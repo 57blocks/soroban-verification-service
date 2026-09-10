@@ -30,7 +30,7 @@ ENV VITE_VERIFY_API_URL=${VITE_VERIFY_API_URL}
 RUN pnpm run generate:api-client \
     && pnpm exec turbo run build --filter=soroban-verify-web
 
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 COPY docker/web-nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/clients/web/dist /usr/share/nginx/html
 
