@@ -1,0 +1,46 @@
+# Actions are pinned to commit SHAs, which is what stops a moved tag from changing what a workflow
+# runs — and what stops a security fix from arriving on its own. This file is the other half of that
+# trade: without it a pinned SHA is a frozen SHA.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(actions)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The lockfile is fully registry.npmjs.org, so these resolve for anyone — including a fork.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # One pull request per risk class rather than per package: a patch bump nobody reads is noise,
+      # and a major that arrives inside a group of thirty is a major nobody reviewed.
+      production-patch-and-minor:
+        dependency-type: production
+        update-types: ["minor", "patch"]
+      development:
+        dependency-type: development
+        update-types: ["minor", "patch"]
+
+  # The base images the sandbox and the services are built from. A stale base image is the most
+  # common way a fixed CVE stays unfixed.
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(docker)"

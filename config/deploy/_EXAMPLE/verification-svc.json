@@ -1,0 +1,405 @@
+{
+  "$generated": "Illustration only — a snapshot of what `pnpm run generate:deploy-env` writes. Regenerate for your own environments; do not edit.",
+  "$contract": "docs/design/aws-deployment.md §6 · ADR-012 · ADR-025",
+  "target_env": "_EXAMPLE",
+  "service": "verification-svc",
+  "kind": "ecs-service",
+  "exposure": "public (ALB)",
+  "environment": {},
+  "secrets": {
+    "$note": "Every deployed variable arrives via ECS `secrets`/`valueFrom` (ADR-025). `store` says which secret: `config` is `scvs/dev/verification-svc/config`, written by CI on every deploy from `json_key`; `credential` names its own pre-existing secret in `secret`, which CI has no grant to write. Keeping the two apart is load-bearing — a grant to read a timeout must not read a password.",
+    "config_secret": "scvs/dev/verification-svc/config",
+    "variables": {
+      "AWS_REGION": {
+        "required": true,
+        "fail": "silent",
+        "source": "literal",
+        "value": "ap-southeast-2",
+        "store": "config",
+        "json_key": "AWS_REGION"
+      },
+      "CORS_ORIGIN": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "*",
+        "store": "config",
+        "json_key": "CORS_ORIGIN"
+      },
+      "NODE_ENV": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "production",
+        "store": "config",
+        "json_key": "NODE_ENV"
+      },
+      "PORT": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "5000",
+        "store": "config",
+        "json_key": "PORT"
+      },
+      "POSTGRES_DB": {
+        "required": true,
+        "fail": "first-use",
+        "source": "terraform",
+        "value_from_output": "rds.database",
+        "value": "stellar",
+        "value_is_authoritative": false,
+        "store": "config",
+        "json_key": "POSTGRES_DB"
+      },
+      "POSTGRES_HOST": {
+        "required": true,
+        "fail": "first-use",
+        "source": "terraform",
+        "value_from_output": "rds.verify_host",
+        "terraform_output": "module.rds.address",
+        "store": "config",
+        "json_key": "POSTGRES_HOST"
+      },
+      "POSTGRES_PASSWORD": {
+        "required": true,
+        "fail": "first-use",
+        "source": "secret",
+        "secret": "sv-dev-rds-master-verify",
+        "json_key": "password",
+        "store": "credential"
+      },
+      "POSTGRES_PORT": {
+        "required": true,
+        "fail": "first-use",
+        "source": "terraform",
+        "value_from_output": "rds.port",
+        "value": "5432",
+        "value_is_authoritative": false,
+        "store": "config",
+        "json_key": "POSTGRES_PORT"
+      },
+      "POSTGRES_SSL": {
+        "required": true,
+        "fail": "first-use",
+        "source": "literal",
+        "value": "true",
+        "store": "config",
+        "json_key": "POSTGRES_SSL"
+      },
+      "POSTGRES_USER": {
+        "required": true,
+        "fail": "first-use",
+        "source": "secret",
+        "secret": "sv-dev-rds-master-verify",
+        "json_key": "username",
+        "store": "credential"
+      },
+      "SCVS_ABUSE_COUNTER_RETENTION_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "900000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_ABUSE_COUNTER_RETENTION_MS"
+      },
+      "SCVS_ABUSE_FINGERPRINT_KEY": {
+        "required": true,
+        "fail": "boot",
+        "source": "ci-generated",
+        "generate": "random-256-bit",
+        "store": "config",
+        "json_key": "SCVS_ABUSE_FINGERPRINT_KEY"
+      },
+      "SCVS_ABUSE_MAX_PER_WINDOW": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "600",
+        "store": "config",
+        "json_key": "SCVS_ABUSE_MAX_PER_WINDOW"
+      },
+      "SCVS_ABUSE_SWEEP_INTERVAL_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "300000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_ABUSE_SWEEP_INTERVAL_MS"
+      },
+      "SCVS_ABUSE_WINDOW_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "60000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_ABUSE_WINDOW_MS"
+      },
+      "SCVS_ACTIVE_JOB_DEDUP_STALE_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "1800000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_ACTIVE_JOB_DEDUP_STALE_MS"
+      },
+      "SCVS_ARTIFACT_DIR": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "$TMPDIR/scvs-artifacts",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_ARTIFACT_DIR"
+      },
+      "SCVS_CLI_TIMEOUT_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "120000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_CLI_TIMEOUT_MS"
+      },
+      "SCVS_DRAIN_GRACE_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "15000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_DRAIN_GRACE_MS"
+      },
+      "SCVS_JOB_MAX_WAIT_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "3600000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_JOB_MAX_WAIT_MS"
+      },
+      "SCVS_JOB_STREAM_SAFETY_POLL_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "10000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_JOB_STREAM_SAFETY_POLL_MS"
+      },
+      "SCVS_JOB_STREAM_WINDOW_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "900000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_JOB_STREAM_WINDOW_MS"
+      },
+      "SCVS_LEGAL_DOCUMENTS_SOURCE": {
+        "required": true,
+        "fail": "boot",
+        "source": "literal",
+        "value": "config/legal-documents.json",
+        "store": "config",
+        "json_key": "SCVS_LEGAL_DOCUMENTS_SOURCE"
+      },
+      "SCVS_MAINNET_RPC_URL": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "https://mainnet.sorobanrpc.com",
+        "store": "config",
+        "json_key": "SCVS_MAINNET_RPC_URL"
+      },
+      "SCVS_MAX_SOURCE_ARCHIVE_BYTES": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "52428800",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_MAX_SOURCE_ARCHIVE_BYTES"
+      },
+      "SCVS_PUBLIC_RESULT_ROOT": {
+        "required": true,
+        "fail": "silent",
+        "source": "literal",
+        "value": "https://results.dev.sv.example.com",
+        "store": "config",
+        "json_key": "SCVS_PUBLIC_RESULT_ROOT"
+      },
+      "SCVS_PUBLISHER_BUCKET": {
+        "required": true,
+        "fail": "first-use",
+        "source": "terraform",
+        "required_when": "SCVS_PUBLISHER_STORAGE != filesystem",
+        "value_from_output": "buckets.results",
+        "value": "sv-dev-results",
+        "value_is_authoritative": false,
+        "store": "config",
+        "json_key": "SCVS_PUBLISHER_BUCKET"
+      },
+      "SCVS_PUBLISHER_PREFIX": {
+        "required": false,
+        "fail": "silent",
+        "source": "literal",
+        "value": "",
+        "store": "config",
+        "json_key": "SCVS_PUBLISHER_PREFIX"
+      },
+      "SCVS_PUBLISHER_STORAGE": {
+        "required": true,
+        "fail": "silent",
+        "source": "literal",
+        "value": "s3",
+        "store": "config",
+        "json_key": "SCVS_PUBLISHER_STORAGE"
+      },
+      "SCVS_R2_ACCOUNT_ID": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "store": "config",
+        "json_key": "SCVS_R2_ACCOUNT_ID"
+      },
+      "SCVS_R2_ENDPOINT": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "store": "config",
+        "json_key": "SCVS_R2_ENDPOINT"
+      },
+      "SCVS_R2_REGION": {
+        "required": true,
+        "fail": "first-use",
+        "source": "literal",
+        "value": "ap-southeast-2",
+        "store": "config",
+        "json_key": "SCVS_R2_REGION"
+      },
+      "SCVS_RESULT_ROOT": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "$SCVS_ARTIFACT_DIR/public",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_RESULT_ROOT"
+      },
+      "SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "14400000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS"
+      },
+      "SCVS_STORAGE_BUCKET": {
+        "required": true,
+        "fail": "first-use",
+        "source": "terraform",
+        "value_from_output": "buckets.scratch",
+        "value": "sv-dev-scratch",
+        "value_is_authoritative": false,
+        "store": "config",
+        "json_key": "SCVS_STORAGE_BUCKET"
+      },
+      "SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "1500",
+        "store": "config",
+        "json_key": "SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW"
+      },
+      "SCVS_THROTTLE_LIMIT": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "3000",
+        "store": "config",
+        "json_key": "SCVS_THROTTLE_LIMIT"
+      },
+      "SCVS_UPLOAD_CLEANUP_INTERVAL_MS": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "60000",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_UPLOAD_CLEANUP_INTERVAL_MS"
+      },
+      "SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "600",
+        "store": "config",
+        "json_key": "SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE"
+      },
+      "SCVS_VERIFIER_DISPLAY_NAME": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "value": "SCVS Dev Verifier",
+        "store": "config",
+        "json_key": "SCVS_VERIFIER_DISPLAY_NAME"
+      },
+      "SCVS_VERIFIER_ID": {
+        "required": true,
+        "fail": "silent",
+        "source": "literal",
+        "value": "scvs-dev",
+        "store": "config",
+        "json_key": "SCVS_VERIFIER_ID"
+      },
+      "SCVS_VERIFIER_POLICY_ID": {
+        "required": true,
+        "fail": "silent",
+        "source": "literal",
+        "value": "sdf-trusted-public-and-private-upload-v1",
+        "store": "config",
+        "json_key": "SCVS_VERIFIER_POLICY_ID"
+      },
+      "SERVICE_ENTRYPOINT": {
+        "required": true,
+        "fail": "boot",
+        "source": "literal",
+        "value": "verification-svc",
+        "store": "config",
+        "json_key": "SERVICE_ENTRYPOINT"
+      },
+      "STELLAR_CLI_PATH": {
+        "required": false,
+        "fail": "n/a",
+        "source": "image-build",
+        "note": "the image supplies this; set it only to point somewhere else",
+        "value": "stellar",
+        "store": "config",
+        "json_key": "STELLAR_CLI_PATH"
+      }
+    }
+  },
+  "forbidden": {
+    "$note": "must never be set for this service. For the builder this is ADR-002's trust boundary and is normative for the Batch job definition, which CI cannot inspect.",
+    "variables": [
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "SCVS_R2_ACCESS_KEY_ID",
+      "SCVS_R2_SECRET_ACCESS_KEY"
+    ]
+  },
+  "not_in_deployment": {
+    "$note": "read by the code and valid in local development, but must not be set in a deployed environment — see the manifest entry for why",
+    "variables": [
+      "DATABASE_URL"
+    ]
+  }
+}

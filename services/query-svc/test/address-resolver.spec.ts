@@ -1,0 +1,93 @@
+import { Address, StrKey, xdr } from "@stellar/stellar-base";
+import { MalformedContractIdError } from "../src/modules/results/address-resolver.js";
+import { StellarRpcAddressResolver } from "../src/modules/results/stellar-rpc.resolver.js";
+
+// The decode path, against XDR built by the same library that reads it.
+
+const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 7));
+const WASM_HASH = "ab".repeat(32);
+const RPC_URL = "https://rpc.example/testnet";
+
+/** One `getLedgerEntries` entry, as the RPC would serialize it. */
+function ledgerEntry(executable: xdr.ContractExecutable): string {
+  return xdr.LedgerEntryData.contractData(
+    new xdr.ContractDataEntry({
+      ext: new xdr.ExtensionPoint(0),
+      contract: new Address(CONTRACT_ID).toScAddress(),
+      key: xdr.ScVal.scvLedgerKeyContractInstance(),
+      durability: xdr.ContractDataDurability.persistent(),
+      val: xdr.ScVal.scvContractInstance(new xdr.ScContractInstance({ executable, storage: null })),
+    }),
+  ).toXDR("base64");
+}
+
+function resolverAnswering(body: unknown, init: ResponseInit = {}): StellarRpcAddressResolver {
+  const config = {
+    get(key: string) {
+      if (key === "stellarRpcUrlTestnet") return RPC_URL;
+      if (key === "stellarRpcUrlMainnet") return "";
+      return 5_000;
+    },
+  };
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify(body), { status: 200, ...init })) as typeof fetch;
+  return new StellarRpcAddressResolver(config as never);
+}
+
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
+describe("StellarRpcAddressResolver", () => {
+  it("decodes the Wasm hash a contract instance points at", async () => {
+    const resolver = resolverAnswering({
+      result: { entries: [{ xdr: ledgerEntry(xdr.ContractExecutable.contractExecutableWasm(Buffer.from(WASM_HASH, "hex"))) }] },
+    });
+    expect(await resolver.resolve("testnet", CONTRACT_ID)).toBe(WASM_HASH);
+  });
+
+  it("resolves a Stellar Asset Contract to nothing rather than to an error", async () => {
+    // The address is real and holds a contract; there is simply no Wasm to verify against, which is a 404 to
+    // the caller rather than a failure.
+    const resolver = resolverAnswering({
+      result: { entries: [{ xdr: ledgerEntry(xdr.ContractExecutable.contractExecutableStellarAsset()) }] },
+    });
+    expect(await resolver.resolve("testnet", CONTRACT_ID)).toBeUndefined();
+  });
+
+  it("resolves an address with no ledger entry to nothing", async () => {
+    const resolver = resolverAnswering({ result: { entries: [] } });
+    expect(await resolver.resolve("testnet", CONTRACT_ID)).toBeUndefined();
+  });
+
+  it("rejects a malformed contract id before making any request", async () => {
+    let requested = false;
+    const config = { get: (key: string) => (key === "stellarRpcUrlTestnet" ? RPC_URL : 5_000) };
+    globalThis.fetch = (async () => {
+      requested = true;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    const resolver = new StellarRpcAddressResolver(config as never);
+    await expect(resolver.resolve("testnet", "not-a-contract")).rejects.toThrow(MalformedContractIdError);
+    // The caller's mistake must not be reported as a failure to reach the ledger, and must not cost an upstream
+    // request either.
+    expect(requested).toBe(false);
+  });
+
+  it("surfaces an RPC-level error rather than reading past it", async () => {
+    const resolver = resolverAnswering({ error: { message: "method not found" } });
+    await expect(resolver.resolve("testnet", CONTRACT_ID)).rejects.toThrow(/method not found/);
+  });
+
+  it("surfaces a transport failure", async () => {
+    const resolver = resolverAnswering({}, { status: 503 });
+    await expect(resolver.resolve("testnet", CONTRACT_ID)).rejects.toThrow(/503/);
+  });
+
+  it("refuses mainnet with no configured endpoint, instead of guessing one", async () => {
+    const resolver = resolverAnswering({ result: { entries: [] } });
+    await expect(resolver.resolve("mainnet", CONTRACT_ID)).rejects.toThrow(/No Soroban RPC endpoint/);
+  });
+});

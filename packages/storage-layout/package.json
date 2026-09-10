@@ -1,0 +1,38 @@
+{
+  "name": "@scvs/storage-layout",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./shapes": {
+      "types": "./dist/src/shapes.d.ts",
+      "default": "./dist/src/shapes.js"
+    },
+    "./keys": {
+      "types": "./dist/src/keys.d.ts",
+      "default": "./dist/src/keys.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx src/registry-status-test.ts && tsx src/publish-source-test.ts && tsx src/verifier-policy-test.ts"
+  },
+  "dependencies": {
+    "@scvs/aws": "workspace:*",
+    "@scvs/core": "workspace:*",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

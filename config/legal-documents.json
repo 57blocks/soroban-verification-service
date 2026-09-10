@@ -1,0 +1,227 @@
+{
+  "schema": "scvs-legal-documents-v1",
+  "version": "2026-09-08",
+  "effective_date": null,
+  "operator_name": "57Blocks",
+  "service_name": "Soroban Verify",
+  "history_url": "https://github.com/57blocks/soroban-verification-service/commits/main/config/legal-documents.json",
+  "contact_url": "https://github.com/57blocks/soroban-verification-service/issues",
+  "documents": [
+    {
+      "slug": "terms",
+      "title": "Terms of Service",
+      "document_title": "Terms of Service | Soroban Verify",
+      "intro": "These terms govern your use of Soroban Verify, the hosted Soroban source verification service operated by 57Blocks at this domain (the \"Service\"). They cover the hosted Service only. The software behind it is open source under the [Apache License 2.0](https://sv.57blocks.com/schemas/LICENSE), and your use of that software is governed by that license, not by these terms.",
+      "sections": [
+        {
+          "id": "what-the-service-does",
+          "heading": "1. What the Service does",
+          "blocks": [
+            "You submit a deployed Soroban contract, by contract ID or Wasm hash, together with a claim about its source and build arguments. The Service rebuilds that source in an isolated sandbox using a pinned, reproducible build environment, compares the rebuilt Wasm byte for byte against the Wasm deployed on the Stellar network, and publishes the outcome as a result attributed to this verifier.",
+            "The Service is free, requires no account, and asks for no identity. It is operated under a Stellar Community Fund build award during an initial grant period. Its continued operation beyond that period is not guaranteed."
+          ]
+        },
+        {
+          "id": "what-a-verdict-means",
+          "heading": "2. What a verdict means, and what it does not",
+          "blocks": [
+            "A **verified** result means one thing: the source and build recipe you supplied reproduce, byte for byte, the Wasm deployed on chain, in the build environment recorded in the result. A **mismatched** result means they did not.",
+            "A verdict is not a security audit, a code review, or an endorsement of the contract, its authors, or its behaviour. Verified code can still be defective or malicious. Do not treat a verdict as a statement about safety.",
+            "Results are attributed to this verifier. They are not a global or authoritative status, and another verifier may reach a different result for the same Wasm. A verdict attaches to a Wasm hash, and it is never downgraded because the source it was verified against later became unavailable.",
+            "Many outcomes are not verdicts at all: the contract may be out of scope for this verifier, the submission may be rejected by policy, or the build may fail. Those outcomes are reported to you and are not published as results."
+          ]
+        },
+        {
+          "id": "your-submissions",
+          "heading": "3. Your submissions",
+          "blocks": [
+            "You are responsible for everything you submit: the source you point to or upload, the build arguments, the credentials you do not include in it (section 5), and the public declaration described in section 4. You represent that you have the right to submit that source for compilation and, if you declare it public, the right to have it published as section 4 describes.",
+            "Submitted source is compiled and executed inside a sandbox. Build scripts, procedural macros, and the build scripts of dependencies run as part of that compilation. The sandbox holds no credentials, has no network access during the build, and cannot reach any other job. Do not submit anything you are not entitled to have executed.",
+            "Source you reference by URL is fetched from that URL. The Service does not authenticate to private repositories, and a URL that requires credentials will fail.",
+            "The Service may refuse, rate-limit, or discard any submission, including for policy reasons, abuse control, resource limits, or because the toolchain the deployed contract records is not one this verifier can reproduce."
+          ]
+        },
+        {
+          "id": "public-declaration",
+          "heading": "4. The public declaration is permanent",
+          "blocks": [
+            "When you submit source, you choose whether to declare it public. The default is not public. This is the only storage choice you make, and it cannot be changed after submission.",
+            "If you declare source public, the Service stores a copy, serves it by its SHA-256 hash from this verifier's result root, and references it from the published result. Published results are content-addressed, archived to the Arweave permanent storage network, and mirrored by other verifiers and by consumers of results. **The Service cannot delete, alter, or recall content once it is published.** A request to remove published source or a published result cannot be honoured, whoever makes it and for whatever reason.",
+            "Do not declare source public unless you are entitled to publish it under those conditions. If you declare public source that you had no right to publish, you are solely responsible for that declaration and for any claim arising from it, and you agree to indemnify 57Blocks against such claims to the extent permitted by law.",
+            "If you do not declare source public, the Service deletes the bytes when the job terminates, on every outcome including failure, and retains only the SHA-256 hash of the archive as a commitment to what was verified. There is no private storage tier, no encryption service, and no way to retrieve non-public source after submission."
+          ]
+        },
+        {
+          "id": "build-logs",
+          "heading": "5. Build logs",
+          "blocks": [
+            "The compiler output of every job is captured, redacted of storage locations and credentials, and kept for a limited period so that you can read why a build failed. A build log can include file paths, crate names, and compiler messages that quote your source.",
+            "**Reading the raw log needs a token, and the job link is not it.** When you submit a job, the response carries a one-time token; your browser keeps it. The job link alone does not open the raw log, so sending someone the link does not send them the log. There is no way to re-issue the token: if you lose it, or clear your browser storage, the raw log is no longer readable by anyone. The verdict, the diagnostics, and everything published are unaffected.",
+            "**Raw logs are deleted after the period stated in the Privacy Notice.** You may delete one earlier yourself. What remains after that is the minimized diagnostic summary — the reason, the codes, and the shape of the run, with none of the compiler's output in it.",
+            "**Do not submit secrets.** Redaction is automatic and is not a guarantee: it recognises the shapes of credentials it knows about, and a secret in a form it does not recognise will survive into the log and into anything the compiler printed. This Service is not a confidential-computing service and not secure storage, and you should not use it as one. That is a statement about what the Service is for, not a licence to be careless with it: the controls described here are ones we hold ourselves to regardless."
+          ]
+        },
+        {
+          "id": "acceptable-use",
+          "heading": "6. Acceptable use",
+          "blocks": [
+            {
+              "list": [
+                "Do not attempt to escape, probe, or interfere with the sandbox, or use a build to reach any network, host, or job other than your own.",
+                "Do not use the Service as general compute, as a file host, or as a distribution channel. Public source is served publicly, and the Service is not a place to publish content unrelated to verifying a deployed contract.",
+                "Do not circumvent rate limits, and do not automate submissions at a rate that degrades the Service for others.",
+                "Do not submit content you have no right to submit, or content whose publication would be unlawful."
+              ]
+            },
+            "A submission that violates these rules may be refused or discarded. Because published content cannot be removed, prevention is the only remedy the Service has. That is why the public declaration is yours to make and yours to answer for."
+          ]
+        },
+        {
+          "id": "availability-and-changes",
+          "heading": "7. Availability and changes",
+          "blocks": [
+            "The Service is provided free of charge and on a best-effort basis, with no service-level commitment. It may be changed, suspended, or discontinued at any time. Published results and archived content persist independently of the Service: in this verifier's result root for its operating lifetime, and in the Arweave archive indefinitely.",
+            "These terms may change. The version in effect is the one published at this address, and its [revision history](https://github.com/57blocks/soroban-verification-service/commits/main/config/legal-documents.json) is public."
+          ]
+        },
+        {
+          "id": "disclaimers",
+          "heading": "8. Disclaimer of warranties and limitation of liability",
+          "blocks": [
+            "THE SERVICE AND ALL RESULTS ARE PROVIDED \"AS IS\" AND \"AS AVAILABLE\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AND NON-INFRINGEMENT. 57Blocks DOES NOT WARRANT THAT ANY RESULT IS CORRECT, THAT A VERIFIED CONTRACT IS SAFE, OR THAT THE SERVICE WILL BE AVAILABLE OR ERROR-FREE.",
+            "TO THE MAXIMUM EXTENT PERMITTED BY LAW, 57Blocks AND ITS CONTRIBUTORS ARE NOT LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF FUNDS, DATA, OR PROFITS, ARISING FROM YOUR USE OF THE SERVICE OR YOUR RELIANCE ON ANY RESULT, EVEN IF ADVISED OF THE POSSIBILITY. WHERE LIABILITY CANNOT BE EXCLUDED, IT IS LIMITED TO THE AMOUNT YOU PAID FOR THE SERVICE, WHICH IS NOTHING."
+          ]
+        },
+        {
+          "id": "third-parties",
+          "heading": "9. Third parties",
+          "blocks": [
+            "The Service reads the Stellar network through public RPC endpoints, fetches source from the URLs you supply, builds inside environments composed from official Stellar and Rust release components, runs on Amazon Web Services, and archives results to Arweave through the Irys uploader. Each of those is operated by a third party under its own terms, and none of them is a party to these terms."
+          ]
+        },
+        {
+          "id": "governing-law",
+          "heading": "10. Governing law and disputes",
+          "blocks": [
+            "The governing law and the forum for any dispute under these terms will be stated here once legal review is complete."
+          ]
+        },
+        {
+          "id": "contact",
+          "heading": "11. Contact",
+          "blocks": [
+            "Questions about these terms: open an issue in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public. Do not send confidential material through it."
+          ]
+        }
+      ],
+      "open_items": [
+        "Liability for an incorrect public declaration (TRD §10 item 6). Section 4 drafts the submitter-responsible position with an indemnity. Not yet agreed with 57Blocks counsel or with SDF.",
+        "Governing law and forum (section 10).",
+        "Whether a notice-and-response process is needed for published references to source (the report's source pointer, the stored copy in this verifier's result root) given that the Arweave copy of the report cannot be removed.",
+        "Whether and how the Stellar Development Foundation should be named: as the grant funder, as the publisher of the official build components, or not at all."
+      ]
+    },
+    {
+      "slug": "privacy",
+      "title": "Privacy Notice",
+      "document_title": "Privacy Notice | Soroban Verify",
+      "intro": "This notice describes what Soroban Verify, operated by 57Blocks at this domain (the \"Service\"), processes when you use it, and what happens to that data. It is written to match what the Service actually does. Where the Service's design makes something impossible, such as deleting a published result, this notice says so rather than promising it.",
+      "sections": [
+        {
+          "id": "summary",
+          "heading": "1. The short version",
+          "blocks": [
+            {
+              "list": [
+                "No accounts, no sign-in, no identity verification, no email address. Nothing you do here is linked to an identity.",
+                "No cookies, no analytics, no advertising or tracking scripts. The web console sets no cookies at all, and makes no request to any third party: its typefaces are served from this domain.",
+                "The only thing the Service records about you, as opposed to about the contract, is a keyed one-way fingerprint of your IP address, used to rate-limit submissions. It changes every minute and is deleted within fifteen.",
+                "The raw build log needs a one-time token, not the job link, and is deleted after 7 days. The diagnostic summary that stays behind carries none of the compiler's output.",
+                "Everything the Service publishes is public and permanent, including any source you declare public."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "what-we-process",
+          "heading": "2. What the Service processes, and why",
+          "blocks": [
+            "**Rate-limiting fingerprint.** Each request to the submission and upload endpoints is counted against an HMAC-SHA-256 fingerprint of the requesting IP address, per route and per one-minute window, so that one source of requests cannot exhaust the Service for everyone else. The raw address is not stored by the application. The key is a secret the Service holds and the database does not, and the one-minute window is part of what is hashed — so the same address produces an unrelated value in every window, and the values cannot be linked across windows or reversed by trying addresses. **The counters are deleted fifteen minutes after their window closes.** The fingerprint is linked to nothing else the Service holds.",
+            "**Job records.** For each submission: the network, the contract ID or Wasm hash, the source reference you supplied (a URL, or the identifier of an upload), your build arguments, the public declaration, the job's status and outcome, the verdict if one was reached, and timestamps. **A job whose result was published is kept permanently** — it is part of the public record, and section 4 describes what that means. **A job that never published — one that failed, was rejected, was a dry run, or was abandoned — is deleted 30 days after it was created**. Its raw build log goes sooner, on the period below. These records back the job page and the published result.",
+            "**Submitted source.** Handled according to your public declaration, as section 3 describes.",
+            "**Raw build logs.** The compiler output of every job, redacted of storage locations and credentials. It can contain what the compiler printed: lines of your source, file paths, dependency names and versions, and anything a build script wrote. Because of that it is treated as the most sensitive thing the Service holds about a submission. **Reading it requires a one-time token issued in the response to the submission that created the job — the job link does not open it**, and the Service stores only a hash of that token, so it cannot re-issue one or read your log on your behalf. **Raw logs are deleted 7 days after the build finishes**, and you can delete one sooner. A log may be held past that only for a specific security investigation; a held log stays unreadable through the API. Redaction removes the shapes of credentials it recognises and cannot promise to remove every secret, which is why the period is short and the access is not the job link.",
+            "**Diagnostic summary.** What is left once the raw log is gone, and what any visitor to a job link sees: the failure reason, the error and status codes, and whether a raw log exists and until when. **It contains no compiler output**, and it is retained with the job record on the periods above — permanent for a published job, 30 days for one that never published.",
+            "**Infrastructure logs.** The load balancer and web server in front of the Service record standard access logs, which include IP addresses, request paths, and browser user-agent strings. They are used for operations and abuse investigation and are retained for a limited period under the hosting provider's configuration.",
+            "**Your browser.** The console keeps the list of jobs you have opened in your browser's local storage so you can find them again. That list never leaves your browser and is not sent to the Service, and alongside it the console keeps the build-log tokens issued to you — the only copy that exists, since the Service holds a hash and cannot recover one. Everything the console loads — its code, its styles and its typefaces — is served from this domain, so opening it contacts no one else."
+          ]
+        },
+        {
+          "id": "source",
+          "heading": "3. Source you submit",
+          "blocks": [
+            "**Declared public.** A copy is stored durably, served by its SHA-256 hash from this verifier's result root, and referenced from the published result. It is therefore available to anyone, mirrored by other verifiers and consumers, and referenced from the Arweave archive. Source archives commonly contain personal data placed there by their authors: names and email addresses in Cargo.toml, git metadata, comments, licence headers. Once published, none of it can be removed. Check what is in the archive before declaring it public.",
+            "**Not declared public.** The bytes are deleted when the job terminates, on every path including failure, and only the SHA-256 hash of the archive is retained and published. The staging location is excluded from backups. While the job runs, the bytes exist in that staging location and inside the sandbox, and nowhere else.",
+            "**Referenced by URL.** The Service fetches the URL you supply. The URL itself becomes part of the job record and, if the source is declared public, of the published result."
+          ]
+        },
+        {
+          "id": "what-is-published",
+          "heading": "4. What is published",
+          "blocks": [
+            "For each verification that reaches a verdict: a report document holding the verdict, the Wasm hash, the source hash and, for public source, its pointer, the build recipe and environment, sandbox diagnostics, and timestamps; an index entry per Wasm hash; and this verifier's manifest and policy. Reports are archived to Arweave. All of it is public, content-addressed, and permanent. By design it contains no personal data other than what may be inside public source."
+          ]
+        },
+        {
+          "id": "recipients",
+          "heading": "5. Who receives data",
+          "blocks": [
+            {
+              "list": [
+                "**Amazon Web Services** hosts the Service, stores everything in section 2, and runs the sandboxed builds.",
+                "**Arweave**, through the Irys uploader, receives published reports.",
+                "**Stellar RPC providers** receive the contract ID or Wasm hash you ask about, as a read of the public ledger.",
+                "**Source hosts** such as GitHub receive the fetch for a URL you supply. That fetch comes from the Service's address, not yours.",
+                "**Other verifiers and consumers of results** receive published content, by design."
+              ]
+            },
+            "The Service does not sell data and has no advertising relationships."
+          ]
+        },
+        {
+          "id": "your-rights",
+          "heading": "6. Your rights and their limits",
+          "blocks": [
+            "Because the Service holds no identity, it cannot look up \"your\" data: a job is yours if you hold its link, and a fingerprint is a hash. Published content cannot be deleted, altered, or recalled by anyone, including 57Blocks. That is a property of the design, and it is the reason the public declaration defaults to not public. Anything not published, such as a job that never reached a verdict, deletes itself on the schedule in section 2 without you asking; to have one removed sooner, contact us through the channel in section 9. The raw build log is the one thing you can delete yourself, with the token you were issued — and the same token is the only way to read it, so clearing your browser storage ends your access to it as surely as the 7-day expiry does.",
+            "Statutory rights over personal data, where they apply to you, will be described here once legal review is complete."
+          ]
+        },
+        {
+          "id": "children",
+          "heading": "7. Children",
+          "blocks": [
+            "The Service is a developer tool and is not directed at children."
+          ]
+        },
+        {
+          "id": "changes",
+          "heading": "8. Changes to this notice",
+          "blocks": [
+            "This notice may change when the Service does. The version in effect is the one published at this address, and its [revision history](https://github.com/57blocks/soroban-verification-service/commits/main/config/legal-documents.json) is public."
+          ]
+        },
+        {
+          "id": "contact",
+          "heading": "9. Contact",
+          "blocks": [
+            "Questions about this notice: open an issue in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public. Do not send confidential material through it."
+          ]
+        }
+      ],
+      "open_items": [
+        "The controller's legal identity and address, and the legal basis for each processing purpose in section 2, for readers in jurisdictions that require them.",
+        "Retention period of the load-balancer and web-server access logs (section 2). Stated as \"a limited period\" pending confirmation from DevOps of the configured value.",
+        "Whether Stellar's legal team wants SDF's role described here."
+      ]
+    }
+  ]
+}

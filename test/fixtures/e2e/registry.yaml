@@ -1,0 +1,1038 @@
+schema_version: 1
+checked_at: "2026-08-18"
+source_inputs:
+  existing_demo_archive:
+    repository: https://github.com/jia57b/soroban-contract
+    revision: 7bd0765afdca5f99fbbec403d4b45cc3dbb05524
+    url: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    status: ready
+    validation: downloaded and hashed on 2026-08-03
+  mirrored_source:
+    url_a: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    url_b: https://github.com/jia57b/soroban-contract/raw/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    status: ready
+    validation: both URLs fetched with HTTP 200 and produced 14487 bytes with the recorded SHA-256 on 2026-08-18
+  multi_package_workspace:
+    path: test/fixtures/sample-contracts/multi-package-workspace
+    source_archive: artifacts/e2e-fixtures/archives/multi-package-source.tar.gz
+    source_sha256: 2948171d6ed3dd40e061ff922d597e5b0b23c9175c89260b138898fd667b07cb
+    selected_manifest: contracts/contract-b/Cargo.toml
+    status: ready
+    validation: deterministic archive built from the tracked source tree and contract-b rebuilt to the deployed Wasm hash
+  mainnet_reflector_source:
+    repository: https://github.com/reflector-network/reflector-contract
+    revision: 42f3116b0c5ea335181508c926e5ec48d67af419
+    tag: v6.0.1_reflector-pulse-contract_cli27.0.0
+    package: reflector-pulse-contract
+    downloaded_sha256: cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d
+    status: ready
+    validation: StellarExpert independently records an exact build match for this revision and package
+  public_testnet_stellaroid_earn_source:
+    repository: https://github.com/Iron-Mark/Hackathon-Stellaroid_Earn
+    revision: 7a67648472102d381665cb1235f003b8d114179d
+    package: stellaroid_earn
+    downloaded_sha256: 66810898471a18cecf6dcf53b23de524690faee1099193b839eb6f5b186d4539
+    status: candidate
+    validation: GitHub repository and fixed source archive were reachable on 2026-08-03
+  public_testnet_stellaroid_2026_source:
+    repository: https://github.com/armlynobinguar/Stellaroid-2026
+    revision: 4bcc503506745631411c8f31099da28a4bd2bca0
+    packages: [stellaroid_earn, payment_registry]
+    downloaded_sha256: 0782c6f61e7bc737356a097825b6e1c7acce71302c1d32b3214a02ba4e0ed4d7
+    status: candidate
+    validation: README-listed testnet contract and fixed source archive were reachable on 2026-08-03
+  public_testnet_smart_block_source:
+    repository: https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block
+    revision: 59cdbf1a81bb5eb36304bc8897eac014fb0decab
+    package: soroban-explorer-contract
+    downloaded_sha256: ba4ecc43259e40928b450c1860cc88751f4b51c7110c3a7a92584dfc262ec2f8
+    status: candidate
+    validation: README-listed testnet contract and fixed source archive were reachable on 2026-08-03
+
+discovery:
+  mainnet_contract_index: https://api.stellar.expert/explorer/public/contract
+  mainnet_wasm_endpoint: https://api.stellar.expert/explorer/public/wasm/{wasm_hash}
+  testnet_contract_index: https://api.stellar.expert/explorer/testnet/contract
+  testnet_wasm_endpoint: https://api.stellar.expert/explorer/testnet/wasm/{wasm_hash}
+  note: The StellarExpert contract-list cursor repeated pages during the 2026-08-03 scan. A read-only mainnet recheck on 2026-08-18 (ascending and descending) returned two pages before each next cursor self-looped; the mainnet Wasm endpoint returned 404 for F-XNET's testnet hash (the testnet endpoint returns 200). No matching mainnet contract was found in the visible sample, but the API pagination defect means this is not a complete chain rescan.
+
+testnet_lifecycle:
+  ttl_extended_at: "2026-08-03T08:48:35Z"
+  ledgers_to_extend: 500000
+  minimum_instance_live_until_ledger: 4445399
+  minimum_code_live_until_ledger: 4445400
+  fixtures_extended: 8
+  wasm_entries_extended: 9
+  history: artifacts/e2e-fixtures/testnet-ttl-history.ndjson
+
+contracts:
+  existing_testnet_cli58:
+    fixture_roles: [F-58-candidate]
+    network: testnet
+    contract_id: CAIDEXLNHK7WF2OC4CZ5Y3FHA5WNMAGIYSFKGKAUHVBGDVAZ2EQJTKEG
+    wasm_hash: 5711318cca03d3b5651a4c2e271f3f108dc893eb5813cd8e17d46e87d72558e1
+    class: cli-58
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    bldimg: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+    status: candidate
+    blockers:
+      - source_uri is absent from on-chain metadata; confirm whether the target-state preflight considers the recipe complete
+    validation:
+      - contract fetched successfully from testnet on 2026-08-03
+      - fetched Wasm SHA-256 matched wasm_hash
+      - metadata parsed locally with stellar 27.0.0
+      - the digest-pinned official image was pulled and used for fixture builds on 2026-08-03
+
+  existing_testnet_cli_legacy_27_1_94_1:
+    fixture_roles: [F-LEG-2-candidate, F-LEG-3-target]
+    network: testnet
+    contract_id: CDFI5WMI7VA6YO5TKM7AI4CGQGYYT45UDQFMDKGN5Q22S2SLCI6RT4RM
+    wasm_hash: 6d12d8458807f912749f72d9fb11788b2426fab7614e1a72a6ad52042977f1c0
+    class: cli-legacy
+    cliver: 27.0.0#93e1b1671f14830662766c005138b19095fe9307
+    rsver: 1.94.1
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    status: blocked
+    blockers:
+      - no official image exists for the 27.0.0 and 1.94.1 pair
+      - the verifier-composed image digest must be built and registered before F-LEG-2 is ready
+    validation:
+      - contract fetched successfully from testnet on 2026-08-03
+      - fetched Wasm SHA-256 matched wasm_hash
+      - canonical source rebuilt locally with stellar 27.0.0 and rustc 1.94.1 to the exact deployed hash
+
+  public_testnet_stellaroid_earn:
+    fixture_roles: [F-PUBTEST-S55-candidate, F-PUBTEST-LEG-candidate]
+    network: testnet
+    contract_id: CAD6C24POQGRYXMBNBEGVDHUROF5ZC37XRDC6NCVILTXWMYJIBMISZCV
+    wasm_hash: 1b7479f1ca0f12846bbfdd8f0681670692e29e1f20618150912f010b7caf4b9f
+    class: cli-legacy
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.95.0
+    source_repo: github:Iron-Mark/Hackathon-Stellaroid_Earn
+    home_domain: stellaroid.tech
+    source_revision: 7a67648472102d381665cb1235f003b8d114179d
+    source_package: stellaroid_earn
+    source_archive_sha256: 66810898471a18cecf6dcf53b23de524690faee1099193b839eb6f5b186d4539
+    status: candidate
+    blockers:
+      - no on-chain SEP-58 source_uri, source_sha256, bldimg, or bldopt; a submitted recipe must still be prepared
+      - GitHub attestation lookup for the deployed Wasm returned 404 on 2026-08-03
+      - exact rebuild against the deployed Wasm has not been proven
+    validation:
+      - discovered from public StellarExpert testnet contract data and public GitHub source_repo metadata
+      - contract fetched successfully from testnet on 2026-08-03
+      - fetched Wasm SHA-256 matched wasm_hash
+      - metadata parsed locally with stellar 27.0.0
+      - source_repo repository, fixed revision, Cargo workspace, and source archive were publicly reachable
+
+  public_testnet_stellaroid_2026_reference:
+    fixture_roles: [F-PUBTEST-LEG-candidate]
+    network: testnet
+    contract_id: CABV3HJFEPCREHGVFTHETSCAGPVI4O4NTCBWS5ROH6ZCWOJHNKLOO2RS
+    wasm_hash: 3d8d326da33e1a811853f409b13c2a9701b7e2dfa5e55f0e53b5e80c7361e4db
+    class: cli-legacy
+    cliver: 25.2.0#28484880988199233a7e8e87c97cb12dac323cb3
+    rsver: 1.94.0
+    source_repository: https://github.com/armlynobinguar/Stellaroid-2026
+    source_revision: 4bcc503506745631411c8f31099da28a4bd2bca0
+    source_package: stellaroid_earn
+    source_archive_sha256: 0782c6f61e7bc737356a097825b6e1c7acce71302c1d32b3214a02ba4e0ed4d7
+    status: candidate
+    blockers:
+      - source repository is documented in the public README, not embedded on chain as source_repo
+      - no on-chain SEP-58 recipe; a submitted recipe must still be prepared
+      - exact rebuild against the deployed Wasm has not been proven
+    validation:
+      - discovered from a public project README that names this testnet reference contract
+      - contract fetched successfully from testnet on 2026-08-03
+      - fetched Wasm SHA-256 matched wasm_hash
+      - metadata parsed locally with stellar 27.0.0
+      - fixed source revision and source archive were publicly reachable
+
+  public_testnet_smart_block_explorer:
+    fixture_roles: [F-PUBTEST-NONE-candidate]
+    network: testnet
+    contract_id: CDA2ZCIB3ETZNFNQP4NS3SIEW5XCF7DKP5UWN4Y33F5FV34JA2CGAJ44
+    wasm_hash: 058548a781065a0f929d49acc6c738ac17ed5f2436d7e0038d3be663348f01b6
+    class: cli-none
+    rsver: 1.99.0-nightly
+    source_repository: https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block
+    source_revision: 59cdbf1a81bb5eb36304bc8897eac014fb0decab
+    source_package: soroban-explorer-contract
+    source_archive_sha256: ba4ecc43259e40928b450c1860cc88751f4b51c7110c3a7a92584dfc262ec2f8
+    status: candidate
+    blockers:
+      - cli-none is unsupported by the reference verifier at launch
+      - source repository is documented in the public README, not embedded on chain as source_repo
+      - exact rebuild against the deployed Wasm has not been proven
+    validation:
+      - discovered from a public project README that names this testnet contract
+      - contract fetched successfully from testnet on 2026-08-03
+      - fetched Wasm SHA-256 matched wasm_hash
+      - metadata parsed locally with stellar 27.0.0
+      - fixed source revision and source archive were publicly reachable
+
+  existing_mainnet_reflector_pulse_v6_0_1:
+    fixture_roles: [F-LEG-1-mainnet, F-LEG-2-candidate, F-MAINNET-READ-ONLY]
+    network: mainnet
+    contract_id: CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN
+    wasm_hash: 8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c
+    class: cli-legacy
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.97.1
+    source_repo: github:reflector-network/reflector-contract
+    source_revision: 42f3116b0c5ea335181508c926e5ec48d67af419
+    source_tag: v6.0.1_reflector-pulse-contract_cli27.0.0
+    source_package: reflector-pulse-contract
+    source_uri: https://api.github.com/repos/reflector-network/reflector-contract/tarball/42f3116b0c5ea335181508c926e5ec48d67af419
+    source_sha256: cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d
+    submitted_recipe:
+      bldarg: [contract, build]
+      bldopt:
+        - --package=reflector-pulse-contract
+        - --meta=source_repo=github:reflector-network/reflector-contract
+        - --optimize
+    status: ready
+    validation:
+      - StellarExpert resolved the live contract and recorded this exact Wasm hash on 2026-08-03
+      - Wasm downloaded from the public StellarExpert endpoint matched wasm_hash
+      - local metadata parsing matched class, cliver, rsver, and source_repo
+      - StellarExpert records verified source revision 42f3116b, package reflector-pulse-contract, and an exact build match
+      - repository tag lookup resolved the named tag to revision 42f3116b
+      - fixed GitHub source archive downloaded and SHA-256 matched source_sha256 on 2026-08-21
+      - validate-mainnet-reflector-rebuild.sh rebuilt the fixed source in the verifier's v3 composed CLI 27.0.0 / Rust 1.97.1 image with no build-stage network and matched wasm_hash on 2026-08-21
+
+  purpose_testnet_f_leg_1:
+    fixture_roles: [F-LEG-1]
+    network: testnet
+    contract_id: CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76
+    wasm_hash: 34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37
+    class: cli-legacy
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    bldimg: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+    status: ready
+    validation:
+      - built inside the digest-pinned official image
+      - deployed to testnet and fetched back with matching Wasm hash
+      - public source archive and image digest are retrievable
+
+  purpose_testnet_f_compose_only:
+    fixture_roles: [F-COMPOSE-ONLY]
+    network: testnet
+    contract_id: CB6BPRLONPH3SX4YBR5IPQOOXQNYZ7BPXDUSV4BL2RHH2ZDBWJMT6UNE
+    wasm_hash: b052d489ff3acc03cb2efc56292b24ff0cb119d71b831d5c3d36d17a97c021b4
+    class: cli-legacy
+    cliver: 25.2.0#28484880988199233a7e8e87c97cb12dac323cb3
+    rsver: 1.94.0
+    bldopt: [--locked, --manifest-path=contracts/verified-demo/Cargo.toml, --package=verified-demo, --optimize]
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    status: ready
+    purpose: >-
+      The first fixture on a pair Docker Hub publishes no image for. Docker Hub carries six
+      (cliver, rsver) pairs; the 2026-07-30 corpus scan found 99 live pairs, so 92.6% of live
+      class-B contracts can only ever be verified through composition, and until this fixture
+      existed no E2E case had driven the full pipeline for one of them. Demand rank 2 (10.1%).
+      Superseded as the *most important* of its kind by purpose_testnet_f_demand_01 — this pair
+      was chosen because a specific public contract raised the question, not because of demand.
+    validation:
+      - >-
+        built 2026-08-19 inside scvs-composed:template-gate-v3, a locally composed image for this pair;
+        no such image exists on Docker Hub, which is the fixture's whole premise
+      - >-
+        deployed to testnet and fetched back with matching Wasm hash; the metadata below is read from the
+        fetched bytes, not from the image that claimed to produce them
+      - >-
+        deployed metadata records cliver 25.2.0#28484880 and rsver 1.94.0 and no bldimg, so the chain
+        classifies it cli-legacy and the verifier must compose
+      - >-
+        rssdkver 25.3.1#e50d95af matches purpose_testnet_f_leg_1's, so `--locked` held and the SDK is not
+        a second variable between the two fixtures
+      - >-
+        626 bytes, byte-for-byte the same length as f-leg-1-official.wasm from the same source, and a
+        different hash (b052d489 vs 34fc22d0)
+    build:
+      image: composed locally — scvs-composed:template-gate-v3
+      produce: >-
+        node eng-tools/check-composition-template.mjs --cliver '25.2.0#28484880988199233a7e8e87c97cb12dac323cb3'
+        --rsver 1.94.0 --keep-image --no-contract-build
+      build_command: >-
+        SCVS_FIXTURE_BUILD_SCOPE=compose-only SCVS_FIXTURE_BUILD_IMAGE=scvs-composed:template-gate-v3
+        bash test/fixtures/e2e/build-purpose-contracts.sh
+      deploy_command: SCVS_FIXTURE_DEPLOY_SET=compose-only bash test/fixtures/e2e/deploy-testnet.sh
+    notes:
+      - >-
+        Source is byte-identical to purpose_testnet_f_leg_1's, which is what makes the pair the only
+        variable between the two fixtures and lets this entry reuse that source_sha256.
+      - >-
+        Built by our composer and verified by our composer. That proves the pipeline runs end to end
+        for an unofficial pair and that the composition is reproducible; it does not prove our
+        composed 25.2.0/1.94.0 agrees with a third party's, because no official 25.2.0/1.94.0 exists
+        to agree with. purpose_testnet_f_leg_1 carries the cross-environment half — official image in,
+        composed image out — and neither fixture substitutes for the other.
+      - >-
+        build-purpose-contracts.sh reads cliver and rsver back out of the built Wasm and refuses a
+        mismatch, and refuses bytes identical to f-leg-1-official.wasm, so a run pointed at the wrong
+        image cannot quietly produce a fixture that covers the pair it was meant to be different from.
+      - >-
+        Of those two guards the metadata read-back is the load-bearing one, and the 2026-08-19 build
+        showed why: this Wasm and f-leg-1-official.wasm are both 626 bytes and carry the same rssdkver,
+        so the whole hash difference may be nothing but the cliver string embedded in contractmetav0.
+        The duplicate-hash check would therefore be satisfied by a metadata change alone and cannot on
+        its own establish that a different toolchain ran. That is fine for what this fixture claims —
+        it is about the pipeline composing and verifying an unpublished pair, not about codegen
+        diverging between toolchains — but the two guards are not interchangeable and this one is the
+        weaker.
+
+  # ── Not purpose-built, and cannot be ────────────────────────────────────────────────────────────
+  # Every other cli-legacy entry here is a contract we built. This one is a contract somebody else
+  # deployed, because the property it needs is one no image we can assemble produces: an `rsver` whose
+  # toolchain lacks `wasm32v1-none`, which is exactly why the verifier must refuse it. `stellar contract
+  # build` chooses that target itself (measured on the corpus's oldest CLI, 23.2.0), so a toolchain
+  # without it cannot complete the build the CLI requests.
+  #
+  # ★ It is nonetheless reachable, where F-PUBTEST is not, and the difference is worth stating because
+  # it looks like the same wall. F-PUBTEST is blocked on *rebuild evidence*. This fixture's expected
+  # verdict is a refusal reached before any source is fetched, compiled or compared, and nothing is
+  # published — so rebuild evidence is not merely expensive here, it is not part of the claim. Two
+  # properties, both readable straight off the chain, are the whole requirement.
+  existing_testnet_refusable_cliver:
+    fixture_roles: [F-FLOOR-REFUSE]
+    network: testnet
+    contract_id: CDZZY4MN4KV73AF43PQ7UF2LASI6COPWMLLT5YVM5RS2LVIJABU32JZR
+    wasm_hash: 06186e938a0ba1585a5d8a6d2ec802f3d184aaf9ec298d8c8aece50ca56cb239
+    class: cli-legacy
+    cliver: "25.2.0#"
+    rsver: 1.94.0
+    expected_composition_reason: unaddressable_cliver
+    expected_verdict: policy_rejected
+    status: ready
+    purpose: >-
+      Prove end to end that a recorded toolchain the composer must permanently refuse is refused with
+      the permanent arm — job status policy_rejected — and not with the retryable one, which would tell
+      the submitter of a contract that can never be built to retry forever. The composition matrix
+      proves the shape of the refusal at the composer; the arm is chosen three files away, in
+      verification-pipeline.service.ts.
+    found: >-
+      2026-08-19, by test/fixtures/e2e/find-refusable-contracts.mjs --scan, in a 20-contract sample.
+      Its cliver is "25.2.0#" — a trailing separator with an empty rev. parseCliver requires at least
+      one character after the '#' (REV_RE), so it returns undefined and components.ts refuses with
+      unaddressable_cliver before any download. classifyBuildEnvironment still routes it to compose,
+      because the pair is present and not an undated nightly — which is what makes it this case rather
+      than a preflight one.
+    validation:
+      - fetched from testnet 2026-08-19; wasm_hash above is the sha256 of the fetched bytes
+      - metadata parsed locally by `stellar contract info meta`, not read from an explorer's cache
+      - >-
+        classifyBuildEnvironment routes it to `compose` — the pair is present and not an undated
+        nightly — so preflight cannot refuse it and the refusal must come from the composer
+      - >-
+        parseCliver refuses "25.2.0#" (REV_RE needs at least one character after the '#'), so
+        components.ts raises unaddressable_cliver before any component is downloaded
+      - unaddressable_cliver is in PERMANENT_COMPOSITION_FAILURES, so the job must end policy_rejected
+      - no rebuild evidence needed: the verdict is reached before any source is fetched or compiled
+    standing_caution: >-
+      ★ Somebody else's contract on testnet, which is a weaker guarantee than a purpose-built fixture —
+      testnet is periodically reset. Re-confirm it is live if the case starts failing at preflight; if it
+      is gone, re-run test/fixtures/e2e/find-refusable-contracts.mjs. Nothing about the case is specific
+      to this contract, and it accepts either refusal family.
+    requirements:
+      - records a cliver and an rsver and no bldimg, so classification routes it to compose
+      - one of those two values is a permanent composition refusal
+      - not an undated nightly and not a missing pair — those are refused at preflight, a different case
+    notes:
+      - >-
+        ★ NOT blocked on rebuild evidence, and that is why this fixture is reachable while F-PUBTEST is
+        not. The expected verdict is reached before any source is fetched, compiled or compared, and
+        nothing is published, so no source has to reproduce the deployed bytes. The submission carries an
+        archive because the API requires one; it is never opened. F-LEG-1's source_uri/source_sha256 are
+        fine for it.
+      - >-
+        Two refusal families are acceptable here and the E2E case derives which one applies from what the
+        chain records, so replacing this contract with one carrying the other defect needs no code change:
+        unaddressable_cliver (this one) and toolchain_target_unavailable (an rsver below 1.84.0, the
+        release wasm32v1-none shipped in — of the 20 stable rsvers the corpus records, only 1.81.0).
+      - >-
+        Not purpose-buildable, for either family: the CLI stamps both fields itself. A real binary does
+        not write "25.2.0#", and a toolchain lacking wasm32v1-none cannot complete the build the CLI
+        requests. That is exactly why these pairs are refusable.
+      - >-
+        ★ The discovery script walked past this contract on its first run. Its own copy of the cliver
+        shape rules tested `cliver.includes("#")` for a missing rev, which an empty rev satisfies, so it
+        reported "rsver 1.94.0 is servable" — true, and beside the point. It now imports parseCliver and
+        classifyBuildEnvironment from @scvs/core's built output, so a disagreement between the script and
+        the service is no longer expressible.
+
+  purpose_testnet_f_demand_01:
+    fixture_roles: [F-DEMAND-01]
+    network: testnet
+    contract_id: CACXUT2PCIUTOWS7O6GKFK4CVJL5JYAGIEGZ4B2YVEI5L5YHDI3QUM4H
+    wasm_hash: 67bafc0b173035f76516acb46114cbf5e65edf389039c11994d86442fc632c49
+    class: cli-legacy
+    cliver: 25.1.0#a048a57a75762458b487052e0021ea704a926bee
+    rsver: 1.95.0
+    # No --locked: 25.1.0's `contract build` does not offer it (measured 2026-08-19).
+    bldopt: [--manifest-path=contracts/verified-demo/Cargo.toml, --package=verified-demo, --optimize]
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    status: ready
+    purpose: >-
+      The corpus's largest single (cliver, rsver) combination — 813 live contracts, 25.2% of live
+      class-B on its own, more than ranks 2 and 3 together. No official image pairs 25.1.0 with
+      1.95.0 (official gives 25.1.0 the 1.90.0 build), so every one of those 813 contracts can only
+      ever be verified through composition. If exactly one pair were ever carried end to end it
+      should have been this one; purpose_testnet_f_compose_only got there first by accident of which
+      question was being asked.
+    validation:
+      - >-
+        built 2026-08-19 inside scvs-composed:template-gate-v3, a locally composed image for this pair;
+        Docker Hub pairs 25.1.0 with 1.90.0, not 1.95.0, so no official image can produce it
+      - >-
+        deployed to testnet and fetched back with matching Wasm hash; the metadata below is read from the
+        fetched bytes, not from the image that claimed to produce them
+      - deployed metadata records cliver 25.1.0#a048a57a and rsver 1.95.0 and no bldimg
+      - >-
+        626 bytes and rssdkver 25.3.1#e50d95af — identical to purpose_testnet_f_leg_1's on both counts,
+        so neither the source nor the SDK is a variable and the pair is the only difference between them
+      - >-
+        wasm_hash differs from F-LEG-1's, from purpose_testnet_f_compose_only's and from
+        purpose_testnet_f_old_end's, so no two compose fixtures were built in the same image
+    build:
+      image: composed locally — scvs-composed:template-gate-v3
+      produce: >-
+        node eng-tools/check-composition-template.mjs --cliver '25.1.0#a048a57a75762458b487052e0021ea704a926bee'
+        --rsver 1.95.0 --keep-image --no-contract-build
+      build_command: >-
+        SCVS_FIXTURE_BUILD_SCOPE=compose-only SCVS_FIXTURE_COMPOSE_TARGET=F-DEMAND-01
+        SCVS_FIXTURE_BUILD_IMAGE=scvs-composed:template-gate-v3
+        bash test/fixtures/e2e/build-purpose-contracts.sh
+      deploy_command: SCVS_FIXTURE_DEPLOY_SET=compose-only bash test/fixtures/e2e/deploy-testnet.sh
+    notes:
+      - >-
+        Composition already proved this pair can be materialized — eng-tools/composition-pairs.mjs's
+        demand-01 row composed on 2026-08-19. What is untested is whether a submission on it reaches a
+        verdict, which is decided three files away in verification-pipeline.service.ts.
+      - >-
+        Same source, same guards and the same stated limit as purpose_testnet_f_compose_only: built by
+        our composer and verified by our composer, so it proves the pipeline and the composition's
+        reproducibility, not agreement with a third party's 25.1.0/1.95.0 (there is none).
+      - >-
+        The composition gate reuses one image tag for every pair, so building this target without first
+        recomposing for its pair would build it in whichever pair's image is still tagged. The metadata
+        read-back in build-purpose-contracts.sh refuses that, and so does the duplicate-hash check
+        against every sibling in the compose_targets table.
+
+  purpose_testnet_f_old_end:
+    fixture_roles: [F-OLD-END]
+    network: testnet
+    contract_id: CCT6PKZ4KG54R7M4PMBMVOQ5V6VJKDFPNZ5Q4JZH6FNTIL3OP3ISVJHU
+    wasm_hash: ea0c44b0576232162a5630046b223753922e9d55588a03c640a7395bb08adf19
+    class: cli-legacy
+    cliver: 23.3.0#08473ac20016c369067ce0dbca91d9595e72d6d4
+    rsver: 1.91.1
+    # No --locked (nothing before 25.2.0 has it). --optimize and --package are measured present on
+    # 23.3.0: the build probe accepted them and the build succeeded, 2026-08-19.
+    bldopt: [--manifest-path=contracts/verified-demo/Cargo.toml, --package=verified-demo, --optimize]
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    status: ready
+    purpose: >-
+      The old end of both version ranges, which the E2E layer had nothing on. Every fixture before the
+      compose-built ones sat at 27.0.0/1.96.0 — the newest end of the CLI range and of the Rust range —
+      while the corpus's risk is concentrated at the other end: 23.x CLIs paired with 1.8x/1.9x Rust.
+      23.3.0 is the oldest CLI major with real demand (rank 4, 150 live contracts, 4.6%) and 1.91.1 is
+      the lowest rsver any fixture will carry.
+    validation:
+      - built 2026-08-19 inside scvs-composed:template-gate-v3, a locally composed image for this pair
+      - >-
+        deployed to testnet and fetched back with matching Wasm hash; metadata read from the fetched
+        bytes records cliver 23.3.0#08473ac2 and rsver 1.91.1 and no bldimg
+      - >-
+        the lowest rsver any fixture carries, and the only one below 1.94 — 27.0.0/1.96.0 was the newest
+        end of both ranges and the only end the E2E layer had
+      - 626 bytes, and a wasm_hash distinct from every other compose fixture and from F-LEG-1
+    build:
+      image: composed locally — scvs-composed:template-gate-v3
+      produce: >-
+        node eng-tools/check-composition-template.mjs --cliver '23.3.0#08473ac20016c369067ce0dbca91d9595e72d6d4'
+        --rsver 1.91.1 --keep-image --no-contract-build
+      build_command: >-
+        SCVS_FIXTURE_BUILD_SCOPE=compose-only SCVS_FIXTURE_COMPOSE_TARGET=F-OLD-END
+        SCVS_FIXTURE_BUILD_IMAGE=scvs-composed:template-gate-v3
+        bash test/fixtures/e2e/build-purpose-contracts.sh
+      deploy_command: SCVS_FIXTURE_DEPLOY_SET=compose-only bash test/fixtures/e2e/deploy-testnet.sh
+    notes:
+      - >-
+        eng-tools/composition-pairs.mjs's oldest-major-cli23.3.0-rust1.91.1 row composed on 2026-08-19,
+        so the environment exists and the toolchain compiles a contract in it.
+      - >-
+        ★ ANSWERED 2026-08-19. The stated risk was that the committed Cargo.lock pins soroban-sdk 25.3.1
+        and that SDK's MSRV might be above 1.91.1, in which case no fixture could exist on this rsver. It
+        is not: the build succeeded and the deployed metadata records rssdkver 25.3.1#e50d95af — the same
+        SDK every other fixture resolved. 1.91.1 is inside its MSRV.
+      - >-
+        ★ And a second thing that answers, which was the more interesting worry. 23.3.0 has no --locked
+        (nothing before 25.2.0 does), so this build ran without it — and cargo still resolved exactly
+        rssdkver 25.3.1#e50d95af, byte-identical to the --locked builds. That is direct evidence for the
+        claim in build-purpose-contracts.sh that a committed Cargo.lock is sufficient for a fixed source
+        tree and that dropping --locked does not weaken these fixtures. It is one observation, not a
+        proof — cargo may still re-resolve if the manifest ever loosens — but it is the observation the
+        claim was missing.
+
+  purpose_testnet_f_leg_3_target:
+    fixture_roles: [F-LEG-3-target]
+    network: testnet
+    contract_id: CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW
+    wasm_hash: 4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab
+    class: cli-legacy
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    status: ready
+    validation:
+      - built inside the digest-pinned official image
+      - deployed to testnet and fetched back with matching Wasm hash
+      - target hash differs from F-LEG-1 and has no registered matching-source verification fixture
+
+  purpose_testnet_f58:
+    fixture_roles: [F-58]
+    network: testnet
+    contract_id: CBRIXGXYTW3A74CA5K4ICSFKMB56EIZSJC4XXZGF27BIALJ7TEUNJU4X
+    wasm_hash: 575ce34aa57957ff6e06b988eb7c50758667387763a15b65fc80c2952db5a75b
+    class: cli-58
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    bldimg: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+    status: ready
+    validation:
+      - complete SEP-58 recipe parsed from the deployed Wasm
+      - deployed to testnet and fetched back with matching Wasm hash
+
+  purpose_testnet_badimg_tag:
+    fixture_roles: [F-BADIMG-TAG]
+    network: testnet
+    contract_id: CAC66EEBWQIIBTYCN4ASU5OE5JPIU5CX7S6B6USEJ5FHYKZQDOUIABG4
+    wasm_hash: 65aaed90491a75bb82f246f78ef975130503d255a7d8b700cce4864bf1df8a63
+    class: cli-58
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    bldimg: docker.io/stellar/stellar-cli:25.2.0
+    status: ready
+    validation:
+      - complete SEP-58-shaped metadata parsed from the deployed Wasm
+      - deployed to testnet and fetched back with matching Wasm hash
+      - chain-recorded bldimg is mutable and intentionally not digest-pinned
+
+  purpose_testnet_badimg_untrusted:
+    fixture_roles: [F-BADIMG-UNTRUSTED]
+    network: testnet
+    contract_id: CBMRRUS3OIPFI5LY4OJKTF77VLRZDSWTBI4DUROPHOFZO4XGJDSLJJXD
+    wasm_hash: 65a942312b639ef9b764dfb88c5d683cc36ae9c81973d79d8167bcc3e9e63d17
+    class: cli-58
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    bldimg: docker.io/library/rust@sha256:4732ca96fd086cb9be682050c3f0176288eebaac2b80aa2bcefccfaf198e1950
+    status: ready
+    validation:
+      - complete SEP-58-shaped metadata parsed from the deployed Wasm
+      - deployed to testnet and fetched back with matching Wasm hash
+      - chain-recorded bldimg is the public rust 1.96.0-slim-bookworm OCI index digest
+
+  purpose_testnet_f_none:
+    fixture_roles: [F-NONE]
+    network: testnet
+    contract_id: CB4RTAYATOAKOFRMNBCGYTBA54ZLC5FS3BF2N636KZ5XELNSCUYUKBDH
+    wasm_hash: 2e27c372efa90653a8c2546f714c7782519cb89f7c1f219f2f0bd6bb3f31e03f
+    class: cli-none
+    rsver: 1.94.1
+    status: ready
+    validation:
+      - built with cargo rustc and no Stellar CLI
+      - deployed metadata contains rsver and rssdkver but no cliver
+      - deployed to testnet and fetched back with matching Wasm hash
+
+  purpose_testnet_f_multipkg:
+    fixture_roles: [F-MULTIPKG]
+    network: testnet
+    contract_id: CAXZUPMTFUU4JPTX5XOGWWIW5XVLV3OF3LHGTCMA6BB7BA3HVANYATLW
+    wasm_hash: 8bce8d0c883ed35557059e4906dc4b8de06eca95d044ad3e8980421eab2c1162
+    class: cli-legacy
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    source_sha256: 2948171d6ed3dd40e061ff922d597e5b0b23c9175c89260b138898fd667b07cb
+    bldopt: [--manifest-path=contracts/contract-b/Cargo.toml]
+    status: ready
+    validation:
+      - contract-b built inside the digest-pinned official image
+      - deployed to testnet and fetched back with matching Wasm hash
+      - deterministic source archive rebuilt contract-b with the recorded equals-form manifest path
+
+  purpose_testnet_s55_a:
+    fixture_roles: [F-S55-A]
+    network: testnet
+    contract_id: CA4XHOKR37CO6SRMN35VZIZUQVUVPMEAWKZVA2MYM5VGC6VCDDYMNI6S
+    wasm_hash: add3924046efca1ef3f7513807b7e209548ffd37386951e3e8d0f89a947b843c
+    class: cli-legacy
+    source_repo: github:example/contract
+    submitted_recipe:
+      source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+      source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+      image: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+      bldopt:
+        - --locked
+        - --manifest-path=contracts/verified-demo/Cargo.toml
+        - --package=verified-demo
+        - "--meta=source_repo=github:example/contract"
+        - --optimize
+    status: ready
+    validation:
+      - source_repo is on-chain; the remaining recipe is submitted because this contract is cli-legacy
+      - built inside the digest-pinned official image, deployed, fetched, and hash-checked
+
+  purpose_testnet_s55_b:
+    fixture_roles: [F-S55-B]
+    network: testnet
+    contract_id: CBGR2MR3VRQJX6G4ILZI6ADVAW7SHXK6SDNCIOXGBAT5IBVSTPCLB2DY
+    wasm_hash: 30aaf50be16af57ede4acac32ff46ff480f5326c526f1c93de13df74d9d45cf9
+    class: cli-legacy
+    source_repo: https://example.com/src.tar.gz
+    submitted_recipe:
+      source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+      source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+      image: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+      bldopt:
+        - --locked
+        - --manifest-path=contracts/verified-demo/Cargo.toml
+        - --package=verified-demo
+        - "--meta=source_repo=https://example.com/src.tar.gz"
+        - --optimize
+    status: ready
+    validation:
+      - source_repo is on-chain; the remaining recipe is submitted because this contract is cli-legacy
+      - built inside the digest-pinned official image, deployed, fetched, and hash-checked
+
+  purpose_testnet_s55_c:
+    fixture_roles: [F-S55-C]
+    network: testnet
+    contract_id: CBEC6C5OSITUAVBLOA5F6EYOTCWOBLQAQHCZDP7763PP5C36GZJKHDOO
+    wasm_hash: aa900d0e89ac395d443c884bd958b2d53ff72f2bddd4f2e1e787b4831f02797f
+    class: cli-legacy
+    source_repo: https://mirror.example.com/github:foo
+    submitted_recipe:
+      source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+      source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+      image: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+      bldopt:
+        - --locked
+        - --manifest-path=contracts/verified-demo/Cargo.toml
+        - --package=verified-demo
+        - "--meta=source_repo=https://mirror.example.com/github:foo"
+        - --optimize
+    status: ready
+    validation:
+      - source_repo is on-chain; the remaining recipe is submitted because this contract is cli-legacy
+      - built inside the digest-pinned official image, deployed, fetched, and hash-checked
+
+  purpose_testnet_s55_d:
+    fixture_roles: [F-S55-D]
+    network: testnet
+    contract_id: CDH27GIY7J3ABTWXAIFXQZRER5B4DZDZR5TFBPOOUWJ6TTSVD5Q5TDQF
+    wasm_hash: f0af8418de18a7a0dbd4151adffd51b258668a3b95a21ac4d9558ac6082f12e2
+    class: cli-58
+    source_repo: github:example/contract
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    source_uri: https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz
+    bldimg: docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43
+    status: ready
+
+  purpose_testnet_f_upg:
+    fixture_roles: [F-UPG-testnet]
+    network: testnet
+    contract_id: CDPEO2O4QSD7BRBWRF6ZK3XNW44W7CF23XRUP2ZRAV6CZKJCGT7ATOMR
+    class: cli-legacy
+    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
+    rsver: 1.96.0
+    initial_wasm_hash: 8d5b43411d6e4a9cad08814c2212a93d0ab7b6c8d6f453bc60a118c523c692e2
+    prepared_new_wasm_hash: 0b260ed57954e1e6c1a51dccd2f88340ca2054cc5c6aa339477550b0790e580e
+    initial_source_sha256: 8de1dd418723ee2eb493e245e1fd3905ea6cf01b099f7470a883f56ccc196461
+    prepared_new_source_sha256: aab6c4baae1c1ddd495dc3e783d6a86a1ed9d50878225db9f8cfddedc5a8dec9
+    upgrade_authority: GD4DMTPNUNFZIZCZWGUSURQ323TK3J2LUKFMSSVDY4SUKRZUD5DZVZ6N
+    current_state: old
+    status: ready
+    validation:
+      - each source archive rebuilt independently to its recorded Wasm hash in the official image
+      - v1 was deployed and fetched back with the initial hash
+      - v2 was uploaded before the test run
+      - an authorized v1 to v2 to v1 round trip completed and each state was fetched and hash-checked
+
+required_contracts:
+  F-LEG-1-testnet:
+    status: ready
+    contract: purpose_testnet_f_leg_1
+  F-SUB09-TIMEOUT:
+    status: ready
+    source_record: build-timeout
+    deployment: run_scoped
+    purpose: isolate E2E-SUB-09's retrying timeout job from every other target
+  F-SUB10-TIMEOUT:
+    status: ready
+    source_record: build-timeout
+    deployment: run_scoped
+    purpose: isolate E2E-SUB-10's retrying timeout job from every other target
+  F-RULE-D-TIMEOUT:
+    status: ready
+    source_record: build-timeout
+    deployment: run_scoped
+    purpose: isolate E2E-DEDUP-06's retrying timeout job from every other target
+  F-LEG-1-mainnet:
+    status: ready
+    contract: existing_mainnet_reflector_pulse_v6_0_1
+    evidence: test/fixtures/e2e/validate-mainnet-reflector-rebuild.sh
+  F-LEG-2:
+    status: candidate
+    candidates: [existing_mainnet_reflector_pulse_v6_0_1, existing_testnet_cli_legacy_27_1_94_1]
+    need: reproducible verifier-composed image and digest for at least one candidate
+    # ★ 2026-08-20 — `E2E-SUB-02/compose_cache_hit` no longer waits on this entry, and the reason is
+    # worth writing down so nobody unblocks F-LEG-2 expecting to close a case that is already closed.
+    #
+    # The cache-hit claim is that ONE environment row serves TWO DIFFERENT CONTRACTS — `environments`
+    # is keyed `(cliver, rsver, template_version)` UNIQUE, so a cache keyed on the target would pass
+    # any single-contract version of the case. A lone third-party contract can only be submitted
+    # twice, which is the shape `compose_unofficial_pair` already has. Two ready fixtures already sit
+    # on one pair (27.0.0#5a7c5fe7… / 1.96.0), so the case uses those:
+    #   purpose_testnet_f_leg_1   CBKT6EZF…  34fc22d0  canonical archive        rssdkver 25.3.1
+    #   purpose_testnet_f_multipkg CAXZUPMT… 8bce8d0c  multi-package contract-b rssdkver 23.5.3
+    #
+    # What F-LEG-2 is still for, and it is not a smaller thing: a contract THIS PROJECT DID NOT BUILD,
+    # whose composed environment reproduces bytes somebody else deployed. Every compose fixture here is
+    # built by our composer and verified by our composer; F-LEG-2 is the only planned entry that would
+    # break that circle for a pair no official image serves.
+    not_blocking: E2E-SUB-02/compose_cache_hit — implemented 2026-08-20 on F-LEG-1 + F-MULTIPKG
+    still_blocking: E2E-PUB-15's queued row, and the cross-environment claim described above
+  F-COMPOSE-ONLY:
+    status: ready
+    contract: purpose_testnet_f_compose_only
+    purpose: prove the E2E pipeline reaches a verdict for a pair no official image exists for
+    relation_to_F-LEG-2: >-
+      F-LEG-2 wants "a reproducible verifier-composed image and digest" for a contract already on
+      chain. This is the purpose-built way to get the same property without waiting for a suitable
+      third-party contract to appear, so it can carry E2E-SUB-02's cache-reuse claim for its own pair.
+      It does not close F-LEG-2, which is about an *existing* contract.
+  F-DEMAND-01:
+    status: ready
+    contract: purpose_testnet_f_demand_01
+    purpose: carry the corpus's largest single combination (25.2% of live class-B) end to end
+  F-OLD-END:
+    status: ready
+    contract: purpose_testnet_f_old_end
+    purpose: the only E2E fixture at the old end of both version ranges (23.x CLI, rust below 1.94)
+    measured: >-
+      the pinned soroban-sdk 25.3.1 accepts rust 1.91.1 — the MSRV risk this entry warned about did not
+      materialise, and the build resolved the same SDK without --locked. See the contract entry's ★ notes.
+  F-FLOOR-REFUSE:
+    status: ready
+    contract: existing_testnet_refusable_cliver
+    purpose: >-
+      prove a toolchain the composer must refuse is refused with the permanent arm (policy_rejected),
+      not the retryable one
+    found: >-
+      2026-08-19 — CDZZY4MN…U32JZR, cliver "25.2.0#" (empty rev) → unaddressable_cliver. Discovered by
+      test/fixtures/e2e/find-refusable-contracts.mjs --scan in a 20-contract sample.
+    not_blocked_on: >-
+      rebuild evidence. Unlike F-PUBTEST, this fixture's expected verdict is reached before any build,
+      so no source has to reproduce the deployed bytes and nothing is published.
+  F-PUBTEST:
+    status: candidate
+    candidates:
+      - public_testnet_stellaroid_earn
+      - public_testnet_stellaroid_2026_reference
+      - public_testnet_smart_block_explorer
+    purpose: supplemental real public testnet corpus, separate from purpose-built deterministic fixtures
+    need:
+      - prepare submitted recipes and rebuild evidence before using these as ready verification fixtures
+      - keep purpose-built fixtures as the canonical ready set until exact rebuilds are proven
+  F-LEG-3:
+    status: ready
+    target: purpose_testnet_f_leg_3_target
+    source_archive: artifacts/e2e-fixtures/archives/mismatch.tar.gz
+    source_sha256: f7715c78c9c6888c92c3051e73bbbe65c9edb8ddc232232c26d1f1d230a541b7
+    expected_build_wasm_hash: cea248caf5cb0d3b86108510d0864883bc59a1e98e30bd1f7c379cc6cb64ac2d
+    expected_verdict: mismatched
+    validation:
+      - source compiled successfully with the target toolchain and produced expected_build_wasm_hash
+      - expected_build_wasm_hash differs from the target contract wasm_hash
+  F-58-testnet-supplemental:
+    status: ready
+    contract: purpose_testnet_f58
+  F-BADIMG-TAG:
+    status: ready
+    contract: purpose_testnet_badimg_tag
+  F-BADIMG-UNTRUSTED:
+    status: ready
+    contract: purpose_testnet_badimg_untrusted
+  F-58-mainnet:
+    status: blocked
+    need: a currently resolvable mainnet cli-58 contract whose full on-chain recipe, source URI, source hash, and image digest all validate
+  F-NONE:
+    status: ready
+    contract: purpose_testnet_f_none
+  F-MULTIPKG:
+    status: ready
+    contract: purpose_testnet_f_multipkg
+    also_carries: >-
+      E2E-SUB-02/compose_cache_hit's second contract. It is the only ready fixture other than
+      purpose_testnet_f_leg_1 whose deployed metadata records cliver 27.0.0#5a7c5fe7… with rsver
+      1.96.0 and no bldimg, which makes the two of them the one pair of fixtures that share an
+      `environments` row while sharing nothing else — different contracts, hashes, source trees and
+      even rssdkver (23.5.3 against 25.3.1). ★ Its rebuild must therefore stay on that pair: moving
+      it to another toolchain silently removes the only cross-contract cache evidence in the suite,
+      which is why the case asserts the two compose intents name the same pair before anything else.
+  F-S55-A:
+    status: ready
+    contract: purpose_testnet_s55_a
+  F-S55-B:
+    status: ready
+    contract: purpose_testnet_s55_b
+  F-S55-C:
+    status: ready
+    contract: purpose_testnet_s55_c
+  F-S55-D:
+    status: ready
+    contract: purpose_testnet_s55_d
+  F-S55-E:
+    status: ready
+    deployment: run_scoped
+    source_repo: GitHub:example/contract
+    purpose: "exercise RA5's exact lowercase github: discriminator"
+  F-S55-F:
+    status: ready
+    deployment: run_scoped
+    source_repo: "github:"
+    purpose: "exercise RA5's prefix-only observation at an empty suffix"
+  F-UPG-testnet:
+    status: ready
+    contract: purpose_testnet_f_upg
+  F-UPG-mainnet:
+    status: blocked
+    need: approved funded mainnet signer and lifecycle plan
+  F-XNET:
+    status: blocked
+    testnet_contract: purpose_testnet_f_leg_1
+    wasm_hash: 34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37
+    need: deploy the recorded Wasm unchanged with an approved funded mainnet signer
+  F-DARK:
+    status: candidate
+    source_archive: artifacts/e2e-fixtures/archives/canonical-source.tar.gz
+    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
+    server: test/fixtures/e2e/dark-source-server.mjs
+    need: expose the fixture server at a URL reachable by the deployment under test
+    validation:
+      - local server response bytes matched source_sha256 with cache disabled
+    # ── What E2E-SRC-08 checks about this fixture before it will run (2026-08-20) ─────────────────
+    # Both are premises the case asserts rather than assumes, because either one silently produces a
+    # green run that proves nothing.
+    requirements:
+      - >-
+        The `source_uri` recorded in the fixture inventory must be an address the DEPLOYMENT resolves.
+        The verifier fetches the source, not the harness, so the 127.0.0.1 default is local smoke only
+        — bind with SCVS_FIXTURE_DARK_HOST=0.0.0.0 behind a reachable address.
+      - >-
+        ★ The archive must NOT be the canonical one recorded above. Its sha256 is F-LEG-1's, and
+        E2E-SRC-01 retains that archive — so `/visibility_reflects_reality` would pass by finding
+        SRC-01's copy and would prove nothing about this fixture. Point SCVS_FIXTURE_DARK_ARCHIVE at
+        an archive with its own hash (the bulk corpus has 200) and record that hash here and in the
+        inventory. The case refuses to run when the hash collides with another fixture's.
+    control_protocol: >-
+      POST {control} {"available": boolean} — implemented by dark-source-server.mjs's /control route
+      and driven by test/integration/support/source-control.ts. Set SCVS_E2E_DARK_SOURCE_CONTROL_URL
+      to it. Nothing else may stand in: E2E-SRC-08 is about a source that really stopped answering,
+      and env.ts refuses SCVS_E2E_ASSUME_SOURCE_DARK outright.
+  F-PRIV:
+    status: ready
+    source_record: private-canary
+    canary: SCVS-PRIVATE-CANARY-20260803
+    target: purpose_testnet_f_leg_1
+    # ★ 2026-08-20. E2E-SRC-03 needs one private fixture per terminal state, and the three below are
+    # variants of this one rather than separate fixtures: same target, same recipe, different source.
+    # None of them needs a new on-chain contract — the variable is the archive, not the chain.
+    src03_terminal_state_variants:
+      on_verified:
+        status: ready
+        source_record: private-canary
+        terminal_state: verified
+      on_mismatched:
+        status: ready
+        source_record: src03-mismatch-private
+        source_archive: artifacts/e2e-fixtures/archives/src03-mismatch-private.tar.gz
+        source_sha256: be4563d689c6a98cf1c517e928ffd14c69b52dce110f5305c41bff8f910a517a
+        terminal_state: job `mismatch`, verdict `mismatched`
+        fixture: F-PRIV-MISMATCH
+        why_not_reuse_mismatch_archive: >-
+          SRC-07 submits mismatch.tar.gz with is_public true, so its bytes are retained at
+          sources/<hash>. An SRC-03 row sharing that source hash could not distinguish "this private
+          submission was not published" from "a public case published the same archive earlier", which
+          is HA3. The canary in the variant makes the hash diverge while leaving the build — and so the
+          mismatched verdict — untouched.
+      on_build_failed:
+        status: ready
+        source_record: build-failed
+        source_archive: artifacts/e2e-fixtures/archives/build-failed.tar.gz
+        source_sha256: 96879a2eb739032612785151a1642ae93ebb28853b0bc5900d4974914fa64033
+        terminal_state: failed / build_failed
+        note: >-
+          Already generated; validate-local.sh asserts it produces a recognizable rustc error rather
+          than merely failing. Wired into the inventory as F-PRIV-BUILDFAILED. Deliberately not a
+          newly written syntax-error source: a second one would have to be kept in step with this one.
+      on_internal_error:
+        status: ready
+        source_record: private-canary
+        target: SCVS_E2E_INTERNAL_ERROR_CONTRACT_ID
+        need: >-
+          Runner supplies a structurally valid contract id that is absent on the target network for the
+          maintenance window. The real chain lookup then records internal_error with
+          stellar_contract_fetch_failed. This row observes first-failure cleanup only; it does not
+          assert Rule D retry retention.
+    observer_requirement: >-
+      HA1/HA2 are not observable over HTTP by design (no upload GET/HEAD, no sourceRef on the job body,
+      log route fenced to build-logs/). The runner needs SCVS_E2E_STAGING_PROBE_URL (existence-only
+      probe — the only admissible option on a shared bucket, since HeadObject requires s3:GetObject) or
+      SCVS_E2E_STAGING_BUCKET/REGION against an isolated E2E bucket, plus an approved
+      SCVS_E2E_STAGING_DELETION_DEADLINE_MS. Re-submitting the upload_id is DB-row evidence only.
+  F-SRC-11:
+    status: ready
+    # ★ No new contract, and that is the finding rather than a shortcut. Source retention is keyed by
+    # `source_sha256`, not by target, so what E2E-SRC-11 needs is two source archives nothing else has
+    # retained — not two deployed contracts. Both borrow purpose_testnet_f_leg_3_target, whose
+    # published verdict is `mismatched` and therefore cannot be displaced into hiding by ADR-014.
+    fault_run:
+      fixture: F-SRC11-FAULT
+      source_archive: artifacts/e2e-fixtures/archives/bulk/bulk-002.tar.gz
+      source_sha256: 4bb96e0ddca348f9d0bc00eb4222eb66c118c69949fa90c9a421ff448ae7f87c
+    negative_control:
+      fixture: F-SRC11-CONTROL
+      source_archive: artifacts/e2e-fixtures/archives/bulk/bulk-003.tar.gz
+      source_sha256: dab5989b7d9f85d3f8e1496887d11e9d80c43ea5adef11977583b120c3267fa8
+    why_two_archives: >-
+      The 🔁 control proves retention works on this deployment; the fault run proves it fails only
+      under the injected fault. One shared archive would let the control's stored copy answer the
+      fault run's read, and the case would pass with the fault doing nothing.
+    why_a_bulk_archive: >-
+      It has to compile. A generated non-compiling archive ends the job at build_failed, which
+      publishes nothing and retains nothing — and SRC-11 is about the retention write on a job that
+      DID publish. The bulk corpus is 200 compilable sources whose builds mismatch, each with its own
+      hash, which is exactly the shape needed.
+    not_blocked_on: >-
+      a contract. It is blocked on prerequisite P12 only — an object-store fault injector that can
+      fail writes under `sources/` while `wasms/` and `reports/` stay healthy. Wire it to
+      SCVS_E2E_OBJECT_STORE_FAULT_URL; anything wider turns the run into E2E-PUB-16.
+    cleanup: >-
+      The case heals the fault and backfills by re-submitting under a fresh run-scoped recipe. If it
+      cannot, it says so: a record left `is_public: true` with no stored copy is the state README gap
+      9 describes and E2E-SRC-09 reports.
+
+  F-BULK:
+    status: ready
+    source_records: bulk-001 through bulk-200
+    count: 200
+    guarantee: every source archive hash is distinct and every sampled build mismatches the target
+  F-ADV-PLANT:
+    status: ready
+    source_record: planted-target-wasm
+    target: purpose_testnet_f_leg_1
+  F-ADV-BUILDRS:
+    status: ready
+    source_record: buildrs-planted-target
+    target: purpose_testnet_f_leg_1
+  F-ADV-TAR:
+    status: ready
+    # ★ candidate -> ready, 2026-08-20. The two outstanding records were waiting on a fixture
+    # *generator* and a limit *source*, and both now exist. No on-chain contract is or ever was
+    # needed: the submission borrows F-LEG-1's target and the archives are the variable.
+    target: purpose_testnet_f_leg_1
+    generated_by: test/integration/support/archives.ts
+    generated_at: test time, in code, never checked in as binaries
+    why_not_checked_in: >-
+      test/fixtures/malicious-tarballs/README.md's decision, which applies unchanged here: a
+      checked-in archive is opaque to a reviewer and unreadable in a diff, a repository shipping
+      archives designed to escape an extraction root is itself a small hazard, and GNU tar strips a
+      leading '../' at create time while bsdtar keeps it — so a tar-built traversal fixture tests the
+      local tar rather than this validator, and asserts a different reason code per platform.
+    source_records:
+      tar-path-traversal:
+        status: ready
+        bound_under_test: none
+      tar-symlink-escape:
+        status: ready
+        bound_under_test: none
+      tar-entry-count-bomb:
+        status: ready
+        bound_under_test: LIMIT_TAR_ENTRIES
+        shape: exactly LIMIT_TAR_ENTRIES + 1 entries surviving --strip-components 1
+      tar-expanded-size-bomb:
+        status: ready
+        bound_under_test: LIMIT_UNCOMPRESSED_BYTES
+        shape: declared expansion of exactly LIMIT_UNCOMPRESSED_BYTES + 1, written through a gzip stream
+    limits_from:
+      repo_managed_env: config/deploy/<SCVS_E2E_ENV>/builder.json — SCVS_MAX_SOURCE_ARCHIVE_ENTRIES,
+        SCVS_MAX_SOURCE_ARCHIVE_UNCOMPRESSED_BYTES, SCVS_MAX_SOURCE_ARCHIVE_BYTES; value before an
+        explicitly numeric default, blocking on a non-literal source or a prose default
+      other_deployments: live-config evidence via the verifier's policy_url; no such field exists yet,
+        so the two numeric records are unbuildable there and their rows skip
+      never: a SCVS_E2E_LIMIT_* environment variable — the harness asserting its own guess is not
+        evidence about a deployment (docs/qa/e2e-missing-coverage-priority.md § "SEC-03 的准确补齐边界")
+    note: >-
+      `ready` here means the four archives can be *built and submitted*; the two numeric ones still
+      skip on a deployment whose bounds cannot be cited. That is a runner precondition, not a fixture
+      blocker, which is why it is not `candidate` — nothing further has to be built or deployed.
+  F-ADV-SHA:
+    status: ready
+    source_record: source-sha-mismatch
+    archive_record: canonical
+  F-BUILD-TIMEOUT:
+    status: ready
+    source_record: build-timeout
+    source_archive: artifacts/e2e-fixtures/archives/build-timeout.tar.gz
+    source_sha256: 791471844ce3c2f22ca2902dbd7494b152d673288d55d6f41d06e90d21e88570
+    purpose: exercise E2E-SUB-09/build_timeout and E2E-SUB-10/build_timeout
+    validation:
+      - Cargo.toml enables build.rs
+      - build.rs emits the F-BUILD-TIMEOUT marker before an unbounded sleep loop
+      - validate-local.sh inspects the archive without executing the unbounded script
+    note: >-
+      The submitted source is the variable; each case deploys F-LEG-1's Wasm and recorded (cliver,
+      rsver) pair under its run's salt. The deployment's own LIMIT_WALLCLOCK must terminate the
+      Batch job and classify it as build_timeout.
+  F-ADV-EGRESS:
+    status: candidate
+    source_record: build-egress
+    need: replace the reserved .invalid endpoint with a controlled endpoint and retain its request logs
+  F-ADV-BLDOPT:
+    status: ready
+    escape_case:
+      status: ready
+      bldopt: [--manifest-path=../../outside/Cargo.toml]
+    normalized_replay_case:
+      status: ready
+      fixture: F-MULTIPKG
+      source_archive: artifacts/e2e-fixtures/archives/multi-package-source.tar.gz
+      bldopt: [--manifest-path=contracts/contract-b/Cargo.toml]
+  F-ADV-TOOLCHAIN:
+    status: ready
+    source_record: toolchain-selector
+    requested_source_toolchain: 1.99.0
+
+generated_data:
+  output_root: artifacts/e2e-fixtures
+  manifest: artifacts/e2e-fixtures/manifest.ndjson
+  generator: test/fixtures/e2e/generate-fixtures.sh
+  purpose_built_manifest: artifacts/e2e-fixtures/purpose-built-wasm.ndjson
+  testnet_deployments: artifacts/e2e-fixtures/testnet-deployments.ndjson

@@ -1,0 +1,24 @@
+name: soroban-verification-service
+
+services:
+  postgres:
+    container_name: scvs-postgres
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scvs
+      POSTGRES_PASSWORD: scvs_local_dev
+      POSTGRES_DB: scvs
+    ports:
+      - "5433:5432"
+    volumes:
+      - scvs_postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scvs -d scvs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  scvs_postgres_data:

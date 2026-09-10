@@ -1,0 +1,12 @@
+{
+  // Was a standalone copy of tsconfig.base.json's options, minus `experimentalDecorators`/
+  // `emitDecoratorMetadata` — which made the `@Injectable()` repositories fail to compile with
+  // TS1206 once they gained constructor parameter decorators. Extending the base, like every other
+  // package does, is both the fix and one less copy to keep in sync.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "generated/**/*"]
+}

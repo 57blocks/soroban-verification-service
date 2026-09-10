@@ -1,0 +1,14 @@
+{
+  "schema": "stellar-by-hash-result-v2",
+  "wasm_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "results": [
+    {
+      "status": "verified",
+      "verifier_id": "fixture-verifier-a",
+      "verified_at": "2026-06-30T00:00:00.000Z",
+      "artifact_url": "./test/fixtures/verifiers/verifier-a/artifacts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "updated_at": "2026-06-30T00:00:00.000Z"
+}

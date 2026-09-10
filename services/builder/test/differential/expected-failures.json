@@ -1,0 +1,6 @@
+{
+  "be6-multi-package-ambiguous-current": {
+    "rules": ["BE6"],
+    "reason": "A whole-workspace multi-artifact build has no recipe field naming which artifact to compare."
+  }
+}

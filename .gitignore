@@ -1,0 +1,38 @@
+.DS_Store
+node_modules
+dist
+dist-types
+build
+generated/
+openapi.json
+coverage
+
+# Turborepo's local task cache and per-package task logs.
+.turbo/
+# The Mimosa security hook's local state and findings cache — tool scratch, never versioned.
+.mimosa/
+.idea/
+.env
+.env.local
+tmp
+.tmp
+artifacts/
+**/artifacts/
+.local-results/
+*.log
+*.tsbuildinfo
+demo
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Fetched/compiled by scripts/ci/fetch-or-build-stellar-cli.sh — arch-specific build artifact,
+# never committed (see docker/stellar-cli.pin for the source-of-truth commit pins).
+docker/prebuilt/
+
+# @scvs/e2e-tests: an optional local inventory override. Dev CI generates its ignored run-local
+# inventory under artifacts/; another environment must point SCVS_E2E_FIXTURES at its own inventory.
+test/integration/fixtures/e2e-fixtures.json
+
+# Python bytecode from eng-tools/check-feature-ownership.py
+__pycache__/

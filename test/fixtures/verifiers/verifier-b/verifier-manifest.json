@@ -1,0 +1,16 @@
+{
+  "schema": "stellar-verifier-manifest-v1",
+  "id": "fixture-verifier-b",
+  "display_name": "Fixture Verifier B",
+  "url": ".",
+  "policy_url": "policy.json",
+  "results": {
+    "by_contract_template": "results/by-contract/{network}/{contract_id}.json",
+    "by_hash_template": "results/by-hash/{wasm_hash}.json"
+  },
+  "feeds": {
+    "latest_url": "feeds/latest.json",
+    "daily_template": "feeds/{network}/{date}.jsonl"
+  },
+  "updated_at": "2026-06-30T00:00:00.000Z"
+}

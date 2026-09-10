@@ -1,0 +1,132 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { findWorkspaceRoot } from "@scvs/config";
+import { parseDto } from "@scvs/core";
+import { LegalDocumentsBundle, type LegalBlock, type LegalDocumentSlug } from "../src/modules/legal/legal.dto.js";
+import { loadLegalDocumentsSource } from "../src/modules/legal/legal.source.js";
+
+/**
+ * The reference deployment's own bundle, the one `dev` and `staging` are configured with.
+ *
+ * **This file is where the text-versus-behaviour coverage lives now.** It used to be a `describe` block in
+ * `clients/web/test/legal-pages.spec.tsx` asserting the wording of the two documents while they were
+ * TypeScript modules in the console bundle. Moving the text to operator configuration moved its guard here,
+ * rather than losing it — every assertion below is one the console spec used to make, and each one exists
+ * because the sentence it checks is a claim about what the code actually does.
+ */
+const root = findWorkspaceRoot() as string;
+const REFERENCE = "config/legal-documents.json";
+
+let bundle: LegalDocumentsBundle;
+let raw: string;
+
+beforeAll(async () => {
+  raw = await readFile(join(root, REFERENCE), "utf8");
+  bundle = parseDto(LegalDocumentsBundle, JSON.parse(raw));
+});
+
+/** Every paragraph and list entry of one document, flattened — the same shape the old spec asserted over. */
+const text = (slug: LegalDocumentSlug): string => {
+  const document = bundle.documents.find((candidate) => candidate.slug === slug);
+  if (!document) throw new Error(`${REFERENCE} carries no ${slug} document`);
+  return document.sections
+    .flatMap(({ blocks }) => blocks.map(flatten))
+    .join(" ");
+};
+
+const flatten = (block: LegalBlock): string => (typeof block === "string" ? block : block.list.join(" "));
+
+describe("the configured bundle is one this service can actually serve", () => {
+  it("validates, and loads through the real loader by its relative path", async () => {
+    // The relative path is what `config/deploy/{dev,staging}/verification-svc.json` carries, and it resolves
+    // against the workspace root rather than the cwd — which in the image is `/app`.
+    const loaded = await loadLegalDocumentsSource(REFERENCE);
+    expect(loaded.raw).toBe(raw);
+    expect(bundle.schema).toBe("scvs-legal-documents-v1");
+  });
+
+  it("carries both documents, once each, with unique section ids", () => {
+    expect(bundle.documents.map((document) => document.slug).sort()).toEqual(["privacy", "terms"]);
+    for (const document of bundle.documents) {
+      const ids = document.sections.map((section) => section.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+
+  it("is still a draft, so acceptance stays offered and not required", () => {
+    // If this fails because an effective date was set, that is the intended path — enforcement begins, and
+    // this expectation becomes `not.toBeNull()` in the same change.
+    expect(bundle.effective_date ?? null).toBeNull();
+    expect(bundle.documents.every((document) => document.open_items.length > 0)).toBe(true);
+  });
+
+  it("resolves every interpolation the TypeScript modules used to carry", () => {
+    // The text came from template literals over `serviceName` / `operatorName` / URL constants. A `${` left
+    // in the JSON would be a transcription that never got evaluated.
+    expect(raw).not.toContain("${");
+    expect(bundle.operator_name).toBe("57Blocks");
+  });
+
+  it("points its revision history at where the documents now live — in the body text too", () => {
+    // Not at `clients/web/.../legal/content`, which no longer exists: a reader following this link has to
+    // reach the file the next revision will actually change.
+    expect(bundle.history_url).toContain(REFERENCE);
+    // And the same URL is interpolated *inside* two paragraphs (terms §7, privacy §8). Asserting only the
+    // top-level field missed them, and a dead link in the published legal text is worse than one in metadata.
+    expect(raw).not.toContain("clients/web/src/features/legal/content");
+  });
+});
+
+describe("the terms say what the Service actually does", () => {
+  it("state that published content cannot be removed", () => {
+    expect(text("terms")).toMatch(/cannot delete, alter, or recall/);
+  });
+
+  it("say a verdict is not an audit", () => {
+    expect(text("terms")).toMatch(/not a security audit/);
+  });
+
+  it("warn against submitting secrets without using that as an excuse", () => {
+    const terms = text("terms");
+    expect(terms).toMatch(/Do not submit secrets/);
+    expect(terms).toMatch(/not a confidential-computing service and not secure storage/);
+    // Counsel asks for the disclaimer AND for it not to read as a licence to be careless.
+    expect(terms).toMatch(/controls described here are ones we hold ourselves to regardless/);
+    expect(terms).toMatch(/There is no way to re-issue the token/);
+  });
+});
+
+describe("the privacy notice says what the Service actually does", () => {
+  it("describes the rate-limit fingerprint as keyed and rotating", () => {
+    const privacy = text("privacy");
+    expect(privacy).toMatch(/HMAC-SHA-256 fingerprint of the requesting IP address/);
+    expect(privacy).toMatch(/cannot be linked across windows or reversed/);
+    expect(privacy).not.toMatch(/pseudonymous, not anonymous/);
+  });
+
+  it("describes the raw log and the summary as separate tiers", () => {
+    const privacy = text("privacy");
+    expect(privacy).toMatch(/\*\*Raw build logs\.\*\*/);
+    expect(privacy).toMatch(/\*\*Diagnostic summary\.\*\*/);
+    expect(privacy).toMatch(/deleted 7 days after the build finishes/);
+    expect(privacy).toMatch(/the job link does not open it/);
+    expect(privacy).toMatch(/contains no compiler output/i);
+    // The bearer-link model, described accurately when it was true, must not survive its removal.
+    expect(privacy).not.toMatch(/served to anyone who holds the job link/);
+  });
+
+  it("states both retention periods, not just the permanent one", () => {
+    const privacy = text("privacy");
+    expect(privacy).toMatch(/counters are deleted fifteen minutes after their window closes/);
+    expect(privacy).toMatch(/deleted 30 days after it was created/);
+    expect(privacy).not.toMatch(/Job records are retained indefinitely/);
+  });
+
+  it("mentions no third party the console no longer contacts", () => {
+    // Self-hosting the typefaces removed the vendor, so every statement about it had to go with it — a
+    // notice describing a request the console no longer makes is as wrong as one omitting a request it does.
+    for (const slug of ["terms", "privacy"] as const) {
+      expect(text(slug)).not.toMatch(/Google/i);
+    }
+  });
+});
