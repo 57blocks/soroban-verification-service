@@ -1,6 +1,6 @@
 # The submission/results console (clients/web): a Vite build served by nginx.
 
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 
 # Whole workspace: the console's build chain reaches further than its own directory. It imports the

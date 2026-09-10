@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------------------------
 # Stage 1/3: compile TypeScript with the full (dev-included) dependency graph.
 # ---------------------------------------------------------------------------------------------
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
@@ -22,7 +22,7 @@ RUN pnpm --filter @scvs/builder... run build
 
 # ---------------------------------------------------------------------------------------------
 # Stage 2/3: a second, `--prod`-only install of the exact same manifests.
-FROM node:24-slim AS runtime-deps
+FROM node:26-slim AS runtime-deps
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
@@ -39,7 +39,7 @@ RUN corepack enable \
 # ---------------------------------------------------------------------------------------------
 # Stage 3/3: the actual runtime image — only what's needed to execute the built JS + drive the
 # `stellar`/`docker` CLIs as subprocesses.
-FROM node:24-slim
+FROM node:26-slim
 
 # `libarchive-tools` supplies `bsdtar`, and it is here for exactly one caller: `archive-extraction.ts` reads
 # **zip** source archives with it.

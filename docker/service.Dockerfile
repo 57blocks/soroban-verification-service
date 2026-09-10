@@ -1,7 +1,7 @@
 # Generic resident-service image, shared by services/verification-svc, services/orchestrator-svc and
 # services/query-svc.
 
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 
 # The whole workspace, deliberately — not an enumerated list of the manifests these three services depend on.
@@ -23,7 +23,7 @@ RUN pnpm --filter @scvs/verification-svc... \
          --filter @scvs/orchestrator-svc... \
          --filter @scvs/query-svc... run build
 
-FROM node:24-slim
+FROM node:26-slim
 ENV NODE_ENV=production
 WORKDIR /app
 
