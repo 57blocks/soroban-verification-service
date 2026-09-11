@@ -63,11 +63,13 @@ Verified by: `services/orchestrator-svc/src/modules/scheduler/rebuild-reconciler
 ## The idempotency key
 
 Identifies a **rebuild**, not a target. Computed over content, not location — `source_sha256`,
-`bldimg`, ordered `bldarg` (default `["contract", "build"]`), bytewise-sorted `bldopt` — with each
-element length-prefixed so no two distinct input tuples can serialise to the same byte string.
-Excludes network, contract ID, and Wasm hash, which is what makes a cached rebuild reusable across
-targets while the verdict is recomputed per target.
-Verified by: `packages/core/src/rebuild-key.ts` (`computeIdempotencyKey`), `packages/core/src/rebuild-key-test.ts`.
+`bldimg`, ordered `bldarg` (default `["contract", "build"]`), bytewise-sorted `bldopt`, and an
+optional `metadata_replay` component when one applies — with each element length-prefixed so no two
+distinct input tuples can serialise to the same byte string. Excludes network, contract ID, and Wasm
+hash, which is what makes a cached rebuild reusable across targets while the verdict is recomputed
+per target. `Rebuild.idempotencyKey` is unique in the schema: two rebuild rows never share a key.
+Verified by: `packages/core/src/rebuild-key.ts` (`computeIdempotencyKey`), `packages/core/src/rebuild-key-test.ts`,
+`packages/db/prisma/schema.prisma`.
 
 ## Deduplication and re-verification
 
@@ -125,15 +127,3 @@ Verified by: `services/orchestrator-svc/src/modules/source-resolution/source-res
 Verification is independent of storage: a submission whose source is not stored still receives a real
 verdict, published like any other. A verdict is never downgraded because source became unavailable
 later.
-
-## Drift notes
-
-- The idempotency key implementation (`packages/core/src/rebuild-key.ts`) hashes an additional
-  optional `metadata_replay` component when present, beyond the four fields (`source_sha256`,
-  `bldimg`, `bldarg`, `bldopt`) this document describes. Not a contradiction — it's conditionally
-  appended and empty by default — but a reader deriving the key independently needs
-  `rebuild-key.ts` itself, not just this summary.
-- `Rebuild.idempotencyKey` is `@unique` in the current schema (`packages/db/prisma/schema.prisma`).
-  The original design source noted this as an open disagreement between two documents (a spec wanting
-  it non-unique on the job table vs. a decision relocating it to the rebuild); the shipped schema has
-  settled it — unique, on the rebuild — which is what this document now describes as built.

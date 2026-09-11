@@ -60,6 +60,8 @@ signals the status object does not. Two properties that must survive any rewrite
   canonicalization requirement.
 - **The artifact records only facts true at verification time.** Anything that changes later (an
   archive reference arriving, a source going dark) lives in the mutable status object, never here.
+- **The artifact is unsigned.** Integrity is checkable via `sha256`; the artifact does not
+  self-attribute to a signing key.
 
 *Verified by:* `packages/storage-layout/src/publish.ts` (`serializeReport`, `publishReport`),
 `test/integration/cases/pub/pub-report-immutability.spec.ts` (`/hash_matches_results_urls`,
@@ -101,15 +103,3 @@ routes instead. See [rule 14](../invariants.md)'s staleness test for the general
 
 *Verified by:* `test/integration/cases/pub/pub-layout-and-bulk-load.spec.ts` (the "has no
 `by-contract`/`by-network` file" probes).
-
-## Drift notes
-
-- The internal design document this spec was rewritten from carries an extended revision history —
-  withdrawn extension mechanisms (`x_extensions`, `57b.candidate-sources`), renamed field tiers, and
-  a signature scheme considered and dropped. None of that is restated here: it is process history,
-  not a standing property, and the wire shape it discusses now lives entirely in
-  [`docs/results-sep/`](../results-sep/).
-- Signing is explicitly **not implemented**: report artifacts are integrity-checkable via `sha256`
-  but not self-attributing. This spec states the rule as it stands — unsigned — rather than the
-  deferred plan, since restating a future intention is not an
-  as-built claim.

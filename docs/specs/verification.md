@@ -13,21 +13,24 @@ built — a deployed Wasm never acquires metadata later.
 | **cli-legacy** | `cliver` + `rsver`, no `bldimg` | submitted source, tested against the recorded pair | composed from the pair (see [`build-environments.md`](build-environments.md)) |
 | **cli-none** | no CLI record | — | `unsupported` |
 
+The "Environment" column is which build image the class resolves to; which mechanism performs the
+rebuild is a separate question, covered below.
+
 Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/chain-reader.service.ts`,
 `packages/core/src/wasm-metadata.ts`
 
 ## Mechanism
 
-**One mechanism performs every rebuild: the verifier's own two-stage sandbox.** The CLI-backed
-mechanism (`stellar contract verify`) is retired; `selectBuildMechanism` is pure, total, and returns
-`mode: "build"` for every input — its branches survive only to compute `reason`, persisted as
-`recipe_source`.
+**One mechanism performs every rebuild, for cli-58 and cli-legacy alike: the verifier's own
+two-stage sandbox.** `selectBuildMechanism` is pure, total, and returns `mode: "build"` for every
+input — its branches exist only to compute `reason`, persisted as `recipe_source`. A cli-58 target's
+build image is the chain-named, policy-checked digest; the sandbox builds against that digest.
 
 Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/mechanism-routing.util.ts`
 
 A sandbox execution failure is terminal — there is no other mechanism to demote to. A stale
-`cli_failure` from before the retirement is re-opened for the next job that attaches (a fresh
-attempt, not a demotion), never retried in place.
+`cli_failure` is re-opened for the next job that attaches (a fresh attempt, not a demotion), never
+retried in place.
 
 Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/failure-reason.util.ts`
 
@@ -88,11 +91,11 @@ Verified by: `services/builder/test/differential/reproducibility.spec.ts`,
 contract's own bytes — via the source archive or a `build.rs` side effect, so a verifier that finds
 "the rebuilt artifact" by scanning a directory publishes a false `verified`.
 
-**Current mechanism** (amended from the build-tool-report design after a 2026-09-09 finding that a
-proc macro can forge a build tool's own report text on the same output stream): the artifact is the
-sole `.wasm` file in a dedicated output mount carrying nothing else, and the build tool's own report
-must *confirm* the candidate rather than *select* it from an unconstrained directory scan. Every
-`.wasm` already present in materialized source is snapshotted before the build and excluded.
+The artifact is the sole `.wasm` file in a dedicated output mount carrying nothing else, and the
+build tool's own report must *confirm* the candidate rather than *select* it from an unconstrained
+directory scan — a build tool's report text shares the same output stream a proc macro can write to,
+so the report cannot be trusted to name the artifact on its own. Every `.wasm` already present in
+materialized source is snapshotted before the build and excluded.
 
 Verified by: `services/builder/src/modules/builder/artifact-selection.ts`
 (`selectArtifactFromOutput`), `services/builder/test/planted-artifact.spec.ts`,
@@ -146,14 +149,3 @@ Only digest-pinned images are accepted; a mutable tag cannot support a reproduci
 image-acceptance policy is compile-time code, never operator-supplied runtime data.
 
 Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/policy.ts`
-
-## Drift notes
-
-- The source design names a `check-mount-paths` tool (invoked as a `check:` script) asserting CE3
-  (bind-mount host path equivalence) statically against registered job definitions. No such script
-  or `eng-tools/` file exists in this repository — either never shipped here or since removed.
-  Flagged, not asserted.
-- The source design's mechanism-selection section (§2) documents an amendment history (CLI retired
-  2026-08-31, retention window closed, artifact-identification rule amended 2026-09-09). This spec
-  states only the resulting current behavior; the amendment narrative itself is not carried forward,
-  per the as-built/no-history rule this document follows.

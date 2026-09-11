@@ -14,14 +14,22 @@ Every route below is under `/api/verification/v1`. Free, no accounts, no KYC, HT
 | `GET` | `/verifications/{job_id}/events` | Server-sent progress |
 | `GET` | `/verifications/{job_id}/log` | Redacted build output, every terminal outcome including failure |
 | `POST` | `/uploads/source` | Upload target; carries the public-declaration flag |
-| `GET` | `/wasms` | This verifier's own bulk-load stream |
-| `GET` | `/wasms/{wasm_hash}.json` | Per-hash status read |
+| `GET` | `/wasms` | Reads the published bulk-load stream: `jobs.published_updated_at` and the same documents `orchestrator-svc` publishes |
+| `GET` | `/wasms/{wasm_hash}.json` | Reads the published result root: the same bytes at `wasms/<hash>.json`, plus `202` while a verification for that hash is queued or running |
 
 Field-level request/response shapes: [`docs/submission-api-guide.md`](../submission-api-guide.md).
+`GET /contracts/{network}/{contract_id}` is served under `query-svc`'s own `/api/query/v1/` prefix
+(`services/query-svc/src/modules/results/results.controller.ts`), a separate service from this one.
+
+Both `/wasms` routes above give a consumer of this verifier's public HTTP surface a stable place to
+poll or enumerate results without its own storage-backend or bucket-layout knowledge: verification-svc
+fetches the same object the publisher wrote and returns it byte-identical, adding only the states a
+static file cannot represent (`202` in flight, `404`/`503` for absent/unreadable storage).
 
 Verified by: `services/verification-svc/src/modules/preflight/preflight.controller.ts`,
 `services/verification-svc/src/modules/verifications/verifications.controller.ts`,
 `services/verification-svc/src/modules/wasms/wasms.controller.ts`,
+`services/verification-svc/src/modules/wasms/wasms.service.ts` (`storage.readText(wasmStatusKey(wasmHash))`),
 `services/verification-svc/src/modules/bulk-load/own-bulk-load.controller.ts`
 
 ## Preflight
@@ -169,14 +177,3 @@ declaration, progress, verdict, and build log — including on failure. No CLI h
 published API and SDK (Node-compatible) are sufficient for non-interactive/CI use.
 
 Verified by: `test/integration/cases/web/`, `test/integration/cases/sdk/`
-
-## Drift notes
-
-- The design source claimed `GET /v1/wasms/{wasm_hash}.json` was "not served" by this surface (owned
-  by a different feature). It is now implemented directly in
-  `services/verification-svc/src/modules/wasms/wasms.controller.ts` and is listed in the surface
-  table above as current behavior.
-- `GET /contracts/{network}/{contract_id}` is served, but under `query-svc`'s own
-  `/api/query/v1/` prefix (`services/query-svc/src/modules/results/results.controller.ts`), not under
-  `/api/verification/v1/` — the "not served here" claim holds only for the verification-svc prefix
-  this spec covers.
