@@ -1,0 +1,6 @@
+[workspace]
+members = ["contracts/hello"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true

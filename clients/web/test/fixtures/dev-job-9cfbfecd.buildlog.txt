@@ -1,0 +1,563 @@
+$ docker login --username AWS --password-stdin <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com
+Login Succeeded
+WARNING! Your password will be stored unencrypted in /home/<redacted>/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/?<redacted>
+
+[exit 0]
+
+$ cp -R /tmp/<redacted> /tmp/<redacted>
+
+[exit 0]
+
+$ docker run --rm --entrypoint rustup <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 show active-toolchain
+1.94.0-aarch64-unknown-linux-gnu (overridden by environment variable RUSTUP_TOOLCHAIN)
+Unable to find image '<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62' locally
+<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62: Pulling from sv-dev-composed-environments
+4c8862d24541: Pulling fs layer
+225a0a6c500b: Pulling fs layer
+2c9a098bd641: Pulling fs layer
+a75326012c0e: Pulling fs layer
+ab222ebea6d9: Pulling fs layer
+d89c9b8b61eb: Pulling fs layer
+122c837bf601: Pulling fs layer
+7bb9e05af68b: Pulling fs layer
+44d4a68d15d3: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+d89c9b8b61eb: Waiting
+122c837bf601: Waiting
+7bb9e05af68b: Waiting
+44d4a68d15d3: Waiting
+a75326012c0e: Waiting
+ab222ebea6d9: Waiting
+4f4fb700ef54: Waiting
+225a0a6c500b: Verifying Checksum
+225a0a6c500b: Download complete
+4c8862d24541: Verifying Checksum
+4c8862d24541: Download complete
+ab222ebea6d9: Verifying Checksum
+ab222ebea6d9: Download complete
+2c9a098bd641: Verifying Checksum
+2c9a098bd641: Download complete
+122c837bf601: Verifying Checksum
+122c837bf601: Download complete
+d89c9b8b61eb: Verifying Checksum
+d89c9b8b61eb: Download complete
+44d4a68d15d3: Verifying Checksum
+44d4a68d15d3: Download complete
+4f4fb700ef54: Verifying Checksum
+4f4fb700ef54: Download complete
+4c8862d24541: Pull complete
+a75326012c0e: Verifying Checksum
+a75326012c0e: Download complete
+225a0a6c500b: Pull complete
+7bb9e05af68b: Verifying Checksum
+7bb9e05af68b: Download complete
+2c9a098bd641: Pull complete
+a75326012c0e: Pull complete
+ab222ebea6d9: Pull complete
+d89c9b8b61eb: Pull complete
+122c837bf601: Pull complete
+7bb9e05af68b: Pull complete
+44d4a68d15d3: Pull complete
+4f4fb700ef54: Pull complete
+Digest: sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62
+Status: Downloaded newer image for <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62
+[exit 0]
+
+$ docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --entrypoint cargo -v /tmp/<redacted>:/source:ro -v /tmp/<redacted>:/vendor -v /tmp/<redacted>:/out -w /source -e CARGO_HOME=/out/cargo-home -e RUSTUP_TOOLCHAIN=1.94.0-aarch64-unknown-linux-gnu <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 vendor --locked --manifest-path /source/Cargo.toml /vendor
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "/vendor"
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded autocfg v1.1.0
+  Downloaded rfc6979 v0.4.0
+  Downloaded semver v1.0.22
+  Downloaded sec1 v0.7.3
+  Downloaded zeroize_derive v1.4.2
+  Downloaded wasm-bindgen-macro v0.2.91
+  Downloaded syn v1.0.109
+  Downloaded zeroize v1.7.0
+  Downloaded wasmi_core v0.13.0
+  Downloaded time v0.3.44
+  Downloaded soroban-wasmi v0.31.1-soroban.20.0.1
+  Downloaded wasm-bindgen v0.2.91
+  Downloaded num-conv v0.1.0
+  Downloaded ff v0.13.0
+  Downloaded windows_aarch64_gnullvm v0.52.3
+  Downloaded paste v1.0.14
+  Downloaded once_cell v1.19.0
+  Downloaded windows_x86_64_gnullvm v0.52.3
+  Downloaded ethnum v1.5.0
+  Downloaded p256 v0.13.2
+  Downloaded windows_x86_64_msvc v0.52.3
+  Downloaded windows_i686_gnu v0.52.3
+  Downloaded hashbrown v0.14.3
+  Downloaded hashbrown v0.13.2
+  Downloaded curve25519-dalek v4.1.3
+  Downloaded chrono v0.4.34
+  Downloaded sha3 v0.10.8
+  Downloaded ark-bls12-381 v0.4.0
+  Downloaded libc v0.2.153
+  Downloaded memchr v2.7.6
+  Downloaded libm v0.2.8
+  Downloaded itertools v0.10.5
+  Downloaded darling_core v0.21.3
+  Downloaded windows_i686_msvc v0.52.3
+  Downloaded windows_aarch64_msvc v0.52.3
+  Downloaded num-bigint v0.4.4
+  Downloaded k256 v0.13.4
+  Downloaded js-sys v0.3.68
+  Downloaded heapless v0.8.0
+  Downloaded hashbrown v0.12.3
+  Downloaded elliptic-curve v0.13.8
+  Downloaded ed25519-dalek v2.1.1
+  Downloaded der v0.7.8
+  Downloaded darling_core v0.20.11
+  Downloaded bumpalo v3.15.3
+  Downloaded indexmap v2.2.3
+  Downloaded crypto-bigint v0.5.5
+  Downloaded derivative v2.2.0
+  Downloaded darling v0.21.3
+  Downloaded base64 v0.22.1
+  Downloaded log v0.4.20
+  Downloaded indexmap v1.9.3
+  Downloaded hmac v0.12.1
+  Downloaded num-integer v0.1.45
+  Downloaded getrandom v0.2.11
+  Downloaded either v1.10.0
+  Downloaded ed25519 v2.2.3
+  Downloaded digest v0.10.7
+  Downloaded data-encoding v2.9.0
+  Downloaded ark-ff v0.4.2
+  Downloaded iana-time-zone v0.1.60
+  Downloaded ecdsa v0.16.9
+  Downloaded deranged v0.5.4
+  Downloaded const-oid v0.9.6
+  Downloaded pkcs8 v0.10.2
+  Downloaded group v0.13.0
+  Downloaded dyn-clone v1.0.20
+  Downloaded downcast-rs v1.2.0
+  Downloaded ark-poly v0.4.2
+  Downloaded ark-ec v0.4.2
+  Downloaded hex-literal v0.4.1
+  Downloaded equivalent v1.0.1
+  Downloaded darling v0.20.11
+  Downloaded core-foundation-sys v0.8.6
+  Downloaded soroban-sdk v25.3.0
+  Downloaded keccak v0.1.5
+  Downloaded dtor v0.1.0
+  Downloaded derive_arbitrary v1.3.2
+  Downloaded darling_macro v0.20.11
+  Downloaded ident_case v1.0.1
+  Downloaded dtor-proc-macro v0.0.6
+  Downloaded byteorder v1.5.0
+  Downloaded macro-string v0.1.4
+  Downloaded heck v0.5.0
+  Downloaded generic-array v0.14.7
+  Downloaded darling_macro v0.21.3
+  Downloaded rustc_version v0.4.1
+  Downloaded ahash v0.8.11
+  Downloaded zerocopy-derive v0.7.35
+  Downloaded zerocopy v0.7.35
+  Downloaded windows-core v0.52.0
+  Downloaded escape-bytes v0.1.1
+  Downloaded unicode-ident v1.0.12
+  Downloaded indexmap-nostd v0.4.0
+  Downloaded time-core v0.1.6
+  Downloaded thiserror v1.0.55
+  Downloaded crate-git-revision v0.0.6
+  Downloaded test-case-macros v3.3.1
+  Downloaded test-case v3.3.1
+  Downloaded syn v2.0.101
+  Downloaded stable_deref_trait v1.2.1
+  Downloaded soroban-spec-rust v25.3.0
+  Downloaded soroban-sdk-macros v25.3.0
+  Downloaded stellar-strkey v0.0.16
+  Downloaded wasmparser v0.116.1
+  Downloaded wasmi_arena v0.4.1
+  Downloaded soroban-builtin-sdk-macros v25.0.1
+  Downloaded soroban-env-host v25.0.1
+  Downloaded soroban-env-common v25.0.1
+  Downloaded smallvec v1.13.1
+  Downloaded itoa v1.0.10
+  Downloaded iana-time-zone-haiku v0.1.2
+  Downloaded hash32 v0.3.1
+  Downloaded cc v1.0.88
+  Downloaded base16ct v0.2.0
+  Downloaded ark-std v0.4.0
+  Downloaded arbitrary v1.3.2
+  Downloaded num-derive v0.4.1
+  Downloaded strsim v0.11.1
+  Downloaded stellar-strkey v0.0.13
+  Downloaded static_assertions v1.1.0
+  Downloaded spin v0.9.8
+  Downloaded soroban-spec v25.3.0
+  Downloaded num-traits v0.2.17
+  Downloaded wasm-bindgen-shared v0.2.91
+  Downloaded serde_with_macros v3.15.0
+  Downloaded hex v0.4.3
+  Downloaded fnv v1.0.7
+  Downloaded curve25519-dalek-derive v0.1.1
+  Downloaded base64ct v1.6.0
+  Downloaded wasi v0.11.0+wasi-snapshot-preview1
+  Downloaded time-macros v0.2.24
+  Downloaded test-case-core v3.3.1
+  Downloaded subtle v2.5.0
+  Downloaded soroban-env-guest v25.0.1
+  Downloaded wasmparser-nostd v0.100.1
+  Downloaded windows_x86_64_gnu v0.52.3
+  Downloaded windows-targets v0.52.3
+  Downloaded wasm-bindgen-backend v0.2.91
+  Downloaded soroban-ledger-snapshot v25.3.0
+  Downloaded signature v2.2.0
+  Downloaded serde_with v3.15.0
+  Downloaded serde_json v1.0.145
+  Downloaded serde v1.0.228
+  Downloaded schemars v1.0.4
+  Downloaded schemars v0.9.0
+  Downloaded ref-cast-impl v1.0.25
+  Downloaded crypto-common v0.1.6
+  Downloaded ark-ff-macros v0.4.2
+  Downloaded wasm-bindgen-macro-support v0.2.91
+  Downloaded visibility v0.1.1
+  Downloaded version_check v0.9.4
+  Downloaded typenum v1.17.0
+  Downloaded thiserror-impl v1.0.55
+  Downloaded spki v0.7.3
+  Downloaded soroban-env-macros v25.0.1
+  Downloaded sha2 v0.10.9
+  Downloaded serde_derive v1.0.228
+  Downloaded serde_core v1.0.228
+  Downloaded schemars v0.8.22
+  Downloaded rand_core v0.6.4
+  Downloaded rand_chacha v0.3.1
+  Downloaded rand v0.8.5
+  Downloaded quote v1.0.40
+  Downloaded ctor-proc-macro v0.0.6
+  Downloaded ctor v0.5.0
+  Downloaded cpufeatures v0.2.12
+  Downloaded bytes-lit v0.0.5
+  Downloaded ryu v1.0.17
+  Downloaded prettyplease v0.2.15
+  Downloaded cfg-if v1.0.0
+  Downloaded ark-serialize-derive v0.4.2
+  Downloaded ark-bn254 v0.4.0
+  Downloaded ref-cast v1.0.25
+  Downloaded proc-macro2 v1.0.95
+  Downloaded ppv-lite86 v0.2.17
+  Downloaded powerfmt v0.2.0
+  Downloaded ark-ff-asm v0.4.2
+  Downloaded android_system_properties v0.1.5
+  Downloaded primeorder v0.13.6
+  Downloaded cfg_eval v0.1.2
+  Downloaded block-buffer v0.10.4
+  Downloaded android-tzdata v0.1.1
+  Downloaded ark-serialize v0.4.2
+  Downloaded fiat-crypto v0.2.6
+  Downloaded stellar-xdr v25.0.0
+   Vendoring ahash v0.8.11 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ahash-0.8.11) to /vendor/ahash
+   Vendoring android-tzdata v0.1.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/android-tzdata-0.1.1) to /vendor/android-tzdata
+   Vendoring android_system_properties v0.1.5 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/android_system_properties-0.1.5) to /vendor/android_system_properties
+   Vendoring arbitrary v1.3.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/arbitrary-1.3.2) to /vendor/arbitrary
+   Vendoring ark-bls12-381 v0.4.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-bls12-381-0.4.0) to /vendor/ark-bls12-381
+   Vendoring ark-bn254 v0.4.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-bn254-0.4.0) to /vendor/ark-bn254
+   Vendoring ark-ec v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ec-0.4.2) to /vendor/ark-ec
+   Vendoring ark-ff v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ff-0.4.2) to /vendor/ark-ff
+   Vendoring ark-ff-asm v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ff-asm-0.4.2) to /vendor/ark-ff-asm
+   Vendoring ark-ff-macros v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ff-macros-0.4.2) to /vendor/ark-ff-macros
+   Vendoring ark-poly v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-poly-0.4.2) to /vendor/ark-poly
+   Vendoring ark-serialize v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-serialize-0.4.2) to /vendor/ark-serialize
+   Vendoring ark-serialize-derive v0.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-serialize-derive-0.4.2) to /vendor/ark-serialize-derive
+   Vendoring ark-std v0.4.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ark-std-0.4.0) to /vendor/ark-std
+   Vendoring autocfg v1.1.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/autocfg-1.1.0) to /vendor/autocfg
+   Vendoring base16ct v0.2.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-0.2.0) to /vendor/base16ct
+   Vendoring base64 v0.22.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/base64-0.22.1) to /vendor/base64
+   Vendoring base64ct v1.6.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/base64ct-1.6.0) to /vendor/base64ct
+   Vendoring block-buffer v0.10.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/block-buffer-0.10.4) to /vendor/block-buffer
+   Vendoring bumpalo v3.15.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/bumpalo-3.15.3) to /vendor/bumpalo
+   Vendoring byteorder v1.5.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/byteorder-1.5.0) to /vendor/byteorder
+   Vendoring bytes-lit v0.0.5 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/bytes-lit-0.0.5) to /vendor/bytes-lit
+   Vendoring cc v1.0.88 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/cc-1.0.88) to /vendor/cc
+   Vendoring cfg-if v1.0.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.0) to /vendor/cfg-if
+   Vendoring cfg_eval v0.1.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/cfg_eval-0.1.2) to /vendor/cfg_eval
+   Vendoring chrono v0.4.34 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/chrono-0.4.34) to /vendor/chrono
+   Vendoring const-oid v0.9.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/const-oid-0.9.6) to /vendor/const-oid
+   Vendoring core-foundation-sys v0.8.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/core-foundation-sys-0.8.6) to /vendor/core-foundation-sys
+   Vendoring cpufeatures v0.2.12 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/cpufeatures-0.2.12) to /vendor/cpufeatures
+   Vendoring crate-git-revision v0.0.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/crate-git-revision-0.0.6) to /vendor/crate-git-revision
+   Vendoring crypto-bigint v0.5.5 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/crypto-bigint-0.5.5) to /vendor/crypto-bigint
+   Vendoring crypto-common v0.1.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/crypto-common-0.1.6) to /vendor/crypto-common
+   Vendoring ctor v0.5.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ctor-0.5.0) to /vendor/ctor
+   Vendoring ctor-proc-macro v0.0.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ctor-proc-macro-0.0.6) to /vendor/ctor-proc-macro
+   Vendoring curve25519-dalek v4.1.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/curve25519-dalek-4.1.3) to /vendor/curve25519-dalek
+   Vendoring curve25519-dalek-derive v0.1.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/curve25519-dalek-derive-0.1.1) to /vendor/curve25519-dalek-derive
+   Vendoring darling v0.20.11 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/darling-0.20.11) to /vendor/darling-0.20.11
+   Vendoring darling v0.21.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/darling-0.21.3) to /vendor/darling
+   Vendoring darling_core v0.20.11 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/darling_core-0.20.11) to /vendor/darling_core-0.20.11
+   Vendoring darling_core v0.21.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/darling_core-0.21.3) to /vendor/darling_core
+   Vendoring darling_macro v0.20.11 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/darling_macro-0.20.11) to /vendor/darling_macro-0.20.11
+   Vendoring darling_macro v0.21.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/darling_macro-0.21.3) to /vendor/darling_macro
+   Vendoring data-encoding v2.9.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/data-encoding-2.9.0) to /vendor/data-encoding
+   Vendoring der v0.7.8 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/der-0.7.8) to /vendor/der
+   Vendoring deranged v0.5.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.5.4) to /vendor/deranged
+   Vendoring derivative v2.2.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/derivative-2.2.0) to /vendor/derivative
+   Vendoring derive_arbitrary v1.3.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/derive_arbitrary-1.3.2) to /vendor/derive_arbitrary
+   Vendoring digest v0.10.7 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.10.7) to /vendor/digest
+   Vendoring downcast-rs v1.2.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/downcast-rs-1.2.0) to /vendor/downcast-rs
+   Vendoring dtor v0.1.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/dtor-0.1.0) to /vendor/dtor
+   Vendoring dtor-proc-macro v0.0.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/dtor-proc-macro-0.0.6) to /vendor/dtor-proc-macro
+   Vendoring dyn-clone v1.0.20 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/dyn-clone-1.0.20) to /vendor/dyn-clone
+   Vendoring ecdsa v0.16.9 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ecdsa-0.16.9) to /vendor/ecdsa
+   Vendoring ed25519 v2.2.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ed25519-2.2.3) to /vendor/ed25519
+   Vendoring ed25519-dalek v2.1.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ed25519-dalek-2.1.1) to /vendor/ed25519-dalek
+   Vendoring either v1.10.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.10.0) to /vendor/either
+   Vendoring elliptic-curve v0.13.8 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/elliptic-curve-0.13.8) to /vendor/elliptic-curve
+   Vendoring equivalent v1.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/equivalent-1.0.1) to /vendor/equivalent
+   Vendoring escape-bytes v0.1.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/escape-bytes-0.1.1) to /vendor/escape-bytes
+   Vendoring ethnum v1.5.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ethnum-1.5.0) to /vendor/ethnum
+   Vendoring ff v0.13.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ff-0.13.0) to /vendor/ff
+   Vendoring fiat-crypto v0.2.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/fiat-crypto-0.2.6) to /vendor/fiat-crypto
+   Vendoring fnv v1.0.7 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/fnv-1.0.7) to /vendor/fnv
+   Vendoring generic-array v0.14.7 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7) to /vendor/generic-array
+   Vendoring getrandom v0.2.11 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/getrandom-0.2.11) to /vendor/getrandom
+   Vendoring group v0.13.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/group-0.13.0) to /vendor/group
+   Vendoring hash32 v0.3.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hash32-0.3.1) to /vendor/hash32
+   Vendoring hashbrown v0.12.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.12.3) to /vendor/hashbrown-0.12.3
+   Vendoring hashbrown v0.13.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.13.2) to /vendor/hashbrown-0.13.2
+   Vendoring hashbrown v0.14.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.14.3) to /vendor/hashbrown
+   Vendoring heapless v0.8.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/heapless-0.8.0) to /vendor/heapless
+   Vendoring heck v0.5.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/heck-0.5.0) to /vendor/heck
+   Vendoring hex v0.4.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hex-0.4.3) to /vendor/hex
+   Vendoring hex-literal v0.4.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hex-literal-0.4.1) to /vendor/hex-literal
+   Vendoring hmac v0.12.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/hmac-0.12.1) to /vendor/hmac
+   Vendoring iana-time-zone v0.1.60 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/iana-time-zone-0.1.60) to /vendor/iana-time-zone
+   Vendoring iana-time-zone-haiku v0.1.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/iana-time-zone-haiku-0.1.2) to /vendor/iana-time-zone-haiku
+   Vendoring ident_case v1.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ident_case-1.0.1) to /vendor/ident_case
+   Vendoring indexmap v1.9.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/indexmap-1.9.3) to /vendor/indexmap-1.9.3
+   Vendoring indexmap v2.2.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/indexmap-2.2.3) to /vendor/indexmap
+   Vendoring indexmap-nostd v0.4.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/indexmap-nostd-0.4.0) to /vendor/indexmap-nostd
+   Vendoring itertools v0.10.5 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/itertools-0.10.5) to /vendor/itertools
+   Vendoring itoa v1.0.10 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/itoa-1.0.10) to /vendor/itoa
+   Vendoring js-sys v0.3.68 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/js-sys-0.3.68) to /vendor/js-sys
+   Vendoring k256 v0.13.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/k256-0.13.4) to /vendor/k256
+   Vendoring keccak v0.1.5 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/keccak-0.1.5) to /vendor/keccak
+   Vendoring libc v0.2.153 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.153) to /vendor/libc
+   Vendoring libm v0.2.8 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/libm-0.2.8) to /vendor/libm
+   Vendoring log v0.4.20 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.20) to /vendor/log
+   Vendoring macro-string v0.1.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/macro-string-0.1.4) to /vendor/macro-string
+   Vendoring memchr v2.7.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.7.6) to /vendor/memchr
+   Vendoring num-bigint v0.4.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/num-bigint-0.4.4) to /vendor/num-bigint
+   Vendoring num-conv v0.1.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/num-conv-0.1.0) to /vendor/num-conv
+   Vendoring num-derive v0.4.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/num-derive-0.4.1) to /vendor/num-derive
+   Vendoring num-integer v0.1.45 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/num-integer-0.1.45) to /vendor/num-integer
+   Vendoring num-traits v0.2.17 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/num-traits-0.2.17) to /vendor/num-traits
+   Vendoring once_cell v1.19.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/once_cell-1.19.0) to /vendor/once_cell
+   Vendoring p256 v0.13.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/p256-0.13.2) to /vendor/p256
+   Vendoring paste v1.0.14 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.14) to /vendor/paste
+   Vendoring pkcs8 v0.10.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/pkcs8-0.10.2) to /vendor/pkcs8
+   Vendoring powerfmt v0.2.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/powerfmt-0.2.0) to /vendor/powerfmt
+   Vendoring ppv-lite86 v0.2.17 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ppv-lite86-0.2.17) to /vendor/ppv-lite86
+   Vendoring prettyplease v0.2.15 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/prettyplease-0.2.15) to /vendor/prettyplease
+   Vendoring primeorder v0.13.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/primeorder-0.13.6) to /vendor/primeorder
+   Vendoring proc-macro2 v1.0.95 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro2-1.0.95) to /vendor/proc-macro2
+   Vendoring quote v1.0.40 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/quote-1.0.40) to /vendor/quote
+   Vendoring rand v0.8.5 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/rand-0.8.5) to /vendor/rand
+   Vendoring rand_chacha v0.3.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/rand_chacha-0.3.1) to /vendor/rand_chacha
+   Vendoring rand_core v0.6.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.6.4) to /vendor/rand_core
+   Vendoring ref-cast v1.0.25 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-1.0.25) to /vendor/ref-cast
+   Vendoring ref-cast-impl v1.0.25 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ref-cast-impl-1.0.25) to /vendor/ref-cast-impl
+   Vendoring rfc6979 v0.4.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/rfc6979-0.4.0) to /vendor/rfc6979
+   Vendoring rustc_version v0.4.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/rustc_version-0.4.1) to /vendor/rustc_version
+   Vendoring ryu v1.0.17 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ryu-1.0.17) to /vendor/ryu
+   Vendoring schemars v0.8.22 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/schemars-0.8.22) to /vendor/schemars-0.8.22
+   Vendoring schemars v0.9.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/schemars-0.9.0) to /vendor/schemars-0.9.0
+   Vendoring schemars v1.0.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/schemars-1.0.4) to /vendor/schemars
+   Vendoring sec1 v0.7.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/sec1-0.7.3) to /vendor/sec1
+   Vendoring semver v1.0.22 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/semver-1.0.22) to /vendor/semver
+   Vendoring serde v1.0.228 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228) to /vendor/serde
+   Vendoring serde_core v1.0.228 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228) to /vendor/serde_core
+   Vendoring serde_derive v1.0.228 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_derive-1.0.228) to /vendor/serde_derive
+   Vendoring serde_json v1.0.145 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.145) to /vendor/serde_json
+   Vendoring serde_with v3.15.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with-3.15.0) to /vendor/serde_with
+   Vendoring serde_with_macros v3.15.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.15.0) to /vendor/serde_with_macros
+   Vendoring sha2 v0.10.9 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/sha2-0.10.9) to /vendor/sha2
+   Vendoring sha3 v0.10.8 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/sha3-0.10.8) to /vendor/sha3
+   Vendoring signature v2.2.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0) to /vendor/signature
+   Vendoring smallvec v1.13.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/smallvec-1.13.1) to /vendor/smallvec
+   Vendoring soroban-builtin-sdk-macros v25.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-builtin-sdk-macros-25.0.1) to /vendor/soroban-builtin-sdk-macros
+   Vendoring soroban-env-common v25.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-common-25.0.1) to /vendor/soroban-env-common
+   Vendoring soroban-env-guest v25.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-guest-25.0.1) to /vendor/soroban-env-guest
+   Vendoring soroban-env-host v25.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1) to /vendor/soroban-env-host
+   Vendoring soroban-env-macros v25.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-macros-25.0.1) to /vendor/soroban-env-macros
+   Vendoring soroban-ledger-snapshot v25.3.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-ledger-snapshot-25.3.0) to /vendor/soroban-ledger-snapshot
+   Vendoring soroban-sdk v25.3.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.3.0) to /vendor/soroban-sdk
+   Vendoring soroban-sdk-macros v25.3.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-macros-25.3.0) to /vendor/soroban-sdk-macros
+   Vendoring soroban-spec v25.3.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-25.3.0) to /vendor/soroban-spec
+   Vendoring soroban-spec-rust v25.3.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-25.3.0) to /vendor/soroban-spec-rust
+   Vendoring soroban-wasmi v0.31.1-soroban.20.0.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-wasmi-0.31.1-soroban.20.0.1) to /vendor/soroban-wasmi
+   Vendoring spin v0.9.8 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/spin-0.9.8) to /vendor/spin
+   Vendoring spki v0.7.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.7.3) to /vendor/spki
+   Vendoring stable_deref_trait v1.2.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/stable_deref_trait-1.2.1) to /vendor/stable_deref_trait
+   Vendoring static_assertions v1.1.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/static_assertions-1.1.0) to /vendor/static_assertions
+   Vendoring stellar-strkey v0.0.13 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-strkey-0.0.13) to /vendor/stellar-strkey-0.0.13
+   Vendoring stellar-strkey v0.0.16 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-strkey-0.0.16) to /vendor/stellar-strkey
+   Vendoring stellar-xdr v25.0.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-xdr-25.0.0) to /vendor/stellar-xdr
+   Vendoring strsim v0.11.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/strsim-0.11.1) to /vendor/strsim
+   Vendoring subtle v2.5.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/subtle-2.5.0) to /vendor/subtle
+   Vendoring syn v1.0.109 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/syn-1.0.109) to /vendor/syn-1.0.109
+   Vendoring syn v2.0.101 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/syn-2.0.101) to /vendor/syn
+   Vendoring test-case v3.3.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/test-case-3.3.1) to /vendor/test-case
+   Vendoring test-case-core v3.3.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/test-case-core-3.3.1) to /vendor/test-case-core
+   Vendoring test-case-macros v3.3.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/test-case-macros-3.3.1) to /vendor/test-case-macros
+   Vendoring thiserror v1.0.55 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-1.0.55) to /vendor/thiserror
+   Vendoring thiserror-impl v1.0.55 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-impl-1.0.55) to /vendor/thiserror-impl
+   Vendoring time v0.3.44 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/time-0.3.44) to /vendor/time
+   Vendoring time-core v0.1.6 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/time-core-0.1.6) to /vendor/time-core
+   Vendoring time-macros v0.2.24 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/time-macros-0.2.24) to /vendor/time-macros
+   Vendoring typenum v1.17.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/typenum-1.17.0) to /vendor/typenum
+   Vendoring unicode-ident v1.0.12 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.12) to /vendor/unicode-ident
+   Vendoring version_check v0.9.4 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/version_check-0.9.4) to /vendor/version_check
+   Vendoring visibility v0.1.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/visibility-0.1.1) to /vendor/visibility
+   Vendoring wasi v0.11.0+wasi-snapshot-preview1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasi-0.11.0+wasi-snapshot-preview1) to /vendor/wasi
+   Vendoring wasm-bindgen v0.2.91 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-0.2.91) to /vendor/wasm-bindgen
+   Vendoring wasm-bindgen-backend v0.2.91 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-backend-0.2.91) to /vendor/wasm-bindgen-backend
+   Vendoring wasm-bindgen-macro v0.2.91 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-macro-0.2.91) to /vendor/wasm-bindgen-macro
+   Vendoring wasm-bindgen-macro-support v0.2.91 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-macro-support-0.2.91) to /vendor/wasm-bindgen-macro-support
+   Vendoring wasm-bindgen-shared v0.2.91 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-shared-0.2.91) to /vendor/wasm-bindgen-shared
+   Vendoring wasmi_arena v0.4.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasmi_arena-0.4.1) to /vendor/wasmi_arena
+   Vendoring wasmi_core v0.13.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasmi_core-0.13.0) to /vendor/wasmi_core
+   Vendoring wasmparser v0.116.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasmparser-0.116.1) to /vendor/wasmparser
+   Vendoring wasmparser-nostd v0.100.1 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/wasmparser-nostd-0.100.1) to /vendor/wasmparser-nostd
+   Vendoring windows-core v0.52.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows-core-0.52.0) to /vendor/windows-core
+   Vendoring windows-targets v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows-targets-0.52.3) to /vendor/windows-targets
+   Vendoring windows_aarch64_gnullvm v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_aarch64_gnullvm-0.52.3) to /vendor/windows_aarch64_gnullvm
+   Vendoring windows_aarch64_msvc v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_aarch64_msvc-0.52.3) to /vendor/windows_aarch64_msvc
+   Vendoring windows_i686_gnu v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_i686_gnu-0.52.3) to /vendor/windows_i686_gnu
+   Vendoring windows_i686_msvc v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_i686_msvc-0.52.3) to /vendor/windows_i686_msvc
+   Vendoring windows_x86_64_gnu v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_x86_64_gnu-0.52.3) to /vendor/windows_x86_64_gnu
+   Vendoring windows_x86_64_gnullvm v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_x86_64_gnullvm-0.52.3) to /vendor/windows_x86_64_gnullvm
+   Vendoring windows_x86_64_msvc v0.52.3 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/windows_x86_64_msvc-0.52.3) to /vendor/windows_x86_64_msvc
+   Vendoring zerocopy v0.7.35 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zerocopy-0.7.35) to /vendor/zerocopy
+   Vendoring zerocopy-derive v0.7.35 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zerocopy-derive-0.7.35) to /vendor/zerocopy-derive
+   Vendoring zeroize v1.7.0 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zeroize-1.7.0) to /vendor/zeroize
+   Vendoring zeroize_derive v1.4.2 (/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/zeroize_derive-1.4.2) to /vendor/zeroize_derive
+To use vendored sources, add this to your .cargo/config.toml for this project:
+
+[exit 0]
+
+$ docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --network none -v /tmp/<redacted>:/source:ro -v /tmp/<redacted>:/vendor:ro -v /tmp/<redacted>:/out -w /source -e CARGO_TARGET_DIR=/out/target -e TMPDIR=/out/tmp -e CARGO_HOME=/out/cargo-home -e CARGO_NET_OFFLINE=true -e RUSTUP_TOOLCHAIN=1.94.0-aarch64-unknown-linux-gnu <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 contract build --optimize --meta source_repo=github:reflector-network/reflector-contract --manifest-path /source/Cargo.toml --package reflector-pulse-contract --out-dir /out
+ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/out/cargo-home/registry/src= cargo rustc --manifest-path=pulse-contract/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
+   Compiling proc-macro2 v1.0.95
+   Compiling unicode-ident v1.0.12
+   Compiling serde_core v1.0.228
+   Compiling quote v1.0.40
+   Compiling syn v2.0.101
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.145
+   Compiling itoa v1.0.10
+   Compiling memchr v2.7.6
+   Compiling ryu v1.0.17
+   Compiling autocfg v1.1.0
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling fnv v1.0.7
+   Compiling version_check v0.9.4
+   Compiling typenum v1.17.0
+   Compiling generic-array v0.14.7
+   Compiling serde_derive v1.0.228
+   Compiling darling_core v0.21.3
+   Compiling crate-git-revision v0.0.6
+   Compiling libc v0.2.153
+   Compiling darling_macro v0.21.3
+   Compiling schemars v0.8.22
+   Compiling darling v0.21.3
+   Compiling stellar-strkey v0.0.13
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling dyn-clone v1.0.20
+   Compiling cpufeatures v0.2.12
+   Compiling digest v0.10.7
+   Compiling serde_with_macros v3.15.0
+   Compiling stellar-xdr v25.0.0
+   Compiling cfg_eval v0.1.2
+   Compiling semver v1.0.22
+   Compiling data-encoding v2.9.0
+   Compiling cfg-if v1.0.0
+   Compiling sha2 v0.10.9
+   Compiling serde_with v3.15.0
+   Compiling hex v0.4.3
+   Compiling escape-bytes v0.1.1
+   Compiling ethnum v1.5.0
+   Compiling num-traits v0.2.17
+   Compiling soroban-env-common v25.0.1
+   Compiling either v1.10.0
+   Compiling itertools v0.10.5
+   Compiling hashbrown v0.14.3
+   Compiling equivalent v1.0.1
+   Compiling thiserror v1.0.55
+   Compiling indexmap v2.2.3
+   Compiling num-derive v0.4.1
+   Compiling thiserror-impl v1.0.55
+   Compiling num-integer v0.1.45
+   Compiling prettyplease v0.2.15
+   Compiling wasmparser v0.116.1
+   Compiling darling_core v0.20.11
+   Compiling num-bigint v0.4.4
+   Compiling base64 v0.22.1
+   Compiling heapless v0.8.0
+   Compiling byteorder v1.5.0
+   Compiling soroban-spec v25.3.0
+   Compiling hash32 v0.3.1
+   Compiling darling_macro v0.20.11
+   Compiling soroban-env-macros v25.0.1
+   Compiling rustc_version v0.4.1
+   Compiling stellar-strkey v0.0.16
+   Compiling stable_deref_trait v1.2.1
+   Compiling static_assertions v1.1.0
+   Compiling soroban-sdk v25.3.0
+   Compiling soroban-spec-rust v25.3.0
+   Compiling darling v0.20.11
+   Compiling macro-string v0.1.4
+   Compiling heck v0.5.0
+   Compiling bytes-lit v0.0.5
+   Compiling soroban-sdk-macros v25.3.0
+   Compiling soroban-env-guest v25.0.1
+   Compiling visibility v0.1.1
+   Compiling oracle v6.0.0 (/source/oracle)
+   Compiling reflector-pulse-contract v6.0.0 (/source/pulse-contract)
+    Finished `release` profile [optimized] target(s) in 47.48s
+ℹ️  Build Summary:
+    Wasm File: /out/reflector_pulse_contract.wasm (19418 bytes optimized (original size was 23217 bytes))
+    Wasm Hash: 7944a96d512f6e51532687811cc0c932505b0c051be9d351f5332739d70f753c
+    Wasm Size: 19418 bytes optimized (original size was 23217 bytes)
+    Exported Functions: 23 found
+      • add_assets
+      • admin
+      • assets
+      • base
+      • cache_size
+      • config
+      • decimals
+      • estimate_retention_cost
+      • expires
+      • extend_asset_ttl
+      • fee_config
+      • history_retention_period
+      • last_timestamp
+      • lastprice
+      • price
+      • prices
+      • resolution
+      • set_cache_size
+      • set_fee_config
+      • set_history_retention_period
+      • set_price
+      • update_contract
+      • version
+✅ Build Complete
+
+[exit 0]

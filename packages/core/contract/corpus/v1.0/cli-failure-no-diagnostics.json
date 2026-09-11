@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "recipe": {
+    "image": "000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
+    "workspace_path": "contracts/verified-demo/Cargo.toml",
+    "package": "verified-demo",
+    "target": "wasm32v1-none",
+    "bldarg": [
+      "contract",
+      "build"
+    ],
+    "bldopt": [
+      "--locked",
+      "--manifest-path=contracts/verified-demo/Cargo.toml",
+      "--package=verified-demo",
+      "--optimize",
+      "--env=SCVS_E2E_RECIPE_SCOPE=bf46082db904d9aaefc8521e"
+    ]
+  },
+  "runner": "docker_build_image_rebuild",
+  "built_at": "2026-08-25T13:58:48.336Z",
+  "exit_code": null,
+  "classification": "cli_failure",
+  "reason": "source_archive_too_many_entries",
+  "failure_context": {
+    "stage": "fetch-source",
+    "status": "extraction_failed",
+    "reason": "source_archive_too_many_entries",
+    "detail": "Source archive contains more than 20000 entries."
+  }
+}

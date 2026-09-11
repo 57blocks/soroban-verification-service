@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Soroban Verify</title>
+    <meta
+      name="description"
+      content="Source verification for Soroban contracts with reproducible build results."
+    />
+    <link rel="icon" href="/favicon.png" sizes="32x32" type="image/png" />
+    <!-- Lora is the display serif behind every heading in the design; Inter is the UI font. Both are
+         self-hosted and loaded from src/fonts.ts: a Google Fonts request disclosed every visitor's IP to
+         Google (docs/features/retention-and-pseudonymisation/design.md RP-4). -->
+    <!--
+      Runtime configuration, substituted by docker/web-entrypoint.sh at container start. Inline and
+      synchronous so a route guard can read it during the first navigation — a fetched config.json
+      would resolve after the router has already decided.
+
+      The dev server substitutes nothing and leaves the placeholder, which src/config/features.ts
+      reads as "not configured here" and falls back to the build-time value.
+    -->
+    <script>
+      window.__SCVS_RUNTIME_CONFIG__ = {
+        enableAggregator: "__SCVS_ENABLE_AGGREGATOR__",
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "schema": "stellar-by-contract-result-v1",
+  "network": "testnet",
+  "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB",
+  "latest": {
+    "status": "mismatch",
+    "wasm_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "verifier_id": "fixture-verifier-b",
+    "verified_at": "2026-06-30T00:01:00.000Z",
+    "artifact_url": "./test/fixtures/verifiers/verifier-b/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json",
+    "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "history": [
+    {
+      "status": "mismatch",
+      "wasm_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "verifier_id": "fixture-verifier-b",
+      "verified_at": "2026-06-30T00:01:00.000Z",
+      "artifact_url": "./test/fixtures/verifiers/verifier-b/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.json",
+      "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "updated_at": "2026-06-30T00:01:00.000Z"
+}

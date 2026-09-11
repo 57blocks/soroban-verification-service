@@ -1,0 +1,56 @@
+{
+  "name": "@scvs/sdk",
+  "version": "0.0.0-managed-by-ci",
+  "description": "Query and aggregate Soroban contract source-verification results across verifiers",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/57blocks/soroban-verification-service.git",
+    "directory": "clients/sdk"
+  },
+  "homepage": "https://github.com/57blocks/soroban-verification-service/tree/main/clients/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/57blocks/soroban-verification-service/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.decl.json && api-extractor run --local -c api-extractor.json && node -e \"require('fs').rmSync('dist-types', { recursive: true, force: true })\"",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/sdk-test.ts && tsx test/registry-read-test.ts && tsx test/hosted-test.ts && tsx test/browser-graph-test.ts && tsx test/browser-bundle-test.ts",
+    "check:packaging": "publint --strict && attw --pack . --ignore-rules cjs-resolves-to-esm && node ../../eng-tools/check-sdk-pack-install.mjs",
+    "check:registry-install": "node ../../eng-tools/check-sdk-registry-install.mjs"
+  },
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@microsoft/api-extractor": "^7.59.1",
+    "@scvs/core": "workspace:*",
+    "@scvs/storage-layout": "workspace:*",
+    "@types/node": "^22.20.1",
+    "esbuild": "^0.28.2",
+    "publint": "^0.3.24",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

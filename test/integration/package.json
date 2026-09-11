@@ -1,0 +1,26 @@
+{
+  "name": "@scvs/e2e-tests",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Black-box end-to-end suite: enters through the public surfaces of a real deployment (docs/qa/e2e-test-plan.md §1.1), stubs no component this project owns.",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node ./setup/run-e2e-test.mjs",
+    "test:jest": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:auto": "node ./setup/run-auto-e2e-test.mjs",
+    "test:smoke": "node --experimental-strip-types ./setup/run-smoke.ts",
+    "drift": "node ./setup/print-drift.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.20.1",
+    "dotenv": "^16.6.1",
+    "jest": "^30.5.1",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.9.3"
+  }
+}

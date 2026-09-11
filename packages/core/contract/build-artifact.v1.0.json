@@ -1,0 +1,455 @@
+{
+  "schema_version": "1.0",
+  "shapes": {
+    "BuildArtifact": {
+      "properties": {
+        "build_log": {
+          "absence_rejected": false
+        },
+        "built_at": {
+          "absence_rejected": true
+        },
+        "classification": {
+          "absence_rejected": true
+        },
+        "diagnostics": {
+          "absence_rejected": false,
+          "nested": "SandboxDiagnostics"
+        },
+        "exit_code": {
+          "absence_rejected": true
+        },
+        "failure_context": {
+          "absence_rejected": false
+        },
+        "reason": {
+          "absence_rejected": false
+        },
+        "rebuilt_wasm_hash": {
+          "absence_rejected": false
+        },
+        "rebuilt_wasm_size_bytes": {
+          "absence_rejected": false
+        },
+        "rebuilt_wasm_uploaded": {
+          "absence_rejected": false
+        },
+        "recipe": {
+          "absence_rejected": false,
+          "nested": "BuildRecipe"
+        },
+        "runner": {
+          "absence_rejected": true
+        },
+        "schema_version": {
+          "absence_rejected": false
+        },
+        "source_canonicalisation": {
+          "absence_rejected": false,
+          "nested": "SourceCanonicalisation"
+        },
+        "source_sha256": {
+          "absence_rejected": false
+        },
+        "verify_attempt_reason": {
+          "absence_rejected": false
+        }
+      }
+    },
+    "BuildRecipe": {
+      "properties": {
+        "bldarg": {
+          "absence_rejected": false
+        },
+        "bldopt": {
+          "absence_rejected": false
+        },
+        "features": {
+          "absence_rejected": false
+        },
+        "image": {
+          "absence_rejected": true
+        },
+        "metadata_replay": {
+          "absence_rejected": false
+        },
+        "package": {
+          "absence_rejected": false
+        },
+        "profile": {
+          "absence_rejected": false
+        },
+        "target": {
+          "absence_rejected": true
+        },
+        "workspace_path": {
+          "absence_rejected": true
+        }
+      }
+    },
+    "CustomSectionDiff": {
+      "properties": {
+        "common": {
+          "absence_rejected": true
+        },
+        "only_deployed": {
+          "absence_rejected": true
+        },
+        "only_rebuilt": {
+          "absence_rejected": true
+        }
+      }
+    },
+    "ImportExportDiff": {
+      "properties": {
+        "only_deployed": {
+          "absence_rejected": true
+        },
+        "only_rebuilt": {
+          "absence_rejected": true
+        }
+      }
+    },
+    "ReferenceAlignmentCommit": {
+      "properties": {
+        "pr": {
+          "absence_rejected": true
+        },
+        "sha": {
+          "absence_rejected": true
+        }
+      }
+    },
+    "ReferenceAlignmentDto": {
+      "properties": {
+        "base_commit": {
+          "absence_rejected": false
+        },
+        "pr_commits": {
+          "absence_rejected": false,
+          "nested": "ReferenceAlignmentCommit"
+        },
+        "read_from": {
+          "absence_rejected": true
+        },
+        "repo": {
+          "absence_rejected": true
+        },
+        "version": {
+          "absence_rejected": false
+        }
+      }
+    },
+    "SandboxDiagnostics": {
+      "properties": {
+        "artifact_selection": {
+          "absence_rejected": false
+        },
+        "build_image": {
+          "absence_rejected": false
+        },
+        "cargo_config_path": {
+          "absence_rejected": false
+        },
+        "cargo_home": {
+          "absence_rejected": false
+        },
+        "cargo_net_offline": {
+          "absence_rejected": false
+        },
+        "cargo_target_dir": {
+          "absence_rejected": false
+        },
+        "command": {
+          "absence_rejected": false
+        },
+        "command_summary": {
+          "absence_rejected": false
+        },
+        "container_manifest_path": {
+          "absence_rejected": false
+        },
+        "dependency_prefetch": {
+          "absence_rejected": false
+        },
+        "dependency_prefetch_allowed_hosts": {
+          "absence_rejected": false
+        },
+        "dependency_prefetch_blocked_url": {
+          "absence_rejected": false
+        },
+        "dependency_prefetch_exit_code": {
+          "absence_rejected": false
+        },
+        "dependency_prefetch_policy": {
+          "absence_rejected": false
+        },
+        "dependency_vendor_dir": {
+          "absence_rejected": false
+        },
+        "docker_available": {
+          "absence_rejected": false
+        },
+        "docker_cap_drop": {
+          "absence_rejected": false
+        },
+        "docker_cpus": {
+          "absence_rejected": false
+        },
+        "docker_error": {
+          "absence_rejected": false
+        },
+        "docker_memory": {
+          "absence_rejected": false
+        },
+        "docker_network": {
+          "absence_rejected": false
+        },
+        "docker_pids_limit": {
+          "absence_rejected": false
+        },
+        "docker_read_only": {
+          "absence_rejected": false
+        },
+        "docker_security_opt": {
+          "absence_rejected": false
+        },
+        "docker_tmpfs": {
+          "absence_rejected": false
+        },
+        "docker_user": {
+          "absence_rejected": false
+        },
+        "exit_code": {
+          "absence_rejected": false
+        },
+        "expected_wasm_hash": {
+          "absence_rejected": false
+        },
+        "extraction_normalisation": {
+          "absence_rejected": false
+        },
+        "likely_causes": {
+          "absence_rejected": false
+        },
+        "manifest_path": {
+          "absence_rejected": false
+        },
+        "metadata_replay": {
+          "absence_rejected": false
+        },
+        "metadata_replay_dropped_keys": {
+          "absence_rejected": false
+        },
+        "metadata_replay_section_index": {
+          "absence_rejected": false
+        },
+        "metadata_replay_source": {
+          "absence_rejected": false
+        },
+        "output_mount": {
+          "absence_rejected": false
+        },
+        "rebuilt_wasm_hash": {
+          "absence_rejected": false
+        },
+        "rebuilt_wasm_size_bytes": {
+          "absence_rejected": false
+        },
+        "reference_alignment": {
+          "absence_rejected": false,
+          "nested": "ReferenceAlignmentDto"
+        },
+        "rejected_build_option": {
+          "absence_rejected": false
+        },
+        "rejected_build_option_origin": {
+          "absence_rejected": false
+        },
+        "replayed_bldopts": {
+          "absence_rejected": false
+        },
+        "reported_artifact_hash_verified": {
+          "absence_rejected": false
+        },
+        "reported_artifact_path": {
+          "absence_rejected": false
+        },
+        "runner": {
+          "absence_rejected": true
+        },
+        "rustup_toolchain": {
+          "absence_rejected": false
+        },
+        "source_mount": {
+          "absence_rejected": false
+        },
+        "source_rust_toolchain_file": {
+          "absence_rejected": false
+        },
+        "stderr_excerpt": {
+          "absence_rejected": false
+        },
+        "stdout_excerpt": {
+          "absence_rejected": false
+        },
+        "timed_out": {
+          "absence_rejected": false
+        },
+        "tmp_dir": {
+          "absence_rejected": false
+        },
+        "toolchain_pinned": {
+          "absence_rejected": false
+        },
+        "unparsable_bldopts": {
+          "absence_rejected": false
+        },
+        "unreplayed_bldopts": {
+          "absence_rejected": false
+        },
+        "wasm_compare": {
+          "absence_rejected": false,
+          "nested": "WasmComparisonDiagnostics"
+        }
+      }
+    },
+    "SourceCanonicalisation": {
+      "properties": {
+        "canonical_format": {
+          "absence_rejected": true
+        },
+        "canonical_sha256": {
+          "absence_rejected": false
+        },
+        "depth": {
+          "absence_rejected": true
+        },
+        "expected_source_sha256": {
+          "absence_rejected": false
+        },
+        "outer_format": {
+          "absence_rejected": true
+        },
+        "reconstruction": {
+          "absence_rejected": true
+        },
+        "reconstruction_detail": {
+          "absence_rejected": false
+        },
+        "uploaded": {
+          "absence_rejected": true
+        }
+      }
+    },
+    "WasmComparisonDiagnostics": {
+      "properties": {
+        "custom_section_diff": {
+          "absence_rejected": false,
+          "nested": "CustomSectionDiff"
+        },
+        "deployed": {
+          "absence_rejected": false,
+          "nested": "WasmSummary"
+        },
+        "export_diff": {
+          "absence_rejected": false,
+          "nested": "ImportExportDiff"
+        },
+        "import_diff": {
+          "absence_rejected": false,
+          "nested": "ImportExportDiff"
+        },
+        "parse_errors": {
+          "absence_rejected": false,
+          "nested": "WasmParseErrors"
+        },
+        "rebuilt": {
+          "absence_rejected": false,
+          "nested": "WasmSummary"
+        },
+        "section_diffs": {
+          "absence_rejected": false,
+          "nested": "WasmSectionDiff"
+        }
+      }
+    },
+    "WasmParseErrors": {
+      "properties": {
+        "deployed": {
+          "absence_rejected": false
+        },
+        "rebuilt": {
+          "absence_rejected": false
+        }
+      }
+    },
+    "WasmSection": {
+      "properties": {
+        "count": {
+          "absence_rejected": false
+        },
+        "custom_name": {
+          "absence_rejected": false
+        },
+        "id": {
+          "absence_rejected": true
+        },
+        "name": {
+          "absence_rejected": true
+        },
+        "size_bytes": {
+          "absence_rejected": true
+        }
+      }
+    },
+    "WasmSectionDiff": {
+      "properties": {
+        "deployed": {
+          "absence_rejected": false
+        },
+        "key": {
+          "absence_rejected": true
+        },
+        "rebuilt": {
+          "absence_rejected": false
+        }
+      }
+    },
+    "WasmSummary": {
+      "properties": {
+        "code_count": {
+          "absence_rejected": false
+        },
+        "custom_sections": {
+          "absence_rejected": false
+        },
+        "exports": {
+          "absence_rejected": false
+        },
+        "function_count": {
+          "absence_rejected": false
+        },
+        "imports": {
+          "absence_rejected": false
+        },
+        "section_count": {
+          "absence_rejected": false
+        },
+        "sections": {
+          "absence_rejected": false,
+          "nested": "WasmSection"
+        },
+        "size_bytes": {
+          "absence_rejected": true
+        },
+        "soroban_custom_sections": {
+          "absence_rejected": false
+        },
+        "type_count": {
+          "absence_rejected": false
+        }
+      }
+    }
+  }
+}

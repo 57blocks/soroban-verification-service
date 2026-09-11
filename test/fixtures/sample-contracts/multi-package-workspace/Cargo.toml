@@ -1,0 +1,6 @@
+[workspace]
+members = ["contracts/contract-a", "contracts/contract-b", "crates/shared-flags"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true

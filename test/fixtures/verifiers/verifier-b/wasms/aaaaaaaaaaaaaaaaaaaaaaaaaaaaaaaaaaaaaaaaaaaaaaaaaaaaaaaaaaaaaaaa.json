@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "wasm_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "updated_at": "2026-06-30T00:00:00.000Z",
+  "source_code_verifications": [
+    {
+      "verifier": {
+        "name": "Fixture Verifier B",
+        "url": "https://b.example"
+      },
+      "status": "mismatched",
+      "processed_at": "2026-06-30T00:00:00.000Z",
+      "out_of_band": false,
+      "bldimg": "docker.io/stellar/stellar-cli@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "bldopt": [],
+      "rebuilt_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_repo": "https://github.com/example/b",
+      "source_rev": "0000000000000000000000000000000000000002",
+      "results_urls": [
+        {
+          "type": "report",
+          "url": "https://b.example/reports/b.json",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    }
+  ]
+}

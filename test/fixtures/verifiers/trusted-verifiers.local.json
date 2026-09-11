@@ -1,0 +1,24 @@
+{
+  "schema": "stellar-trusted-verifiers-list-v1",
+  "verifiers": [
+    {
+      "id": "fixture-verifier-a",
+      "display_name": "Fixture Verifier A",
+      "url": "verifier-a",
+      "manifest_url": "verifier-a/verifier-manifest.json",
+      "bulk_load_url": "verifier-a/api/verification/v1/wasms.json",
+      "trust_tier": "primary",
+      "status": "active"
+    },
+    {
+      "id": "fixture-verifier-b",
+      "display_name": "Fixture Verifier B",
+      "url": "verifier-b",
+      "manifest_url": "verifier-b/verifier-manifest.json",
+      "bulk_load_url": "verifier-b/api/verification/v1/wasms.json",
+      "trust_tier": "community",
+      "status": "active"
+    }
+  ],
+  "updated_at": "2026-06-30T00:00:00.000Z"
+}

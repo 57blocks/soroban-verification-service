@@ -1,0 +1,260 @@
+{
+  "$comment": [
+    "Copy this template to an environment-specific inventory such as e2e-fixtures.staging.json,",
+    "fill it from a real deployment, and point SCVS_E2E_FIXTURES at that file. Every entry corresponds",
+    "to an F-* row in docs/qa/e2e-test-plan.md \u00a73. Anything left out makes the cases that need it skip,",
+    "naming the fixture ID \u2014 nothing here is guessed or defaulted.",
+    "",
+    "test/fixtures/e2e/ already owns the scripts that produce these: build-purpose-contracts.sh,",
+    "deploy-testnet.sh, generate-fixtures.sh, and registry.yaml records which are currently `ready`.",
+    "This file is the bridge between that registry and the suite."
+  ],
+  "contracts": {
+    "F-MAINNET-READ-ONLY": {
+      "id": "F-MAINNET-READ-ONLY",
+      "note": "public mainnet target for E2E-NET-01/read_only_mainnet only; no source or recipe fields means it cannot be submitted",
+      "network": "mainnet",
+      "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
+      "wasm_hash": "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c"
+    },
+    "F-LEG-1-MAINNET": {
+      "id": "F-LEG-1-MAINNET",
+      "note": "public cli-legacy mainnet target for E2E-SUB-01; include it only after the fixed source and recorded recipe reproduce its deployed Wasm in the verifier-composed image",
+      "network": "mainnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/f-leg-1-mainnet.tar.gz",
+      "source_sha256": "<64 hex>",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--package=contract",
+        "--optimize"
+      ]
+    },
+    "F-LEG-1": {
+      "id": "F-LEG-1",
+      "note": "cli-legacy, supported (cliver, rsver) pair requiring a newly composed environment",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/f-leg-1.tar.gz",
+      "source_sha256": "<64 hex>",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--package=hello"
+      ]
+    },
+    "F-PRIV": {
+      "id": "F-PRIV",
+      "note": "private upload canary that rebuilds to F-LEG-1's deployed bytes",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<same 64 hex as F-LEG-1>",
+      "source_path": "artifacts/e2e-fixtures/archives/private-canary.tar.gz",
+      "source_sha256": "<64 hex, distinct from F-LEG-1 source_sha256>",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--package=hello"
+      ]
+    },
+    "F-URI-PRIV": {
+      "id": "F-URI-PRIV",
+      "note": "A unique HTTPS-hosted archive that rebuilds to F-LEG-1. E2E-SRC-05/uri_declared_private submits it with is_public false; its source_sha256 must not have been retained by any public fixture or prior run.",
+      "network": "testnet",
+      "contract_id": "<same contract id as F-LEG-1>",
+      "wasm_hash": "<same 64 hex as F-LEG-1>",
+      "source_uri": "https://e2e-fixtures.example/uri-private-verified.tar.gz",
+      "source_sha256": "<unique 64 hex>",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--package=hello"
+      ]
+    },
+    "F-URI-MISMATCH": {
+      "id": "F-URI-MISMATCH",
+      "note": "A unique HTTPS-hosted archive that compiles against its target but produces different Wasm bytes. E2E-SRC-02/uri_declared_public_mismatch submits it with is_public true; its source_sha256 must not have been retained before the test begins.",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://e2e-fixtures.example/uri-public-mismatch.tar.gz",
+      "source_sha256": "<unique 64 hex>",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--package=hello"
+      ]
+    },
+    "F-LEG-2": {
+      "id": "F-LEG-2",
+      "note": "the same (cliver, rsver) pair after its composed environment is cached \u2014 proves reuse",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/f-leg-2.tar.gz",
+      "source_sha256": "<64 hex>"
+    },
+    "F-LEG-3": {
+      "id": "F-LEG-3",
+      "note": "compiles cleanly but produces different bytes \u2014 the expected `mismatched` fixture",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/f-leg-3-mismatch.tar.gz",
+      "source_sha256": "<64 hex>",
+      "run_scoped_recipe": true
+    },
+    "F-58": {
+      "id": "F-58",
+      "note": "cli-58: a complete SEP-58 recipe on chain and a trusted bldimg",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-S55-A": {
+      "id": "F-S55-A",
+      "note": "SEP-55 marker present: contractmetav0 records source_repo=github:<user>/<repo>",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-S55-B": {
+      "id": "F-S55-B",
+      "note": "legacy SEP-58 v0.4.0 source_repo (an ordinary URL) \u2014 must read false",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-S55-C": {
+      "id": "F-S55-C",
+      "note": "source_repo containing but not starting with `github:` \u2014 must read false",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-S55-D": {
+      "id": "F-S55-D",
+      "note": "coexistence: a github: marker and a complete SEP-58 recipe on the same contract",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-S55-E": {
+      "id": "F-S55-E",
+      "note": "run-scoped case-sensitive discriminator: source_repo=GitHub:<user>/<repo> must read false",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-S55-F": {
+      "id": "F-S55-F",
+      "note": "run-scoped prefix boundary: source_repo=github: begins the RA5 literal and must read true",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>"
+    },
+    "F-NONE": {
+      "id": "F-NONE",
+      "note": "cli-none: built with plain cargo build, no cliver in metadata \u2014 must be `unsupported`",
+      "network": "testnet",
+      "contract_id": "C..."
+    },
+    "F-XNET": {
+      "id": "F-XNET",
+      "note": "identical bytes deployed on both networks; the mainnet twin goes in F-XNET-MAINNET",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/f-xnet.tar.gz",
+      "source_sha256": "<64 hex>"
+    },
+    "F-XNET-MAINNET": {
+      "id": "F-XNET-MAINNET",
+      "note": "the same bytes as F-XNET, deployed on mainnet",
+      "network": "mainnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/f-xnet.tar.gz",
+      "source_sha256": "<64 hex>"
+    },
+    "F-UPG": {
+      "id": "F-UPG",
+      "note": "upgradeable; test/fixtures/e2e/set-upgrade-testnet-version.sh flips it between old/new",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<old 64 hex>",
+      "prepared_new_wasm_hash": "<new 64 hex>",
+      "source_path": "artifacts/e2e-fixtures/archives/upgrade/f-upg-v1-source.tar.gz",
+      "source_sha256": "<old source archive 64 hex>",
+      "run_scoped_recipe": true
+    },
+    "F-BUILD-TIMEOUT": {
+      "id": "F-BUILD-TIMEOUT",
+      "note": "Infinite build.rs submitted to one run-scoped timeout target per case; deployment LIMIT_WALLCLOCK must stop it",
+      "network": "testnet",
+      "source_path": "artifacts/e2e-fixtures/archives/build-timeout.tar.gz",
+      "source_sha256": "<64 hex>",
+      "run_scoped_recipe": true
+    },
+    "F-SUB09-TIMEOUT": {
+      "id": "F-SUB09-TIMEOUT",
+      "note": "Run-scoped deployed target for E2E-SUB-09/build_timeout; deploy-testnet.sh creates it from f-leg-1-official.wasm with the run's salt.",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<same 64 hex as F-LEG-1>"
+    },
+    "F-SUB10-TIMEOUT": {
+      "id": "F-SUB10-TIMEOUT",
+      "note": "Run-scoped deployed target for E2E-SUB-10/build_timeout; deploy-testnet.sh creates it from f-leg-1-official.wasm with the run's salt.",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<same 64 hex as F-LEG-1>"
+    },
+    "F-RULE-D-TIMEOUT": {
+      "id": "F-RULE-D-TIMEOUT",
+      "note": "Run-scoped deployed target for E2E-DEDUP-06/build_timeout_requeued; deploy-testnet.sh creates it from f-leg-1-official.wasm with the run's salt.",
+      "network": "testnet"
+    },
+    "F-DARK": {
+      "id": "F-DARK",
+      "note": "source_uri under runner control so it can be taken down; see test/fixtures/e2e/dark-source-server.mjs",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "http://127.0.0.1:8787/source.tar.gz",
+      "source_sha256": "<64 hex>"
+    },
+    "F-MULTIPKG": {
+      "id": "F-MULTIPKG",
+      "note": "multi-package workspace where omitting --manifest-path builds the wrong package; source tree in test/fixtures/sample-contracts/multi-package-workspace",
+      "network": "testnet",
+      "contract_id": "C...",
+      "wasm_hash": "<64 hex>",
+      "source_uri": "https://example.invalid/multi-package.tar.gz",
+      "source_sha256": "<64 hex>",
+      "bldopt": [
+        "--manifest-path=contracts/contract-b/Cargo.toml"
+      ]
+    }
+  },
+  "images": {
+    "$comment": "Read `accepted` out of the deployment's own policy.json rather than hardcoding it.",
+    "accepted": "docker.io/stellar/stellar-cli@sha256:<64 hex>",
+    "digest_pinned_untrusted": "docker.io/library/rust@sha256:<64 hex>",
+    "tag_only": "docker.io/stellar/stellar-cli:25.2.0"
+  },
+  "mirrored_source": {
+    "$comment": "Same bytes, two locations \u2014 E2E-DEDUP-02/same_bytes_different_url.",
+    "url_a": "https://example.invalid/a/source.tar.gz",
+    "url_b": "https://example.invalid/b/source.tar.gz",
+    "sha256": "<64 hex>"
+  },
+  "bulk": {
+    "target_fixture": "F-LEG-3",
+    "archive_directory": "artifacts/e2e-fixtures/archives/bulk",
+    "count": 200
+  },
+  "unreachable_source_uri": "https://example.invalid/definitely-not-here.tar.gz"
+}

@@ -1,0 +1,47 @@
+{
+  "name": "@scvs/query-svc",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsc",
+    "generate:openapi": "tsx src/generate-openapi.ts",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.2.3",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.2.3",
+    "@nestjs/platform-express": "^11.2.3",
+    "@nestjs/swagger": "^11.4.7",
+    "@scvs/config": "workspace:*",
+    "@scvs/core": "workspace:*",
+    "@scvs/db-query": "workspace:*",
+    "@scvs/openapi": "workspace:*",
+    "@scvs/sdk": "workspace:*",
+    "@scvs/storage-layout": "workspace:*",
+    "@stellar/stellar-base": "^15.0.0",
+    "class-validator": "^0.14.4",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.2.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.20.1",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.1",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

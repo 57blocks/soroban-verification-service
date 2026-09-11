@@ -1,0 +1,23 @@
+{
+  "schema": "stellar-verification-feed-index-v1",
+  "verifier_id": "fixture-verifier-a",
+  "latest": [
+    {
+      "network": "testnet",
+      "date": "2026-06-30",
+      "url": "testnet/2026-06-30.jsonl",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "event_count": 1
+    }
+  ],
+  "feeds": [
+    {
+      "network": "testnet",
+      "date": "2026-06-30",
+      "url": "testnet/2026-06-30.jsonl",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "event_count": 1
+    }
+  ],
+  "updated_at": "2026-06-30T00:00:00.000Z"
+}

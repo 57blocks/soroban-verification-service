@@ -1,0 +1,11 @@
+[package]
+name = "shared-flags"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+contract-a = []
+contract-b = []
+
+[dependencies]
+soroban-sdk = "23.0.0"

@@ -1,0 +1,1439 @@
+{
+  "$source": [
+    "Filled in on 2026-08-17 from test/fixtures/e2e/registry.yaml (`required_contracts` — only rows",
+    "marked `status: ready`) cross-checked against artifacts/e2e-fixtures/testnet-deployments.ndjson",
+    "and purpose-built-wasm.ndjson. Recipes come from test/fixtures/e2e/build-purpose-contracts.sh's",
+    "`docker_build`, which is what actually produced these Wasm files — not inferred from the shape",
+    "of a sibling fixture.",
+    "",
+    "Anything registry.yaml marks `candidate` or `blocked` is deliberately absent: a fixture that",
+    "has not been proven to rebuild is a case that fails for a fixture reason and reads as a",
+    "conformance failure. F-MAINNET-READ-ONLY is a deliberately recipe-free view of the same",
+    "ready Reflector target as F-LEG-1-MAINNET, so E2E-NET-01 can remain strictly read-only."
+  ],
+  "contracts": {
+    "F-MAINNET-READ-ONLY": {
+      "id": "F-MAINNET-READ-ONLY",
+      "note": "existing_mainnet_reflector_pulse_v6_0_1 — public cli-legacy mainnet target used only by E2E-NET-01/read_only_mainnet. Registry status: candidate for rebuild/submission, but its contract ID, deployed Wasm hash, and toolchain metadata have been independently checked. Do not add source or recipe fields here: doing so would make this read-only probe eligible for submission by accident.",
+      "network": "mainnet",
+      "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
+      "wasm_hash": "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c"
+    },
+    "F-LEG-1-MAINNET": {
+      "id": "F-LEG-1-MAINNET",
+      "note": "existing_mainnet_reflector_pulse_v6_0_1 — public cli-legacy mainnet contract. The fixed GitHub revision rebuilt to its deployed Wasm in the verifier's v3 composed CLI 27.0.0 / Rust 1.97.1 image with the recorded recipe; registry status: ready.",
+      "network": "mainnet",
+      "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
+      "wasm_hash": "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c",
+      "source_uri": "https://api.github.com/repos/reflector-network/reflector-contract/tarball/42f3116b0c5ea335181508c926e5ec48d67af419",
+      "source_sha256": "cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--package=reflector-pulse-contract",
+        "--meta=source_repo=github:reflector-network/reflector-contract",
+        "--optimize"
+      ]
+    },
+    "F-LEG-1": {
+      "id": "F-LEG-1",
+      "note": "purpose_testnet_f_leg_1 — cli-legacy (cliver 27.0.0, rsver 1.96.0), registry status: ready. Built by build-purpose-contracts.sh's docker_build, so bldarg/bldopt below are what produced the deployed bytes.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-COMPOSE-ONLY": {
+      "id": "F-COMPOSE-ONLY",
+      "note": "purpose_testnet_f_compose_only — cli-legacy (cliver 25.2.0, rsver 1.94.0), registry status: ready. The only fixture on a pair Docker Hub publishes no image for, so composition is the only way it can be verified. Built 2026-08-19 inside scvs-composed:template-gate-v3 by build-purpose-contracts.sh's compose-only scope; source is byte-identical to F-LEG-1's, so the pair is the only variable between the two. bldarg/bldopt below are what produced the deployed bytes.",
+      "network": "testnet",
+      "contract_id": "CB6BPRLONPH3SX4YBR5IPQOOXQNYZ7BPXDUSV4BL2RHH2ZDBWJMT6UNE",
+      "wasm_hash": "b052d489ff3acc03cb2efc56292b24ff0cb119d71b831d5c3d36d17a97c021b4",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-DEMAND-01": {
+      "id": "F-DEMAND-01",
+      "note": "purpose_testnet_f_demand_01 — cli-legacy (cliver 25.1.0, rsver 1.95.0), registry status: ready. The corpus's largest single combination: 813 live contracts, 25.2% of live class-B, more than ranks 2 and 3 together, and no official image pairs 25.1.0 with 1.95.0. Built 2026-08-19 inside scvs-composed:template-gate-v3. Source and SDK are identical to F-LEG-1's (626 bytes, rssdkver 25.3.1#e50d95af), so the pair is the only difference. ★ bldopt carries NO --locked: 25.1.0's `contract build` does not offer it, so a recipe containing it would describe a build that could not have happened.",
+      "network": "testnet",
+      "contract_id": "CACXUT2PCIUTOWS7O6GKFK4CVJL5JYAGIEGZ4B2YVEI5L5YHDI3QUM4H",
+      "wasm_hash": "67bafc0b173035f76516acb46114cbf5e65edf389039c11994d86442fc632c49",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-OLD-END": {
+      "id": "F-OLD-END",
+      "note": "purpose_testnet_f_old_end — cli-legacy (cliver 23.3.0, rsver 1.91.1), registry status: ready. The old end of both version ranges and the only fixture below rust 1.94 — every fixture before the compose-built ones sat at 27.0.0/1.96.0, the newest end of both, while the corpus's risk is concentrated on 23.x CLIs with 1.8x/1.9x Rust. Built 2026-08-19 inside scvs-composed:template-gate-v3. ★ Same no---locked bldopt as F-DEMAND-01, and it resolved rssdkver 25.3.1#e50d95af anyway — the same SDK the --locked builds got, which is the evidence that a committed Cargo.lock is sufficient here.",
+      "network": "testnet",
+      "contract_id": "CCT6PKZ4KG54R7M4PMBMVOQ5V6VJKDFPNZ5Q4JZH6FNTIL3OP3ISVJHU",
+      "wasm_hash": "ea0c44b0576232162a5630046b223753922e9d55588a03c640a7395bb08adf19",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-FLOOR-REFUSE": {
+      "id": "F-FLOOR-REFUSE",
+      "note": "existing_testnet_refusable_cliver — NOT purpose-built. Somebody else's live testnet contract whose cliver is `25.2.0#`: a trailing separator with an empty rev, which parseCliver refuses, so the composer raises unaddressable_cliver before any download while classifyBuildEnvironment still routes it to `compose`. registry status: ready. ★ The source below is F-LEG-1's and does NOT reproduce these bytes — it is not supposed to. The expected verdict is a refusal reached before any source is fetched, compiled or compared, so the archive is never opened; that is also why this fixture is reachable while F-PUBTEST is not. bldarg/bldopt are equally inert and present only so the submitted manifest is a complete one.",
+      "network": "testnet",
+      "contract_id": "CDZZY4MN4KV73AF43PQ7UF2LASI6COPWMLLT5YVM5RS2LVIJABU32JZR",
+      "wasm_hash": "06186e938a0ba1585a5d8a6d2ec802f3d184aaf9ec298d8c8aece50ca56cb239",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-PRIV": {
+      "id": "F-PRIV",
+      "note": "Private upload canary built from F-LEG-1's canonical source. The extra non-build file gives it a distinct source hash while preserving the verified Wasm bytes.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_path": "artifacts/e2e-fixtures/archives/private-canary.tar.gz",
+      "source_sha256": "c35ed3d331e425ea8f397e5c2b562cd1012896c45c4282a1b96a60d87dce45dc",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-URI-PRIV": {
+      "id": "F-URI-PRIV",
+      "note": "E2E-SRC-05/uri_declared_private. GitHub's archive of 7bd0765 has the same contract source as F-LEG-1 but a distinct full-archive hash because its README revision differs. Submit it through source_uri with is_public false: it must verify without this verifier retaining a copy.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_uri": "https://api.github.com/repos/jia57b/soroban-contract/tarball/7bd0765afdca5f99fbbec403d4b45cc3dbb05524",
+      "source_sha256": "b34f44869d502688387fb8381e013f5826c0c0b074e197fdb75431096f402797",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-URI-MISMATCH": {
+      "id": "F-URI-MISMATCH",
+      "note": "E2E-SRC-02/uri_declared_public_mismatch. GitHub's archive of a107dd4 has the same contract source as F-LEG-1 plus one inert tarball, giving it a distinct full-archive hash. Submit it through source_uri against F-LEG-3 with is_public true: it must mismatch and still be retained.",
+      "network": "testnet",
+      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
+      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
+      "source_uri": "https://api.github.com/repos/jia57b/soroban-contract/tarball/a107dd4a006ef2a3252884532550cd3c1fab23ba",
+      "source_sha256": "b4596fd652055c1c82e6692bbdfb13898b7de0f57efe98f3c83571f7be33405c",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-58-PRIV": {
+      "id": "F-58-PRIV",
+      "note": "CI-only cli-58 private-upload fixture. generate-e2e-ci-inventory.mjs fills its fresh target and run-scoped source archive after the purpose-built contract is deployed.",
+      "network": "testnet"
+    },
+    "F-PRIV-MISMATCH": {
+      "id": "F-PRIV-MISMATCH",
+      "note": "E2E-SRC-03/on_mismatched private-only variant. It makes the same source edit as F-LEG-3 but adds a non-build canary, so its source hash cannot collide with SRC-07's publicly retained mismatch archive.",
+      "network": "testnet",
+      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
+      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
+      "source_path": "artifacts/e2e-fixtures/archives/src03-mismatch-private.tar.gz",
+      "source_sha256": "be4563d689c6a98cf1c517e928ffd14c69b52dce110f5305c41bff8f910a517a",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-LEG-3": {
+      "id": "F-LEG-3",
+      "note": "Dedicated cli-legacy mismatch target. No matching-source fixture verifies this hash, so ADR-014 cannot hide the expected mismatched publication.",
+      "network": "testnet",
+      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
+      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
+      "source_path": "artifacts/e2e-fixtures/archives/mismatch.tar.gz",
+      "source_sha256": "f7715c78c9c6888c92c3051e73bbbe65c9edb8ddc232232c26d1f1d230a541b7",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-SRC11-FAULT": {
+      "id": "F-SRC11-FAULT",
+      "note": "E2E-SRC-11's fault run. bulk-002 — a compilable source that rebuilds to bytes other than F-LEG-3's target, so the job reaches a *published* mismatch (a build failure would publish nothing and retain nothing, and SRC-11 is about the retention write, not the build). ★ It must be an archive no other case retains: SRC-11 asserts that `sources/{file}` is ABSENT while writes to that prefix are faulted, and a hash some other case already stored would make that assertion unfalsifiable. Targets purpose_testnet_f_leg_3_target because a published `mismatched` there cannot be hidden by ADR-014.",
+      "network": "testnet",
+      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
+      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
+      "source_path": "artifacts/e2e-fixtures/archives/bulk/bulk-002.tar.gz",
+      "source_sha256": "4bb96e0ddca348f9d0bc00eb4222eb66c118c69949fa90c9a421ff448ae7f87c",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-SRC11-CONTROL": {
+      "id": "F-SRC11-CONTROL",
+      "note": "E2E-SRC-11's 🔁 negative control. bulk-003, same shape as F-SRC11-FAULT and deliberately a different archive: the control proves retention WORKS on this deployment while the fault run proves it fails only under the injected fault. Sharing one archive between the two would let the control's stored copy satisfy the fault run's read.",
+      "network": "testnet",
+      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
+      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
+      "source_path": "artifacts/e2e-fixtures/archives/bulk/bulk-003.tar.gz",
+      "source_sha256": "dab5989b7d9f85d3f8e1496887d11e9d80c43ea5adef11977583b120c3267fa8",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-MISMATCH-ALT": {
+      "id": "F-MISMATCH-ALT",
+      "note": "A second distinct mismatch candidate for F-LEG-3's dedicated target.",
+      "network": "testnet",
+      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
+      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
+      "source_path": "artifacts/e2e-fixtures/archives/bulk/bulk-001.tar.gz",
+      "source_sha256": "668292e30df5512ac2994bf986cf45bb65d6d07241b8ec77665a383c5fa336b1",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-ADV-PLANT": {
+      "id": "F-ADV-PLANT",
+      "note": "planted-target-wasm — the deployed bytes sit at target/wasm32v1-none/release/planted_target.wasm beside a source whose real output differs (lib.rs says \"Plant control\"), with a 2038 mtime so a newest-file scan would pick the plant. Built by generate-fixtures.sh; registry.yaml marks it ready. Targets F-LEG-1's contract, so the CI overlay must rewrite these three fields — see generate-e2e-ci-inventory.mjs.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_path": "artifacts/e2e-fixtures/archives/planted-target-wasm.tar.gz",
+      "source_sha256": "39480fefb38a8c36d26adb161f7045901936e177d5df2cdc6f82e54c3445c5a6",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-ADV-BUILDRS": {
+      "id": "F-ADV-BUILDRS",
+      "note": "buildrs-planted-target — no .wasm ships in the archive (that would overlap F-ADV-PLANT); build.rs decodes an embedded hex payload of the deployed bytes and writes planted_from_build_rs.wasm into the artifact directory at compile time, printing [F-ADV-BUILDRS] plant result=… so a run that did not actually plant can be told from one that did.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_path": "artifacts/e2e-fixtures/archives/buildrs-planted-target.tar.gz",
+      "source_sha256": "43b63f0b4123b3cf4affdc9deb756f942b3b86c94aa3de719b1f6370fb615ebe",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-58": {
+      "id": "F-58",
+      "note": "purpose_testnet_f58 — testnet, not mainnet: registry.yaml marks F-58-mainnet `blocked` and F-58-testnet-supplemental `ready`. Complete SEP-58 recipe on chain. NOTE: no `bldimg` here on purpose — the chain records one and the submitter is never asked for it (ADR-009 constraint 1); sending it would be inert noise. Its chain value is docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43, kept in this note rather than in the submitted manifest.",
+      "network": "testnet",
+      "contract_id": "CBRIXGXYTW3A74CA5K4ICSFKMB56EIZSJC4XXZGF27BIALJ7TEUNJU4X",
+      "wasm_hash": "575ce34aa57957ff6e06b988eb7c50758667387763a15b65fc80c2952db5a75b",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-58-ZIP": {
+      "id": "F-58-ZIP",
+      "note": "Base template for the run-scoped private cli-58 ZIP fixture. Keep contract_id, wasm_hash, source_path and source_sha256 absent: the ZIP provisioner generates the archive, builds and deploys it per run, then the run-local overlay writes those facts from the build/deployment evidence. The deployed recipe records f58-source-tree.zip itself, not a tarball.",
+      "network": "testnet",
+      "source_uri": "https://example.invalid/scvs/f58-source-tree.zip",
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-58-ZIP-PUBLIC": {
+      "id": "F-58-ZIP-PUBLIC",
+      "note": "Base template for the run-scoped public cli-58 ZIP fixture. Keep contract_id, wasm_hash, source_path and source_sha256 absent: the ZIP provisioner generates the archive, builds and deploys it per run, then the run-local overlay writes those facts from the build/deployment evidence. Its inert canary makes the ZIP hash, immutable recipe and deployed Wasm distinct from F-58-ZIP, preventing Rule B adoption across visibility assertions.",
+      "network": "testnet",
+      "source_uri": "https://example.invalid/scvs/f58-public-source-tree.zip",
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-S55-A": {
+      "id": "F-S55-A",
+      "note": "purpose_testnet_s55_a — cli-legacy, registry status: ready. The `github:`-prefixed `source_repo` is on chain (contractmetav0 section 1, beside cliver), so `metadata_replay` carries it and E2E-SEP55-01 expects trust.sep55_attestation_present == true. The `--meta=source_repo=…` bldopt entry below is what produced the deployed bytes; the builder strips every recorded `--meta` option and replays metadata_replay instead (services/builder/src/modules/builder/run-cli.ts's removeRecordedMetaBldopts), so the submitted entry is byte-inert. run_scoped_recipe because an adopted pre-RA5 publication carries the old hardcoded `false` and would decide this run's assertion.",
+      "network": "testnet",
+      "contract_id": "CA4XHOKR37CO6SRMN35VZIZUQVUVPMEAWKZVA2MYM5VGC6VCDDYMNI6S",
+      "wasm_hash": "add3924046efca1ef3f7513807b7e209548ffd37386951e3e8d0f89a947b843c",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--meta=source_repo=github:example/contract",
+        "--optimize"
+      ]
+    },
+    "F-S55-B": {
+      "id": "F-S55-B",
+      "note": "purpose_testnet_s55_b — cli-legacy, registry status: ready. Legacy SEP-58 v0.4.0 vocabulary: `source_repo` is an ordinary URL, so E2E-SEP55-03/legacy_source_repo expects `false`. Same recipe and source archive as F-S55-A; only the on-chain source_repo value differs, which is why the two carry different Wasm hashes.",
+      "network": "testnet",
+      "contract_id": "CBGR2MR3VRQJX6G4ILZI6ADVAW7SHXK6SDNCIOXGBAT5IBVSTPCLB2DY",
+      "wasm_hash": "30aaf50be16af57ede4acac32ff46ff480f5326c526f1c93de13df74d9d45cf9",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--meta=source_repo=https://example.com/src.tar.gz",
+        "--optimize"
+      ]
+    },
+    "F-S55-C": {
+      "id": "F-S55-C",
+      "note": "purpose_testnet_s55_c — cli-legacy, registry status: ready. The value *contains* `github:` without being prefixed by it, so E2E-SEP55-03/contains_but_not_prefix expects `false`. This is the fixture that separates startsWith() from includes().",
+      "network": "testnet",
+      "contract_id": "CBEC6C5OSITUAVBLOA5F6EYOTCWOBLQAQHCZDP7763PP5C36GZJKHDOO",
+      "wasm_hash": "aa900d0e89ac395d443c884bd958b2d53ff72f2bddd4f2e1e787b4831f02797f",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--meta=source_repo=https://mirror.example.com/github:foo",
+        "--optimize"
+      ]
+    },
+    "F-S55-D": {
+      "id": "F-S55-D",
+      "note": "purpose_testnet_s55_d — cli-58, registry status: ready. The coexistence fixture: a complete SEP-58 recipe AND a `github:` source_repo in the same contractmetav0 section. NOTE: no bldimg/bldarg/bldopt and no run_scoped_recipe on purpose — E2E-SEP55-04 submits it as a target-only body (metadataSubmissionFor) so verification-svc infers the whole manifest from chain metadata, which is the shape the case is about. source_uri/source_sha256 are recorded here for reference only; they are the chain's own values. Its on-chain bldopt records --meta=source_repo='github:example/contract' with the shell quotes build-purpose-contracts.sh wrote, and registry.yaml carries no rebuild validation line for it, so the verdict may be mismatched rather than verified — the case accepts either, since it asserts placement, not a match.",
+      "network": "testnet",
+      "contract_id": "CDH27GIY7J3ABTWXAIFXQZRER5B4DZDZR5TFBPOOUWJ6TTSVD5Q5TDQF",
+      "wasm_hash": "f0af8418de18a7a0dbd4151adffd51b258668a3b95a21ac4d9558ac6082f12e2",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533"
+    },
+    "F-S55-E": {
+      "id": "F-S55-E",
+      "note": "Run-scoped E2E-SEP55-03 case-variant fixture. Its deployed metadata records source_repo=GitHub:example/contract, which does not begin with RA5's lowercase literal github: and must therefore publish false.",
+      "network": "testnet",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--meta=source_repo=GitHub:example/contract",
+        "--optimize"
+      ]
+    },
+    "F-S55-F": {
+      "id": "F-S55-F",
+      "note": "Run-scoped E2E-SEP55-03 empty-prefix fixture. Its deployed metadata records source_repo=github:, which satisfies RA5's literal begins-github: observation and must therefore publish true.",
+      "network": "testnet",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+      "run_scoped_recipe": true,
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--meta=source_repo=github:",
+        "--optimize"
+      ]
+    },
+    "F-BADIMG-TAG": {
+      "id": "F-BADIMG-TAG",
+      "note": "Complete chain recipe whose bldimg is the mutable tag docker.io/stellar/stellar-cli:25.2.0. The request sends no bldimg; preflight and inferred submission policy read it from deployed metadata.",
+      "network": "testnet",
+      "contract_id": "CAC66EEBWQIIBTYCN4ASU5OE5JPIU5CX7S6B6USEJ5FHYKZQDOUIABG4",
+      "wasm_hash": "65aaed90491a75bb82f246f78ef975130503d255a7d8b700cce4864bf1df8a63"
+    },
+    "F-BADIMG-UNTRUSTED": {
+      "id": "F-BADIMG-UNTRUSTED",
+      "note": "Complete chain recipe whose bldimg is a real digest-pinned Docker Official Image outside the verifier's trusted Stellar CLI image class. The request sends no bldimg.",
+      "network": "testnet",
+      "contract_id": "CBMRRUS3OIPFI5LY4OJKTF77VLRZDSWTBI4DUROPHOFZO4XGJDSLJJXD",
+      "wasm_hash": "65a942312b639ef9b764dfb88c5d683cc36ae9c81973d79d8167bcc3e9e63d17"
+    },
+    "F-NONE": {
+      "id": "F-NONE",
+      "note": "purpose_testnet_f_none — built with cargo rustc and no Stellar CLI, so its metadata carries rsver + rssdkver but no cliver. That absence is what makes it cli-none. The source below is only there to get past the completeness gate: whether it is the right source is irrelevant, because environment resolution rejects the target before any source is fetched.",
+      "network": "testnet",
+      "contract_id": "CB4RTAYATOAKOFRMNBCGYTBA54ZLC5FS3BF2N636KZ5XELNSCUYUKBDH",
+      "wasm_hash": "2e27c372efa90653a8c2546f714c7782519cb89f7c1f219f2f0bd6bb3f31e03f",
+      "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+      "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533"
+    },
+    "F-MULTIPKG": {
+      "id": "F-MULTIPKG",
+      "note": "Purpose-built cli-legacy multi-package workspace. contract-b is deployed; the submitted equals-form manifest path selects contract-b while the split form must be rejected instead of losing the path.",
+      "network": "testnet",
+      "contract_id": "CAXZUPMTFUU4JPTX5XOGWWIW5XVLV3OF3LHGTCMA6BB7BA3HVANYATLW",
+      "wasm_hash": "8bce8d0c883ed35557059e4906dc4b8de06eca95d044ad3e8980421eab2c1162",
+      "source_path": "artifacts/e2e-fixtures/archives/multi-package-source.tar.gz",
+      "source_sha256": "2948171d6ed3dd40e061ff922d597e5b0b23c9175c89260b138898fd667b07cb",
+      "bldopt": [
+        "--manifest-path=contracts/contract-b/Cargo.toml"
+      ]
+    },
+    "F-UPG": {
+      "id": "F-UPG",
+      "note": "purpose_testnet_f_upg — currently in state `old` (wasm 8d5b4341…); prepared new is 0b260ed5…. test/fixtures/e2e/set-upgrade-testnet-version.sh flips it. The full E2E-QRY-06 needs that flip mid-case, which is AUTO-INFRA; the AUTO half here only reads.",
+      "network": "testnet",
+      "contract_id": "CDPEO2O4QSD7BRBWRF6ZK3XNW44W7CF23XRUP2ZRAV6CZKJCGT7ATOMR",
+      "wasm_hash": "8d5b43411d6e4a9cad08814c2212a93d0ab7b6c8d6f453bc60a118c523c692e2",
+      "prepared_new_wasm_hash": "0b260ed57954e1e6c1a51dccd2f88340ca2054cc5c6aa339477550b0790e580e",
+      "source_path": "artifacts/e2e-fixtures/archives/upgrade/f-upg-v1-source.tar.gz",
+      "source_sha256": "8de1dd418723ee2eb493e245e1fd3905ea6cf01b099f7470a883f56ccc196461",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-PRIV-BUILDFAILED": {
+      "id": "F-PRIV-BUILDFAILED",
+      "note": "E2E-SRC-03/on_build_failed. The already-generated build-failed archive — F-LEG-1's canonical source with `this is not valid rust` appended to contracts/verified-demo/src/lib.rs, so cargo runs and rustc fails (test/fixtures/e2e/validate-local.sh asserts a recognizable compiler error). Targets F-LEG-1's contract; the verdict never gets far enough to compare bytes. Its source hash is used by no public-source case, which is what makes SRC-03's HA3 attributable to this submission. SUB-09/build_failed can reuse it.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_path": "artifacts/e2e-fixtures/archives/build-failed.tar.gz",
+      "source_sha256": "96879a2eb739032612785151a1642ae93ebb28853b0bc5900d4974914fa64033",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-BUILD-TIMEOUT": {
+      "id": "F-BUILD-TIMEOUT",
+      "note": "F-LEG-1 source with an enabled build.rs that prints [F-BUILD-TIMEOUT] and waits forever. Timeout cases submit it to their own run-scoped target so live Rule D retries cannot collide with another case or harness run.",
+      "network": "testnet",
+      "source_path": "artifacts/e2e-fixtures/archives/build-timeout.tar.gz",
+      "source_sha256": "791471844ce3c2f22ca2902dbd7494b152d673288d55d6f41d06e90d21e88570",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    },
+    "F-SUB09-TIMEOUT": {
+      "id": "F-SUB09-TIMEOUT",
+      "note": "Run-scoped target for E2E-SUB-09/build_timeout. The timeout provisioner deploys F-LEG-1's Wasm with this run's salt.",
+      "network": "testnet"
+    },
+    "F-SUB10-TIMEOUT": {
+      "id": "F-SUB10-TIMEOUT",
+      "note": "Run-scoped target for E2E-SUB-10/build_timeout. The timeout provisioner deploys F-LEG-1's Wasm with this run's salt.",
+      "network": "testnet"
+    },
+    "F-RULE-D-TIMEOUT": {
+      "id": "F-RULE-D-TIMEOUT",
+      "note": "Run-scoped target for E2E-DEDUP-06/build_timeout_requeued. The timeout provisioner deploys F-LEG-1's Wasm with this run's salt; the case submits F-BUILD-TIMEOUT's archive.",
+      "network": "testnet"
+    },
+    "F-ADV-TOOLCHAIN": {
+      "id": "F-ADV-TOOLCHAIN",
+      "note": "E2E-SEC-06. F-LEG-1 source with rust-toolchain.toml requesting unavailable Rust 1.99.0. The builder must instead pin the digest-resolved image toolchain through RUSTUP_TOOLCHAIN in both acquisition and final build stages.",
+      "network": "testnet",
+      "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
+      "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+      "source_path": "artifacts/e2e-fixtures/archives/toolchain-selector.tar.gz",
+      "source_sha256": "35290e2b58901940ed5f725dd369efd2bd19c2ab8f912e4de75e68c5799d2dc0",
+      "run_scoped_recipe": true,
+      "bldarg": [
+        "contract",
+        "build"
+      ],
+      "bldopt": [
+        "--locked",
+        "--manifest-path=contracts/verified-demo/Cargo.toml",
+        "--package=verified-demo",
+        "--optimize"
+      ]
+    }
+  },
+  "mirrored_source": {
+    "url_a": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+    "url_b": "https://github.com/jia57b/soroban-contract/raw/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+    "sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533"
+  },
+  "bulk": {
+    "target_fixture": "F-LEG-3",
+    "archive_directory": "artifacts/e2e-fixtures/archives/bulk",
+    "count": 200
+  },
+  "performance_verified": {
+    "$note": "Persistent shared testnet target pool for E2E-PERF-01/02. Every address deploys F-LEG-1's known-good Wasm. CI and local runners must not run PERF-01/02 against this pool concurrently.",
+    "fixture_id": "F-LEG-1",
+    "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
+    "targets": [
+      {
+        "contract_id": "CA23X67ANWH3TX3UONTCYBJMXM4CKYVDLAV5SDPRNQ3LYHJRD555S2CH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA2C7KOD5LOLZQRIBHGDL362WRHSOML7BDMTW4U2UKJVY2DYVJ634CD5",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA2GFXSXX22AIKAR3JYMNUFJEYVAHAITXEPZHB2IZQ3VA47BIY3HHWQG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA4PLFGS5CQPIBWWHKKPQK4EEDBEROG5K2L3X4NRNA7UHGXKIGG3FHFG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA4PQGDB3OJPK6K7WHWI6RORFNJ2QU7MPDFEDRZQUWOJJMLDYVBGTGRA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA52Q6DRTD4QRYOJUFRJC2PGOTLAILMY752IB7V3P6JJ4TIOC2XAS4QG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA5N2ZPGVFIBMSKKQ75ODXVWMWIOSU6CNXIWOJ27X7PQJDDWGTSOZ25N",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA6PTZFGVS234POX7WAN6BDFBQ3BZSKDJ6LXIOTEJG473H4AMFI7W6EG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA73MSOTCN42JDED2G34QC7CZXZTUNLYIB25COQJ6DE5CO73H5WO5ITL",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CA776UF2AETIC4JM6DBAQOJSZGZABLQ4UWQMXZYFZGXYCBO4FO5CMWGV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAAZM5QWKEE36F7P2UBSATQPH2VKX7GSI3KSEIZB7SO2VWH7FBO3TS7B",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CABWSY66Z5VPFQR5KXG5BSPQBJDBHMODXZHIEBTMXQ6NG3BHDLCETHH6",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CACE2MAEZMQX3UWS7KZG2F5LUQJOCVE6PRNCA6HMEZMON6HMXPUEE6KE",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CACMIWZHMRCWYBY6YN62BNCDVPVL36TLTXF2EZFBBSYKKJ5H76R4YTNY",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAEES65TBDFTNEGSVLVUVLRYJUTLI6D4XMOXA2OFNBFCMQMQ3ISJ4PIJ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAEX3FFCLAGTPHTQ6RLTHBEL4AIXZI5WZEKSXSYH7PXH72VBHCW2A3XK",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAF3KIPQQZZ47VPYDYELPKUYFCLR6LMHPSFC6YG7CD3JINJBOZWWIFYG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAFCSL75MFN5G424JO2YDBEAZHUKIB6A27FAJTXLPXL63KS4BVK7ZIYH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAFQEWO2GBH5SLU3WKIPHHS4YFCUF7G2HQZHMYBXXH6U44DFCRSI3VBN",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAFSQCCZOYQKOWPHP7DPWHVIHDSYH6K4F73R5UHVZHQIS7GCZOSMAHOC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAGAXMWBFKKNE6ZSYKPXLI4D2MEBAQBAE3QGEH2N52VHTKR6P2AEHRBR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAGTY4WP77DSKS5I25RVIMOTM66CAQU6MG5SLO25RUBSE3TDF4FXGMTR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAIH2WP4B4EZKX7VNUNKPDCQJAE6DESC4WHUOSEKQAGQONTXQUDD36QZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAIJU2UEUHML32SAZ7PFKNT2E547SLCQHSRC4FMLCGY7HS35GFIRZHRM",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAJLVXUD4VPXWDOFYY5AABH7OQ7NEQ5K7PEC6IBRU3V3LITCPHG2C2O2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAJTHKATMGZIW2NOQALUFVN5KELZYQ5QNEGB2DO2PIFMUQEDZLMOL764",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAJYNJUBAKDAYR4LVBOI7GKR2KW5AOFU5WWSV5I623DKT7OTSRDS4PV6",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAKE4ZZB3RCJXS7ETABC2GSJW3N3NIXK52QWFIZYX2LENAXZBN2KBTHH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CALGM4Y6PCJGA3PPVJB6STORHE5JD75BUAV4NE7I7ZYUAOU23BZ3QKMB",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CALM3V6FZ5VYNKZ3GM4ILCLMGCKLZ6OF6LXRHNUGJLC4E3GBIQE3E7DC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CALW4PL7GS7CVKV3HYUXQQWK6WMT2TO6TK3KHPADGNL5XW5J5XNSPQOC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CALX4UWWXUU774MHPYM4RDD5FHZEAAEMS2S3JPSVC33F4OWUCTYQYRXW",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAN3WVCD3JMSIL2E2YH5XBHZKOQVB2JDAWJ6OV6IC67LN3C22CISSSWZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CANF6PGZJQVN7XKBU7WBMPLZCI4B3C2Y5EWXWTEZUV77BMHUYVK2TRXH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAPXJG7ZNERRKLBSGFPGWMU7SCCDVGMCBUWAIIQDGXN5UK4Y7MIGQLHZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAQO3EXCUS4PIQMBWPAOO45EAH5JYUNQ65EHSZ26RS76PEEUMOTAH3YL",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CASA3YOKPCZ2CPW775FO7I4DF4S4LV43MTS6GYQQXIXMN6RNBPP5A4Z2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CATTXF2YAR3LOZGZ3PM7HQHZQ6RNQD3VGU76P3CJYHQCFEH4E3Z75RXA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAUR3ZVPPZNIHQGMUIKPJAYCDX5ZEXVCSODOCDTYE2HKZIDVAACX2SRF",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAV63GEJLAOPU5MKIJAIDOF5Z7QK53JF5HDKSGS6O66RGYXH7O5XOWA6",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAVFEMOVY2EM3FDDMADKBG3AVGQG354RWURTSV2E4BSE76E3HQZ2LDFX",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAW4SBI4IUQPNQQTVZCV4ZYDCIENGQ3BZJ5UYRTZOGW5SKC67ICSEZX4",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAWH2HSVXQSYFLRWZX4AXXMFI3UYI6634VKWANSUMMXJPFIFSCVOXG7X",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAX2TSKTBTYOXXRMUWF54FNJBPY46LSDP5V5KDBITJCMUXLRKDBKMA2I",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAXB5BSFZMT227A4C44DA3ZFCTD3VKNEFAYOMS6SQCDO5QYWCWZH7AAC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAXSC2QXC4B47K3VBFMSJTVTAJ5WJ5NSZLYD6BLREZF76T35T43C2MAS",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAXWRRNOEQNF4MKA5E3KCTSYMJ5D2L6QDRLU6HQAYXXELAJW2RLWZGA5",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CAYZNKF3VMYJH5RGA6FZEIU6IAPRPASE2DWTJKILHC5JTCP3J35AV37C",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CB2O377RYJO72ZMLAWP5AXBVDEL6QD374OE5RUD4PBNM2EKAY4IDXIZD",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CB3AYBT2XJAUDLBAXGMOWAS5NWDWU42ACXDRCDFHBEOVJ53TLFLSVYNF",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CB3RQK4BDPPSKFPMCLRDH6XRIPYCBF62Q5WSZ6AK3Z2GEMRSFQRDMFZD",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CB3SGMOQZRX4HMY2YH7YQAPLW3MS3PH4CLUMWIKM4ORGMESEHNB6L3EP",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CB6GFE7OGTUCGFBATSHM2O6GKGD4VZB3UGBWOL24EJOMXNS7RHLN7W4S",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBAKBHQQT6SHYMIY2LV6RPEUL3BZMS2JK4GG4EXT7WF7BIYU7UQI4MNI",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBCQUOEPOQL4S2RIZ4JORPK5JEZ5RDV2J2FNUYFKBQ67DGHZBBJVY7JX",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBDYS672IIS3QZT23VS35HI6433V7ZLWMG5QFUAKDSG4ZVLGAOGKIQIY",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBEAKJRZHYW7QLVMTS5EHHHFIGMUX7NGH7K3VGUFAM4ZLYOG5MD27BQZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBEDNHYL5MNQSIMOBLQ5GAER3WRUDX5BC7TVC6XNNTHVSXJDBLB7VJXV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBFMT3LZMNISXXMLXCIF22CYLJQMBME3PMIZZGQ6TSGJSCRJRTHZSQ2F",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBFU6GWDHX5ZVTQJW4WA5AH45FMLXAAFGMFO3V2UQPJQP5IUFPPHQY5M",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBG4PWZFKKFQTBOCHNIMKFYHF7YHY4RQCW4M5BW5NPST2CHMVCTAT65A",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBGYYJIU6ATQMLBYQDB5ICKPYPHZRQ23GPKSVT6GKW63OCBFJTF4MI6A",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBHALFAYBDA6P2CJRJ4V3G34KNNWG4BILYRBCOZRVF2DQBIEPES2CMG5",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBHBIGIMRAYYCPTPLAUDW3E7HHTPSKURHJKHEMBOHJ5KSC66NUJOSH52",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBHDZGRPV3VQX5GZYO64LXHF3ORRAIV73GBY3RCZHTYPV5ODW2D442C2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBHKG3N3APEY6KSPIYPLGTXMBPB7D3DZ35NNNWLF5QJD3DR5PYJDF723",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBI6IR7BONGGRXPZVI7BRQRLZWO5WPKET26YSUGJJC4AOONKBPCIFTWY",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBKJHC22TTY5SNIGMUZCMG4VEUJLZ6YRP6RVVE52DAXFABSFMNJYZA3U",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBLZFI73GV643MCE4UPTWXTTJUGHBCR4V47C4Q5QDIGLSNY3JAM4VU7D",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBM3355WQRRG6EOSEW4F7WDR6MXPEZPXLKV6BPG2WGXUL57DU6E22TRU",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBMYWFH5DCDB36BXRPKVLDT4ZFOJG4AF4U2USEUOT5AKVOP3DKTBYZI2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBNH3BXRLJEZMDODSE5OLEG4KHNNRGGCYQMKPZDQDY57BCEHFMDP34W5",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBNYXWJCUS3QHAU6NEASIVO4LHYPO7AZGKFWEVFY7ANATTZLJHH4KOND",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBPQ37SQJPVMXZS5H66YOVO322USYGAZC54HNV2UFLNVM3MAFA67TJUO",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBQN6GJGQ2NSVWJJSXCDVHZADAOPZ5OTLF63LBKNDKKYC6KZ2CBPGSOC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBRLMZOI7XFVDJXSJBT5DABQHCEHZEDTDF3QSBNKJV4WT6SCIOFVQSWF",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBRRCCMOGFDBJLX4NNC4MNVVWWYHEFIZDUYXM6BDXRT7T3LS2GQTG3TX",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBRWB3SBDM53LJSQZHBWXMWVKDLSDGDKDPBQXSACUGFXJQTJDATJELHN",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBTTKAOJ32YMY6ULGDOM6BYVVZRDMXR2DK56NO2SEGTV4RWFODGNUN27",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBU7QVA5WQMGGYJKCZTIWF4SZJKAF2IUXHRHPCGJRZF6EUWRVQO26J2H",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBVEZYKJR3TX6NDPKIACZ2LJKDSS3IM6IAS6BKHYDCC66FWW6GHJVFLT",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBVGXYHUKE7DTGFGN3G2MBXWHZ7VWTIYDUIJWFJDFEAZC4UXA7IGKFYP",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBXSJKALXFJUP4AWE3RDT6HDCNTAPZKCNK65RL7XIY7SWTEXVU2OZLRD",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBYAA7W5ZD7UQKLRO23OA7ENQKADAEDH7NTAEJWMCTCXANO6K62RIIJG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CBYJTNUHK3SC54N2SJ3FYKKQ22F5JSMSPA7UPCCZJYE4VZEY5MRQMKNV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC2XDGSU4577MZFDPVO5RW6J65N7XBROWVYWP26CTEL62EEC62PZ2KD7",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC3AIESKSKMWHZ7QJYRLMO7UDS3BVQE6Y356Y4W5CIVJMUA32KJXCATD",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC4BGBE3UELKRIZ32UBYMPTLKDZVRJ3BLM2RD7VNX7DEO3R4IFKEXADP",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC4MWAY63BXPOKN26ISNWIKZAJPBWSEJP6LGOKSASFUNUOK7IP7BAX5A",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC4OCZEEO2CAUSZRPJQGZREOC7PCEEWFS4H75NPVLSJOCLT53SCGVK3M",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC4SG3CNYECMV4ZCTD3UJ4KLY2FBEV6DVLJGQBQIDO4AMJTTK4ND2QA3",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC5ELEEP4U66GIZIGZPJPFSJYGBW3TR44OWINVHCRVLXAKLMRNPE7H4C",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC6B2SN7RAF64PMP2SL6PAZHBZXJ2VC6HQEEFS6OBJQ7GSZJIO3V53QC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC7RWGKOMTCEEJPY7JMHWL3U2M7DUBK2O6T5HHMFRIUX7NNQ3W24YXKZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CC7UZSX4VFRD64BRQKF6XL4CT6ZEP2JT6KN5WNDNHUJ72DBQE2ZJSTAM",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCA36WYQA3NQNURZAEUWBVCCK3JRU5277M7PFJ4TTOA3XWFQAFUHXM6B",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCAUGXO3QC5EJWKWV6PDSLQYEJRXFTTTDXSCXFI746SSF3T6TI2WDDOC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCB3KPRXNO6EMB7BEOZ3JI42ELZ5OTBDJSCHFHAED5ZQIWO2IHR2MUZH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCBF7EPJGSUMAIHHV5LGNLJDJJDWQQZ6A2ZW7QCRNN746NI3NIVQCUWR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCCBL65QJAOQAG4Y2JMZ2PHK7CR67XDPOXILPVWQARLENJ7JEIIIRPQ4",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCDJRZPRCFPPEG7FGOFW53NQA6JW6KMFB5SMMVH4HQUK3JUXT33MQ2VV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCDYUYWKRRCFKGDUMFMPZG5P5XQUTVHNB4WNAKMMFSVC3Q5L5AVYMWBC",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCE3FFN4QIHMWXELV5723GBWDBRFHOAYHBABW6ZJBHTTEYJTHUJKRXN5",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCE5P36IJ3Y67UM2VKLERZFNNFBNFJPK2XKKRBM5YOWLWZ3UJWTQSVSN",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCED4MCLEJ3I5M5I2ZS5I63EBTGTFH7EWBWDGG4DCZVH7FIUAQCXBSAJ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCFFPN4PKZYIAHO2EH4WJOJJTCHYPO7TXEGTHO7OPB4VBEKX7UM3VARE",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCFMYYQS3RAE3XTVSBE37X6RLFA3PH6YGEPA3ULA4C6GJ25KFPQYS4QV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCFRGETSITAMDUOLS3PL4OQFK4SAQNF3OPFV7GC6YL3PHFN2ZX3WIJ4N",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCG3WXBNEZWLGRCRQGBO7NA3X5ZE3JID2CUPGX6HZ2FP3PP7MYXR7CVH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCGBGLYJESINLPRSKAUL2XZHGZ56AU7JVODKBVP2PNGHGCV6KS2R64SL",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCH2A23BC3P3G2SHNBBEV2NIZ7MXMS2ZUOQPJFYNVDRM7E4B6PLHC4VU",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCHNB3X7TMKYDKPCA72O756DGPKNT2ZMRBMOQDMZGFTGH6ZEIPBEULXM",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCHUKQ6WVGOHPYZM5I2GR22E7DG7ITDRJENVYDMWRQ4ZHNVZ7UPHESDR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCI2GAKOMW4OP2A5OKPL3QAKF5A2EAELO6PUVLK6JAZ6ELHDJBVRHBGI",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCI32SCHPYJHQVJ5GBLACDJRVP3FRO4SDUEEAZXSXOB7GOZU2RX6CMUE",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCICZHML2WBA52IZOXZHESFP46JL6FI5BCCQLK6NJDSBQFIY4NFNYU7L",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCJZNPSCWPPVXOX3QEPC6JT4B3DW4E4CCID54B3POF3IFJEH7SC6RQBI",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCKBISWX2QAATKYNNQL34WLVS6PEOFC3DKPDHB7HBASRYUXJ7F4O6NQE",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCKL3ZSM6X6EOPLF7BHDM33T2EHZRUHUY2NZAT7YCOD52C43ZKBJU7OY",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCKREULO7FUEZCUPF2BD5NHQWQ5YKIQXCNFM7DGM2SC3WV75KBJIJETJ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCKZGQDME6RONOFRJDMSVGTLCSNBPQVQYT5WH3F74NK5NSEIBVRQPC3F",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCLT34Q52XOHAPKKUCRCIQ7FP34ZEDXLJUMUJK5D77QLXZF46HIX3Y2V",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCM2LNNQXRSHU3G5HLETJ732LSGIUI6XZC6QUOBAZIT7DDSMX3TPUS7Y",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCMPDN4HER5WDF4GID27OTSWX6LNEXPLYBOXLNQVW2GHGMDGSHQVBRYT",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCNHJPEWVEKUZK3SXDDDNDL4Z4TMAX4WXIZPFNAR32SOOUN6UOKDJ34F",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCO3CEQFXLS3EAUFJ52HMA5WF6UCTXDPVGPDFGV7MDFGXJJ54MLYQCI4",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCP5CK4BJX5FDLRJGKHA5NDEYBCWHKFJM42JCC6AGY775O6W7QRFTF3F",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCPSM7VFRPK75TRWPLZFA33I2AEDNB2IL2DEVY36DJWTTACDHYJTAFXR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCPTBQOBA2XADMICKY6BGRYZYM7CAJQL5ISNWCSHER5WO57UDQREH6SG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCQ5BK5T477SOM22F4PE2AUWIYRTJZI7STYAZHX72TKDEIUF2FVXVVON",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCQMPOUOF6P7UWBSPWWXRYVE5SYDTDZPQ477JDPJNY3MXIKOULD5S6WI",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCR4NEQYKWNOS7B3XIUODSJTRVCM432UU7XNGJTZGRE7HMXZU763QB5T",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCRFLTZ2UZVVXVYJD62X327ECDCJUMU6GBS7EELWEV3YCZBEOVT2YG66",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCROYWXOZPHMIEBKAVOFWLVQXTR7KKUKUS3US3WXNNQS2YJPCR7LNCHI",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCRQN6JNROSSRZ3AKF2LYI76VKYSFVTPIGLHQ2SMSAJOKMZAM2VNL7KR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCSVIAFTPJMKEWPR6KQVYBBTFNFVHFSOLAUXL7JRASW76Y4HVFNUDKQK",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCTBW2CUT5II32XCBDVB6PGIA2ZDCMXABMSE5IXNHHK3UDAXO2KYENEP",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCTEZS3JGVC4NWZMDQ7CLSMDF3PS3RY7CMYJ7X2EUDAHPKZRO3UACAPR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCTZVUBG4R6X5X4C7MCRVVLY2SOLPS242LKRERWGN7YEU6KWXUMWRG5S",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCUTMO2HNLVYMH7VA4VG2N5WCJ3RZDEVKDTA6F7WVEEXJWFP2GIAANT6",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCW45M67VCRDKIXRONVTXQPCQUG6MSEOATDBNABER7CCBJ56Z2YAKYVO",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCWU7Z4XB4XR2S3FJ3W6YMW6WC7RKHXLMJFMHYRBMJFWMILJRNJQDBFM",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCXARA5USZBORF2J2MAMI2XBUBH4MJB4GBLNJVRGO67NUCAK6HSXBQ2W",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCXNFGN5V7SKRT7MIM4AEKJLOB7S74SI5XIUBWUDZOKCLZPBCHQ3VJXI",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCY7TYHQJ2L3ZE2JI623ESOBOF2CMDCBIJ6HPND66ULKOXSXQMUET74H",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCYAEZSZU7XT425IZJWHJJ2MHTQTBH5YMBMVR7F74ULM34TYQD7K5SJ3",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCYCI6UOWSICUN3MKQTNN5H642KXN2RAZHIUZNR7RBPDM3LPQBU3DFDD",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCZ5LXFY7ZOLIDINANSDNL5XJYNGRAGTCAGLWT7I6QRPECDIO2FN6CE2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCZDN2OSBSY4HCQZQBNXNLKVNEEJUIDYZATZQEBLOCTHSM5FNV6TTBW4",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCZFPJIZYA2PQFQIFXHSD2RD2DGSWE7X26GHG22TZ5R7LASGQUDSPPI4",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CCZOTIJCHZLWCOBZMSYNENXTBH6TVTP3LBEAXYVIIL5UCBGARLYM2XMH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD2QWOZKVODQXYDWO35PQBAEPS3GS5XSRCNGWGXDVXLEAS5EMVCJ2FUD",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD44ENOXPUUFKYVEQYC67OCWWTVWAVP2EBCDEFCINUOKHJZERCF6I5LA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD4BZ3WP5PEGLMPDBVWFGU757CO4ZCZHVAADFW4PH6SGUMSDOGLANDQT",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD4FDNSUGFPDW3G7B4WUP7OJGZNVW5SAWNEO75L73TZMKH74SGZSA7GF",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD5PR6WDQSGMVS2Y2XE5IXNH66FDGKWFGKM3VBUSYXCX4YHLJN7YBPMM",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD5QU4IOW5Y25FY2DFFBBH2F2J3BYYSRWYKOO7PMHKWIQLF7OSEL5YYZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CD7D2BEJYNVJFQ4TCV7QBQMCC5L3LKGK3YVXXBJRMSTAUBNQ2PAPITG7",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDB7IDIMMEEGOWAFMIW5YFCQNVPWAHY5MJJL54OT4NSEH6ISCJ4TCKLW",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDBMGHLNXSRXSUXIVSNDGF7HNA5R4OHOC7MPCNWTBNCYTHF2ERLGO7ES",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDCLZ2ATYQPAQ44ZCCDHGHFO5HT3HLOJJDLVEVHH6KPXVV7PZTPSGCAV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDCVJBQRPLWZQFYEPV4IDRPNKR74SKQ4V3DTGOD4YUMLPYW6SGKCAGOA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDCXEIGHHH6D2GOMRQQQE3M4NIKLU663TUB5XEGPYE7VIGTVK233BYW2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDDEKIWLEJI6CJPXOGOBWJKAGJZX7O3FY2LLZECHHFAEBA62FTRXJGZK",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDDQ53CUDPGOW2USBVFB66CYGOY5EXGD7CLQCVV5QWXPITHVWHAVKWEA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDFOXJU6ZHLMAKHMTEYMCX7SU26M5E4BRK3L7Y5TSFALOBBRJYLPMTEF",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDFTGSJP3SKTJTLBIKIMQTHUWOESLOLQPE4PXBEXDWJ2L5ZSGIE4NTDN",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDGKIYIO4WRT7HMH6UZBBNYJZF62KSXZHHQNJAKMFCX75TYL3Q4FRBVV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDH2DXL45FEM7LKMVQ63LYUKCWUQ7DAJ6ZBBEM6MRX37AYZ3H3GPKX4B",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDHA46NRFKJCKPRB2ML2H6EANE62WVWOCAGGPGNMNR6AKAWA2NQLNHGA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDHIAWULP2K6SO7NUTHWWTOJX7PBJ3KGM6PBGX2FBX76FKF2JCOPVXKN",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDHWENIPL4QBWGR3RYIVUOGAOEYBJIBB3RONYMDOSZ6GZJVKVTT3X5FH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDHXELKEUZZNAFOCBOXZ5YY3UT56QN6Q2O2KHTPYZMXLQXNXZLLXG7RP",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDISHLCCFNWUIBKKCXVBMKF35LTCBKZMYYBDUVQJXYLGL3IV7HF4XRMU",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDJ2D2DXH3FX3CVYQAZ7U2YPR4BAMFPUD73VQKGUFYAT3JKSL4QMOPNN",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDJUJEF43FCIY4X5TAZWK2OO2HTTYMSTDUIWE6VCYQC7H26NTX6ZOPLG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDJWYSOJTDCHQFDHQ3DRZKEHX45JK7L6STH2PGC3DCNGWQZKKMXEXQIQ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDLCECVDU4ODL6BZ5UC5ILZZW3AE3X3AY6JJOBFTTNNZ6LJOTZDMCH6O",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDM6WQP25J43KD6756AD4YREJJFFO7CPQBDIUMEDVMIJ5IPKN6EQ2APJ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDM7TBAJ2SMVMV57EGNZIPUMPP5KBIFJGHAVQH36HN6NQBHXIBAXIZM6",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDMG42GCQW2IWJFQFWKLTA5M5LMAUCSY6FT4IILDAHRYDMSX36YQNH5M",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDMWNXKYIIMP6V5QCC5ZIRAESIRWOGY4MZIXZJZK2HJDL2H3Y45QOBNY",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDOAD2M5RCGNR7KFCYLZWU6JUNZPQZWFC44ZLIYRPFRBM3NGKRYH4DHG",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDPCEYHRPSJBU33FDZHWYSIVZAIUORTRYQENMBSUBQLEPUYBEPMZKRNS",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDPSVBXZUOKJ2LNAFJRTWD54J2WE6ASBF3EYRWUTOMHH5RFC3WA5ZT3Q",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDQYGNGL4TKK2GWBPTA423OMPBPVDI4DAJ6IZX2675QB6XKXN6NIK4A2",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDRBKRX4BTW6NMEKHKWRHVYIAU6MUC3IJOVUMYSE4KMB5U22BYHGFAPJ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDRVUQTXEIOMSTXJ6LE7QSC5B4RR4A7ZXNXSN7V23JXI7TPBI5G7A42O",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDRYMVACH2P5LKHCX2CAWQWMG2QLP3CAF7OUT2HI36I4JKV5D7TUOGN6",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDU264YGLASQQOQALLG4PTBFHXMYHHCATWKYN26T6DGCDX3MVC7F5NYZ",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDULCTCCVXAEIISCHODD2EHI55RZQOQFAT63JHLU4L4QGV6MDBBY5N5U",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDUNKGIQ5TBGAYCPXG6IXPJ5SNP63BX5RPI2NZEULUENOMNYBISJPXEH",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDV3Z5EVOIFIBKM5ROKUY6UVAD6BWSXNT6DCCASF35FXW6P6T2BEJGHV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDVETSIAMAZ62XUOS4S6IMXUK33YQLUA2H6FPYZ6RPEGUJ4EKAX5ME4A",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDVLBKM6AL3POGR7RMD73BJY3YNGN7VUPV5I3RZZJXWTZ5DUI4KU4EAA",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDVT5WIXXNM5GTNIPPATNAEFAZQFN5526MKONMVCNYVLMLQS46ZYHWYT",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDWKLEJTK2QA5E7UZYGF5FK2EVOI4XGUJQP57SDUPZH7SQKPJV6MENGV",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDXASHQY6HQEME24JKDH4ABTSIKGEZ4ELVQQCGEPYMY2X6NSPR3G3EZR",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDYHI4SMCBE3QLINXEFOX5PORG3FREEWAVUAWB7L3HUFKSJQ3SC6RMEU",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      },
+      {
+        "contract_id": "CDZNSNW2YWIBBVK4UEQAV4KL6D2KBVKSI3LKPMS6YE6BZ4EUZ3IDCBST",
+        "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37"
+      }
+    ]
+  },
+  "$omitted": {
+    "F-LEG-2": "candidate — needs a reproducible verifier-composed image digest for one of its candidates. E2E-PUB-15's queued row skips. ★ E2E-SUB-02/compose_cache_hit no longer waits on it: that case needs one environment row serving two *different* contracts, and F-LEG-1 + F-MULTIPKG are both ready on cliver 27.0.0#5a7c5fe7… / rsver 1.96.0. F-LEG-2 stays open for the claim only it can make — a contract this project did not build, rebuilt in an environment this project composed.",
+    "F-XNET / F-XNET-MAINNET": "blocked — needs the recorded Wasm deployed unchanged on mainnet with a funded signer. E2E-DEDUP-03/cross_network and E2E-PUB-10 skip.",
+    "F-DARK": "candidate — the fixture server (test/fixtures/e2e/dark-source-server.mjs) has to be exposed at a URL this deployment can reach.",
+    "F-PUBTEST": "candidate — the three real public testnet contracts (stellaroid_earn 27.0.0/1.95.0, stellaroid_2026 25.2.0/1.94.0, smart_block cli-none/1.99.0-nightly) still need rebuild evidence. Deliberately absent per this file's own rule above: a fixture not proven to rebuild fails for a fixture reason and reads as a conformance failure. Run test/fixtures/e2e/validate-public-testnet-candidates.sh, then prove an exact rebuild, then promote in registry.yaml first."
+  },
+  "images": {
+    "$note": [
+      "`accepted` is the digest the live policy.json accepts: accepted_trust_levels is exactly",
+      "[\"sdf_trusted\"], digest_pinned_only true, tag_only_allowed false.",
+      "",
+      "`digest_pinned_untrusted` is the published OCI index digest for rust:1.96.0-slim-bookworm.",
+      "It is well-formed and immutable, but outside the trusted Stellar CLI image class."
+    ],
+    "accepted": "docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43",
+    "digest_pinned_untrusted": "docker.io/library/rust@sha256:4732ca96fd086cb9be682050c3f0176288eebaac2b80aa2bcefccfaf198e1950",
+    "tag_only": "docker.io/stellar/stellar-cli:25.2.0"
+  },
+  "unreachable_source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/0000000000000000000000000000000000000000000000000000000000000000.tar.gz"
+}

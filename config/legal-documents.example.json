@@ -1,0 +1,51 @@
+{
+  "schema": "scvs-legal-documents-v1",
+  "version": "EXAMPLE-0000-00-00",
+  "effective_date": null,
+  "operator_name": "Example Operator",
+  "service_name": "Example Soroban Verifier",
+  "history_url": null,
+  "contact_url": null,
+  "documents": [
+    {
+      "slug": "terms",
+      "title": "Terms of Service",
+      "document_title": "Terms of Service | Example Soroban Verifier",
+      "intro": "This is placeholder text, not terms. It exists so a self-hoster can see the shape this service expects and boot before their own counsel-approved text is ready. Replace every string in this file.",
+      "sections": [
+        {
+          "id": "example-section",
+          "heading": "1. Replace this section",
+          "blocks": [
+            "A paragraph is a string. Two inline marks render: **bold** and [a link](https://example.invalid).",
+            {
+              "list": [
+                "A bullet list is an array of strings.",
+                "Each entry renders as one item."
+              ]
+            }
+          ]
+        }
+      ],
+      "open_items": [
+        "This bundle sets effective_date to null, so acceptance is accepted and not required, and this list is shown to readers as open for review."
+      ]
+    },
+    {
+      "slug": "privacy",
+      "title": "Privacy Notice",
+      "document_title": "Privacy Notice | Example Soroban Verifier",
+      "intro": "Placeholder text, not a privacy notice. Describe what your deployment actually does with a requester's data.",
+      "sections": [
+        {
+          "id": "example-section",
+          "heading": "1. Replace this section",
+          "blocks": [
+            "Both documents are versioned together: one version and one hash cover the pair."
+          ]
+        }
+      ],
+      "open_items": []
+    }
+  ]
+}

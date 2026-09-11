@@ -1,0 +1,17 @@
+{
+  "schema": "stellar-trusted-verifiers-list",
+  "schema_version": "1.0",
+  "$note": "Local development's Trusted Verifiers List, loaded by scripts/seed-tvl.ts when SCVS_TRUSTED_VERIFIERS_SOURCE names nothing else. Every URL here is a service's default dev port, and all three are verification-svc's: url (cdn_root until 2026-09-03 \u2014 a public contract must not assume a CDN) and manifest_url are its static result root, and bulk_load_url is its own bulk-load route (services/verification-svc/src/modules/bulk-load/own-bulk-load.controller.ts) on port 5000 — suffix-less since later (TRD \u00a75.7 reserves .json for documents a static origin serves as-is); the .json spelling still answers as a deprecated alias until 2026-12-01 — NOT query-svc's 5001, which served that path until it was removed. Nothing cross-checks this file against the routes the services register, and a wrong port fails open rather than loudly: discovery 404s, one `verifier sync incomplete` warn is logged, and GET /api/query/v1/wasms then answers 200 with an empty page, which a consumer records as synchronised.",
+  "verifiers": [
+    {
+      "id": "local-verifier",
+      "display_name": "Local Soroban Verifier",
+      "url": "http://localhost:5000/public",
+      "manifest_url": "http://localhost:5000/public/verifier-manifest.json",
+      "bulk_load_url": "http://localhost:5000/api/verification/v1/wasms",
+      "trust_tier": "local",
+      "status": "active"
+    }
+  ],
+  "updated_at": "2026-07-01T00:00:00.000Z"
+}

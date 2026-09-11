@@ -1,0 +1,20 @@
+Soroban Verify — authors
+========================
+
+The public repository begins at one synthesized commit, so `git log` there records none of the work
+that produced it. This file does.
+
+Contributors to the internal history this tree was exported from, alphabetically:
+
+  Jia Chen
+  Lily Hu
+  Sander Heng
+  Song Bai
+  Teki Yang
+
+Dependency updates in that history were also authored by Dependabot.
+
+Apache-2.0 requires no attribution beyond the notices in LICENSE and NOTICE. This file exists because
+the squash discarded thirteen contributor identities, and a one-line record is the whole remedy.
+
+Contributors from here on are in the commit history, where they belong.

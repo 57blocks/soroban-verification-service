@@ -1,0 +1,32 @@
+{
+  "name": "@scvs/config",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./load-env": {
+      "types": "./dist/src/load-env.d.ts",
+      "default": "./dist/src/load-env.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.2.3",
+    "@scvs/core": "workspace:*",
+    "class-validator": "^0.14.4",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$comment": [
+    "Rules and baseline for eng-tools/check-secrets.mjs: the identifiers no entropy scanner",
+    "recognises. gitleaks covers the credential classes and is configured in .gitleaks.toml.",
+    "",
+    "Both lists are empty, which is the correct starting state for a repository that has not yet",
+    "decided what its own deployment must not disclose. To arm a rule:",
+    "",
+    "  aws-account-id     add the SHA-256 of your account id to `digests` — never the id itself,",
+    "                     because this file is public",
+    "  internal-hostname  add `\"domain\": \"<your-domain>\"`; with none, the rule never fires",
+    "",
+    "`pending` is a ratchet, not an allowlist: it records what the tree carried when the gate was",
+    "armed, the gate fails when a count grows or a file not named here acquires one, and",
+    "`pnpm run check:secrets -- --write-baseline` can only ever shrink it."
+  ],
+  "rules": {
+    "aws-account-id": {
+      "why": "A 12-digit account id in an ARN tells a reader which account to enumerate.",
+      "matches": "every 12-digit run, compared by SHA-256 so this file carries no literal",
+      "digests": [],
+      "redacts-to": "123456789012, AWS's own documentation example"
+    },
+    "internal-hostname": {
+      "why": "Per-environment hostnames name endpoints that are not part of the published surface.",
+      "matches": "any subdomain of `domain` below; no rule fires when it is absent",
+      "redacts-to": "the same subdomains under example.com"
+    },
+    "aws-resource-id": {
+      "why": "A VPC, subnet or security-group id is the network topology of a live deployment.",
+      "matches": "vpc- subnet- sg- igw- rtb- acl- eni- ami- vol- snap- followed by 8 or 17 hex digits",
+      "redacts-to": "<prefix>-EXAMPLE — not a hex body, which would still match this rule"
+    },
+    "internal-tracker": {
+      "why": "A tracker URL cites a record an outside reader cannot open, and names our instance.",
+      "matches": "any *.atlassian.net host",
+      "redacts-to": "nothing — the citing prose has to be rewritten by a human, so the export fails instead"
+    }
+  },
+  "pending": {}
+}
