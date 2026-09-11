@@ -1,0 +1,16 @@
+-- query-svc no longer scans its own private result-tree storage
+-- (own-root-should-not-bypass-the-registry-api.md, Option A). `publication_index` was
+-- `AggregationRepository.recordPublication()`'s only writer and `listPublications()`'s only
+-- reader, both deleted from `packages/db/src/aggregation.repo.ts` in the same change — nothing
+-- reads or writes this table once that ships.
+--
+-- Hand-authored rather than `prisma migrate dev --create-only`: the shared local dev database
+-- carries tables from both @scvs/db's and @scvs/db-query's migration histories on one physical
+-- Postgres instance, and `migrate dev`'s shadow-database diff reports those as drift (the same
+-- situation 20260818084712_drop_tables_moved_to_db_query's own header describes) instead of
+-- producing a clean diff for this one column-and-table removal.
+--
+-- No data migration: the table holds only re-derivable cache state (each row is reconstructible
+-- by re-scanning the result root, the exact operation this decision removes), not
+-- source-of-truth data.
+DROP TABLE IF EXISTS "publication_index";

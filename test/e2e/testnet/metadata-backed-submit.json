@@ -1,0 +1,22 @@
+{
+  "target": {
+    "network": "testnet",
+    "contract_id": "CAIDEXLNHK7WF2OC4CZ5Y3FHA5WNMAGIYSFKGKAUHVBGDVAZ2EQJTKEG"
+  },
+  "manifest": {
+    "schema": "stellar-submitted-source-verification-manifest-v1",
+    "target": {
+      "network": "testnet",
+      "contract_id": "CAIDEXLNHK7WF2OC4CZ5Y3FHA5WNMAGIYSFKGKAUHVBGDVAZ2EQJTKEG"
+    },
+    "bldimg": "docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43",
+    "source_sha256": "ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533",
+    "source_uri": "https://raw.githubusercontent.com/jia57b/soroban-contract/main/ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533.tar.gz",
+    "bldopt": [
+      "--locked",
+      "--manifest-path=contracts/verified-demo/Cargo.toml",
+      "--package=verified-demo",
+      "--optimize"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "types": ["jest", "node"]
+  },
+  "include": ["support/**/*", "cases/**/*", "setup/**/*", "playwright.config.ts"]
+}

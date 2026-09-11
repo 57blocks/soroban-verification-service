@@ -1,0 +1,109 @@
+{
+  "host_label": "local-mac-arm64",
+  "fixtures": {
+    "cli-legacy-single-package-current": {
+      "sha256": "5e67692a4981f1a615f971e6036ecd6c0a9c2f7dcabcee8567b72bf374e43184",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "be4-bldopt-encoding-current": {
+      "sha256": "366745b3dfda6e2bf5f0e67247cc8669eb1807aff024e0f623df5616b9d58e8f",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "be6-multi-package-recorded-package-current": {
+      "sha256": "69093ddffd0e0b8ffc3e4e26d13c14357c454d8773734f7d7b66e4004733a2a7",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "be7-readonly-source-mount-current": {
+      "sha256": "5e67692a4981f1a615f971e6036ecd6c0a9c2f7dcabcee8567b72bf374e43184",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "be7-redirected-target-dir-current": {
+      "sha256": "5e67692a4981f1a615f971e6036ecd6c0a9c2f7dcabcee8567b72bf374e43184",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "be7-vendored-offline-current": {
+      "sha256": "5e67692a4981f1a615f971e6036ecd6c0a9c2f7dcabcee8567b72bf374e43184",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-25.1.0-rust-1.90.0": {
+      "sha256": "1cbc4bdc94e4aa2e2d8fc2b3ddc62f597c18a4c0dcc67a54186a2985bae22467",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-25.2.0-rust-1.90.0": {
+      "sha256": "1de2c5bf9e882dd7ce03ca0cb6ed50bb9c324060d694105332738455ed7c15c3",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-26.0.0-rust-1.94.1": {
+      "sha256": "3ac13767afff5ecd88a30e27e0ad8eb90643e82bebeaea2cc71f9b239fa4639f",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-26.1.0-rust-1.96.0": {
+      "sha256": "51730ab29f26453a4c1397b3344100836e5668fda0029404e89421465b494499",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-27.0.0-rust-1.95.0": {
+      "sha256": "52b9fd4d7c445038f6242d467ed63faa13f21d28b767ab8167941262c93c60f4",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-27.1.0-rust-1.96.1": {
+      "sha256": "a1595dce978f52dfde6b64a371038c48c5aed44139be620165b0196d94d29cfa",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    },
+    "cli-legacy-single-package-current@cli-27.1.0-rust-1.97.1": {
+      "sha256": "05e97489f01cf8ded85a02b0bc949ba34627df975160f19ba84c8e42c1a951ed",
+      "reference_alignment": {
+        "repo": "stellar/stellar-cli",
+        "version": "v28.0.0",
+        "read_from": "docker/stellar-cli.pin"
+      }
+    }
+  }
+}

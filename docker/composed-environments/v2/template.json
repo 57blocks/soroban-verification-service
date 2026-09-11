@@ -1,0 +1,71 @@
+{
+  "schema": "scvs-composition-template-v1",
+  "template_version": "v2",
+  "_comment": [
+    "The verifier-owned pins for this composition template.",
+    "Every value is a digest or a checksum, never a tag; changing one needs a new directory and a new",
+    "`template_version` rather than an in-place edit."
+  ],
+  "_platform_comment": [
+    "Passed to `docker build --platform`."
+  ],
+  "platform": "linux/arm64",
+  "base_image": {
+    "_comment": [
+      "Docker Official buildpack-deps:bookworm linux/arm64 manifest digest."
+    ],
+    "reference": "docker.io/library/buildpack-deps",
+    "digest": "sha256:645b62aca8d4504ed608ff71e7c57932eb88ce724c632d3a391aaffac2717e2a"
+  },
+  "rustup": {
+    "_comment": [
+      "What is pinned is (a) this installer, by the sha256 below, and (b) the exact toolchain *version*,",
+      "which travels in the recipe as `pair.rsver`."
+    ],
+    "version": "1.29.0",
+    "target_triple": "aarch64-unknown-linux-gnu",
+    "installer_sha256": "9732d6c5e2a098d3521fca8145d826ae0aaa067ef2385ead08e6feac88fa5792"
+  },
+  "rust": {
+    "_comment": [
+      "`--profile minimal` keeps the image to what a build needs; `wasm32v1-none` is the Soroban target."
+    ],
+    "profile": "minimal",
+    "targets": [
+      "wasm32v1-none"
+    ]
+  },
+  "stellar_cli": {
+    "_comment": [
+      "The released binary, not a source build."
+    ],
+    "repository": "stellar/stellar-cli",
+    "asset_target_triple": "aarch64-unknown-linux-gnu"
+  },
+  "runtime_libraries": {
+    "_comment": [
+      "Shared libraries the released `stellar` binary needs and `base_image` does not supply."
+    ],
+    "packages": [
+      {
+        "name": "libdbus-1-3",
+        "version": "1.14.10-1~deb12u1",
+        "url": "https://snapshot.debian.org/archive/debian/20230924T084440Z/pool/main/d/dbus/libdbus-1-3_1.14.10-1~deb12u1_arm64.deb",
+        "sha256": "2a423794f44ee756f70fda67c6e47b15afe3dd22cd69e51f5d14d2ec9538f806"
+      }
+    ]
+  },
+  "runtime_surface": {
+    "_comment": [
+      "The non-root user, working directory and baked toolchain environment the image runs builds under.",
+      "`bake_rustup_toolchain` fixes the toolchain in the image so submitted source cannot select its own."
+    ],
+    "user": "scvs",
+    "uid": 1000,
+    "workdir": "/source",
+    "cargo_home": "/usr/local/cargo",
+    "rustup_home": "/usr/local/rustup",
+    "bake_rustup_toolchain": true,
+    "stellar_no_update_check": true
+  }
+}

@@ -1,0 +1,78 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. See [SECURITY.md](../../SECURITY.md) instead
+        if this is a security vulnerability — do not open a public issue for those.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including any error output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The minimal steps needed to trigger this.
+      placeholder: |
+        1. Run '...'
+        2. Submit '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component?
+      options:
+        - verification-svc
+        - orchestrator-svc
+        - builder
+        - composer
+        - query-svc
+        - clients/web
+        - clients/sdk
+        - clients/api-client
+        - packages/* (shared library)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "node --version"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. macOS 14, Ubuntu 22.04
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: Paste any relevant terminal output, stack traces, or logs. This will be rendered as a code block, so no need for backticks.
+      render: shell

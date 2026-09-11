@@ -1,0 +1,70 @@
+{
+  "name": "@scvs/core",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./enums": {
+      "types": "./dist/src/enums.d.ts",
+      "default": "./dist/src/enums.js"
+    },
+    "./validate": {
+      "types": "./dist/src/validate.d.ts",
+      "default": "./dist/src/validate.js"
+    },
+    "./registry": {
+      "types": "./dist/src/registry.d.ts",
+      "default": "./dist/src/registry.js"
+    },
+    "./aggregate": {
+      "types": "./dist/src/aggregate.d.ts",
+      "default": "./dist/src/aggregate.js"
+    },
+    "./result": {
+      "types": "./dist/src/result.d.ts",
+      "default": "./dist/src/result.js"
+    },
+    "./cursor": {
+      "types": "./dist/src/cursor.d.ts",
+      "default": "./dist/src/cursor.js"
+    },
+    "./fetch-policy": {
+      "types": "./dist/src/fetch-policy.d.ts",
+      "default": "./dist/src/fetch-policy.js"
+    },
+    "./error-envelope": {
+      "types": "./dist/src/error-envelope.d.ts",
+      "default": "./dist/src/error-envelope.js"
+    },
+    "./schema-hint": {
+      "types": "./dist/src/schema-hint.d.ts",
+      "default": "./dist/src/schema-hint.js"
+    },
+    "./validators/schema-version": {
+      "types": "./dist/src/validators/schema-version.d.ts",
+      "default": "./dist/src/validators/schema-version.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx src/enums-test.ts && tsx src/archive-format-test.ts && tsx src/registry-test.ts && tsx src/aggregate-test.ts && tsx src/target-test.ts && tsx src/source-sha256-case-test.ts && tsx src/wasm-metadata-test.ts && tsx src/cliver-test.ts && tsx src/stellar-network-test.ts && tsx src/rebuild-key-test.ts && tsx src/logging-test.ts && tsx src/metrics-test.ts && tsx src/drain-test.ts && tsx src/build-environment-test.ts && tsx src/composer-test.ts && tsx src/batch-test.ts && tsx src/artifact-contract-test.ts && tsx src/redact-test.ts && tsx src/build-log-access-test.ts && tsx src/manifest-path-test.ts && tsx src/shell-words-test.ts",
+    "contract:snapshot": "tsx src/artifact-contract-test.ts --update"
+  },
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

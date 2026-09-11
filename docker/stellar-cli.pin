@@ -1,0 +1,25 @@
+# The official `stellar` CLI release baked into docker/service.Dockerfile and docker/builder.Dockerfile.
+#
+# To bump: pick a release tag, refresh every digest below from that SAME tag, then re-run
+# .github/workflows/stellar-cli.yml to refresh the S3 cache (editing this file triggers it on merge).
+# The version is part of the cache key, so a bump starts a fresh entry rather than overwriting one.
+
+STELLAR_CLI_VERSION=v28.0.0
+
+# The release asset basename, which upstream spells with the bare version and the Rust target triple.
+STELLAR_CLI_ASSET_TEMPLATE='stellar-cli-{version}-{triple}.tar.gz'
+
+# `shasum -a 256` of the release tarball, per architecture. Guards the download.
+STELLAR_CLI_TARBALL_SHA256_ARM64=8d8e5ea9bb441a19e99a7a7a4809df3f758c9654265c76953436fb7e9288b9ff
+STELLAR_CLI_TARBALL_SHA256_AMD64=207544486734fccb4df1afc4a7745478f9f1e21688b2f9506f0ef36f60ce3fdc
+
+# `shasum -a 256` of the `stellar` binary inside it.
+STELLAR_CLI_BINARY_SHA256_ARM64=18020d55978c359b0b67c13442f508b2cbeecb08e9ed28abcd0447a338820ecc
+STELLAR_CLI_BINARY_SHA256_AMD64=bbe5c76a3bf8b4e1103cdd8726d9497b7dbb735e766d5b0d448b787c9b1293e0
+
+# ── macOS, for the E2E fixture helper only ──────────────────────────────────────────────────────
+# No image consumes these; `test/fixtures/e2e/pinned-stellar-cli.sh` fetches the apple-darwin asset.
+STELLAR_CLI_TARBALL_SHA256_DARWIN_ARM64=416483409db89d9bf58163023d2c9d67cda24a5645042a98c0b8c1378cfc659d
+STELLAR_CLI_TARBALL_SHA256_DARWIN_AMD64=9408343ed9cad961e529b3fdcd124ddc38fe1fa4766098e3c109d78e8d847305
+STELLAR_CLI_BINARY_SHA256_DARWIN_ARM64=10c5abc3796505626c098583b4bdc6d4bf52dd50157aa710c62e3d9cb348326b
+STELLAR_CLI_BINARY_SHA256_DARWIN_AMD64=24965d034a6b19fed27c84f18939edcf03fc7fd31932301b759074aebdbaf6a1

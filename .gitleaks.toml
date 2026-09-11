@@ -1,0 +1,28 @@
+# gitleaks configuration for `pnpm run check:secrets`, which scans the snapshot the public mirror
+# will carry — tracked files only, minus the docs/ entries scripts/public-sync/doc-scope.txt keeps
+# private. Vendored code and build output are outside that snapshot and need no allowlist here.
+#
+# An entry below asserts "this string is not a credential". Adding one to quiet a real finding is the
+# failure this file exists to prevent: rotate first, then decide whether the string may stay.
+
+title = "SCVS publication snapshot"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+The redaction suite's own inputs. These are synthetic tokens the builder's log redactor is asserted to
+mask — the strings have to look like credentials for the test to mean anything.
+"""
+paths = ['''(?:^|/)services/builder/test/redact\.spec\.ts$''']
+
+[[allowlists]]
+description = """
+Fixture keys for the verifier-identity and SDK suites. Neither authenticates anything: they are opaque
+identifiers the assertions compare by value.
+"""
+paths = [
+  '''(?:^|/)clients/sdk/test/sdk-test\.ts$''',
+  '''(?:^|/)services/query-svc/test/verifiers\.spec\.ts$''',
+]

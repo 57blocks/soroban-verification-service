@@ -1,0 +1,19 @@
+{
+  "schema": "stellar-verifier-policy-v1",
+  "id": "fixture-policy-a",
+  "build_images": {
+    "accepted_trust_levels": ["sdf_trusted"],
+    "digest_pinned_only": true,
+    "tag_only_allowed": false,
+    "arbitrary_user_images_allowed": false
+  },
+  "source_modes": ["public_repo", "hosted_tarball", "private_uploaded_tarball"],
+  "private_source": {
+    "requires_tarball_sha256_match": true,
+    "publish_source_bytes": false
+  },
+  "retention": {
+    "source_retained_after_verification": false,
+    "result_artifacts_retained": true
+  }
+}

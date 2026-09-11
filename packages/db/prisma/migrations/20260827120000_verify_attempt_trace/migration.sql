@@ -1,0 +1,18 @@
+-- ACN-9: keep what the burned verify attempt said.
+--
+-- `requeueForRetry` demotes a rebuild from `verify` to `build` and clears `outcome`, `error_code` and
+-- `diagnostics` so the retry can write its own — correct, and also why the reason a cli-58 contract
+-- publishes `verification_path: "retroactive_manual"` existed nowhere a reader could reach. The
+-- published artifact showed `recipe_source: "on_chain_metadata"` beside a sandbox rebuild and said
+-- nothing about the CLI attempt in between; the reason lived only in the sandbox's CloudWatch stream.
+--
+-- Nullable with no backfill. NULL means "no verify attempt was demoted for this rebuild", which is
+-- true of every row written before this migration and of every rebuild PA1 routed straight to the
+-- sandbox. A backfilled value would be a guess about an attempt nobody recorded.
+--
+-- A code and no detail column beside it: the builder's `failure_context` is deliberately kept out of
+-- `rebuilds.diagnostics` (that column is read back as a validated `SandboxDiagnostics`), so a detail
+-- column here would have nothing to write into it.
+--
+-- See docs/features/source-archive-canonicalisation/design.md §ACN-9.
+ALTER TABLE "rebuilds" ADD COLUMN     "verify_failure_code" TEXT;

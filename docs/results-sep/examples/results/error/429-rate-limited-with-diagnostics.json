@@ -1,0 +1,7 @@
+{
+  "schema": "stellar-verification-error",
+  "schema_version": "1.0",
+  "error": "rate_limited",
+  "message": "Too many requests, please try again later.",
+  "status_code": 429
+}

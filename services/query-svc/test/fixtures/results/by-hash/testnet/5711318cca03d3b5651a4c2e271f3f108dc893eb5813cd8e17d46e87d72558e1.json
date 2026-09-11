@@ -1,0 +1,16 @@
+{
+  "schema": "stellar-by-hash-result-v1",
+  "network": "testnet",
+  "wasm_hash": "5711318cca03d3b5651a4c2e271f3f108dc893eb5813cd8e17d46e87d72558e1",
+  "results": [
+    {
+      "status": "verified",
+      "contract_id": "CAIDEXLNHK7WF2OC4CZ5Y3FHA5WNMAGIYSFKGKAUHVBGDVAZ2EQJTKEG",
+      "verifier_id": "test-fixture-verifier",
+      "verified_at": "2026-07-01T00:00:00Z",
+      "artifact_url": "https://example.invalid/artifacts/test-fixture.json",
+      "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "updated_at": "2026-07-01T00:00:00Z"
+}

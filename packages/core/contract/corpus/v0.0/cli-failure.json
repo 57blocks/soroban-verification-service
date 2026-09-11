@@ -1,0 +1,27 @@
+{
+  "recipe": {
+    "image": "000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
+    "workspace_path": "../../outside/Cargo.toml",
+    "target": "wasm32v1-none",
+    "bldarg": [
+      "contract",
+      "build"
+    ],
+    "bldopt": [
+      "--manifest-path=../../outside/Cargo.toml",
+      "--env=SCVS_E2E_RECIPE_SCOPE=4141d953dfc298ecaa95d609"
+    ]
+  },
+  "runner": "docker_build_image_rebuild",
+  "built_at": "2026-08-25T02:51:06.424Z",
+  "exit_code": null,
+  "classification": "cli_failure",
+  "reason": "manifest_path_escapes_source",
+  "failure_context": {
+    "reason": "manifest_path_escapes_source",
+    "runner": "docker_build_image_rebuild",
+    "source_root": "/tmp/<redacted>",
+    "manifest_path": "../../outside/Cargo.toml",
+    "detail": "The recorded manifest path resolves to ../../outside/Cargo.toml, outside the mounted source tree. A recipe whose manifest lies outside the submitted source cannot be replayed."
+  }
+}

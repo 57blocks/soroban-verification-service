@@ -1,0 +1,2711 @@
+# Environment variable contract — machine-readable, one file, repo-owned.
+
+version: 1
+
+meta:
+  supersedes: the per-service environment tables that used to live in the deployment design
+  # Adding an environment here generates its `config/deploy/<env>/` artifacts in the shape every entry already
+  # declares; it does NOT invent values.
+  environments: [] # list your own; `pnpm run generate:deploy-env` writes config/deploy/<env>/
+  aws_account: "123456789012"
+  aws_region: ap-southeast-2
+  # Local development does not use this file; it uses the root `.env` (see `.env.example`).
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Groups — bundles of variables that must move together.
+groups:
+  base:
+    description: Every resident (ECS) service. The builder deliberately inherits none of this.
+    variables:
+      NODE_ENV:
+        type: enum
+        values: [production, development, test]
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: development
+        envs: { dev: production, staging: production }
+        observable: value
+        code: various (Nest + Prisma read it directly)
+      PORT:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: per service — see each service block
+        note: The container port must match the target group's, so treat it as required in practice.
+      AWS_REGION:
+        type: string
+        required: yes
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: us-east-1
+        envs: { dev: ap-southeast-2, staging: ap-southeast-2 }
+        code: packages/config/src/index.ts::getStagingStorageConfig
+        note: >-
+          Unset silently defaults the staging-bucket client to us-east-1, which then fails on every
+          object rather than at boot. This is the reason `fail: silent` exists as a category.
+      SCVS_DRAIN_GRACE_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 15000
+        code: services/*/src/common/drain.service.ts
+        note: >-
+          How long a task keeps serving after SIGTERM before it exits, so `/health/ready` can go false
+          and the load balancer can deregister it first. Must exceed the target group's
+          deregistration delay + one health-check interval, or the balancer is still routing when the
+          process leaves. The builder deliberately does not inherit this: a Batch job is one-shot and
+          draining a process that exits on its own is meaningless.
+      CORS_ORIGIN:
+        type: string
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "*"
+        envs: { dev: "*", staging: "*" }
+        code: services/query-svc/src/config/configuration.ts
+        note: >-
+          Same-origin ALB routing makes this belt-and-braces in dev. Read by query-svc only:
+          verification-svc's API is public and unauthenticated and now sends `*` unconditionally,
+          so setting this no longer narrows it.
+
+  postgres:
+    description: >-
+      The verifier's own database. Read by verification-svc, orchestrator-svc, and the migration
+      task — NOT query-svc, which has its own instance and its own group, `query-postgres`
+      (the query service reads its own database instance, not the verifier's). Presence is enforced by
+      @scvs/db's connection assembly, NOT by the boot-time env DTOs — deliberately, so
+      `generate-openapi.ts` can boot the real app in CI with no database. See
+      packages/config/src/env.dto.ts's header.
+    variables:
+      POSTGRES_HOST:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: rds.verify_host
+        tier: infrastructure
+        inject: ecs-secrets
+        default: localhost
+        terraform: module.rds.address
+        code: packages/db/src/connection.ts::readDbEnv
+        note: >-
+          `.address` (hostname), **not** `.endpoint` — corrected 2026-08-21. This line said
+          `module.rds.endpoint`, which is `host:port`; `POSTGRES_PORT` is a separate variable below,
+          so wiring `endpoint` here would put `…rds.amazonaws.com:5432` into a host-only field. The
+          live wiring has always used `.address` (`envs/<env>/main.tf`'s `rds_address`), so this was
+          the contract disagreeing with the working infrastructure, in the direction that would have
+          broken it had anyone followed the contract literally.
+      POSTGRES_PORT:
+        type: number
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: rds.port
+        tier: infrastructure
+        inject: ecs-secrets
+        default: 5433
+        envs: { dev: 5432, staging: 5432 }
+        code: packages/db/src/connection.ts::readDbEnv
+        note: >-
+          MUST be set. The default 5433 is the local docker-compose mapping, not RDS. Left unset it
+          fails as a connection timeout, which reads like a security-group problem.
+      POSTGRES_DB:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: rds.database
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        envs: { dev: stellar, staging: stellar }
+        code: packages/db/src/connection.ts::toConnectionString (throws)
+        note: >-
+          `stellar` is module.rds's actual default database. The `scvs` name used in local dev was
+          never created on either RDS instance.
+      POSTGRES_USER:
+        type: string
+        required: yes
+        fail: first-use
+        secret: true
+        source: secret
+        tier: secret
+        inject: ecs-secrets
+        secret_ref:
+          name:
+            {
+              dev: sv-dev-rds-master-verify,
+              staging: sv-staging-rds-master-verify,
+            }
+          json_key: username
+        default: ~
+        code: packages/db/src/connection.ts::toConnectionString (throws)
+      POSTGRES_PASSWORD:
+        type: string
+        required: yes
+        fail: first-use
+        secret: true
+        source: secret
+        tier: secret
+        inject: ecs-secrets
+        secret_ref:
+          name:
+            {
+              dev: sv-dev-rds-master-verify,
+              staging: sv-staging-rds-master-verify,
+            }
+          json_key: password
+        default: ~
+        code: packages/db/src/connection.ts::toConnectionString (throws)
+        note: Never as plaintext `environment`. Prefer the discrete vars over DATABASE_URL for this reason.
+      POSTGRES_SSL:
+        type: enum
+        values: ["true", "false"]
+        required: yes
+        fail: first-use
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "false"
+        envs: { dev: "true", staging: "true" }
+        observable: value
+        code: packages/db/src/connection.ts::toConnectionString
+        note: >-
+          MUST be "true" against RDS — rds.force_ssl=1 rejects a plain connection, and the rejection
+          surfaces through Prisma as a misleading P1010 "User was denied access", not a TLS error.
+          Leave unset for local docker-compose Postgres, which does not terminate TLS.
+      DATABASE_URL:
+        type: url
+        required: no
+        fail: n/a
+        secret: true
+        source: secret
+        tier: secret
+        # `inject` is recorded for completeness only — `deploy: never` means nothing injects this in a deployed
+        # environment.
+        inject: ecs-secrets
+        deploy: never
+        default: ~
+        code: packages/db/src/connection.ts::readDbEnv
+        note: >-
+          `deploy: never` — legal locally, wrong deployed, a distinction `required: forbidden` cannot
+          draw because that is absolute. Short-circuits all six POSTGRES_* variables when set. Do NOT use in deployed
+          environments: it embeds the password in a URL, turning a secret reference into a string.
+          Listed only because the code honours it.
+
+  query-postgres:
+    description: >-
+      query-svc's own database, independent of the verifier's RDS instance above — the
+      organisational-boundary fix this split exists to make (query-svc can be operated by a different
+      organisation than the verifier; sharing `postgres`'s instance made that a fiction). Same five
+      variable NAMES as `postgres` — @scvs/db-query re-exports @scvs/db's connection-resolution
+      functions unchanged, since they read bare `process.env.POSTGRES_*` with no schema dependency —
+      but a DIFFERENT Terraform output and a DIFFERENT secret populate them for query-svc's task.
+      The query service reads every verifier over the public read surface, including one this
+      operator also runs — it has no privileged path into a verifier's own storage or database.
+      ("A second, more deeply buried instance of the same problem"). Presence is enforced by
+      @scvs/db-query's connection assembly, not the boot-time env DTO — same reasoning as `postgres`.
+    variables:
+      POSTGRES_HOST:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: rds.query_host
+        tier: infrastructure
+        inject: ecs-secrets
+        default: localhost
+        terraform: module.rds-1.address
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's readDbEnv)
+        note: >-
+          MUST resolve to `sv-<env>-postgres-query` (dev: `sv-dev-postgres-query`, renamed from
+          `stellar-dev-1-postgres` in the account rebuild) — NOT `module.rds.address`, which is
+          `postgres`'s output above.
+
+          Two corrections, 2026-08-21. **`.address`, not `.endpoint`**: `endpoint` is `host:port` and
+          `POSTGRES_PORT` is separate — same fix as the `postgres` group's own note. **And the module
+          label is `rds-1`, not `query_rds`**: this line named a module that does not exist, so it
+          could not be checked against the infrastructure at all. `rds-1` violates the infra repo's
+          own naming rules (no sequence numbers for instances; Terraform identifiers use underscores)
+          and should become `rds_query`, but renaming a module label moves state, so it is tracked
+          rather than done — this contract names what exists today. The two groups declaring the same variable name is what makes
+          pointing this at the wrong output a config typo rather than a schema error, so this is the
+          one line worth double-checking on apply.
+
+          ✅ **In dev it resolves there, verified 2026-08-25.** The running `sv-dev-query-svc`
+          revision takes this value from `/scvs/dev/query-svc/POSTGRES_HOST` (whose value names
+          `sv-dev-postgres-query`) and its credentials from `sv-dev-rds-master-query`. Landed by the
+          ADR-016 `ecs-ssm` cutover 2026-08-22; before it `modules/ecs` set ONE `POSTGRES_HOST` for
+          every resident service, which also meant `db-migrate.yml`'s two targets applied both
+          migration histories into one database. **Staging is unverified** — re-check it there before
+          relying on the separation.
+      POSTGRES_PORT:
+        type: number
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: rds.port
+        tier: infrastructure
+        inject: ecs-secrets
+        default: 5433
+        envs: { dev: 5432, staging: 5432 }
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's readDbEnv)
+      POSTGRES_DB:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: rds.database
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        envs: { dev: stellar, staging: stellar }
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's toConnectionString, throws)
+      POSTGRES_USER:
+        type: string
+        required: yes
+        fail: first-use
+        secret: true
+        source: secret
+        tier: secret
+        inject: ecs-secrets
+        secret_ref:
+          name:
+            {
+              dev: sv-dev-rds-master-query,
+              staging: sv-staging-rds-master-query,
+            }
+          json_key: username
+        default: ~
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's toConnectionString, throws)
+        note: >-
+          A distinct secret from `postgres`'s `sv-<env>-rds-master-verify` — see aws-deployment.md
+          §7's open item about a dedicated `scvs` role scoped to its own database; do not carry the
+          shared-master-credential shortcut into this instance either. All four secrets exist as of
+          2026-08-20 (the rebuild created them per environment per instance); what is missing is the
+          task definition that points query-svc at its own — see aws-deployment.md §6.4.
+      POSTGRES_PASSWORD:
+        type: string
+        required: yes
+        fail: first-use
+        secret: true
+        source: secret
+        tier: secret
+        inject: ecs-secrets
+        secret_ref:
+          name:
+            {
+              dev: sv-dev-rds-master-query,
+              staging: sv-staging-rds-master-query,
+            }
+          json_key: password
+        default: ~
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's toConnectionString, throws)
+        note: Never as plaintext `environment`. Prefer the discrete vars over DATABASE_URL for this reason.
+      POSTGRES_SSL:
+        type: enum
+        values: ["true", "false"]
+        required: yes
+        fail: first-use
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "false"
+        envs: { dev: "true", staging: "true" }
+        observable: value
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's toConnectionString)
+      DATABASE_URL:
+        type: url
+        required: no
+        fail: n/a
+        secret: true
+        source: secret
+        tier: secret
+        inject: ecs-secrets
+        deploy: never
+        default: ~
+        code: packages/db-query/src/index.ts (re-exports @scvs/db's readDbEnv)
+        note: >-
+          `deploy: never` — legal locally, wrong deployed. Short-circuits all six POSTGRES_*
+          variables when set. Do NOT use in deployed environments.
+
+  result-storage:
+    description: >-
+      The published result tree, written by orchestrator-svc through `@scvs/storage-layout`'s
+      publish path. No cross-service invariant applies here: query-svc no longer reads
+      this group (own-root-should-not-bypass-the-registry-api.md's Option A — it reads every
+      verifier's results, including one this operator also runs, over the public Registry API
+      instead). verification-svc DOES read it: its RC3 dynamic route
+      (`GET /api/verification/v1/wasms/{hash}.json`) serves the published status object
+      byte-for-byte from this tree — the same storage config on both services is what keeps the
+      dynamic and static forms from drifting apart, so the group is inherited rather than
+      hand-copied. verification-svc's own bulk-load route (`GET /api/verification/v1/wasms`)
+      still reads `jobs.published_updated_at` via `JobsRepository`, not the result tree.
+    variables:
+      SCVS_PUBLISHER_STORAGE:
+        type: enum
+        values: [filesystem, s3, r2, gcs]
+        required: yes
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: filesystem
+        envs: { dev: s3, staging: s3 }
+        observable: value
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: >-
+          Unset publishes into the container's ephemeral disk with no error at all. Validated at boot
+          by ResultStorageEnvDto — a typo is rejected, but a legitimately-wrong-for-prod
+          `filesystem` is not, hence `fail: silent`.
+      SCVS_PUBLISHER_BUCKET:
+        type: string
+        required: yes # when storage != filesystem
+        required_when: SCVS_PUBLISHER_STORAGE != filesystem
+        fail: first-use
+        source: terraform
+        value_from_output: buckets.results
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        envs: { dev: sv-dev-results, staging: sv-staging-results }
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: >-
+          The PUBLISHED bucket, and since the repath it holds NOTHING ELSE. That is what lets
+          SCVS_PUBLISHER_PREFIX be empty: the result tree sits at the bucket root, so the CloudFront
+          read grant is the whole bucket, and "everything in this bucket is public, immutable,
+          hash-addressed data" has to be true by construction rather than by a prefix.
+
+          It is therefore NOT `sv-<env>-artifacts`. That bucket also carries the CI Stellar-CLI cache
+          (`scvs-ci/*`, see scripts/ci/fetch-or-build-stellar-cli.sh) and grants `sv-<env>-role-builder`
+          — the Batch job role that executes SUBMITTED source — bucket-wide PutObject. Serving that
+          bucket at a CDN host root would publish both.
+
+          Distinct from SCVS_STORAGE_BUCKET (`sv-<env>-scratch`) as well, which is the sandbox handoff:
+          `staging/{jobId}/…` recipes and private uploads, reached only by presigned URL.
+
+          Per environment, like every bucket since the rebuild. staging has no applied infrastructure
+          yet, so its value is the name it will have.
+      SCVS_PUBLISHER_PREFIX:
+        type: string
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ""
+        envs: { dev: "", staging: "" }
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: >-
+          **EMPTY in every environment.** The result tree is served at its own host's ROOT
+          — `https://results.{env}.sv.example.com/reports/<sha>.json` — so no prefix appears in any
+          published URL and none is written into any key. `/public` is gone from both.
+
+          **`required: no` since the value went empty, and that is not a weakening.** `required: yes`
+          survived the repath change that emptied `envs:` and became unsatisfiable: the config
+          contract reports presence as NON-EMPTY on purpose (`config-contract.ts`'s `isSet`, which
+          names this variable as its example), because `getResultStorageConfig` reads it through
+          `|| ""` and cannot tell unset from empty either. So `required: yes` plus `envs: { dev: "" }`
+          asked a correctly-configured orchestrator-svc to report a prefix it must not have, and
+          `assert-config-contract.mjs` failed every deploy with "is required … but is not set". What
+          protects the value now is the opposite assertion, in that same script: a recorded expected
+          value of `""` means a REPORTED prefix is the failure. That is the direction the risk runs —
+          an empty prefix is correct, a stray one 403s every published URL — and unlike the old
+          `required: yes` it is a check that can pass.
+
+          Empty used to be the failure mode: this note said "an unset value writes to the root —
+          wrong, but silently successful". What changed is not the code, it is what the bucket
+          contains. SCVS_PUBLISHER_BUCKET is now a dedicated results bucket holding only the
+          published tree, so the root IS the right place and the CDN can be granted the whole bucket
+          honestly. Do not restore a prefix here without also giving the bucket a non-public tenant
+          again — those two decisions are one decision.
+
+          No code change was needed for the empty value, which is worth knowing before "fixing" it:
+          `storage-backend.ts`'s `key()` joins `[prefix, path]` through `.filter(Boolean)`, so an
+          empty prefix is dropped rather than producing `//`, and the DTO has always been
+          `@IsOptional() @IsString()`.
+
+          **The rule this replaces — "dev and staging must not share a prefix" (2026-08-17,
+          staging on `public-staging`) — has lapsed, and only because its premise did.** The two
+          environments shared ONE `stellar-artifacts` bucket, so the prefix was the only isolation
+          there was: the published tree has root-level fixed keys (`policy.json` and
+          `verifier-manifest.json` are not hash-addressed), so each environment's publish overwrote
+          the other's, and `wasms/<hash>.json` collided for any wasm verified in both. The
+          counter-intuitive part is worth keeping in mind if anyone ever proposes sharing a bucket
+          again: while the prefix was shared, giving the two environments distinct
+          SCVS_VERIFIER_IDs made it WORSE, because the single verifier-manifest.json then flipped
+          identity with each publish. Buckets are per-environment now
+          (`sv-<env>-artifacts`), so the prefix carries no isolation duty and a shared constant is
+          the simpler, checkable thing.
+
+          **Never set this to `staging`.** That is not about environments at all: `staging/` is this
+          system's sandbox handoff prefix — the glossary's "Staging bucket" entry and
+          `getStagingStorageConfig`: `staging/{jobId}/{mode}/recipe.json` plus private uploads. It
+          lives in SCVS_STORAGE_BUCKET (`sv-<env>-scratch`), a different bucket from this one, so the
+          collision is not reachable today; publishing under `staging/` in a bucket that also held
+          those objects would make a submitter's private source archive publicly readable, since the
+          CloudFront read grant is a prefix wildcard. Caught in review before any Terraform applied.
+
+          P6's three-way invariant is what this retires. It used to be: this value, the task role's
+          write grant, and the CloudFront READ grant — any one out of step and the CDN 403s
+          everything, which happened over 2026-08-17..19. The first two still derive from
+          `envs/<env>`'s `served_prefix`; the third is each environment's own bucket policy now
+          rather than one hand-maintained list in `envs/dev/main.tf`. With the prefix empty and the
+          bucket dedicated, all three degenerate to the same statement and there is nothing left to
+          keep in step.
+
+          **`tier: knob`, not `infrastructure`, for a mechanical reason.** AWS SSM cannot store an
+          empty parameter value, and this variable is `""` in every environment — there is nothing
+          for Parameter Store to protect. It had been declared `inject: ecs-ssm` while the
+          infrastructure could never have honoured it (the parameter was never created — see
+          `envs/<env>/main.tf`'s `ssm_shared` comment in soroban-aws-infrastructure). Changed
+          2026-08-22 with ADR-016's ecs-ssm application; it stays a plaintext `environment` entry.
+      SCVS_R2_REGION:
+        type: string
+        required: yes
+        fail: first-use
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: auto
+        envs: { dev: ap-southeast-2, staging: ap-southeast-2 }
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: >-
+          Badly named but real: for ANY non-filesystem backend this is the S3 client's region, and
+          the default literal `auto` is rejected outright by real AWS S3. Rename is tracked
+          separately; do not "fix" it by dropping it. NOT currently in any env DTO. Gap.
+      SCVS_PUBLIC_RESULT_ROOT:
+        type: url
+        required: yes
+        fail: silent
+        source: literal
+        tier: infrastructure
+        inject: ecs-secrets
+        default: http://localhost:5000/public
+        # `dev` now has a CDN, which is the exact condition the previous decision named for its own supersession
+        # — so this carries a real value again rather than a `value_ref` to that record.
+        envs:
+          {
+            dev: "https://results.dev.sv.example.com",
+            staging: "https://results.staging.sv.example.com",
+          }
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: >-
+          Baked IMMUTABLY into every published artifact. A wrong value is not correctable by
+          redeploying — it is already inside artifacts other verifiers may have aggregated.
+
+          The old dev root (`reports.stellar-verify.example.com/public`) no longer resolves, and
+          nothing published under it survives: the account rebuild destroyed the bucket and the
+          database that held those `artifact_url` values, so there is no historical URL left to keep
+          dereferenceable in dev or staging. That is precisely why this value moves to its final shape
+          NOW, before dev publishes anything again — an empty environment is the only moment when
+          changing it costs nothing. Every publish after this one bakes it in. The domain and the
+          prefix move in the SAME cutover for the same reason: two cutovers would mean two sunset
+          windows over the same artifacts.
+
+          staging's value is the name it will have; staging has no applied infrastructure yet.
+      SCVS_RESULT_ROOT:
+        type: path
+        required: no
+        fail: n/a
+        source: literal
+        tier: infrastructure
+        inject: ecs-secrets
+        default: "$SCVS_ARTIFACT_DIR/public"
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: filesystem backend only. Unused in dev (storage is s3).
+      SCVS_R2_ENDPOINT:
+        type: url
+        required: no
+        fail: n/a
+        source: literal
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: R2/custom-endpoint backends only. Unset for AWS S3. NOT in any env DTO. Gap.
+      SCVS_R2_ACCOUNT_ID:
+        type: string
+        required: no
+        fail: n/a
+        source: literal
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: Derives the R2 endpoint when SCVS_R2_ENDPOINT is unset. NOT in any env DTO. Gap.
+      SCVS_R2_ACCESS_KEY_ID:
+        type: string
+        required: forbidden
+        fail: n/a
+        secret: true
+        source: secret
+        inject: none
+        default: falls back to AWS_ACCESS_KEY_ID
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: >-
+          Must stay unset on ECS. The task role supplies credentials; a static key pair here would
+          be a long-lived credential in a task definition. Only for non-AWS backends outside ECS.
+      SCVS_R2_SECRET_ACCESS_KEY:
+        type: string
+        required: forbidden
+        fail: n/a
+        secret: true
+        source: secret
+        inject: none
+        default: falls back to AWS_SECRET_ACCESS_KEY
+        code: packages/config/src/index.ts::getResultStorageConfig
+        note: As above.
+      AWS_ACCESS_KEY_ID:
+        type: string
+        required: forbidden
+        fail: n/a
+        secret: true
+        source: secret
+        inject: none
+        default: ~
+        note: Task role only. Presence in any task definition is a finding.
+      AWS_SECRET_ACCESS_KEY:
+        type: string
+        required: forbidden
+        fail: n/a
+        secret: true
+        source: secret
+        inject: none
+        default: ~
+        note: As above.
+
+  verifier-identity:
+    description: >-
+      Who this verifier claims to be in every published artifact. Read by orchestrator-svc when
+      publishing, and by verification-svc to name the in-flight entry in the RC3 `202`
+      body — the `verifier.name` there must match what published documents carry, so both services
+      read the same values. All three are validated-if-present by `ResultStorageEnvDto`
+      (packages/config), which both services extend.
+    variables:
+      SCVS_VERIFIER_ID:
+        type: string
+        required: yes
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: local-verifier
+        envs: { dev: scvs-dev, staging: scvs-staging }
+        code: packages/config/src/index.ts::getVerifierIdentity
+        note: >-
+          Unset publishes artifacts attributed to `local-verifier`. Those artifacts are already
+          written and indexed by the time anyone notices — `fail: silent` means nothing stops the
+          service booting under the wrong identity.
+
+          **The `staging:` BLOCKER that stood here is resolved and removed (2026-08-21) — see
+          `decided: Q6`.** It read that `staging:` was deliberately absent and must not be guessed. By
+          the time it was removed it had outlived its own condition: `staging: scvs-staging` was in
+          the `envs:` map directly above it, in the generated
+          `config/deploy/staging/orchestrator-svc.json`, and in `config/trusted-verifiers.staging.json`
+          — the TVL entry CI seeds — so the note forbade a value the repository had already committed
+          in three places and shipped. **A BLOCKER that survives its own resolution is worse than
+          none**: it trains readers to skim the next one.
+      SCVS_VERIFIER_DISPLAY_NAME:
+        type: string
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: Local Soroban Verifier
+        envs: { dev: SCVS Dev Verifier, staging: SCVS Staging Verifier }
+        code: packages/config/src/index.ts::getVerifierIdentity
+        note: >-
+          Display-only, but published: it is what a consumer shows for attribution. **The `staging:`
+          BLOCKER that stood here is resolved and removed (2026-08-21)**, same resolution as
+          `SCVS_VERIFIER_ID` above and recorded with it in `decided: Q6`.
+      SCVS_VERIFIER_POLICY_ID:
+        type: string
+        required: yes
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: sdf-trusted-public-and-private-upload-v1
+        envs:
+          {
+            dev: sdf-trusted-public-and-private-upload-v1,
+            staging: sdf-trusted-public-and-private-upload-v1,
+          }
+        code: packages/config/src/index.ts::getVerifierIdentity
+        note: >-
+          Must match the published policy.json, or artifacts cite a policy that says something else.
+
+          **staging deliberately shares dev's value.** This identifies the POLICY, not the
+          environment, and every SCVS_POLICY_* flag is byte-identical across the two — a distinct id
+          for identical content would be the lie this note warns about. It must fork the moment any
+          of those flags diverges; nothing enforces that, so treat a change to a policy flag as a
+          change to this variable too.
+
+  verifier-policy:
+    description: >-
+      The content of the published policy.json (report-artifact plan.md §2.2/§7). Previously
+      hardcoded inline in packages/storage-layout's writeVerifierPolicy with no config surface at
+      all; every variable here has a working default matching what was hardcoded before, so
+      leaving all of them unset changes nothing about what gets published.
+    variables:
+      SCVS_POLICY_ACCEPTED_TRUST_LEVELS:
+        type: csv
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: sdf_trusted
+        envs: { dev: sdf_trusted, staging: sdf_trusted }
+        code: packages/config/src/index.ts::getVerifierPolicyConfig
+        note: A wrong or stale value publishes a policy this verifier does not actually enforce.
+      SCVS_POLICY_DIGEST_PINNED_ONLY:
+        type: boolean
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "true"
+        envs: { dev: "true", staging: "true" }
+        code: packages/config/src/index.ts::getVerifierPolicyConfig
+      SCVS_POLICY_TAG_ONLY_ALLOWED:
+        type: boolean
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "false"
+        envs: { dev: "false", staging: "false" }
+        code: packages/config/src/index.ts::getVerifierPolicyConfig
+      SCVS_POLICY_ARBITRARY_IMAGES_ALLOWED:
+        type: boolean
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "false"
+        envs: { dev: "false", staging: "false" }
+        code: packages/config/src/index.ts::getVerifierPolicyConfig
+      SCVS_POLICY_REQUIRE_TARBALL_SHA256:
+        type: boolean
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "true"
+        envs: { dev: "true", staging: "true" }
+        code: packages/config/src/index.ts::getVerifierPolicyConfig
+      SCVS_POLICY_RETAIN_ARTIFACTS:
+        type: boolean
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "true"
+        envs: { dev: "true", staging: "true" }
+        code: packages/config/src/index.ts::getVerifierPolicyConfig
+
+  stellar-cli:
+    description: Shared by the two services that shell out to the `stellar` binary.
+    variables:
+      STELLAR_CLI_PATH:
+        type: path
+        required: no
+        fail: n/a
+        source: image-build
+        tier: knob
+        inject: ecs-secrets
+        default: stellar
+        envs: { dev: stellar, staging: stellar }
+        code: services/*/src/config/configuration.ts
+        note: The service image ships the binary; this only overrides its location.
+      SCVS_ARTIFACT_DIR:
+        type: path
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: $TMPDIR/scvs-artifacts
+        code: services/*/src/config/configuration.ts
+        note: Scratch dir for CLI workdirs. Leave unset in dev.
+      SCVS_CLI_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 120000
+        code: services/{verification,orchestrator}-svc/src/config/configuration.ts
+        note: >-
+          Same name, DIFFERENT default in the builder (600000). This is why the manifest is
+          per-service rather than one flat table.
+      SCVS_MAINNET_RPC_URL:
+        type: url
+        # `required: no` is the right GLOBAL answer — a testnet-only deployment needs no mainnet endpoint and
+        # still boots.
+        required: no
+        required_in: [dev, staging]
+        fail: n/a
+        source: literal
+        tier: infrastructure
+        envs:
+          {
+            dev: "https://mainnet.sorobanrpc.com",
+            staging: "https://mainnet.sorobanrpc.com",
+          }
+        code: services/{verification,orchestrator}-svc/src/config/configuration.ts
+        note: >-
+          Soroban RPC the `stellar` CLI is pointed at for mainnet chain lookups. The CLI's built-in
+          mainnet network entry is a docs placeholder that refuses with "Bring Your Own", so a
+          deployment serving mainnet must supply one — every caller passes it as `--rpc-url`
+          together with the public mainnet passphrase, which the CLI requires as a pair
+          (`stellarNetworkArgs`, packages/core/src/stellar-network.ts). Unset keeps the CLI default,
+          so a testnet-only deployment still starts and works.
+
+          ★ **services/builder needs this value too, and deliberately does not have a
+          variable for it.** Its `stellar contract verify` is the third caller of the same rule and
+          was the one still passing `--network mainnet`, so every mainnet cli-58 job failed the CLI
+          path in ~0.1s and published `retroactive_manual` off the build-mode retry. It is now sent
+          per job on `BatchJobParams.rpc_url` by orchestrator-svc, so the sandbox dials exactly the
+          endpoint that read the job's target off the chain. Do NOT add SCVS_MAINNET_RPC_URL to the
+          builder's Batch job definition: a second configured copy is what produced the bug.
+
+          Consequence to weigh when choosing an endpoint: the verify command line reaches the
+          builder's published sandbox diagnostics and build log, where `redactCommand` drops a URL's
+          userinfo, query and fragment but keeps scheme, host and path — the same treatment the
+          presigned `--source-uri` already gets. An endpoint whose credential sits in the **path**
+          would therefore be published. Use a provider key in the query string, or an endpoint that
+          needs none; this variable is `tier: infrastructure`, not `secret`, and must not be made to
+          carry one.
+
+          dev AND staging both point at the public community endpoint mainnet.sorobanrpc.com
+          (verified healthy 2026-08-24). ★ **staging joined dev on 2026-08-27, and the change is a
+          rule, not a value.** It had been deliberately unset, on the reading that "staging does not
+          serve mainnet" — but nothing in the product makes mainnet a per-environment feature: the
+          network enum carries both everywhere, the console offers both, and every route accepts
+          both. So the omission did not scope a feature, it made staging fail a request dev serves,
+          in a way no code path expresses. **Environments differ in capacity, identity and data —
+          never in which features work.** A deployment that genuinely serves testnet only still
+          leaves this unset and still starts; that arm is unchanged. Any environment beyond these
+          two supplies its own node.
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Services — what each deployable unit actually gets.
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+services:
+  verification-svc:
+    kind: ecs-service
+    exposure: public (ALB)
+    port: 5000
+    env_dto: services/verification-svc/src/config/env.dto.ts
+    config_contract: true # serves /internal/config-contract (ADR-013)
+    inherits: [base, postgres, stellar-cli, result-storage, verifier-identity]
+    variables:
+      PORT:
+        {
+          type: number,
+          required: no,
+          source: literal,
+          inject: ecs-secrets,
+          default: 5000,
+          envs: { dev: 5000, staging: 5000 },
+        }
+      SERVICE_ENTRYPOINT:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: verification-svc
+        envs: { dev: verification-svc, staging: verification-svc }
+        dto_exempt: true
+        code: docker/service.Dockerfile (the container CMD, not TypeScript)
+        note: >-
+          Selects which service the ONE shared resident image starts:
+          `CMD ["sh","-c","node services/${SERVICE_ENTRYPOINT}/dist/main.js"]`. Set wrong, the task
+          starts a different service than its task definition claims — it boots healthy and answers the
+          wrong routes.
+
+          `dto_exempt` because no TypeScript reads it: the container's shell does, before Node starts.
+          That is also why `check:env`'s check A missed it for as long as it did — A scans `.ts`, and a
+          variable consumed by a Dockerfile CMD is invisible to it. Check A now scans the Dockerfiles too.
+      SCVS_STORAGE_BUCKET:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: buckets.scratch
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        envs: { dev: sv-dev-scratch, staging: sv-staging-scratch }
+        code: packages/config/src/index.ts::getStagingStorageConfig
+        note: >-
+          Read lazily on the first upload, so a missing value fails POST /v1/uploads/source rather
+          than boot. A healthy container proves nothing here — smoke-test an upload after deploy.
+
+          PER ENVIRONMENT since the account rebuild (2026-08-20); both environments used to name the
+          same `stellar-scratch`. This is the SCRATCH bucket — the sandbox handoff prefix
+          `staging/{jobId}/…` and private uploads live here, not in SCVS_PUBLISHER_BUCKET, and no CDN
+          fronts it.
+      SCVS_JOB_STREAM_SAFETY_POLL_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 10000
+        note: Coupled to the ALB idle timeout — read §4 of the deployment doc before changing.
+    tunables: # all validated-if-present, all have working defaults
+      SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE:
+        type: number
+        default: 60
+        envs: { dev: 600, staging: 150 }
+        required_in: [dev, staging]
+        note: >-
+          A `@Throttle` override on `POST /v1/uploads/source` only, so it *replaces* the global
+          SCVS_THROTTLE_LIMIT for that one route rather than stacking under it. At the defaults
+          both doors are 60/min; the tighter per-client ceilings are the abuse tiers below.
+
+          ★ Read straight off `process.env` in the controller decorator
+          (`verifications.controller.ts`), not through ConfigService, because a decorator is
+          evaluated when the class is defined — before any Nest container exists. It is the one
+          documented exception to AGENTS.md's "never read process.env from business logic", and it
+          means this value is fixed at import time: changing it needs a restart, not a config reload.
+
+          dev and staging raise it for load testing (2026-08-26), to 600 and 150 — the `60R x 0.5`
+          row of the derivation table in SCVS_THROTTLE_LIMIT's note, which is also where the cost of
+          the whole tuning is recorded. Do not move this one on its own.
+      SCVS_UPLOAD_CLEANUP_INTERVAL_MS: { type: number, default: 60000 }
+      SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS:
+        type: number
+        default: 14400000
+        note: >-
+          The sweep's sole exception. An upload past `expiresAt` still survives
+          this long if a referencing job is public and hasn't yet published its source — otherwise
+          a legitimate long build's staging bytes vanish mid-build. 4 hours; this codebase has no
+          existing configured wall-clock cap for a verify/build Batch job to borrow instead.
+      SCVS_MAX_SOURCE_ARCHIVE_BYTES: { type: number, default: 52428800 }
+      SCVS_THROTTLE_LIMIT:
+        type: number
+        default: 60
+        envs: { dev: 3000, staging: 750 }
+        required_in: [dev, staging]
+        note: >-
+          The in-process tier (`@nestjs/throttler`'s ThrottlerGuard, global in app.module.ts), in
+          requests per fixed 60-second window per **process**. Behind an ALB with N tasks the
+          effective ceiling is N x this, unevenly split — it is a cheap first line, not the policy.
+          The policy is the Postgres-backed AbuseGuard below, which is shared across instances.
+
+          ★ It counts every route **except the read-only ones marked `@SkipThrottle`** — health,
+          job status and build-log, the SSE stream, bulk-load, wasm status. Polling your own
+          accepted job spends none of this budget; preflight and the two submission routes do share
+          this one counter. So this tier must stay **above** the sum of the per-route abuse budgets,
+          or it becomes the binding limit and the abuse guard — the tier that is actually per
+          submitter and actually shared across instances — never fires. dev at the old 30 against
+          its 60 submit quota was exactly that inversion.
+
+          ★ It was the literal `30` inside `ThrottlerModule.forRoot` until 2026-08-26 — the only
+          rate limit in this service with no per-environment control. Made configurable that day,
+          and the default raised to 60 the same day, matching the upload door.
+
+          ★ **THE LOAD-TESTING OVERRIDES LIVE HERE (2026-08-26). All four move together.**
+
+          Both tuned environments are derived from one write-path baseline in requests per second
+          (the performance target is 20 req/s sustained, p99 < 5 s at 50
+          concurrent), so the numbers are recomputable rather than picked. For a baseline of R
+          req/s, sustained write rate is 60R per minute and:
+
+            SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW  = 60R x 1.25   the sustained rate plus 25% burst
+            SCVS_ABUSE_MAX_PER_WINDOW         = 60R x 0.5     preflight is a pre-submission probe,
+                                                              not one call per submission
+            SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE = 60R x 0.5     the PERF cases stage uploads ahead of
+                                                              the measured burst, by design
+            SCVS_THROTTLE_LIMIT               > their sum     so the abuse tiers stay the policy
+
+            baseline R          submit  preflight  upload  |   sum  <  throttle
+            dev      20 req/s     1500        600     600  |  2700  <     3000
+            staging   5 req/s      375        150     150  |   675  <      750
+
+          Any environment that is not dev or staging keeps every product default.
+
+          ★ **A later fix changed what these numbers mean, and the derivation above has not caught up.**
+          Until 2026-09-04 the two abuse tiers keyed on the ALB node's address rather than the
+          caller's, so `1500` behaved as a deployment total shared by everyone behind one node (and
+          as N x 1500 across N nodes, with N growing under load). It is now genuinely per caller,
+          which is what it always claimed to be — so the load a tuned environment can legitimately
+          receive is `1500 x (distinct callers)`, against dev's one or two 0.25 vCPU tasks and a
+          shared `db.t4g.micro` sized from the 20 req/s baseline above. The table's arithmetic still
+          holds per caller; what it no longer bounds is the deployment.
+          **This is a re-sizing decision, deliberately not made by the fix** — the four still move
+          together, and they are still settings to revert rather than a new baseline. The reasoning
+          is in
+          the client address is taken from the proxy chain, which is the trust boundary;
+          `SCVS_THROTTLE_LIMIT` is unaffected in kind, since it was always per process.
+
+          ★ **What this cost, and what closed it.** E2E-SEC-12 used to require the submission route
+          to answer 429 within a hardcoded 60 requests. At the old dev ceiling of 30 it was *this*
+          tier that tripped it — the 60 submit quota was never reached. Under the table above the
+          abuse quota is the binding tier in both environments and neither trips inside a 60-request
+          ramp, so SEC-12 failed by construction in dev and staging alike from 2026-08-26, and S15
+          had no environment covering it automatically. **Closed 2026-08-27**: SEC-12 now sizes both
+          legs from `SCVS_E2E_QUOTA_SUBMIT` the way SEC-11 already did, and bursts them concurrently
+          because a fixed window cannot be filled by a sequential ramp. CI exports that value from
+          `config/deploy/<env>/verification-svc.json` — this file's `required_in` marking on
+          `SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW` is what keeps the exported number true. **Raising a
+          quota therefore now raises what SEC-12 sends** (`quota + 20` per leg, one concurrent burst):
+          the four
+          overrides are still load-testing settings to revert, not a new baseline.
+
+          Revert all four overrides, in both environments, together when the performance work ends.
+
+          ★ **All four carry `required_in: [dev, staging]`, and that is a rule this file should apply
+          more widely than it does.** `required: no` is the right GLOBAL answer for every knob here —
+          the service supplies a working default and a bare deployment boots. But the moment an entry
+          names a value under `envs:`, it is asserting that a specific environment has that value,
+          and `assert-config-contract` checks only what `required`/`required_in`/`required_when` mark
+          — so an unmarked `envs:` entry is a claim nothing verifies. That is not hypothetical: on
+          2026-08-26 these four were found absent from BOTH live task definitions while this file had
+          claimed dev and staging set SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW=60 since it was written, and
+          the environments had been running the product default of 6. The 2026-08-21 composer
+          incident was the same shape, and `required_in` was invented for it.
+
+          **~25 other entries still declare `envs:` values with nothing enforcing them** (the
+          `verifier-policy` block, the `arweave` group, SCVS_PUBLISHER_PREFIX, SCVS_ENABLE_AGGREGATOR
+          and others — several `fail: silent`, which is the worst class to leave unchecked). Closing
+          them is a separate, deliberate pass: only the three services with `config_contract: true`
+          serve a report, so marking one on `web`, `builder`, `composer` or `db-migrate` would
+          declare a control that cannot run — worse than none.
+      SCVS_ABUSE_FINGERPRINT_KEY:
+        type: string
+        required: yes
+        fail: boot
+        secret: true
+        source: ci-generated
+        tier: infrastructure
+        inject: ecs-secrets
+        generate: random-256-bit
+        observable: presence
+        default: ~
+        code: services/verification-svc/src/common/abuse-guard.ts::fingerprintRequest
+        note: >-
+          The HMAC key the rate-limit fingerprint is computed under. Outside counsel's 2026-09-06
+          review found the previous unsalted `sha256(req.ip)` reversible over the IPv4 space and
+          linkable across windows, making it pseudonymous rather than anonymous — personal
+          information under CCPA § 1798.140(v)(1)(A) and personal data under GDPR on Breyer.
+          Requirement RP-1 of the retention model.
+
+          The 60-second window is bound into the HMAC input, so the derived value rotates every
+          minute and this key needs no rotation of its own.
+
+          ★ **`generate:` is a third category ADR-025's two-tier table does not have, and it is the
+          reason this entry is `tier: infrastructure` rather than `tier: secret`.** The value IS
+          secret — hence `secret: true`, which pins `observable: presence` and keeps it out of every
+          digest — but no human writes it. `sync-secrets.mjs` mints 32 bytes of CSPRNG output on the
+          first deploy that finds the key absent from `scvs/<env>/<service>/config`, and preserves
+          it verbatim on every deploy after, so it is stable across revisions and identical across
+          tasks. Nothing here or in `config/deploy/` ever records the value.
+
+          Measured 2026-09-08, both environments: the CI deploy role is `allowed` on
+          `CreateSecret`/`PutSecretValue`/`GetSecretValue` for `scvs/<env>/*/config-*`, and the ECS
+          **execution** role already reads that prefix by wildcard
+          (`ReadServiceConfigSecrets`) — so this needs no infrastructure change at all. Under
+          `tier: secret` it would have needed the opposite: the CI role is `implicitDeny` on all
+          four actions for any credential secret (`sv-dev-rds-master-verify` included), and the
+          execution role grants credentials one ARN at a time, so a new one is a Terraform PR and an
+          apply per environment before this could deploy.
+      SCVS_ABUSE_COUNTER_RETENTION_MS:
+        type: number
+        default: 900000
+        note: >-
+          How long a spent `abuse_control` row outlives its window before the sweep deletes it.
+          Counsel's bound is 24h; no code path can read a row outside its own 60-second window, so
+          this is a clock-skew margin between tasks, not a retention choice. design.md RP-2.
+      SCVS_ABUSE_SWEEP_INTERVAL_MS: { type: number, default: 300000 }
+      SCVS_ABUSE_WINDOW_MS: { type: number, default: 60000 }
+      SCVS_ABUSE_MAX_PER_WINDOW:
+        type: number
+        default: 18
+        envs: { dev: 600, staging: 150 }
+        required_in: [dev, staging]
+        note: >-
+          Per-window budget for `POST /v1/preflight`. Was the single ceiling every guarded route
+          shared; now one of two tiers, and the default dropped from 30 to 18 so that 18 + 6 + 6
+          still sums to what one client could previously spend in total. Raising either tier raises
+          that total — they are independent counters, not slices of one. An environment that
+          previously set this explicitly keeps that value for preflight only, and picks up the
+          SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW default for submit and upload unless it sets that too.
+      SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW:
+        type: number
+        default: 6
+        envs: { dev: 1500, staging: 375 }
+        required_in: [dev, staging]
+        note: >-
+          The stricter tier. Applied to `POST /v1/verifications` and `POST /v1/uploads/source` — one
+          caller in one flow, so one number — but the counter is keyed per route, so each gets its
+          own budget and the submission-side ceiling is 2x this value. A client's total across all
+          three guarded routes is SCVS_ABUSE_MAX_PER_WINDOW + 2x this, i.e. 30 at the defaults.
+          Job-status polling and its SSE stream stay exempt from this guard entirely; throttling a
+          submitter who is only reading their own accepted job shows up as console timeouts.
+
+          ★ **This is the tier that binds a load test, and raising the two above it without raising
+          this one changes nothing.** It is per fingerprint, the E2E suite and any load runner reach
+          the service from a single egress address, and it sits on exactly the two routes a write
+          benchmark hammers — so the effective submission ceiling is this number, whatever
+          SCVS_THROTTLE_LIMIT says.
+
+          **dev and staging raise it for load testing (2026-08-26)**, to 1500 and 375 — the
+          `60R x 1.25` row of the derivation table in SCVS_THROTTLE_LIMIT's note, from write-path
+          baselines of 20 and 5 req/s. Read that note before moving any of the four; this one is
+          where the whole tuning's cost lands, because it is the tier that decides. Both values sit
+          far above what the E2E suite bursts from its single egress fingerprint (E2E-PERF-01
+          releases 20 concurrent submissions; E2E-SEC-11 sends quota+20 and is skipped entirely
+          unless SCVS_E2E_QUOTA_SUBMIT names the quota). E2E-SEC-12 reads the same
+          variable since 2026-08-27 and sends `quota + 20` per leg, so it now scales with whatever
+          this value is instead of failing against a hardcoded 60-request ramp. staging used to hold
+          60 for exactly that reason; it no longer does.
+
+          Any environment that is not dev or staging keeps 6.
+      SCVS_JOB_STREAM_WINDOW_MS: { type: number, default: 900000 }
+      SCVS_JOB_MAX_WAIT_MS: { type: number, default: 3600000 }
+      SCVS_ACTIVE_JOB_DEDUP_STALE_MS:
+        type: number
+        default: 1800000
+        note: >-
+          Bounds how long a non-terminal job answers new submissions for its target with "already
+          queued or running". Raising it past the slowest realistic build re-creates the wedge it
+          exists to prevent. ADR-008 decision 7.
+
+        tier: knob
+      SCVS_LEGAL_DOCUMENTS_SOURCE:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: config/legal-documents.example.json
+        envs:
+          {
+            dev: config/legal-documents.json,
+            staging: config/legal-documents.json,
+          }
+        code: services/verification-svc/src/modules/legal/legal.source.ts::loadLegalDocumentsSource
+        note: >-
+          Which `scvs-legal-documents-v1` bundle this deployment serves as its Terms of Service and
+          Privacy Notice: a path (relative to the workspace root, or absolute) or an `https:` URL.
+          `http:` is refused — a submitter's acceptance is recorded against these exact bytes, so they
+          must not be fetched over a channel anyone can rewrite. Same loader shape as
+          SCVS_TRUSTED_VERIFIERS_SOURCE, and deliberately a second copy of it: that one is
+          `fail: silent` with a committed default, this one is `fail: boot` with none.
+
+          `fail: boot`, not `silent`, and it is the point rather than an oversight. This repository
+          ships the assent *mechanism* and no operator's legal text, so there is nothing safe to fall
+          back to: an unset value means the console would take submissions while showing nobody any
+          terms, which is the defect the feature exists to remove. The service refuses to start
+          instead, the same way `docker/web-entrypoint.sh` refuses a template that lost its
+          placeholder.
+
+          The committed **default** is a placeholder bundle whose `effective_date` is null, so a
+          fresh checkout and a self-hoster's first boot both work, and enforcement stays off until
+          real text with a date is supplied. `dev` and `staging` override it with
+          `config/legal-documents.json`, the reference deployment's own bundle — the same
+          per-environment shape `SCVS_TRUSTED_VERIFIERS_SOURCE` already uses, and both point at one
+          file because legal text is not per-environment. Pointing an environment at the example
+          would serve sample text as terms.
+
+          A self-hoster points this at their own bundle and ships none of ours; the reference
+          deployment's presence here constrains nobody, exactly as
+          `config/trusted-verifiers.dev.json` constrains nobody.
+  orchestrator-svc:
+    kind: ecs-service
+    exposure: internal — no ALB
+    port: 5002
+    env_dto: services/orchestrator-svc/src/config/env.dto.ts
+    config_contract: true # serves /internal/config-contract (ADR-013)
+    inherits:
+      [
+        base,
+        postgres,
+        result-storage,
+        verifier-identity,
+        verifier-policy,
+        stellar-cli,
+      ]
+    variables:
+      PORT:
+        {
+          type: number,
+          required: no,
+          source: literal,
+          inject: ecs-secrets,
+          default: 5002,
+          envs: { dev: 5002, staging: 5002 },
+          note: loopback health check only,
+        }
+      SERVICE_ENTRYPOINT:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: verification-svc
+        envs: { dev: orchestrator-svc, staging: orchestrator-svc }
+        dto_exempt: true
+        code: docker/service.Dockerfile (the container CMD, not TypeScript)
+        note: >-
+          Selects which service the ONE shared resident image starts:
+          `CMD ["sh","-c","node services/${SERVICE_ENTRYPOINT}/dist/main.js"]`. Set wrong, the task
+          starts a different service than its task definition claims — it boots healthy and answers the
+          wrong routes.
+
+          `dto_exempt` because no TypeScript reads it: the container's shell does, before Node starts.
+          That is also why `check:env`'s check A missed it for as long as it did — A scans `.ts`, and a
+          variable consumed by a Dockerfile CMD is invisible to it. Check A now scans the Dockerfiles too.
+      SCVS_STORAGE_BUCKET:
+        type: string
+        required: yes
+        fail: boot
+        source: terraform
+        value_from_output: buckets.scratch
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        envs: { dev: sv-dev-scratch, staging: sv-staging-scratch }
+        code: services/orchestrator-svc/src/config/env.dto.ts (IsNotEmpty)
+        note: >-
+          Fails at BOOT here, unlike verification-svc, deliberately: this service always dispatches
+          to real Batch (ADR-003), so a missing staging bucket is a startup misconfiguration. A
+          wrong-but-present value is worse than a missing one — every rebuild resolves as
+          `batch_job_failed_no_artifact` instead of failing loudly.
+      SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 14400000
+        envs: { dev: "14400000", staging: "14400000" }
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          Same env var, same default, as verification-svc's entry of the same name — each service
+          defines its own copy (matching this codebase's pattern for a shared-cadence value, e.g.
+          SCVS_PUBLISH_RECOVERY_INTERVAL_MS) rather than one service depending on the other's
+          config. `deleteStagedUpload` (source-resolution.service.ts) needs it for the same reason
+          `UploadCleanupService`'s sweep does: a sibling job still younger than this ceiling may
+          still owe a source publish, and this job's own terminal cleanup must not delete bytes
+          that sibling job needs (code review finding, 2026-08-14).
+      SCVS_BUILD_LOG_RETENTION_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 604800000
+        code: services/orchestrator-svc/src/modules/scheduler/build-log-expiry.scheduler.ts
+        note: >-
+          How long a job's RAW build log is served after the rebuild that produced it finished, before
+          `BuildLogExpiryScheduler` deletes the object. Outside counsel's 2026-09-06 review rates the
+          previous model — indefinite retention of an artifact any holder of the job id could read — a
+          High finding. Requirement BL-2 of the build-log access model. 7 days is
+          counsel's recommendation; it allows 30 "only if operationally justified".
+
+          ★ **Settled 2026-09-08.** IMPLEMENTATION-SPEC **SB10** used to require build output
+          "retained and retrievable by the submitter for every terminal outcome" with no period,
+          which read as *indefinitely*. It is amended: the rule now requires a **bounded** period
+          and deliberately names no number, so this variable is where the period actually lives and
+          moving it is a configuration decision rather than a requirements change. The reasoning is
+          Requirement BL-SB10 of the build-log access model.
+
+          Expiry is enforced when the log is READ, not only by the sweep, so lowering this takes
+          effect immediately and a wedged sweep cannot extend it.
+      SCVS_BUILD_LOG_SWEEP_INTERVAL_MS: { type: number, default: 3600000 }
+      SCVS_BUILD_LOG_SWEEP_BATCH_SIZE:
+        type: number
+        default: 200
+        note: >-
+          Distinct log objects one sweep tick may delete. Bounded because each is an S3 delete, and the
+          first sweep after this ships faces every log ever written.
+      SCVS_JOB_RETENTION_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 2592000000
+        code: services/orchestrator-svc/src/modules/scheduler/job-retention.scheduler.ts
+        note: >-
+          How long a job record that NEVER PUBLISHED is kept before `JobRetentionScheduler` deletes
+          it, with its `upload_job_references` rows, its build-log object and any rebuild the last
+          referencing job takes with it. Outside counsel's 2026-09-06 review recommends 30-90 days
+          for non-public and failed job metadata; this is the strict end, and nothing operational
+          wants longer (the retry-eligibility window is 1h, dedup is 30min, the source-publish
+          obligation 24h). Requirements:
+          Requirement RP-3 of the retention model.
+
+          ★ **A published job is never pruned at any value of this.** The sweep's line is
+          `jobs.published_updated_at`, not `status`: that column is what `listPublished` — and so a
+          bulk-load consumer's incremental sync — reads, and a row carrying one is part of the
+          published record. Raising this number cannot break bulk load; lowering it to zero cannot
+          either.
+      SCVS_JOB_RETENTION_SWEEP_INTERVAL_MS: { type: number, default: 3600000 }
+      SCVS_JOB_RETENTION_BATCH_SIZE:
+        type: number
+        default: 500
+        note: >-
+          Rows one retention tick may delete. Bounded because the tick also issues one S3 delete per
+          job that has a build log, and an unbounded first sweep against a long-retained database
+          would be a single very long transaction.
+      SCVS_JOB_STATE_CHANGE_QUEUE_URL:
+        type: url
+        required: yes
+        fail: silent
+        source: terraform
+        value_from_output: sqs.job_state_change_url
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        terraform: aws_sqs_queue.batch_job_state_change.url
+        resource: scvs-<env>-batch-job-state-change # name, not the URL — it embeds the account id
+        note: >-
+          Without it no build result is ever consumed — jobs queue and dispatch normally and then
+          never complete. Boots healthy. This is the highest-consequence `fail: silent` in the system.
+
+          **Single-consumer, confirmed by DevOps 2026-08-04.** Nothing else consumes this queue. That
+          matters because a competing consumer deleting the only copy of a Batch terminal event wedges
+          the rebuild in `running` and strands every attached job in `comparing` (see the reconciler
+          notes in §6.3). If another target is ever added to this queue, that decision has to come back
+          here first.
+
+          The EventBridge rule's match pattern is **deliberately left at its current scope** (DevOps,
+          2026-08-04) rather than being narrowed to our job queue pre-emptively. Recorded so nobody
+          reads it later as an oversight: the risk it leaves is that we consume — and delete — Batch
+          events belonging to another queue in the same account, and the agreed response is to narrow
+          the pattern if that actually happens rather than to speculate about the shape now.
+      SCVS_BATCH_JOB_QUEUE_ARN_ARM64:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: batch.builder_queue_arns.arm64
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: sv-<env>-builders-arm-queue # DevOps-managed; the ARN embeds account + region
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          One queue per architecture, replacing the single `SCVS_BATCH_JOB_QUEUE_ARN` (retired
+          2026-08-06 — see `retired:` at the foot of this file). The compute environment behind each
+          queue is single-architecture — arm: Graviton `c6g/c7g/c8g`; x86: `c6i/c7i` — and the build
+          image named by SEP-58 `bldimg` is pulled and executed *on that host*, so an image published
+          only for `linux/amd64` cannot run here at all. Dispatch picks between the two from the
+          image's own registry metadata: `modules/verification-pipeline/queue-selection.util.ts`,
+          part of routing a job to a queue whose architecture matches the image.
+
+          Named for the OCI architecture token the routing key is (`arm64`), not for the queue's own
+          name (`…-arm-queue`) — the token is what the code compares against. The queue name lives in
+          `resource:` so a rename stays greppable (ADR-006).
+
+          **No fallback to the other architecture's queue when this is unset**, deliberately: that
+          queue cannot run the image, so the build would fail inside the sandbox looking like a build
+          failure. Dispatch throws naming this variable instead.
+      SCVS_BATCH_JOB_QUEUE_ARN_AMD64:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: batch.builder_queue_arns.amd64
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: sv-<env>-builders-x86-queue # DevOps-managed; the ARN embeds account + region
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          The x86 half of the pair above. Note the spelling difference on purpose: the variable carries
+          the OCI token `amd64`, the AWS resource is named `…-x86-queue`.
+
+          Work DOES route here, and getting it to run took a later fix. This entry used to say "the builder
+          image has had an `amd64` leg since 2026-07-29 (`deploy-builder.yml` pushes a multi-arch index,
+          so one job-definition revision serves both queues)". Both halves of that stopped being true:
+          an earlier change cut the build to `platforms: linux/arm64` (the `stellar` binary baked in was an arm64
+          ELF, so the amd64 leg had never been runnable), and the single family then meant an arm64 image
+          on x86 hosts. A cli-58 target's chain-recorded `bldimg` is what routes here without asking —
+          `stellar/stellar-cli` publishes amd64 only, so `image_single_arch` picks this queue and
+          `SCVS_BATCH_DEFAULT_ARCH` is never consulted. dev's x86 queue was 56/56 FAILED on 2026-08-24,
+          every one of them `exec format error` inside `materialise`.
+
+          There is now one builder family per architecture — see SCVS_BATCH_JOB_DEFINITION_ARN_ARM64/_AMD64
+          below. The docker-out-of-docker arrangement was still only ever proven
+          on Graviton, so treat the first amd64 dispatch that reaches `runner` as its smoke test.
+      SCVS_BATCH_DEFAULT_ARCH:
+        type: enum
+        values: [arm64, amd64]
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: arm64
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          Which queue takes a build image that can run on *both* architectures, and the fallback when
+          the registry cannot establish an architecture at all — one answer to "the image did not force
+          a queue", rather than two knobs that can disagree.
+
+          `arm64` keeps every image that already ran on Graviton exactly where it was, so this feature
+          lands without moving existing traffic. A single-architecture image ignores this value
+          entirely.
+
+          Boot-validated against the two accepted values (`env.dto.ts`) rather than silently defaulted:
+          both values produce working builds, so a typo would never surface in behaviour.
+      SCVS_BATCH_JOB_DEFINITION_ARN_ARM64:
+        type: string
+        required: yes
+        fail: first-use
+        source: terraform
+        value_from_output: batch.builder_job_definition_arm64
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: scvs-builder-<env> # and this is now the whole value — see the note
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          **The value is a bare family name, not an ARN** — `scvs-builder-<env>`, per environment
+          since 2026-08-22. It used to be one account-wide `scvs-builder-verify`, which under
+          family-name dispatch meant both environments dispatched to whichever revision was
+          registered last, by either environment — the same defect class. `SubmitJob` accepts
+          either and resolves the latest ACTIVE revision itself
+          (`packages/aws/src/batch.ts` passes this straight through), and `env.dto.ts` validates it as
+          a plain string, so nothing in the code changes.
+
+          **`_ARM64` since the split; this was `SCVS_BATCH_JOB_DEFINITION_ARN`** (see `retired:` at the
+          foot of this file). The paragraph above used to end "The `_ARN` suffix is kept only because
+          renaming it would touch this file, the generated contract, every `config/deploy/*.json` and
+          both DTOs for no behavioural gain" — and that reasoning, applied to the *architecture*
+          suffix, is what produced a four-variable set with three suffixes and one exception. The
+          exception is permanent; the cutover is once. The `_ARN` half of the name is still kept for
+          exactly the reason quoted, so the value remains a name in a variable called `…_ARN`.
+
+          This reverses what this entry used to say — "Pin the revision in the task definition — Batch
+          would otherwise resolve to the latest ACTIVE one, which silently changes what a deployed
+          service dispatches to." That determinism was real but never delivered: CI re-registered the
+          orchestrator and rolled the service on every builder deploy, so the pin moved at exactly the
+          moment the value changed, and Terraform's data source re-resolved it on every apply as well.
+          What it did deliver was two writers of one field, which cost three incidents in two weeks.
+          Batch jobs are dispatched by job definition family name, never by revision ARN.
+
+          Before raising the job's VCPU, check the compute environment's current instance types — an
+          over-sized request sits in RUNNABLE forever with MISCONFIGURATION:JOB_RESOURCE_REQUIREMENT
+          and looks like a queue problem.
+      SCVS_BATCH_JOB_DEFINITION_ARN_AMD64:
+        type: string
+        # `required: no` is the right GLOBAL answer — a deployment whose builder fleet is Graviton-only needs no
+        # amd64 family, and the arm64 half above stays the unsuffixed, always-present one.
+        required: no
+        required_in: [dev, staging]
+        fail: first-use
+        source: terraform
+        value_from_output: batch.builder_job_definition_amd64
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: scvs-builder-<env>-amd64 # a bare family name, like the arm64 half
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          The amd64 counterpart of SCVS_BATCH_JOB_DEFINITION_ARN_ARM64, added by the same split. A bare family name,
+          same as the arm64 half; `.github/workflows/deploy-builder.yml` registers all four families
+          (two architectures x two environments) from one run.
+
+          **Why a second family rather than a multi-arch image.** A job-definition revision pins an
+          image, and a Batch host runs whatever that image's entrypoint is compiled for. Publishing one
+          multi-arch index would also work and is a smaller change; a family per architecture was chosen
+          instead because it keeps every revision digest-pinned to a plain, single-platform manifest —
+          the property `provenance: false`/`sbom: false` exists to preserve in that workflow — and
+          because it makes the architecture a visible coordinate rather than something resolved
+          implicitly at pull time on a host nobody is watching.
+
+          Read with queue-selection.util.ts: the queue ARN and the family come out of ONE call, keyed on
+          one resolved `arch`. Two independent lookups is what the earlier bug was. Missing, it throws a
+          `ConfigurationError` naming this variable, so the job fails non-retryably as
+          `service_misconfigured` instead of burning SCVS_MAX_JOB_RETRY_ATTEMPTS.
+      SCVS_BATCH_MATERIALISE_CONTAINER_NAME:
+        type: string
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: materialise
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          The socket-less container in the ecsProperties job definition. Must match the `name` field
+          in deploy-builder.yml's --ecs-properties containers[] exactly, or Batch rejects the
+          override and that container sees no job-params at all.
+
+          Two names rather than the one comma-separated list this replaced (2026-08-10): the two
+          containers no longer receive the same SCVS_JOB_PARAMS_JSON. Each is handed only the fields
+          it reads — this one gets no artifact upload URL — which is both the CE1 least-privilege
+          shape and what keeps the override under Batch's 8192-byte ceiling.
+      SCVS_BATCH_RUNNER_CONTAINER_NAME:
+        type: string
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: runner
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          The socket-holding container, same matching requirement as
+          SCVS_BATCH_MATERIALISE_CONTAINER_NAME above. Receives no source `source_uri`: it reads
+          where the source landed from the materialiser's handoff document.
+      SCVS_JOB_PARAMS_TRANSPORT:
+        type: string
+        required: no
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: env_json
+        envs: { dev: presigned_url, staging: presigned_url }
+        required_in: [dev, staging]
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          ★ Transitional — and **no longer optional in a deployed environment**.
+          `env_json` (the default, and the only behaviour before this knob) injects each builder
+          container's full params document inline — a payload that grows with the source's metadata
+          and presigned-URL lengths, which is what crossed Batch's merged 8192-byte taskProperties
+          ceiling in staging. `presigned_url` stages the documents in the scratch bucket and injects
+          one presigned GET per container instead (SCVS_JOB_PARAMS_URL on the builder side), bounding
+          the override regardless of the source. A later change added the materialiser's canonical-source
+          presigned PUT, measured at +1899 bytes against 1207 bytes of headroom
+          (`builder-container-params.spec.ts`), so the inline leg no longer carries a worst-case
+          uploaded-source verify job at all: dispatch refuses it in
+          `assertWithinTaskPropertiesLimit` before a container starts. Both environments must be set
+          to `presigned_url`; neither had it set as of 2026-08-27, both running the code default.
+          Once they are, this knob AND the `env_json` leg AND SCVS_JOB_PARAMS_JSON are deleted
+          together.
+      SCVS_COMPOSER_JOB_QUEUE_ARN:
+        type: string
+        required: no
+        # `required: no` stays the right GLOBAL answer.
+        required_in: [dev, staging]
+        fail: first-use
+        source: terraform
+        value_from_output: batch.composer_job_queue_arn
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: sv-<env>-composers-queue # DevOps-managed; the ARN embeds account + region
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          ADR-017's composer fleet — a SECOND Batch queue, deliberately not `SCVS_BATCH_JOB_QUEUE_ARN`.
+          The separation IS the CE4 mechanism between fleets: composer and builder never share a host
+          because they are different compute environments, so pointing this at the builder queue would
+          silently dissolve that guarantee while still appearing to work.
+
+          `required: no` because a deployment serving only cli-58 targets needs no composer fleet at
+          all. `fail: first-use` and not `silent`: `ComposerDispatchService` throws naming this variable
+          the first time a cli-legacy target needs composing, so the failure is a job failure with a
+          readable cause rather than a target that mysteriously never progresses.
+
+          `source: terraform` is now true, and was not for most of this variable's life. It was
+          supplied ONLY by `.github/workflows/deploy-composer.yml`, which upserted it into
+          orchestrator-svc's task definition on every composer deploy, while this file said Terraform
+          would — and nothing did. Two writers of one field cost three incidents in two weeks; the
+          last was a `terraform apply` dropping all three coordinates out of dev, with the service
+          booting healthy and every cli-legacy verification failing on first use. Terraform now owns
+          all three and CI writes none of them: those upsert jobs are gone. Since 2026-08-22 they are
+          also injected from Parameter Store rather than plaintext `environment` — `tier:
+          infrastructure` / `inject: ecs-ssm`, the ADR-016 tier finally applied.
+      SCVS_COMPOSER_JOB_DEFINITION_ARN:
+        type: string
+        required: no
+        # `required: no` stays the right GLOBAL answer.
+        required_in: [dev, staging]
+        fail: first-use
+        source: terraform
+        value_from_output: batch.composer_job_definition
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: scvs-composer-<env> # and this is now the whole value — see the note
+        # One account-wide `scvs-composer` family could not carry two roles.
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          **The value is a bare family name, not an ARN** — `scvs-composer-<env>`, same as the builder
+          definition above and for the same reasons. It used to say "Pin the revision in the task
+          definition rather than letting Batch resolve the latest ACTIVE one"; see that entry and
+          Dispatch is by family name, so the reversal is deliberate.
+
+          `source: terraform` is now true, and was not for most of this variable's life. It was
+          supplied ONLY by `.github/workflows/deploy-composer.yml`, which upserted it into
+          orchestrator-svc's task definition on every composer deploy, while this file said Terraform
+          would — and nothing did. Two writers of one field cost three incidents in two weeks; the
+          last was a `terraform apply` dropping all three coordinates out of dev, with the service
+          booting healthy and every cli-legacy verification failing on first use. Terraform now owns
+          all three and CI writes none of them: those upsert jobs are gone. Since 2026-08-22 they are
+          also injected from Parameter Store rather than plaintext `environment` — `tier:
+          infrastructure` / `inject: ecs-ssm`, the ADR-016 tier finally applied.
+      SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI:
+        type: string
+        required: no
+        # `required: no` stays the right GLOBAL answer.
+        required_in: [dev, staging]
+        fail: first-use
+        source: terraform
+        value_from_output: ecr.composed_environments_uri
+        tier: infrastructure
+        inject: ecs-secrets
+        default: ~
+        resource: sv-<env>-composed-environments # repository name; the URI embeds account + region
+        code: services/orchestrator-svc/src/config/env.dto.ts (Matches)
+        note: >-
+          The private ECR repository composed environments are pushed to and pulled from (ADR-017 §3).
+          A **bare** repository URI — no tag, no `@sha256:` suffix. Validated as a shape at boot, not
+          merely as a string, because a tag here would produce a tag-derived environment reference and
+          `build-environments/plan.md` §6 forbids any persisted or published claim being tag-derived.
+          `composedEnvironmentImageReference()` throws on it too, but at dispatch time, which is later
+          than a misconfiguration this cheap to catch deserves.
+
+          **This repository must carry NO ECR lifecycle expiry rule, and that absence is load-bearing**
+          (ADR-017 §4, revised 2026-08-05). Every image in it backs an `environments` row in
+          `status = "ready"`, and deleting one silently makes an already-published verification result
+          unreproducible from our side — no alarm fires, because nothing in ECR knows the image was
+          referenced. At the corpus ceiling the whole repository is under 100 GB, so there is nothing to
+          reclaim by expiring anything.
+
+          A rule "spare the ready ones" is NOT an available option: ECR lifecycle rules select only on
+          tagStatus, tagPrefixList, image count and days-since-push — they cannot read our database. If a
+          retention rule is ever genuinely required here, it has to come back to ADR-017 first.
+
+          ★ The composer tags every pushed image with its `recipe_sha256` specifically so that an
+          account-wide "expire untagged images after N days" rule cannot sweep these away — images pushed
+          by digest alone are `untagged`, and from outside they look exactly like orphaned build layers.
+          That tag is written and never read; dispatch resolves the pull coordinate from the database and
+          pulls by digest. Do not point anything at the tag.
+
+          `source: terraform` is now true, and was not for most of this variable's life. It was
+          supplied ONLY by `.github/workflows/deploy-composer.yml`, which upserted it into
+          orchestrator-svc's task definition on every composer deploy, while this file said Terraform
+          would — and nothing did. Two writers of one field cost three incidents in two weeks; the
+          last was a `terraform apply` dropping all three coordinates out of dev, with the service
+          booting healthy and every cli-legacy verification failing on first use. Terraform now owns
+          all three and CI writes none of them: those upsert jobs are gone. Since 2026-08-22 they are
+          also injected from Parameter Store rather than plaintext `environment` — `tier:
+          infrastructure` / `inject: ecs-ssm`, the ADR-016 tier finally applied.
+
+      SCVS_ENVIRONMENT_COMPOSE_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        inject: ecs-secrets
+        default: 600000
+        code: services/orchestrator-svc/src/config/configuration.ts
+        note: >-
+          How long an `Environment` may sit in `composing` before the reconciler asks Batch about it.
+          Still above `SCVS_REBUILD_RUN_TIMEOUT_MS`, because a composition does a full `docker build`
+          plus a rustup toolchain download plus an ECR push — its legitimate runtime is genuinely
+          longer than a rebuild reusing an already-published image.
+
+          ★ CEILING: this must stay comfortably BELOW the private-upload TTL (30 minutes, hardcoded in
+          `services/verification-svc/src/modules/verifications/uploads.service.ts`). It WAS exactly
+          30 minutes until 2026-08-21, i.e. equal to that TTL, which made every `private_tarball`
+          submission whose terminal Batch event went missing fail with `private_upload_unavailable` —
+          the rescue landed at the instant the upload expired. Observed in staging: job 80f89edb
+          resolved its composition at 14:21:04Z and failed source resolution 2 seconds later. Raise
+          this only if the upload TTL is raised further first.
+
+          A LOWER value does not endanger a healthy slow composition, despite what this note claimed
+          before 2026-08-21: `environment-reconciler.scheduler.ts` rung 1 asks Batch and returns early
+          on any non-terminal status, so a long-but-alive `docker build` is left alone regardless of
+          this setting. The real cost of lowering it is one extra `batch:DescribeJobs` per minute per
+          in-flight composition. That also means this no longer needs to exceed
+          `SCVS_COMPOSER_BUILD_TIMEOUT_MS` for safety — see that variable's own note.
+      SCVS_ENVIRONMENT_RECONCILER_INTERVAL_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        inject: ecs-secrets
+        default: 60000
+        code: services/orchestrator-svc/src/config/configuration.ts
+      SCVS_ARWEAVE_MODE:
+        type: enum
+        values: [disabled, dry-run, dry_run, irys]
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: disabled
+        envs: { dev: irys, staging: irys }
+        observable: value
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Any unrecognised value maps to `disabled` — a typo silently turns result archiving off and
+          nothing in the logs says so. Validated at boot by OrchestratorSvcEnvDto for exactly this.
+          `http` retired (archive-and-recovery plan.md §2.1/§7, 2026-08-05): it configured an
+          SCVS_ARWEAVE_ENDPOINT HTTP archiving service nothing in this repository ever implemented.
+          `irys` is the real archiving mode that replaces it — a genuine @irys/upload-ethereum
+          upload, paid for by SCVS_ARWEAVE_WALLET_PRIVATE_KEY's wallet.
+      SCVS_SOURCE_ARCHIVE_ENABLED:
+        type: boolean
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "false"
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Independent of SCVS_ARWEAVE_MODE, which still governs the report archive unconditionally
+          (mainnet-source-archive design.md §8, MSA-5). Defaults to false: public mainnet source
+          publishes to S3 only, and `sourceArchivePendingSince` is never set. Set to true (with
+          SCVS_ARWEAVE_MODE=irys) to also archive it — no code change needed.
+      SCVS_ARWEAVE_NETWORK:
+        type: enum
+        values: [mainnet, devnet]
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: devnet
+        envs: { dev: devnet, staging: devnet }
+        observable: value
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Defaults to devnet so local dev/CI never touch real funds or produce a real Arweave
+          record merely by exercising SCVS_ARWEAVE_MODE=irys with no special setup. A deployment
+          that should produce durable archives must set this to `mainnet` explicitly — silently
+          inheriting the dev-friendly default there produces non-durable devnet archives with no
+          error (archive-and-recovery plan.md §2.2/§7/§8, 2026-08-05).
+      SCVS_ARWEAVE_RPC_URL:
+        type: url
+        required: no
+        required_when: SCVS_ARWEAVE_NETWORK == mainnet
+        fail: first-use
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        # No `envs:` deliberately. This is only ever set for a mainnet deployment; devnet's default
+        # is baked into getArweaveConfig. It previously recorded the PROSE "~ (devnet default
+        # applies)" for both environments, which read as documentation but is emitted as a value —
+        # so ADR-025's CI wrote that sentence into the config secret and the process would have
+        # received it as the RPC URL. Under the old flow a human binding values by hand would have
+        # caught it; nothing mechanical did. An entry with no value to record records none.
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Ethereum RPC endpoint the archiving wallet signs through. devnet has a working default
+          (Sepolia's public RPC) baked into getArweaveConfig, so this is only ever set for a
+          mainnet deployment.
+      SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
+        type: string
+        required: no
+        required_when: SCVS_ARWEAVE_MODE == irys
+        fail: first-use
+        secret: true
+        source: secret
+        tier: secret
+        inject: ecs-secrets
+        secret_ref: { name: try-arweave/private-key }
+        default: ~
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Ethereum wallet private key, ecs-secrets injected (archive-and-recovery plan.md §7) — read
+          as a plain process.env value at container start, never fetched from Secrets Manager by
+          this service's own code. Dev uses this secret with Irys devnet; the ECS task execution role
+          needs secretsmanager:GetSecretValue on this secret before the container can start.
+      SCVS_ARWEAVE_GATEWAY_URL:
+        type: url
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "https://gateway.irys.xyz"
+        envs:
+          {
+            dev: "https://gateway.irys.xyz",
+            staging: "https://gateway.irys.xyz",
+          }
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          The gateway an archived report's results_urls entry is built against
+          (`${gatewayUrl}/${tx_id}`). Confirmed (2026-08-06) that Irys's own default gateway
+          serves both devnet and mainnet uploads correctly by tx_id — one default suits both
+          networks. Overridable to point at a different Arweave gateway (e.g. arweave.net)
+          without a code change, but a devnet upload is only ever reachable through Irys's own
+          gateway regardless of this setting: it never reaches the real Arweave network at all
+          (it lives on Irys's own devnet node and is deleted after ~60 days), so arweave.net or
+          the ar:// scheme (which resolves via real Arweave/AR.IO gateways) will never show
+          devnet-archived content no matter what this variable is set to.
+    tunables:
+      SCVS_WORKER_CONCURRENCY:
+        type: number
+        default: 1
+        envs: { dev: 1, staging: 1 }
+        note: >-
+          Clamped to 8. Slots rotate round-robin across ticks so 1 does not starve newer jobs, but
+          only one job advances per tick — raise it when verifications routinely overlap.
+        tier: knob
+      SCVS_WORKER_CONCURRENCY_TESTNET:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        note: >-
+          Caps how many of SCVS_WORKER_CONCURRENCY's slots testnet jobs may occupy at once;
+          mainnet is bounded only by the global cap, so whatever testnet does not use is available to
+          it. Unset defaults to the global cap (identical to today's unbounded shared pool) — see
+          per-network admission is a ceiling, not a reservation.
+        tier: knob
+      SCVS_WORKER_POLL_INTERVAL_MS: { type: number, default: 2000 }
+      SCVS_PUBLISH_RECOVERY_INTERVAL_MS: { type: number, default: 60000 }
+      SCVS_ARCHIVE_RECOVERY_INTERVAL_MS:
+        type: number
+        default: 60000
+        note: >-
+          ArchiveRecoveryScheduler's poll interval (archive-and-recovery plan.md §4/§8). No
+          SCVS_MAX_ARCHIVE_ATTEMPTS counterpart — archival has no abandonment ceiling; a stuck job
+          is an observability concern (archive_attempts), not one this scan ever stops retrying.
+        tier: knob
+      SCVS_SOURCE_ARCHIVE_CLAIM_TIMEOUT_MS:
+        type: number
+        default: 300000
+        note: >-
+          How long a source_archive_uploads row may sit at status "claimed" before a
+          losing findOrCreate caller treats it as abandoned (the claimant crashed mid-upload) and
+          releases it inline — no dedicated reaper; see
+          mainnet-source-archive/decisions/source-upload-claim-uses-a-unique-constraint-not-an-advisory-lock.md.
+          Long enough that a normal Irys upload is never reaped mid-flight.
+        tier: knob
+      SCVS_REPORT_ARCHIVE_CLAIM_TIMEOUT_MS:
+        type: number
+        default: 300000
+        note: >-
+          Same mechanism as SCVS_SOURCE_ARCHIVE_CLAIM_TIMEOUT_MS, applied to
+          report_archive_uploads: how long that row may sit at status "claimed" before a losing
+          findOrCreate caller treats it as abandoned (the claimant crashed mid-upload) and releases
+          it inline — no dedicated reaper; see
+          archive-and-recovery/decisions/report-archive-dedup-needs-a-claim-row-too.md.
+          Long enough that a normal Irys upload is never reaped mid-flight.
+        tier: knob
+      SCVS_PUBLISH_STALE_MS:
+        type: number
+        default: 600000
+        note: >-
+          How long a job may sit in `publishing` before its worker is presumed dead and the row is
+          released back to publish_pending. Deliberately separate from the scan interval and well
+          above any legitimate publication: set it too low and a publish merely slowed by S3 is
+          re-claimed alongside the one still running, producing two reports for one verdict.
+        tier: knob
+      SCVS_MAX_PUBLISH_ATTEMPTS:
+        type: number
+        default: 10
+        note: >-
+          Failed publications of one verdict before the recovery scan gives up. Reported to the
+          submitter via `progress`; reset the row's publish_attempts to 0 to re-arm after fixing config.
+        tier: knob
+      SCVS_JOB_RETRY_INTERVAL_MS:
+        type: number
+        default: 60000
+        note: >-
+          JobRetryScheduler's poll interval (TRD §7.6 Rule D) — how often to look, and nothing else.
+          The eligibility window that keeps a deploy from re-queueing the whole historical backlog is
+          a fixed hour in the scheduler, deliberately not derived from this: raising the interval to
+          cut scan load must not widen the backlog bound.
+        tier: knob
+      SCVS_MAX_JOB_RETRY_ATTEMPTS:
+        type: number
+        default: 3
+        note: >-
+          Automatic re-queues of one job after a *retryable* failure (build_timeout, internal_error)
+          before it stays failed. `0` disables Rule D entirely. Reset the row's retry_attempts to 0
+          to re-arm, exactly as with publication.
+        tier: knob
+      SCVS_REBUILD_REAPER_INTERVAL_MS:
+        {
+          type: number,
+          default: 60000,
+          note: how often both reconciler checks run,
+        }
+      SCVS_REBUILD_DISPATCH_TIMEOUT_MS:
+        {
+          type: number,
+          default: 300000,
+          note: how long a rebuild may sit mid-SubmitJob before re-dispatch,
+        }
+      SCVS_REBUILD_RUN_TIMEOUT_MS:
+        type: number
+        default: 180000
+        note: >-
+          Not a kill margin — how long before the reconciler ASKS Batch about a rebuild. A job Batch
+          still reports RUNNING is left alone however long it takes, which is why this no longer has
+          to exceed the longest legitimate build.
+
+        tier: knob
+      SCVS_MAX_REBUILT_WASM_BYTES:
+        type: number
+        default: 16777216
+        fail: first-use
+        note: >-
+          The ceiling on the rebuilt Wasm this service will fetch from staging and hash to compute a
+          verdict (TB3). That object is written by the untrusted sandbox through a presigned PUT, so its
+          size is attacker-chosen — unbounded, one submission decides how much memory the orchestrator
+          buffers. 16 MiB is ~4x the largest Soroban Wasm observed. An object over the bound is not a
+          verdict of any kind: the rebuild is recorded `cli_failure` with
+          `rebuilt_bytes_too_large`, which fails closed rather than falling back to the hash the sandbox
+          reported. Raising this raises the memory a single rebuild can cost; lowering it below a
+          legitimate contract's size makes every such verification fail with that reason.
+        tier: knob
+  query-svc:
+    kind: ecs-service
+    exposure: public (ALB)
+    port: 5001
+    env_dto: services/query-svc/src/config/env.dto.ts
+    config_contract: true # serves /internal/config-contract (ADR-013)
+    # NOT verifier-identity: `getVerifierIdentity()` is read only by orchestrator-svc, which stamps it into
+    # artifacts at publish time. query-svc serves artifacts that already carry the identity, so it needs the
+    # storage location, not the identity.
+    inherits: [base, query-postgres]
+    variables:
+      PORT:
+        {
+          type: number,
+          required: no,
+          source: literal,
+          inject: ecs-secrets,
+          default: 5001,
+          envs: { dev: 5001, staging: 5001 },
+        }
+      SERVICE_ENTRYPOINT:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: verification-svc
+        envs: { dev: query-svc, staging: query-svc }
+        dto_exempt: true
+        code: docker/service.Dockerfile (the container CMD, not TypeScript)
+        note: >-
+          Selects which service the ONE shared resident image starts:
+          `CMD ["sh","-c","node services/${SERVICE_ENTRYPOINT}/dist/main.js"]`. Set wrong, the task
+          starts a different service than its task definition claims — it boots healthy and answers the
+          wrong routes.
+
+          `dto_exempt` because no TypeScript reads it: the container's shell does, before Node starts.
+          That is also why `check:env`'s check A missed it for as long as it did — A scans `.ts`, and a
+          variable consumed by a Dockerfile CMD is invisible to it. Check A now scans the Dockerfiles too.
+      SCVS_STORAGE_BUCKET:
+        {
+          required: forbidden,
+          note: This service never touches the scratch bucket.,
+        }
+    tunables:
+      SCVS_QUERY_TIMEOUT_MS: { type: number, default: 5000 }
+      SCVS_QUERY_CACHE_TTL_MS: { type: number, default: 30000 }
+      SCVS_AGGREGATION_SYNC_INTERVAL_MS:
+        type: number
+        default: 60000
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          How often the retained aggregation is refreshed from each trusted verifier. `0` disables
+          the timer, which leaves the aggregated bulk-load route answering 503 until something
+          drives the sync directly — a test, or a deployment scheduling it some other way.
+      SCVS_BULK_PAGE_LIMIT:
+        type: number
+        default: 200
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          Records requested per page when paging a verifier's own bulk-load stream
+          (`discover()`/`syncOne()`). `200` is the Registry API's own MAX_BULK_LIMIT
+          (`packages/core/src/cursor.ts`) — the largest a conformant verifier accepts — so the
+          default asks for as much as possible per tick. An operator running
+          `SCVS_AGGREGATION_SYNC_INTERVAL_MS` short may want this smaller to bound per-tick request
+          size and load on peers; boot rejects anything outside `[1, 200]` rather than silently
+          clamping it, since a value a peer would refuse is a configuration error, not a tunable.
+      SCVS_RPC_TIMEOUT_MS: { type: number, default: 5000 }
+      STELLAR_RPC_URL_TESTNET:
+        type: string
+        default: "https://soroban-testnet.stellar.org"
+        tier: infrastructure
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          Soroban RPC for testnet address lookup. SDF hosts a public endpoint, so this has a working
+          default; an operator with their own node points it there instead.
+      STELLAR_RPC_URL_MAINNET:
+        type: string
+        # `fail: first-use` makes it the worse of the two to leave unenforced — the service boots healthy and
+        # only the first mainnet address query finds out.
+        required: false
+        required_in: [dev, staging]
+        fail: first-use
+        # An operator's own node, usually.
+        tier: infrastructure
+        envs:
+          {
+            dev: "https://mainnet.sorobanrpc.com",
+            staging: "https://mainnet.sorobanrpc.com",
+          }
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          Soroban RPC for mainnet address lookup. **No default: SDF hosts no public mainnet
+          endpoint.** A deployment serving mainnet address queries must supply one, or
+          `GET /v1/query/mainnet/contracts/...` fails at the first request rather than at boot —
+          deliberately, so a testnet-only deployment still starts.
+
+          dev AND staging both point at the public community endpoint mainnet.sorobanrpc.com
+          (verified healthy 2026-08-24) so the E2E suite's mainnet read-only cases (E2E-NET-01) can
+          resolve addresses in either. A public endpoint in plaintext is the exception this entry's
+          header comment allows. staging joined dev on 2026-08-27 — this variable and
+          SCVS_MAINNET_RPC_URL are one capability wearing two names (they take the same endpoint from
+          one Terraform input, `module.ecs.mainnet_rpc_url`), so they move together or query-svc
+          resolves mainnet addresses for verifications the verifier itself cannot run. See that
+          entry's note for the rule. Any environment beyond these two supplies its own node.
+      SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS:
+        type: boolean
+        default: false
+        deploy: never
+        tier: knob
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          Opts the SDK's fetch policy (S25, S30) out of https-only and out of refusing private,
+          loopback and link-local IP-literal hosts, so a verifier root served over plain http on
+          localhost can be aggregated. **Local development and tests only.** Absent or false is the
+          strict policy, which is why this is not `fail: silent`: forgetting it leaves the service
+          safe and a dev-only root unreachable, not the reverse. Never set it in a deployed
+          environment — with it on, a Trusted Verifiers List entry can point the aggregator at the
+          instance metadata endpoint.
+    # Not read by this service, but validated anyway because QuerySvcEnvDto extends SharedEnvDto directly, and
+    # SharedEnvDto covers the `stellar-cli` group's four variables in the same class as `base`/`postgres`.
+    dto_over_declares:
+      - STELLAR_CLI_PATH
+      - SCVS_CLI_TIMEOUT_MS
+      - SCVS_ARTIFACT_DIR
+      - SCVS_MAINNET_RPC_URL
+    note: >-
+      The Trusted Verifiers List is read from the DATABASE, not a static file — hence postgres. No
+      longer inherits result-storage: query-svc reads every verifier's results — including
+      one this operator also runs — over the public Registry API, the same as any other TVL member,
+      never from the private storage config orchestrator-svc writes through.
+
+  web:
+    kind: ecs-service
+    exposure: public — :443 at the ALB, :80 in the container
+    env_dto: ~ # a Vite bundle, not a Nest app — nothing to validate at boot
+    inherits: []
+    variables:
+      SCVS_ENABLE_AGGREGATOR:
+        type: string
+        required: no
+        fail: silent
+        # `literal`, like SERVICE_ENTRYPOINT — the other variable a container entrypoint consumes.
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        # Both shared environments enable it.
+        envs: { dev: "true", staging: "true" }
+        code: docker/web-entrypoint.sh -> clients/web/src/config/features.ts::isAggregatorEnabled
+        note: >-
+          `"true"` makes `/query` reachable; unset or `"false"` leaves it a redirect. Substituted
+          into index.html at container start rather than at `vite build`, so environments can differ
+          from ONE image (ADR-006 decision 5). The entrypoint rejects any other value rather than
+          reading it as off.
+
+          Setting this to `"true"` in a public deployment ships an aggregator UI, which TRD §1.4
+          lists as a non-goal. That is a product decision with SDF, and **nothing in the application
+          repository can stop you making it here** — no check validates which environment binds this,
+          and the page needs no rebuild to appear. This note is the control; the 2026-08-24 decision
+          is dev + staging on. The page lives at `/query`.
+    build_variables:
+      VITE_QUERY_API_URL:
+        type: string
+        required: no
+        fail: silent
+        source: image-build
+        tier: knob
+        inject: docker-build-arg
+        default: ""
+        envs: { dev: "", staging: "" }
+        code: clients/web/src/lib/http.ts::getQueryApiBase
+        note: >-
+          Read only by the aggregator page, which is the one thing in the console that talks to
+          query-svc. Empty means same origin, which is correct under §4's routing and is the value
+          every environment uses — the same one-image reasoning as `VITE_VERIFY_API_URL`. It exists
+          because in development the two APIs are separate ports, and sending `GET /verifiers` to
+          verification-svc gets a 404.
+      VITE_ENABLE_AGGREGATOR:
+        type: string
+        required: no
+        fail: silent
+        source: image-build
+        tier: knob
+        inject: docker-build-arg
+        default: ~
+        envs: {} # local-only: no deployed environment sets it, and a null key serialises as "null"
+        code: clients/web/src/config/features.ts::isAggregatorEnabled
+        note: >-
+          **Local development only** — `pnpm run dev:web`, where there is no container and no
+          entrypoint to substitute anything. A container ignores this and reads
+          `SCVS_ENABLE_AGGREGATOR` instead; `features.ts` prefers the runtime value and falls
+          back here only when nothing substituted it. Do NOT set it as a build arg for a deployed
+          image: that would put the flag back in the image and cost the one-image invariant.
+      VITE_VERIFY_API_URL:
+        type: string
+        required: yes
+        fail: silent
+        source: image-build
+        tier: knob
+        inject: docker-build-arg
+        default: ~
+        envs: { dev: "", staging: "" }
+        code: clients/web/src/lib/http.ts::getApiBase
+        note: >-
+          Must be the EMPTY STRING, which the client treats as "same origin" — correct under the
+          ALB's path routing, and what keeps one web image valid in every environment. An *unset*
+          (as opposed to empty) value is treated as not-configured and the console shows an explicit
+          error. Empty and unset are different states here; do not normalise them.
+    note: >-
+      The container listens on plain :80 and that is correct — TLS terminates at the ALB. Do not
+      give the container its own certificate.
+
+  builder:
+    kind: batch-job-definition # NOT ECS
+    exposure: none — runs the only untrusted code in the system
+    env_dto: services/builder/src/config/env.dto.ts
+    inherits: [] # deliberately nothing — see trust_boundary below
+    trust_boundary:
+      ADR-002 — this unit holds no business credentials, no database access, and no
+      AWS credentials beyond ECR pull + logs. Its env DTO deliberately does not extend SharedEnvDto,
+      because listing the Postgres and result-storage variables even as optional would document a
+      surface the sandbox must never have.
+    forbidden: # presence of ANY of these is a trust-boundary defect, not a misconfiguration
+      - POSTGRES_HOST
+      - POSTGRES_PORT
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_SSL
+      - DATABASE_URL
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - SCVS_PUBLISHER_STORAGE
+      - SCVS_PUBLISHER_BUCKET
+      - SCVS_PUBLISHER_PREFIX
+      - SCVS_STORAGE_BUCKET
+      - SCVS_JOB_STATE_CHANGE_QUEUE_URL
+      - SCVS_BATCH_JOB_QUEUE_ARN_ARM64
+      - SCVS_BATCH_JOB_QUEUE_ARN_AMD64
+      - SCVS_BATCH_DEFAULT_ARCH
+      - SCVS_BATCH_JOB_DEFINITION_ARN_ARM64
+      - SCVS_BATCH_JOB_DEFINITION_ARN_AMD64
+      - SCVS_VERIFIER_ID
+      - SCVS_ARWEAVE_AUTH_TOKEN
+      # Giving it the composer fleet's coordinates would hand untrusted code a way to submit jobs into the one
+      # fleet that CAN push to our environment registry.
+      - SCVS_COMPOSER_JOB_QUEUE_ARN
+      - SCVS_COMPOSER_JOB_DEFINITION_ARN
+    variables:
+      NODE_ENV:
+        type: enum
+        values: [production, development, test]
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: batch-job-definition
+        default: development
+        envs: { dev: production, staging: production }
+        code: services/builder/src/entrypoint.ts
+        note: >-
+          Declared separately from the `base` group rather than inherited: the sandbox inherits no
+          group, and its injection point is the Batch job definition, not an ECS task definition.
+      SCVS_JOB_PARAMS_JSON:
+        type: json
+        required: yes
+        fail: first-use
+        source: per-invocation
+        tier: knob
+        inject: batch-submit-job
+        default: ~
+        code: services/builder/src/config/configuration.ts
+        note: >-
+          Injected per job by orchestrator-svc's SubmitJob call. NOT part of the job definition —
+          DevOps should not set it, and a value baked into the definition would be a stale job spec.
+
+          ★ Required only while SCVS_JOB_PARAMS_TRANSPORT is `env_json` (the default). The
+          presigned_url transport injects SCVS_JOB_PARAMS_URL instead; both stay declared through
+          the rollout and are removed together with the knob.
+      SCVS_JOB_PARAMS_URL:
+        type: url
+        required: no
+        fail: first-use
+        source: per-invocation
+        tier: knob
+        inject: batch-submit-job
+        default: ~
+        code: services/builder/src/config/configuration.ts
+        note: >-
+          ★ A presigned GET of this container's params document, staged by orchestrator-svc
+          at `staging/{rebuildId}/{mode}/params/{container}.json` — injected exactly when
+          SCVS_JOB_PARAMS_TRANSPORT is `presigned_url`. Same rule as SCVS_JOB_PARAMS_JSON: per job
+          at SubmitJob time, never baked into the job definition, and DevOps should not set it.
+      SCVS_ARTIFACT_DIR:
+        type: path
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: batch-job-definition
+        default: $TMPDIR/scvs-artifacts
+    tunables: # sandbox knobs — every one is a security-relevant limit
+      SCVS_DOCKER_CPUS: { type: string, default: "2" }
+      SCVS_DOCKER_MEMORY: { type: string, default: 2g }
+      SCVS_DOCKER_PIDS_LIMIT: { type: number, default: 512 }
+      SCVS_DOCKER_USER:
+        {
+          type: string,
+          default: "65532:65532",
+          note: non-root; do not set to 0:0,
+        }
+      SCVS_HANDOFF_ROOT:
+        type: string
+        required: no
+        fail: first-use
+        source: literal
+        tier: knob
+        inject: batch-container-environment
+        default: the OS temp dir
+        code: services/builder/src/modules/builder/handoff.ts
+        note: >-
+          The path shared between the builder's TWO containers — the materialiser writes the extracted
+          source there, the runner reads it and hands it to the host's docker daemon. It MUST be a host
+          bind mount at the identical path in both containers, not a Docker-managed volume: the host
+          daemon resolves the runner's `-v` against its own filesystem, so a container-only path mounts
+          an empty directory and the build fails with `could not find Cargo.toml in /source` (CE3, and
+          the CE1 split is the most likely thing to reintroduce it).
+      SCVS_DOCKER_HOST: { type: string, default: ~ }
+      SCVS_DOCKER_CHECK_TIMEOUT_MS: { type: number, default: 10000 }
+      SCVS_PREFETCH_ALLOWED_HOSTS:
+        {
+          type: csv,
+          default: ~,
+          note: comma-separated allowlist for `cargo vendor` prefetch,
+        }
+      SCVS_SOURCE_FETCH_TIMEOUT_MS: { type: number, default: 120000 }
+      SCVS_TAR_TIMEOUT_MS: { type: number, default: 30000 }
+      SCVS_MAX_SOURCE_ARCHIVE_BYTES:
+        {
+          type: number,
+          default: 52428800,
+          note: bound on the COMPRESSED bytes downloaded,
+        }
+      SCVS_MAX_SOURCE_ARCHIVE_ENTRIES: { type: number, default: 20000 }
+      SCVS_MAX_SOURCE_ARCHIVE_UNCOMPRESSED_BYTES:
+        type: number
+        default: 536870912
+        note: >-
+          Bound on what an archive expands to, read from the tar listing before extraction (SB7).
+          Distinct from SCVS_MAX_SOURCE_ARCHIVE_BYTES, which bounds the compressed download: an
+          archive can satisfy that one and still ask for an unbounded write.
+      SCVS_DEPENDENCY_PREFETCH_TIMEOUT_MS:
+        { type: number, default: falls back to SCVS_CLI_TIMEOUT_MS }
+      SCVS_CLI_TIMEOUT_MS:
+        type: number
+        default: 600000
+        note: 600000 here, NOT the 120000 the resident services use. Same name, different default.
+        tier: knob
+  composer:
+    kind: batch-job-definition # NOT ECS, and NOT the builder's definition
+    exposure: none — reaches only official component sources and our own ECR repository
+    env_dto: services/composer/src/config/env.dto.ts
+    inherits: [] # deliberately nothing, same argument as `builder` above
+    trust_boundary: >-
+      ADR-017 §Placement. Container-execution-capable, like the builder, and therefore governed by the
+      same CE1–CE5 — but for the opposite reason: the builder is dangerous because it RUNS untrusted
+      code, while the composer is dangerous because it HOLDS a write capability (`ecr:PutImage`) the
+      builder must never have. Its safety argument is CE1-by-construction: its entire input set is the
+      chain-derived `(cliver, rsver)` pair plus verifier-owned template configuration, and
+      `ComposerJobParams` (packages/core/src/composer.ts) structurally has no field a submitted value
+      could travel through — asserted by `composer-test.ts`, not left to convention.
+
+      A third IAM role, distinct from both the resident services' and the builder fleet's: ECR
+      push/pull scoped to the one `scvs-composed-environments` repository and nothing else. Not the
+      builder's role (it must never gain push), not the resident role (the composer has no business
+      reason to reach the database, the result buckets, or `batch:SubmitJob`).
+    # The builder's list is the FLOOR, not a copy of it — checked, not asserted in prose (rule 3).
+    forbidden_superset_of: builder
+    forbidden: # presence of ANY of these is a trust-boundary defect, not a misconfiguration
+      # The builder's list, for the same reasons — the composer is no more trusted with business credentials
+      # than the sandbox is.
+      - POSTGRES_HOST
+      - POSTGRES_PORT
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_SSL
+      - DATABASE_URL
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - SCVS_PUBLISHER_STORAGE
+      - SCVS_PUBLISHER_BUCKET
+      - SCVS_PUBLISHER_PREFIX
+      - SCVS_JOB_STATE_CHANGE_QUEUE_URL
+      # One queue per architecture since batch-queue-arch-routing; the single `SCVS_BATCH_JOB_QUEUE_ARN` they
+      # replaced is retired and must not be named here (rule 2).
+      - SCVS_BATCH_JOB_QUEUE_ARN_ARM64
+      - SCVS_BATCH_JOB_QUEUE_ARN_AMD64
+      - SCVS_BATCH_DEFAULT_ARCH
+      - SCVS_BATCH_JOB_DEFINITION_ARN_ARM64
+      - SCVS_BATCH_JOB_DEFINITION_ARN_AMD64
+      - SCVS_COMPOSER_JOB_QUEUE_ARN
+      - SCVS_COMPOSER_JOB_DEFINITION_ARN
+      - SCVS_VERIFIER_ID
+      - SCVS_ARWEAVE_AUTH_TOKEN
+      # The last two are the composer's alone — `SCVS_STORAGE_BUCKET` is on the builder's list as well — and
+      # they are why the relationship above is `superset_of` and not equality.
+      - SCVS_STORAGE_BUCKET
+      - SCVS_UPLOAD_DIR
+      - SCVS_PREFETCH_ALLOWED_HOSTS
+    variables:
+      NODE_ENV:
+        type: enum
+        values: [production, development, test]
+        required: no
+        fail: n/a
+        source: literal
+        inject: batch-job-definition
+        default: development
+        envs: { dev: production, staging: production }
+        code: services/composer/src/entrypoint.ts
+        tier: knob
+      SCVS_COMPOSER_PARAMS_JSON:
+        type: json
+        required: yes
+        fail: first-use
+        source: per-invocation
+        inject: batch-submit-job
+        default: ~
+        code: services/composer/src/config/configuration.ts
+        note: >-
+          One `ComposerJobParams` document, injected per job by orchestrator-svc's SubmitJob call —
+          the composer's analogue of the builder's `SCVS_JOB_PARAMS_JSON`, and separately named so a
+          job definition can never satisfy one worker's contract by carrying the other's input. NOT
+          part of the job definition; a value baked in there would be a stale composition spec.
+        tier: knob
+      SCVS_COMPOSER_TEMPLATE_DIR:
+        type: path
+        required: no
+        fail: first-use
+        source: literal
+        inject: batch-job-definition
+        default: docker/composed-environments
+        code: services/composer/src/config/configuration.ts
+        note: >-
+          Where the composition templates live inside the composer image. Baked into the image at build
+          time; declared so the path is greppable rather than only a constant.
+        tier: knob
+      SCVS_ARTIFACT_DIR:
+        type: path
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: batch-job-definition
+        default: $TMPDIR/compose-*
+        code: services/composer/src/config/configuration.ts
+        note: >-
+          Root for the per-composition scratch directory (`composer.service.ts` mkdtemp's `compose-*`
+          under it). Same variable and same shape as the builder's, and read for the same reason: the
+          Batch host's default temp dir is not always the writable one.
+    tunables: # composition knobs
+      SCVS_COMPOSER_BUILD_TIMEOUT_MS:
+        {
+          type: number,
+          default: 1800000,
+          note:
+            "the `docker build` itself. It may legitimately EXCEED the orchestrator's
+            SCVS_ENVIRONMENT_COMPOSE_TIMEOUT_MS (10 min since 2026-08-21): that variable only decides
+            when the reconciler starts ASKING Batch, and rung 1 leaves a still-RUNNING composition
+            alone, so a 30-minute build is not cut short by a 10-minute reconciler threshold. What
+            actually bounds this is the Batch job definition's own attempt timeout.",
+        }
+      SCVS_COMPONENT_FETCH_TIMEOUT_MS: { type: number, default: 300000 }
+      SCVS_COMPOSER_DOCKER_HOST: { type: string, default: ~ }
+
+  db-migrate:
+    kind: ecs-task # one-off, run by .github/workflows/db-migrate.yml
+    exposure: none
+    env_dto: ~ # a `prisma migrate deploy` command override, not a Nest app
+    inherits: [postgres]
+    variables:
+      SCVS_TRUSTED_VERIFIERS_SOURCE:
+        type: string
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: config/trusted-verifiers.local.json
+        envs:
+          {
+            dev: config/trusted-verifiers.dev.json,
+            staging: config/trusted-verifiers.staging.json,
+          }
+        code: scripts/seed-tvl.ts::loadSource
+        note: >-
+          Which `stellar-trusted-verifiers-list-v1` document the seed step loads into
+          `trusted_verifiers`: a path (relative to the repository root, or absolute) or an `https:`
+          URL. `http:` is refused — the list decides who is trusted, so it must not be fetched over a
+          channel anyone can rewrite.
+
+          `fail: silent` is the whole reason this variable exists. Unset, the default is the
+          committed **local-development** list, whose every URL is `http://localhost:5000` — so a
+          deployed seed run succeeds, exits 0, and leaves a table whose entries query-svc's https-only
+          fetch policy refuses. Nothing errors; `GET /verifiers` just answers with a list nobody can
+          read from. That is how staging's table came to hold no usable row while the deploy pipeline
+          stayed green.
+
+          `inject: ecs-environment` is accurate but arrives differently from every other entry with
+          that value: this task has no resident task definition of its own — `db-migrate.yml` borrows
+          the target service's and overrides the command — so the workflow supplies this in the same
+          `run-task` `containerOverrides` block that carries the command, not from a registered
+          `environment` list. The generated `config/deploy/<env>/db-migrate.json` is therefore the
+          contract for what the override must set, not a description of a task definition DevOps
+          maintains.
+    note: >-
+      Same image and same secrets as the services, with a command override running
+      `prisma migrate deploy`. Requires the migration user to hold DDL rights. Runs in the services
+      subnet because RDS is in the isolated data subnets — it cannot be run from a laptop or a
+      GitHub-hosted runner.
+
+      `inherits: [postgres]` understates this task since the split. The workflow takes
+      a `target` input and borrows **that** service's task definition, so `target=verification-svc`
+      runs against the `postgres` group's instance and `target=query-svc` against `query-postgres`'s —
+      the same five variable names, resolved from a different Terraform output and a different secret.
+      Both groups are therefore reachable through this one block, and the generated
+      `config/deploy/<env>/db-migrate.json` shows only the first. Left as-is rather than modelled here:
+      the split is still in flight and owns that work. Flagged so this block is not read as a claim that
+      the migration task only ever touches the verifier's database.
+
+      The seed step is on the `target=query-svc` path only, because `trusted_verifiers` lives in
+      `packages/db-query` since the split — see `SCVS_TRUSTED_VERIFIERS_SOURCE` above and
+      The deployment pipeline seeds the Trusted Verifiers List.
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Retired — declared somewhere but read by nothing.
+retired:
+  SCVS_POLICY_SOURCE_MODES:
+    last_seen: >-
+      `config/deploy/{dev,staging}/orchestrator-svc.json` as a plaintext `environment` entry, set in
+      both environments to its default `public_repo,hosted_tarball,private_uploaded_tarball`.
+    reason: >-
+      Named the `source_modes` array of the published `policy.json`, and **nothing consulted it** — the
+      submit door does not read it, so the value could only make that document agree or disagree with
+      the running system. It disagreed in both directions at once: it offered `public_repo` and
+      `hosted_tarball`, shapes `submit.service.ts`'s `createJob` has never constructed (recorded as
+      part of finding F152), and omitted `source_uri`, this verifier's primary route — which the
+      published shape's own `@IsIn` would in any case have rejected until a later change widened it.
+
+      This is the third `SCVS_POLICY_*` variable retired for one reason. `publish_source_bytes` and
+      `source_retained_after_verification` went the same way, and
+      `writeVerifierPolicy`'s doc comment already states the rule: a config knob that silently does
+      nothing is the defect that function exists to prevent. TRD §5.5 — "a policy document that
+      disagrees with the running system is worse than none".
+
+      What replaces it is `SERVED_SOURCE_MODES` in `packages/storage-layout/src/publish.ts`, derived
+      from the submit door rather than configured. If a real operator switch for accepted source modes
+      is ever wanted, it belongs at the door as a gate, not here as a claim.
+    action: >-
+      Remove from any local `.env`. It is a plaintext `environment` entry rather than an SSM secret, so
+      it leaves the orchestrator task definition with the next `deploy.yml` registration and needs no
+      Terraform apply of its own.
+  SCVS_GIT_TIMEOUT_MS:
+    last_seen: >-
+      `config/deploy/{dev,staging}/builder.json` as a plaintext `environment` entry on the builder job
+      definition. Never set to anything but its default in either environment, because the code path it
+      bounded was never reachable.
+    reason: >-
+      Bounded `git clone`/`git checkout` in `services/builder`'s `fetch-source.ts`. A later change removed that
+      acquisition arm rather than binding it to a URL policy: the orchestrator now resolves every source
+      reference to a presigned staging URL before dispatch, and the `git` source-reference shape it
+      served was constructed nowhere in this repository — `submit.service.ts`'s `createJob` emits
+      `private_tarball` or `source_uri`, and `SubmittedSourceManifest` has no `repo`/`rev` field. See
+      The builder never fetches a host the submitter named.
+    action: >-
+      Remove from any local `.env`. It is a plaintext `environment` entry rather than an SSM secret, so
+      it leaves the builder job definition with the next `deploy-builder.yml` registration and needs no
+      apply of its own.
+  VITE_ENABLE_RESULT_EXPLORER:
+    last_seen: config/deploy/dev/web.json and config/deploy/staging/web.json as a build arg
+    reason: >-
+      Renamed to VITE_ENABLE_AGGREGATOR when the feature became the Aggregator and its two pages
+      collapsed into one. Never set anywhere: it carried no value in any environment, and its
+      container-side successor is SCVS_ENABLE_AGGREGATOR, read at start-up rather than at build.
+    action: >-
+      Remove from any local .env. It was never on a task definition or a build command, so nothing
+      deployed refers to it.
+  SCVS_BUILD_DISPATCH:
+    last_seen: services/orchestrator-svc/.env.example
+    reason: >-
+      Selected between in-process build and AWS Batch dispatch. ADR-003 removed the in-process path
+      entirely — dispatch is now unconditional, and no code reads this variable. The .env.example
+      still sets it, which reads as if a local-only mode exists.
+    action: Remove from services/orchestrator-svc/.env.example. Must not appear in any task definition.
+  SCVS_BATCH_JOB_DEFINITION_ARN:
+    last_seen: >-
+      the deployed dev AND staging orchestrator-svc task definitions, as an `ecs-ssm` secret pointing at
+      `/scvs/<env>/orchestrator-svc/SCVS_BATCH_JOB_DEFINITION_ARN`. **Gone from both, 2026-08-25**: dev
+      is on `sv-dev-orchestrator-svc:38` and staging on `sv-staging-orchestrator-svc:22`, each carrying
+      only the `_ARM64`/`_AMD64` pair, and the SSM parameter itself was destroyed by the follow-up
+      apply in each environment. Verified against the account, not assumed. Kept in this block
+      regardless — `retired:` exists so a name is not silently re-added, and `check:env` reads it.
+    reason: >-
+      Renamed to `SCVS_BATCH_JOB_DEFINITION_ARN_ARM64` by the split that gave the builder its second
+      job-definition family (`…_AMD64`) because the builder image is single-architecture and one family
+      served both queues. The rename is naming only — same value, a bare `scvs-builder-<env>` family
+      name — and it exists so the four architecture-scoped dispatch variables read as one set instead of
+      three-plus-an-exception. The counter-argument (a rename buys no behaviour) is recorded and answered
+      in the successor's own note: the exception would have been permanent, the cutover happens once.
+
+      Nothing accepts the old name as a fallback. That is the same call
+      `decisions/two-arch-queue-vars-replace-the-single-arn.md` made and for a sharper reason here: a
+      fallback would be a second reader of a value whose whole problem was having a second writer.
+    action: >-
+      **Done in both environments on 2026-08-25 — nothing to do.** Recorded because the sequence is the
+      reusable part, and because it is not the sequence anyone would guess: an ECS secret rename is not
+      a "remove it from your .env" retirement. `deploy.yml` builds each new revision from *the revision
+      the service is currently running* and patches only `image`
+      (the infrastructure owns the secret, not its contents), so an infrastructure-side change to `secrets` never reaches a
+      running service by itself, and neither a rename nor an addition can be delivered by CI alone.
+
+      What was done, per environment:
+
+      1. `terragrunt apply` created `…_ARM64` and `…_AMD64` and **kept** this parameter, so the
+         still-running revision could continue to resolve its secrets.
+      2. A one-off script re-registered the RUNNING revision with the new names **added and this one
+         kept** — additive, and before the new code was deployed. All three names on one revision is
+         the only state with no broken window: the old code needs this name, the new code needs the
+         other two. Either single-name order breaks every dispatch in between, not just amd64 ones.
+      3. The new code was deployed.
+      4. The same script re-ran with the legacy name dropped, so CI stopped cloning it forward.
+      5. Only then did a follow-up `terragrunt apply` destroy this parameter.
+
+      Reversing 4 and 5 re-creates the restart hazard the retained parameter existed to prevent: a
+      running revision whose `valueFrom` points at a deleted parameter cannot start, and ECS reports
+      that as a placement failure rather than as a missing parameter.
+
+      The script (`eng-tools/refresh-orchestrator-batch-secrets.mjs`) was deleted with step 5, as its
+      own header instructed. Recover it from history if another `ecs-ssm` variable is ever renamed —
+      `git log --diff-filter=D -- eng-tools/refresh-orchestrator-batch-secrets.mjs`.
+  SCVS_BATCH_JOB_QUEUE_ARN:
+    last_seen: >-
+      the deployed dev orchestrator-svc task definition (2026-08-06). Gone from it since: revision 129
+      carries `SCVS_BATCH_JOB_QUEUE_ARN_ARM64` / `_AMD64` and not this name, confirmed against the
+      account on 2026-08-13, and by the repository owner on 2026-08-12 (ledger F028). Kept in
+      this block regardless — `retired:` exists so a name is not silently re-added, and `check:env`
+      checks F and K read it.
+    reason: >-
+      Named the one Batch job queue every dispatch used. There are now two — one per compute-environment
+      architecture — so the variable has no single correct value, and dispatch selects per rebuild from
+      the build image's own published architecture (`SCVS_BATCH_JOB_QUEUE_ARN_ARM64` /
+      `SCVS_BATCH_JOB_QUEUE_ARN_AMD64`, and the queue is chosen by the image's architecture).
+
+      It was already broken when it was retired: the queue it named in dev,
+      `stellar-dev-builders-queue`, no longer exists — Terraform replaced it with the arm/x86 pair
+      rather than keeping it alongside them, so every SubmitJob from that deployment was failing. That
+      is also why no legacy-fallback path was kept: there was no working behaviour to preserve.
+    action: >-
+      Done for dev — nothing to do there. This line used to read "`node eng-tools/diff-live-taskdefs.mjs
+      --env dev` reports a live environment still carrying it", which was true when written on
+      2026-08-06 and stopped being true no later than 2026-08-12, while continuing to sit here telling
+      whoever read it to go fix something already fixed. It is the same class of unrechecked assertion
+      the block exists to stop.
+
+      For any environment other than dev the instruction stands and the detector is the same command:
+      remove this name from the task definition and set the two replacements. Verify, do not assume —
+      `node eng-tools/check-service-cutover.mjs --env <env>` needs credentials, which is
+      why this line can go stale in the first place and why it now carries the date it was last checked.
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Decided — recorded here because each answer constrains something, and an answer nobody can find gets
+# re-litigated.
+decided:
+  - id: Q1
+    decided: 2026-08-04
+    question: >-
+      Does Terraform consume this file directly (yamldecode, resolving groups/inherits in HCL), or
+      does this repo generate a flat per-service artifact that Terraform reads as-is?
+    decision: >-
+      **This repo generates the flat artifact.** `groups`/`inherits`/`dto_over_declares` are our
+      semantics; resolving them in HCL would mean two implementations of one contract, and
+      `check:env` only covers ours — an error on the Terraform side would put wrong values in a
+      deployed task definition with nothing failing. Resolution happens once, where it is tested.
+      Output is split the way an ECS task definition needs it, so the Terraform is a mechanical map:
+        config/generated/<env>/<service>.json
+          { "environment": { ...plaintext... },
+            "secrets":     { "POSTGRES_PASSWORD": "arn:...:secret:<name>:password::" } }
+      Committing the generated output is deliberate: a PR diff then shows "orchestrator-svc gained
+      SCVS_FOO", which makes a change to the deployment surface visible in review.
+    status: >-
+      IMPLEMENTED — `pnpm run generate:deploy-env`, output committed under `config/deploy/<env>/`, with
+      `check:env` failing when it goes stale. The path is `config/deploy/` and not the
+      `config/generated/` this decision originally named: `.gitignore` has a blanket `generated/` rule
+      (for orval output) that would have silently kept the artifacts out of the repo.
+
+      One correction the artifacts forced: they are a **specification of what Terraform must set**, not
+      a ready-to-apply `environment` map. They cannot be the latter, because per `decided: Q2` this repo
+      does not record the values it does not own. Terraform takes `value` where present, binds its own
+      output where `terraform_output` is named, and composes `valueFrom` from `secret`/`json_key`.
+  - id: Q2
+    decided: 2026-08-04
+    question: >-
+      Should this file record `envs` values for `source: terraform` / `secret` variables at all?
+    decision: >-
+      **Split by what kind of value it is, not by `source:` alone** — the rule and its reasoning are
+      in this file's header. A stable resource *name* is recorded (ADR-006 wants renames greppable);
+      an identifier embedding an account id, region, or revision is not (it goes stale and then
+      misleads); a secret never is. Applied: the Batch job-definition ARN and the full SQS queue URL
+      lost their recorded values and carry `terraform:` output names plus a `resource:` name instead.
+    status: applied
+  - id: Q4
+    decided: 2026-08-04
+    question: >-
+      Who owns detection for the `fail: silent` variables? A missing SCVS_JOB_STATE_CHANGE_QUEUE_URL
+      produces a perfectly healthy service that completes no verification — no health check catches
+      it and no log line fires, because nothing went wrong.
+    decision: >-
+      **Ours, not DevOps's** — the deploy workflow is in this repo. Mechanism: an **internal
+      diagnostic endpoint** reporting the *observability-permitted* state of these variables, asserted
+      by CI after deploy. Chosen over a post-deploy smoke test, which would burn a real AWS Batch
+      build (minutes plus cost) on every deploy to learn the same thing, and over a metric alarm,
+      whose signal-to-noise in an environment with legitimately zero traffic is hopeless.
+    status: >-
+      NOT YET IMPLEMENTED, and blocked on one design decision that is deliberately not made here:
+      **what may be reported.** Presence booleans are safe; enum values are probably safe; bucket
+      names, ARNs, and anything `secret: true` are not. The proposal is to make that a per-variable
+      `observable: presence | value | never` field in this manifest, so the boundary is data,
+      reviewable in a manifest diff, and enforceable by `check:env` (no `secret: true` entry may ever
+      be `observable: value`). It adds an HTTP surface — a sensitive surface per CODE_REVIEW.md — so it
+      needs its own review, and likely its own ADR.
+  - id: Q5
+    decided: 2026-08-04
+    question: >-
+      Is the SQS queue behind SCVS_JOB_STATE_CHANGE_QUEUE_URL single-consumer, and is the EventBridge
+      rule scoped to our job queue?
+    decision: >-
+      **Single-consumer: confirmed, nothing else consumes it.** The EventBridge rule's match pattern
+      stays at its current scope for now, by decision rather than by omission — narrow it if a real
+      conflict appears rather than speculating about the shape in advance. Both recorded on
+      `SCVS_JOB_STATE_CHANGE_QUEUE_URL` itself, where someone changing that variable will see them.
+    status: applied
+
+  - id: Q3
+    decided: 2026-08-04
+    question: >-
+      Are the `secret_ref` entries right — one `sv-dev-rds-master-verify` secret holding `username` and
+      `password` as JSON keys, injected through the task definition's `secrets` block by ARN + key —
+      and does the **execution** role hold `secretsmanager:GetSecretValue` (plus `kms:Decrypt` for a
+      customer-managed key)?
+    decision: >-
+      **Confirmed correct as assumed; nothing needed changing.** Verified read-only against the live
+      account on 2026-08-04, not by asking:
+
+        - `valueFrom` shape — the live task definitions use
+          `arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:stellar-dev-rds-master-YLAYEJ:password::`
+          and `...:username::`, exactly the form this manifest's `secret_ref` describes. The
+          six-character suffix is `YLAYEJ` (`aws secretsmanager describe-secret`).
+        - The execution role is `stellar-dev-role-ecs-task-execution`, shared by all four services. Its
+          inline policy `stellar-dev-policy-ecs-task-execution` already grants
+          `secretsmanager:GetSecretValue`, scoped to that one secret ARN rather than `*`.
+        - No `kms:Decrypt` is needed: the secret's `KmsKeyId` is null, so it uses the AWS-managed
+          `aws/secretsmanager` key, which the execution role reaches implicitly. A move to a CMK would
+          re-open this.
+
+      This repo still emits the secret NAME and JSON key rather than a composed ARN
+      (`config/deploy/<env>/<service>.json`), and that does not change now the suffix is known: the
+      suffix is AWS-generated, Terraform has it from its own data source, and recording it here would
+      re-create exactly the stale-identifier problem `decided: Q2` exists to prevent.
+
+      **The record above is left at its 2026-08-04 names on purpose** — it says what was verified,
+      when. Every one of them moved in the account rebuild (`stellar-dev-rds-master` →
+      `sv-dev-rds-master-verify`, suffix `YLAYEJ` → `sOtsqJ`; `stellar-dev-role-ecs-task-execution` →
+      `sv-dev-role-ecs-task-execution`), and the `secret_ref` entries at the top of this file carry the
+      current names. That the emitted artifact holds a NAME and not an ARN is exactly why the rename
+      cost this repo one line per environment instead of a re-verification.
+    status: applied — nothing to change in AWS or in this repo
+    note: >-
+      Two unrelated over-grants surfaced while reading those policies, both verified against the code
+      rather than assumed. They are IAM state and therefore DevOps's (ADR-006), recorded here only so
+      they are not lost: (1) `web`'s task role is set to the *execution* role, so the most
+      externally-exposed service — a static nginx — holds the RDS-secret read grant; its task role
+      should be empty. (2) `stellar-dev-role-ecs-task` carries `secretsmanager:GetSecretValue` and
+      `s3:DeleteObject` on the published results prefix, and nothing in this codebase uses either: no
+      source calls Secrets Manager (ECS injects the value via the execution role), and the only
+      `deleteObject` call targets the *scratch* bucket, not the published tree that
+      [ADR-010](../docs/adr/ADR-010-result-root-holds-only-hash-keyed-documents.md) treats as immutable.
+
+      One grant that must NOT be tightened: `batch:DescribeJobs` is `Resource: "*"` because AWS Batch
+      does not support resource-level permissions for that action. Narrowing it to an ARN denies the
+      call, which costs the reconciler its most precise rung — see §6.3.
+  - id: Q6
+    decided: 2026-08-21
+    question: >-
+      What is staging's published verifier identity — `SCVS_VERIFIER_ID` and
+      `SCVS_VERIFIER_DISPLAY_NAME`? Two BLOCKER notes said no decision record named it and that a
+      value must not be guessed to unblock deployment.
+    decision: >-
+      **`scvs-staging` / `SCVS Staging Verifier`** — which is not a new choice so much as the
+      recording of one the repository had already made and shipped. The value was already committed in
+      three independent places: the `envs:` map on `SCVS_VERIFIER_ID` itself, the generated
+      `config/deploy/staging/orchestrator-svc.json`, and `config/trusted-verifiers.staging.json` —
+      whose entry is the Trusted Verifiers List record CI seeds, i.e. exactly the artifact
+      the BLOCKER said was missing. The notes were stale, not unsatisfied.
+
+      Recorded here rather than only deleted, because deleting a resolved BLOCKER without saying what
+      settled it leaves the next reader unable to tell an authorized value from an unauthorized one —
+      and this value is a **published identity**, written into `verifier-manifest.json` and used to
+      key a TVL entry, so "who authorized this?" has to stay answerable.
+    status: >-
+      IMPLEMENTED. The infrastructure side was the other half and was wrong until the same day:
+      `modules/ecs` in soroban-aws-infrastructure hardcoded `SCVS_VERIFIER_ID = "scvs-dev"` and
+      `SCVS_VERIFIER_DISPLAY_NAME = "SCVS Dev Verifier"` as module-level constants, and that module is
+      instantiated by BOTH environments — so `sv-staging-orchestrator-svc:2` carried **dev's identity**
+      on a live task definition. Caught before staging published anything (`runningCount=0`). Both are
+      per-environment variables now, deliberately with no default so a new environment cannot inherit
+      another's identity by omission.

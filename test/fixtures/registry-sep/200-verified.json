@@ -1,0 +1,40 @@
+{
+  "schema": "stellar-verification-status",
+  "schema_version": "1.0",
+  "wasm_hash": "cb2fc3a1b4d5e6f7081928374655647382910abcdef0123456789abcdef01234",
+  "updated_at": "2026-09-02T09:30:05Z",
+  "source_code_verifications": [
+    {
+      "verifier": { "name": "57Blocks", "url": "https://verify.example.com/public" },
+      "status": "verified",
+      "recipe_source": "on_chain_metadata",
+      "image_trust_level": "sdf_trusted",
+      "bldimg": "docker.io/stellar/stellar-cli@sha256:c280e6461f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8",
+      "bldarg": ["contract", "build"],
+      "bldopt": ["--package=foo", "--features=std", "--optimize"],
+      "source_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "source_uri": "https://github.com/example/contract/archive/refs/tags/v1.0.tar.gz",
+      "verified_source_code_uris": [
+        {
+          "location": "verifier_self_storage",
+          "url": "https://verify.example.com/public/sources/a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90.tar.gz"
+        }
+      ],
+      "processed_at": "2026-09-02T09:30:00Z",
+      "results_urls": [
+        {
+          "type": "report",
+          "location": "verifier_self_storage",
+          "url": "https://verify.example.com/public/reports/9f2c1a7b3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b.json",
+          "sha256": "9f2c1a7b3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b"
+        },
+        {
+          "type": "report",
+          "location": "arweave",
+          "url": "https://gateway.irys.xyz/AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789ABC",
+          "sha256": "9f2c1a7b3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b"
+        }
+      ]
+    }
+  ]
+}

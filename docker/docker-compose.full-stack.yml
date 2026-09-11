@@ -1,0 +1,169 @@
+# Shipping a "Query-only" service here that quietly required Postgres would claim a conformance row this repo
+# has not earned.
+
+name: scvs-full-stack
+
+x-service-image: &service-image
+  build:
+    context: ..
+    dockerfile: docker/service.Dockerfile
+  restart: unless-stopped
+
+# Every resident service reads these. Kept in one anchor so a value cannot drift between the writer and the
+# reader of the result tree — see the `result-storage` note on `query-svc`.
+x-shared-env: &shared-env
+  NODE_ENV: production
+  AWS_REGION: ${AWS_REGION:-ap-southeast-2}
+  # O9's drain window. Nothing fronts these containers, so there is no deregistration to wait for.
+  SCVS_DRAIN_GRACE_MS: "0"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: scvs
+  POSTGRES_USER: scvs
+  POSTGRES_PASSWORD: scvs_local_dev
+
+# The published result tree, as a filesystem backend rather than S3.
+x-result-storage: &result-storage
+  SCVS_PUBLISHER_STORAGE: filesystem
+  SCVS_RESULT_ROOT: /var/lib/scvs/results
+  SCVS_PUBLIC_RESULT_ROOT: http://localhost:5001/public
+
+services:
+  postgres:
+    container_name: scvs-postgres
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scvs
+      POSTGRES_PASSWORD: scvs_local_dev
+      POSTGRES_DB: scvs
+    ports:
+      - "5433:5432"
+    volumes:
+      - scvs_postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scvs -d scvs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot. Every service below waits for it to *complete*, not merely to start: a service booting against an
+  # unmigrated database fails on its first query rather than at boot, which is the slow way to discover it.
+  migrate:
+    <<: *service-image
+    container_name: scvs-migrate
+    restart: "no"
+    environment:
+      <<: *shared-env
+    command: ["sh", "-c", "pnpm --filter @scvs/db run prisma:deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  verification-svc:
+    <<: *service-image
+    container_name: scvs-verification-svc
+    environment:
+      <<: [*shared-env, *result-storage]
+      SERVICE_ENTRYPOINT: verification-svc
+      PORT: "5000"
+      CORS_ORIGIN: "http://localhost:8080"
+      SCVS_STORAGE_BUCKET: ${SCVS_STORAGE_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Both of these are boot-required with no default, so the container exits at once without them.
+      # The rate-limit fingerprint is an HMAC and any non-empty value serves for local use; the legal
+      # bundle is the placeholder one, which keeps acceptance offered and not required. A real
+      # deployment overrides both. `/app` is the image's workspace root, so the path resolves there.
+      SCVS_ABUSE_FINGERPRINT_KEY: ${SCVS_ABUSE_FINGERPRINT_KEY:-local-compose-not-a-secret}
+      SCVS_LEGAL_DOCUMENTS_SOURCE: ${SCVS_LEGAL_DOCUMENTS_SOURCE:-config/legal-documents.example.json}
+    ports:
+      - "5000:5000"
+    volumes:
+      - scvs_results:/var/lib/scvs/results
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # S1: its own container, always. See the header.
+  orchestrator-svc:
+    <<: *service-image
+    container_name: scvs-orchestrator-svc
+    environment:
+      <<: [*shared-env, *result-storage]
+      SERVICE_ENTRYPOINT: orchestrator-svc
+      PORT: "5002"
+      # Absent, this container exits at boot and says which.
+      SCVS_BATCH_JOB_QUEUE_ARN_ARM64: ${SCVS_BATCH_JOB_QUEUE_ARN_ARM64:-}
+      SCVS_BATCH_JOB_QUEUE_ARN_AMD64: ${SCVS_BATCH_JOB_QUEUE_ARN_AMD64:-}
+      SCVS_BATCH_DEFAULT_ARCH: ${SCVS_BATCH_DEFAULT_ARCH:-arm64}
+      SCVS_BATCH_JOB_DEFINITION_ARN_ARM64: ${SCVS_BATCH_JOB_DEFINITION_ARN_ARM64:-}
+      SCVS_BATCH_JOB_DEFINITION_ARN_AMD64: ${SCVS_BATCH_JOB_DEFINITION_ARN_AMD64:-}
+      SCVS_JOB_STATE_CHANGE_QUEUE_URL: ${SCVS_JOB_STATE_CHANGE_QUEUE_URL:-}
+      SCVS_STORAGE_BUCKET: ${SCVS_STORAGE_BUCKET:-}
+      SCVS_VERIFIER_ID: ${SCVS_VERIFIER_ID:-local-verifier}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      - scvs_results:/var/lib/scvs/results
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Loopback-only by design (no ALB, no inbound) — so the check runs inside the container, exactly as it does
+    # in ECS.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5002/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  query-svc:
+    <<: *service-image
+    container_name: scvs-query-svc
+    environment:
+      <<: [*shared-env, *result-storage]
+      SERVICE_ENTRYPOINT: query-svc
+      PORT: "5001"
+      CORS_ORIGIN: "http://localhost:8080"
+    ports:
+      - "5001:5001"
+    # Read-only on the result tree: this layer serves what the publisher wrote and must never write it.
+    volumes:
+      - scvs_results:/var/lib/scvs/results:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  web:
+    container_name: scvs-web
+    build:
+      context: ..
+      dockerfile: docker/web.Dockerfile
+      args:
+        # Baked at build time, not read at runtime: the console is static files by then.
+        VITE_VERIFY_API_URL: ${VITE_VERIFY_API_URL:-http://localhost:5000}
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      verification-svc:
+        condition: service_started
+
+volumes:
+  scvs_postgres_data:
+  # The published result tree.
+  scvs_results:
