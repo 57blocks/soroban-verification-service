@@ -1,0 +1,143 @@
+name: Publish images
+
+# This repository's build artifacts, published where anyone can pull them.
+#
+# The split this file exists for: **building is public, deploying is not.** A container image is a
+# function of this source and nothing else, so it is built here, from a run anyone can read, and
+# addressed by digest. The deployment pipeline never builds — it is handed a digest and copies it
+# into the registry its runtime pulls from. That is what lets the deploy workflows be reusable
+# without ever checking this repository out, and it is why no AWS credential appears in this file.
+#
+# Immutable tags only. The moving pointer that decides what a service is *running* is a mutable alias
+# in the deployment registry, owned by Terraform (invariants.md rule 29); nothing here should be
+# mistaken for it.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # provenance attestation, not cloud access
+  attestations: write
+
+# Never cancel a publish in flight: a half-pushed manifest is worse than a queued one, and a later
+# commit's images do not supersede an earlier commit's — both are addressed by their own digest.
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The resident services' image. The only one that bakes the pinned `stellar` CLI, which
+          # verification-svc's preflight and orchestrator-svc's chain reader spawn.
+          - component: service
+            dockerfile: docker/service.Dockerfile
+            platform: linux/arm64
+            tag_suffix: ""
+            needs_cli: "true"
+          - component: web
+            dockerfile: docker/web.Dockerfile
+            platform: linux/arm64
+            tag_suffix: ""
+            needs_cli: "false"
+          # The builder ships as two single-architecture images rather than one manifest list: each
+          # Batch compute environment is single-architecture, and dispatch picks the queue that can
+          # run the submission's image.
+          - component: builder
+            dockerfile: docker/builder.Dockerfile
+            platform: linux/arm64
+            tag_suffix: "-arm64"
+            needs_cli: "false"
+          - component: builder
+            dockerfile: docker/builder.Dockerfile
+            platform: linux/amd64
+            tag_suffix: "-amd64"
+            needs_cli: "false"
+          - component: composer
+            dockerfile: docker/composer.Dockerfile
+            platform: linux/arm64
+            tag_suffix: ""
+            needs_cli: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # No AWS here, so the S3 build cache is not reachable and not wanted: the script's primary
+      # source is the official release the pin names, digest-verified either way.
+      - name: Fetch the pinned stellar CLI binary
+        if: matrix.needs_cli == 'true'
+        env:
+          SCVS_CI_CACHE: "off"
+          SCVS_CLI_TARGET_ARCH: ${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+        run: scripts/ci/fetch-or-build-stellar-cli.sh
+
+      - name: Set up QEMU
+        if: matrix.platform == 'linux/amd64'
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to the container registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          # Both default to true, which makes `outputs.digest` name an OCI index (image plus
+          # attestation manifests) rather than the image. The deployment side copies by digest and
+          # must get the image; provenance is attached below instead.
+          provenance: false
+          sbom: false
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/sv-${{ matrix.component }}:${{ github.sha }}${{ matrix.tag_suffix }}
+
+      # A service whose subject is reproducible builds should be able to answer "what produced this
+      # image" about its own artifacts.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/sv-${{ matrix.component }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record what was published
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/sv-${{ matrix.component }}
+          TAG: ${{ github.sha }}${{ matrix.tag_suffix }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### \`sv-${{ matrix.component }}\` (${{ matrix.platform }})"
+            echo
+            echo "| | |"
+            echo "| :--- | :--- |"
+            echo "| tag | \`${IMAGE}:${TAG}\` |"
+            echo "| digest | \`${DIGEST}\` |"
+            echo
+            echo "Resolve it from anywhere, with no credential:"
+            echo
+            echo '```bash'
+            echo "docker buildx imagetools inspect ${IMAGE}:${TAG} --format '{{ .Manifest.Digest }}'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

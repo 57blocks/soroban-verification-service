@@ -3,7 +3,12 @@
     "Rules and baseline for eng-tools/check-secrets.mjs: the identifiers no entropy scanner",
     "recognises. gitleaks covers the credential classes and is configured in .gitleaks.toml.",
     "",
-    "Both lists are empty, which is the correct starting state for a repository that has not yet",
+    "The rules below are armed with THIS deployment's values, because development happens in this",
+    "repository now and nothing upstream of it strips an identifier any more. A digest discloses",
+    "nothing; the domain is a company domain, not a secret, and it is the string that must never",
+    "appear. A fork should replace both with its own — or empty them, which disarms the rule.",
+    "",
+    "To arm a rule:",
     "decided what its own deployment must not disclose. To arm a rule:",
     "",
     "  aws-account-id     add the SHA-256 of your account id to `digests` — never the id itself,",
@@ -18,13 +23,16 @@
     "aws-account-id": {
       "why": "A 12-digit account id in an ARN tells a reader which account to enumerate.",
       "matches": "every 12-digit run, compared by SHA-256 so this file carries no literal",
-      "digests": [],
+      "digests": [
+        "5b6f8e290243228a31d8b50aa1dab6f7c9421de7e271ba1f4a8e1907273b2aed"
+      ],
       "redacts-to": "123456789012, AWS's own documentation example"
     },
     "internal-hostname": {
       "why": "Per-environment hostnames name endpoints that are not part of the published surface.",
       "matches": "any subdomain of `domain` below; no rule fires when it is absent",
-      "redacts-to": "the same subdomains under example.com"
+      "redacts-to": "the same subdomains under example.com",
+      "domain": "57blocks.io"
     },
     "aws-resource-id": {
       "why": "A VPC, subnet or security-group id is the network topology of a live deployment.",

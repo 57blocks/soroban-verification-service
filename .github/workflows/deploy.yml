@@ -1,0 +1,841 @@
+name: Deploy to ECS
+
+# The run title carries the deploy target: a dispatched run is otherwise indistinguishable in the Actions list
+# from every other dispatched run of this workflow.
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Deploy to ECS → {0}', inputs.environment) || '' }}
+
+# Two independent deploy units, not four: docker/service.Dockerfile builds ONE shared image for
+# verification-svc, orchestrator-svc and query-svc.
+# Called by the operations repository, which owns the trigger, the environments and their
+# variables. No trigger of its own: a merge here must not deploy anything.
+on:
+  workflow_call:
+    inputs:
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+      environment:
+        description: "Which environment to deploy — dev or staging. Required; there is no default, because a default would silently deploy dev during a staging run."
+        type: string
+        required: true
+      source_sha:
+        description: >-
+          The application commit whose published images to deploy. This workflow builds nothing: the
+          images already exist, pushed by publish-images.yml, and are addressed by this commit.
+        type: string
+        required: true
+      deploy_service:
+        description: "Deploy the resident services' image. What changed is the caller's question — this workflow never reads git history, because under `workflow_call` the history it could read is the caller's."
+        type: boolean
+        required: false
+        default: true
+      deploy_web:
+        description: "Deploy the console image."
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      AWS_ACCOUNT_ID:
+        description: >-
+          The deploy-role fallback's account id. An identifier, not a credential — it is a secret
+          only so it stays out of the tree, and the caller passes it explicitly.
+        required: false
+
+permissions:
+  id-token: write # OIDC -> AWS role assumption
+  contents: read
+
+# Never cancel a deploy in flight — a half-rolled ECS service is worse than a queued one.
+concurrency:
+  group: deploy-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+
+jobs:
+  # Is there anything to deploy *to* yet? Two independent checks, and only the second is a probe:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      # The one value CI cannot read from the descriptor (it needs the role to read anything): a per-environment
+      # GitHub Environment variable.
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      descriptor: ${{ steps.check.outputs.descriptor }}
+    steps:
+      # Full history: the composer-skew check below resolves an ECR image tag (a commit SHA) back to the tree at
+      # that commit, which a shallow clone cannot do.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      # A dispatch checks out whatever ref it was started from, and `main` is not necessarily a
+      # remote-tracking ref afterwards. Without this the ancestor check cannot run, and it says so.
+      - name: Fetch main to prove the deploy ref against
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      # First step that can fail, and it holds no credentials: an environment may only run a commit a release
+      # could be cut from. This repository cannot have branch protection, so this check is what stands in.
+      - name: Refuse a deploy from a commit that is not on main
+        run: node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The version handshake (T5). ParameterNotFound = infra not applied = skip with a notice; AccessDenied = a
+      # permissions gap = hard failure; schema mismatch = hard failure naming both versions.
+      - name: Read the CI descriptor (version handshake)
+        id: check
+        run: |
+          set +e
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment || 'dev' }}" 2,3)
+          code=$?
+          set -e
+          case "$code" in
+            0)
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              # `account_id` is stripped before the descriptor crosses the job boundary: its value is the
+              # AWS_ACCOUNT_ID secret, and GitHub skips any job output that contains a registered secret's value
+              # ("Skip output 'descriptor' since it may contain secret"), which left every downstream fromJSON()
+              # parsing an empty string.
+              echo "descriptor=$(jq -c 'del(.account_id)' <<<"$DESC")" >> "$GITHUB_OUTPUT"
+              echo "COMPOSER_ECR_REPOSITORY=$(jq -r '.ecr.composer' <<<"$DESC")" >> "$GITHUB_ENV"
+              ;;
+            3)
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "### Deploy skipped — no CI descriptor for this environment yet"
+                echo
+                echo "Terraform has not been applied to this environment (no"
+                echo "\`/scvs/${{ inputs.environment || 'dev' }}/ci/descriptor\`). Apply"
+                echo "soroban-aws-infrastructure first. The image build is skipped too, so nothing is"
+                echo "pushed to ECR for a release that cannot land."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              # 4 = AccessDenied, 5 = schema mismatch — both hard failures; the script already emitted the
+              # ::error:: naming the distinction.
+              exit 1
+              ;;
+          esac
+
+      # This workflow deployed orchestrator-svc anyway, so the orchestrator asked a `v1`-only image for `v2` and
+      # **every** cli-legacy verification failed `composition_template_missing`.
+      - name: Refuse to deploy services that would outrun the composer
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*CURRENT_COMPOSE_TEMPLATE_VERSION = "\([^"]*\)".*/\1/p' \
+            packages/core/src/build-environment.ts | head -1)
+          if [ -z "$version" ]; then
+            echo "::error::could not read CURRENT_COMPOSE_TEMPLATE_VERSION — this check cannot be skipped silently"
+            exit 1
+          fi
+
+          newest=$(aws ecr describe-images --repository-name "$COMPOSER_ECR_REPOSITORY" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'reverse(sort_by(imageDetails,&imagePushedAt))[0].imageTags[0]' \
+            --output text 2>/dev/null || true)
+
+          if [ -z "$newest" ] || [ "$newest" = "None" ]; then
+            # Bootstrap: no composer image exists yet, so there is no skew to create.
+            echo "::notice::no $COMPOSER_ECR_REPOSITORY image in ECR yet; nothing to compare against"
+            exit 0
+          fi
+
+          echo "orchestrator will request template : $version"
+          echo "newest $COMPOSER_ECR_REPOSITORY image commit : $newest"
+
+          if git cat-file -e "$newest:docker/composed-environments/$version/template.json" 2>/dev/null; then
+            echo "✓ that image's commit ships template $version"
+            exit 0
+          fi
+
+          {
+            echo "### Deploy refused — the composer cannot serve template \`$version\`"
+            echo
+            echo "orchestrator-svc built from this commit asks for \`$version\`, but the newest"
+            echo "\`$COMPOSER_ECR_REPOSITORY\` image in ECR is commit \`$newest\`, whose tree has no"
+            echo "\`docker/composed-environments/$version/\`."
+            echo
+            echo "Deploying now would fail **every** cli-legacy verification with"
+            echo "\`composition_template_missing\`, and the \`Environment\` rows it writes are terminal."
+            echo
+            echo "Run **Build & deploy composer image** (\`deploy-composer.yml\`) first, then re-run this."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::composer image $newest does not ship template $version — run deploy-composer.yml first"
+          exit 1
+
+  stage-service-image:
+    needs: preflight
+    if: inputs.deploy_service
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      SERVICE_ECR_REPOSITORY: ${{ fromJSON(needs.preflight.outputs.descriptor).ecr.service }}
+      SOURCE_IMAGE: ghcr.io/${{ github.repository_owner }}/sv-service
+    outputs:
+      # Split into two secret-free outputs, never a full image reference: the deployment registry's
+      # hostname embeds the account id.
+      image_repo: ${{ env.SERVICE_ECR_REPOSITORY }}
+      image_digest: ${{ steps.stage.outputs.digest }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # Copies an already-published image into the registry the runtime pulls from. No checkout and
+      # no build: under `workflow_call` the tree this job could check out is the caller's, which
+      # holds no application source — and a deploy that rebuilds is a deploy that can differ from
+      # what was reviewed and attested.
+      - name: Copy the published image into the deployment registry
+        id: stage
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+
+          # Resolve the tag to a digest first and copy *that*: a tag can move between the read and
+          # the copy, a digest cannot.
+          SOURCE_DIGEST=$(docker buildx imagetools inspect "${SOURCE_IMAGE}:${SOURCE_SHA}" \
+            --format '{{ .Manifest.Digest }}')
+          if [ -z "$SOURCE_DIGEST" ]; then
+            echo "::error::no published image at ${SOURCE_IMAGE}:${SOURCE_SHA} — has publish-images.yml run for that commit?"
+            exit 1
+          fi
+          echo "source: ${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+
+          docker buildx imagetools create \
+            --tag "${REGISTRY}/${SERVICE_ECR_REPOSITORY}:${SOURCE_SHA}" \
+            "${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+
+          # Read the digest back rather than assuming the copy preserved it — everything downstream
+          # pins by this value, so it has to be the one the deployment registry actually holds.
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$SERVICE_ECR_REPOSITORY" \
+            --image-ids imageTag="$SOURCE_SHA" \
+            --query 'imageDetails[0].imageDigest' --output text)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::the copy reported success but ${SERVICE_ECR_REPOSITORY}:${SOURCE_SHA} is not in the registry"
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+  # Schema first, code second.
+  migrate-database-verification-svc:
+    needs: stage-service-image
+    uses: ./.github/workflows/db-migrate.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      action: deploy
+      image_repo: ${{ needs.stage-service-image.outputs.image_repo }}
+      image_digest: ${{ needs.stage-service-image.outputs.image_digest }}
+      # Must be passed explicitly: `inputs` does not propagate into a called workflow, so omitting this would
+      # migrate dev's database during a staging deploy.
+      environment: ${{ inputs.environment || 'dev' }}
+      target: verification-svc
+
+  # ⚠ That last clause states the DESIGN, not dev as deployed.
+  migrate-database-query-svc:
+    needs: stage-service-image
+    uses: ./.github/workflows/db-migrate.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      action: deploy
+      image_repo: ${{ needs.stage-service-image.outputs.image_repo }}
+      image_digest: ${{ needs.stage-service-image.outputs.image_digest }}
+      environment: ${{ inputs.environment || 'dev' }}
+      target: query-svc
+
+  # One job, not a step in each `deploy-service` matrix leg: all three legs share one image, so three legs would
+  # move one tag three times.
+  promote-service-image:
+    needs:
+      [
+        stage-service-image,
+        migrate-database-verification-svc,
+        migrate-database-query-svc,
+        preflight,
+      ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      IMAGE_REPO: ${{ needs.stage-service-image.outputs.image_repo }}
+      IMAGE_DIGEST: ${{ needs.stage-service-image.outputs.image_digest }}
+    outputs:
+      previous_digest: ${{ steps.promote.outputs.previous }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Move the :deployed alias onto this build
+        id: promote
+        run: |
+          set -euo pipefail
+          # Recorded before the move so restore-service-alias can undo it.
+          PREVIOUS=$(aws ecr describe-images --repository-name "$IMAGE_REPO" \
+            --image-ids imageTag=deployed --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null || true)
+          [ "$PREVIOUS" = "None" ] && PREVIOUS=""
+          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          bash scripts/ci/promote-image-alias.sh "$IMAGE_REPO" "$IMAGE_DIGEST"
+
+  # The alias must move BEFORE the rollout — that is how the new image gets pulled at all — so a failed rollout
+  # leaves it naming an image nothing runs.
+  restore-service-alias:
+    needs: [stage-service-image, promote-service-image, deploy-service]
+    if: |
+      always() && needs.deploy-service.result == 'failure'
+      && needs.promote-service-image.outputs.previous_digest != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Put the :deployed alias back
+        run: |
+          bash scripts/ci/promote-image-alias.sh \
+            "${{ needs.stage-service-image.outputs.image_repo }}" \
+            "${{ needs.promote-service-image.outputs.previous_digest }}"
+          echo "::warning::rollout failed; :deployed restored to ${{ needs.promote-service-image.outputs.previous_digest }}"
+
+  # One image, three ECS services (see the workflow header comment for why).
+  deploy-service:
+    needs:
+      [
+        stage-service-image,
+        migrate-database-verification-svc,
+        migrate-database-query-svc,
+        promote-service-image,
+        preflight,
+      ]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    environment: ${{ inputs.environment || 'dev' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [verification-svc, orchestrator-svc, query-svc]
+    env:
+      # Plain variable, no secret-based fallback: jobs that reference an `environment` do not
+      # receive repository-level secrets (GitHub resolves them to empty here), so the old
+      # `secrets.AWS_ACCOUNT_ID` ternary was dead code masked by this variable. vars.DEPLOY_ROLE_ARN
+      # is the contract and is set in both environments (2026-08-22).
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # invariants.md rules 8 and 23: this repository owns deployment configuration. The three steps below write it, render
+      # the task definition from it, and gate that document on the trust boundary — in that order,
+      # because each is a precondition of the next. `render-taskdef` reads the config secret back and
+      # refuses to reference a key `sync-secrets` did not write, so a partial sync fails here rather
+      # than as a task that cannot start.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies for the render tools
+        run: pnpm install --frozen-lockfile
+
+      # Through `env:`, never interpolated into the script: GitHub substitutes the raw text before bash
+      # parses it, so a single quote anywhere in the descriptor would terminate the literal and run the
+      # remainder as shell. deploy-builder.yml already uses this shape.
+      - name: Write ${{ matrix.service }}'s configuration to Secrets Manager
+        env:
+          DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DESCRIPTOR" > /tmp/ci-descriptor.json
+          node eng-tools/sync-secrets.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --service "${{ matrix.service }}" \
+            --descriptor @/tmp/ci-descriptor.json
+
+      # The registry hostname embeds the account id, which stage-service-image deliberately keeps out of its
+      # outputs ("never a full image reference"). It is NOT available from the descriptor either:
+      # preflight strips it (see its comment — it is the AWS_ACCOUNT_ID secret, and GitHub blanks any
+      # job output containing a registered secret's value). `jq -r '.account_id'` would print the
+      # string "null" and exit 0, so `set -e` would not catch it and the leg would register an image
+      # reference nothing can pull — failing at task start, several layers from the cause. Resolved
+      # from the caller identity instead, and asserted before use.
+      - name: Render ${{ matrix.service }}'s task definition
+        run: |
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          case "$ACCOUNT" in
+            [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) echo "::error::could not resolve the account id (got '$ACCOUNT')"; exit 1 ;;
+          esac
+          node eng-tools/render-taskdef.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --service "${{ matrix.service }}" \
+            --image "${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ needs.stage-service-image.outputs.image_repo }}@${{ needs.stage-service-image.outputs.image_digest }}" \
+            --descriptor @/tmp/ci-descriptor.json \
+            > /tmp/taskdef.json
+
+      # The gate invariants.md rule 23 makes a condition of the whole change, not a follow-up. Before it
+      # the builder's `forbidden` list was enforced by topology — CI could not write a job
+      # definition at all. This runs BEFORE register-task-definition, and a non-zero exit must never
+      # be worked around: it means the rendered document crosses invariants.md rule 1's trust boundary.
+      - name: Assert the rendered definition respects the trust boundary
+        run: |
+          node eng-tools/check-taskdef-boundary.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --service "${{ matrix.service }}" \
+            /tmp/taskdef.json
+
+      - name: Register the task definition
+        id: register
+        run: |
+          set -euo pipefail
+          ARN=$(aws ecs register-task-definition --cli-input-json file:///tmp/taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "registered $ARN"
+
+      # The ARN goes through the environment, not a fourth argument: rollback.yml passes N service
+      # names positionally, so a positional would be read as a service there.
+      - name: Roll ${{ matrix.service }} onto the registered revision
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.register.outputs.arn }}
+        run: |
+          bash scripts/ci/roll-service-to-alias.sh \
+            "$ECS_CLUSTER" "${{ needs.stage-service-image.outputs.image_digest }}" "${{ matrix.service }}"
+
+  # `needs: deploy-service` with no `if:` on purpose, unlike verify-config below: this records a claim about
+  # what is running, so a matrix where any leg failed must not record it.
+  record-contract-version:
+    needs: [deploy-service, preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Record the contract version this environment now supports
+        run: |
+          set -euo pipefail
+          ENVIRONMENT="${{ inputs.environment || 'dev' }}"
+          VERSION=$(bash scripts/ci/read-contract-version.sh)
+          bash scripts/ci/orchestrator-contract-version.sh write "$ENVIRONMENT" "$VERSION"
+          {
+            echo "### Build-artifact contract"
+            echo
+            echo "\`$ENVIRONMENT\` orchestrator-svc now supports \`recipe.json\` contract **$VERSION**."
+            echo "\`deploy-builder.yml\` will register a builder image at or below that version into this"
+            echo "environment, and skip it above."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # `needs: deploy-service` waits for the whole matrix.
+  verify-config:
+    needs: [deploy-service, preflight]
+    if: always() && needs.deploy-service.result != 'skipped'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      # Plain variable, no secret-based fallback: jobs that reference an `environment` do not
+      # receive repository-level secrets (GitHub resolves them to empty here), so the old
+      # `secrets.AWS_ACCOUNT_ID` ternary was dead code masked by this variable. vars.DEPLOY_ROLE_ARN
+      # is the contract and is set in both environments (2026-08-22).
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # assert-config-contract.mjs → env-manifest.mjs → import { parse } from "yaml".
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies for config-contract assertion
+        run: pnpm install --frozen-lockfile
+
+      # Every deploy above waited for service stability, so each service has booted and logged one
+      # `[config-contract] {...}` line describing which of its declared variables are actually set.
+      - name: Assert the deployed configuration matches the contract
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/config-reports
+
+          for SERVICE in verification-svc orchestrator-svc query-svc; do
+            TASK_ARN=$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$SERVICE" \
+              --desired-status RUNNING --region "$AWS_REGION" \
+              --query 'taskArns[0]' --output text)
+            if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+              echo "::error::$SERVICE has no RUNNING task after a stable deploy"
+              exit 1
+            fi
+
+            TD=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+              --region "$AWS_REGION" --query 'tasks[0].taskDefinitionArn' --output text)
+            OPTS=$(aws ecs describe-task-definition --task-definition "$TD" --region "$AWS_REGION" \
+              --query "taskDefinition.containerDefinitions[?name=='${SERVICE}'].logConfiguration.options | [0]")
+            GROUP=$(echo "$OPTS" | jq -r '."awslogs-group" // empty')
+            PREFIX=$(echo "$OPTS" | jq -r '."awslogs-stream-prefix" // empty')
+            if [ -z "$GROUP" ]; then
+              echo "::error::$SERVICE's task definition has no awslogs configuration — cannot read its boot report"
+              exit 1
+            fi
+
+            STREAM="${PREFIX}/${SERVICE}/${TASK_ARN##*/}"
+            # The boot line is emitted once, early, so a generous limit from the head of the stream is enough —
+            # no need to page.
+            LINE=$(aws logs get-log-events --log-group-name "$GROUP" --log-stream-name "$STREAM" \
+              --region "$AWS_REGION" --start-from-head --limit 500 \
+              --query 'events[].message' --output text \
+              | tr '\t' '\n' | grep -F '[config-contract]' | tail -1 || true)
+
+            if [ -z "$LINE" ]; then
+              echo "::error::$SERVICE logged no [config-contract] line — the running image predates the config-contract log"
+              exit 1
+            fi
+            echo "${LINE#*\[config-contract\] }" > "/tmp/config-reports/${SERVICE}.json"
+          done
+
+          node eng-tools/assert-config-contract.mjs --env "${{ inputs.environment || 'dev' }}" /tmp/config-reports/*.json \
+            | tee /tmp/config-assert.log
+          {
+            echo "### Deployed configuration contract"
+            echo '```'
+            cat /tmp/config-assert.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-web:
+    needs: preflight
+    if: inputs.deploy_web
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      # Plain variable, no secret-based fallback: jobs that reference an `environment` do not
+      # receive repository-level secrets (GitHub resolves them to empty here), so the old
+      # `secrets.AWS_ACCOUNT_ID` ternary was dead code masked by this variable. vars.DEPLOY_ROLE_ARN
+      # is the contract and is set in both environments (2026-08-22).
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      WEB_ECR_REPOSITORY: ${{ fromJSON(needs.preflight.outputs.descriptor).ecr.web }}
+      SOURCE_IMAGE: ghcr.io/${{ github.repository_owner }}/sv-web
+      ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # Same contract as the service image: publish-images.yml built it, this copies it. See that
+      # job for why a deploy never rebuilds.
+      - name: Copy the published console image into the deployment registry
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          SOURCE_DIGEST=$(docker buildx imagetools inspect "${SOURCE_IMAGE}:${SOURCE_SHA}" \
+            --format '{{ .Manifest.Digest }}')
+          if [ -z "$SOURCE_DIGEST" ]; then
+            echo "::error::no published image at ${SOURCE_IMAGE}:${SOURCE_SHA} — has publish-images.yml run for that commit?"
+            exit 1
+          fi
+          docker buildx imagetools create \
+            --tag "${REGISTRY}/${WEB_ECR_REPOSITORY}:${SOURCE_SHA}" \
+            "${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$WEB_ECR_REPOSITORY" \
+            --image-ids imageTag="$SOURCE_SHA" \
+            --query 'imageDetails[0].imageDigest' --output text)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::the copy reported success but ${WEB_ECR_REPOSITORY}:${SOURCE_SHA} is not in the registry"
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      # web's own alias, moved in this job rather than a sibling of promote-service-image: it has its own image,
+      # its own path filter, and no migrations to wait on.
+      - name: Move the :deployed alias onto this build
+        id: promote-web
+        run: |
+          set -euo pipefail
+          PREVIOUS=$(aws ecr describe-images --repository-name "$WEB_ECR_REPOSITORY" \
+            --image-ids imageTag=deployed --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null || true)
+          [ "$PREVIOUS" = "None" ] && PREVIOUS=""
+          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          bash scripts/ci/promote-image-alias.sh "$WEB_ECR_REPOSITORY" "${{ steps.build.outputs.digest }}"
+
+      # The same four configuration steps as deploy-service. web was left out when that job was wired and its
+      # one variable stayed plaintext — a gap, not a decision: nothing about a static-file service
+      # makes it the exception, and leaving one ECS service on the old path means two ways to deploy
+      # the same kind of thing.
+      #
+      # No Node setup needed: sync-secrets and render-taskdef import only node: builtins, and the
+      # runner ships Node.
+      - name: Write web's configuration to Secrets Manager
+        env:
+          DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DESCRIPTOR" > /tmp/ci-descriptor.json
+          node eng-tools/sync-secrets.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --service web \
+            --descriptor @/tmp/ci-descriptor.json
+
+      # The registry hostname comes from the ECR login step, which already resolved it — unlike
+      # deploy-service, this job has it without a second sts call.
+      - name: Render web's task definition
+        run: |
+          set -euo pipefail
+          node eng-tools/render-taskdef.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --service web \
+            --image "${{ steps.ecr-login.outputs.registry }}/${WEB_ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
+            --descriptor @/tmp/ci-descriptor.json \
+            > /tmp/taskdef.json
+
+      - name: Assert the rendered definition respects the trust boundary
+        run: |
+          node eng-tools/check-taskdef-boundary.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --service web \
+            /tmp/taskdef.json
+
+      - name: Register the task definition
+        id: register-web
+        run: |
+          set -euo pipefail
+          ARN=$(aws ecs register-task-definition --cli-input-json file:///tmp/taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "registered $ARN"
+
+      - name: Roll web onto the registered revision
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.register-web.outputs.arn }}
+        run: |
+          bash scripts/ci/roll-service-to-alias.sh \
+            "$ECS_CLUSTER" "${{ steps.build.outputs.digest }}" web
+
+      # See restore-service-alias for why. Guarded on the promote step having succeeded: a failure before it
+      # means the alias never moved and there is nothing to put back.
+      - name: Restore the :deployed alias after a failed rollout
+        if: failure() && steps.promote-web.outcome == 'success' && steps.promote-web.outputs.previous != ''
+        run: |
+          bash scripts/ci/promote-image-alias.sh \
+            "$WEB_ECR_REPOSITORY" "${{ steps.promote-web.outputs.previous }}"
+          echo "::warning::rollout failed; :deployed restored to ${{ steps.promote-web.outputs.previous }}"
+
+  # Black-box, after whichever of the two rollouts happened: the ALB rules and the web image between them
+  # decide what every position on the host answers, and neither repository can assert that on its own.
+  verify-host-routing:
+    needs: [deploy-service, deploy-web]
+    if: always() && (needs.deploy-service.result == 'success' || needs.deploy-web.result == 'success')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      HOST_ORIGIN: ${{ vars.SCVS_HOST_ORIGIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      # Node 24 only: the tool imports the error-envelope constants from `packages/core` on type stripping,
+      # and installs nothing. It holds no credentials, so this job assumes no role.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Assert the deployed origin answers the routing contract at every position
+        run: |
+          node eng-tools/assert-host-routing.mjs \
+            --env "${{ inputs.environment || 'dev' }}" --origin "$HOST_ORIGIN"
+
+  # ── the SDK channel serving this environment ────────────────────────────────────────────────────
+  # Split in two because the two facts live behind two different roles, and one job holding both would make a
+  # deploy able to publish. This job reads ECR with the deploy role and nothing else.
+  sdk-channel-commit:
+    needs: [deploy-service, preflight]
+    if: always() && needs.deploy-service.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      IMAGE_REPO: ${{ fromJSON(needs.preflight.outputs.descriptor).ecr.service }}
+    outputs:
+      commit: ${{ steps.read.outputs.commit }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The `:deployed` alias names the running image; the commit is its other tag, carried over by stage-service-image.
+      - name: Read the commit this environment runs
+        id: read
+        run: |
+          set -euo pipefail
+          TAGS=$(aws ecr describe-images --repository-name "$IMAGE_REPO" \
+            --image-ids imageTag=deployed --region "$AWS_REGION" \
+            --query 'imageDetails[0].imageTags' --output json)
+          COMMIT=$(jq -r '.[] | select(test("^[0-9a-f]{40}$"))' <<<"$TAGS" | head -1)
+          if [ -z "$COMMIT" ]; then
+            echo "::error::the :deployed image in $IMAGE_REPO carries no commit tag, so what it runs cannot be read: $TAGS"
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "── $IMAGE_REPO:deployed was built from ${COMMIT:0:7}"
+
+      - name: Note that the channel was not asserted
+        if: github.ref != 'refs/heads/main' || vars.SDK_PUBLISH_ROLE_ARN == ''
+        run: |
+          if [ "${{ vars.SDK_PUBLISH_ROLE_ARN }}" = "" ]; then
+            echo "::warning::SDK_PUBLISH_ROLE_ARN is unset, so the dist-tag serving this environment was not checked"
+          else
+            echo "::warning::the SDK channel was not asserted: this run's ref is ${{ github.ref }}, and the registry read is trusted from refs/heads/main only"
+          fi
+
+  # No `environment:` and no deploy role: this job reads the registry, and SDK_PUBLISH_ROLE_ARN is a
+  # repository-level variable for exactly that reason. Its OIDC trust names refs/heads/main, hence the ref gate.
+  sdk-channel-alignment:
+    needs: sdk-channel-commit
+    if: >-
+      always() && needs.sdk-channel-commit.result == 'success'
+      && github.ref == 'refs/heads/main' && vars.SDK_PUBLISH_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCVS_CODEARTIFACT_DOMAIN: sv-packages
+      SCVS_CODEARTIFACT_REPOSITORY: sv-npm
+    steps:
+      # Full history: proving the published build and the running one differ in nothing that ships means
+      # diffing the SDK surface between two commits.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ vars.SDK_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Authenticate npm against CodeArtifact
+        run: |
+          aws codeartifact login --tool npm \
+            --domain "${SCVS_CODEARTIFACT_DOMAIN}" \
+            --repository "${SCVS_CODEARTIFACT_REPOSITORY}" \
+            --namespace scvs
+
+      # Hard failure on staging, a warning on dev: a merge that leaves the SDK untouched legitimately leaves
+      # the `dev` dist-tag behind, while a staging environment nobody can install a matching SDK for is a defect.
+      - name: Does the dist-tag serving this environment match what it runs?
+        run: |
+          node eng-tools/assert-sdk-channel-alignment.mjs \
+            --env "${{ inputs.environment || 'dev' }}" \
+            --deployed-commit "${{ needs.sdk-channel-commit.outputs.commit }}"

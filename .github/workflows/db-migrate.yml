@@ -1,0 +1,365 @@
+name: DB migrate
+
+# The run title carries the environment whose database this run touches — the Actions list would otherwise read
+# "DB migrate" for every run, including the ones that wrote to staging.
+run-name: DB migrate → ${{ inputs.environment }}
+
+# Called by the operations repository, and by deploy.yml with the image it just built.
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: "The application commit this run acts on. Also the ref its tooling is checked out at."
+        type: string
+        required: true
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+      environment:
+        description: >-
+          Which environment's database to migrate. Required from a caller, with no default: `inputs`
+          does not propagate into a called workflow, so a default here would silently migrate dev
+          during a staging deploy.
+        type: string
+        required: true
+      target:
+        description: >-
+          Which database to migrate — verification-svc or query-svc. Required from a
+          caller, with no default, for the same reason `environment` has none: deploy.yml must call
+          this workflow once per target, explicitly, never relying on a default silently picking one.
+        type: string
+        required: true
+      action:
+        type: string
+        required: true
+      image_repo:
+        description: >-
+          ECR repository (name only) of the image to run the migration from — deploy.yml passes the
+          one it just staged. Split from the digest, never a full reference: the registry hostname
+          embeds the account id, and a job output carrying it would be stripped by GitHub's
+          secret filter. Omitted by a standalone run, which resolves an image instead.
+        type: string
+        required: false
+        default: ""
+      image_digest:
+        description: "Digest of the image to run the migration from. Omitted by a standalone run."
+        type: string
+        required: false
+        default: ""
+      image_tag:
+        description: >-
+          Standalone runs only, and optional even then: the tag to migrate from. With none, the
+          newest image in the repository by push time — a manual run should not have to know a
+          commit SHA to apply already-released migrations.
+        type: string
+        required: false
+        default: ""
+    secrets:
+      AWS_ACCOUNT_ID:
+        description: >-
+          The deploy-role fallback's account id. An identifier, not a credential — it is a secret
+          only so it stays out of the tree, and the caller passes it explicitly.
+        required: false
+
+permissions:
+  id-token: write # OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  # Everything else is read from /scvs/<env>/ci/descriptor by the preflight handshake below (T4/T5): the ECS
+  # cluster, the service ECR repository, the migrate family prefix, the account id.
+
+jobs:
+  # Everything downstream is gated on this.
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+    env:
+      # Plain variable, no secret-based fallback: jobs that reference an `environment` do not
+      # receive repository-level secrets (GitHub resolves them to empty here), so the old
+      # `secrets.AWS_ACCOUNT_ID` ternary was dead code masked by this variable. vars.DEPLOY_ROLE_ARN
+      # is the contract and is set in both environments (2026-08-22).
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      descriptor: ${{ steps.check.outputs.descriptor }}
+    steps:
+      # The handshake runs a script from the repository, so this job needs the tree even though it makes no
+      # other use of it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Read the CI descriptor (version handshake)
+        id: check
+        run: |
+          set +e
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment }}" 2,3)
+          code=$?
+          set -e
+          case "$code" in
+            0)
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              # account_id stripped for the same reason as deploy.yml's preflight: its value is the
+              # AWS_ACCOUNT_ID secret, and a job output containing a registered secret's value is skipped by
+              # GitHub, emptying this output for the migrate job.
+              echo "descriptor=$(jq -c 'del(.account_id)' <<<"$DESC")" >> "$GITHUB_OUTPUT"
+              ;;
+            3)
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "### DB migrate skipped — no CI descriptor for this environment yet"
+                echo
+                echo "Terraform has not been applied to this environment (no"
+                echo "\`/scvs/${{ inputs.environment }}/ci/descriptor\`). Apply"
+                echo "soroban-aws-infrastructure first."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              # 4 = AccessDenied, 5 = schema mismatch — hard failures; the script named the reason.
+              exit 1
+              ;;
+          esac
+
+  migrate:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    env:
+      # Same rule as preflight's: no secret-based fallback in an environment-scoped job.
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      CLUSTER_NAME: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
+      SERVICE_ECR_REPOSITORY: ${{ fromJSON(needs.preflight.outputs.descriptor).ecr.service }}
+      CONTAINER_NAME: ${{ inputs.target }}
+      # Environment- AND target-prefixed for the same reason the four service families are
+      # (aws-deployment.md §5.6) — plus the addition made when one environment started running two
+      # independent migration histories, since a shared family name would let them interleave. The
+      # prefix is Terraform-owned and arrives via the descriptor; the target list stays here because
+      # the valid set is `inputs.target` in this file, and copying it into Terraform is the coupling
+      # that had already gone stale twice (once on the prefix, once on the suffix).
+      MIGRATE_FAMILY: ${{ fromJSON(needs.preflight.outputs.descriptor).db_migrate_family_prefix }}${{ inputs.target }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Resolved once and reused by every step below that needs it, so the register call and the log
+      # lookup can never end up describing different revisions.
+      #
+      # The cluster is passed as a FULL ARN, not the bare descriptor name: `--cluster` accepts
+      # either, but the CI role's `ecs:RunTask` grant is conditioned on `ecs:cluster` matching this
+      # cluster's ARN, and passing the name left that condition unreliable — the request was denied
+      # with "no identity-based policy allows ecs:RunTask" even though the statement was present.
+      # The ARN is built here rather than read from the descriptor so the descriptor stays
+      # region-free (T4: AWS_REGION remains a workflow literal).
+      - name: Resolve the running task definition
+        run: |
+          set -euo pipefail
+          # The account id comes from the OIDC identity itself, not from a secret: repository-level secrets do
+          # not reach jobs that reference an environment, and the descriptor job output deliberately no longer
+          # carries account_id (its value matches the secret GitHub would strip). get-caller-identity is the
+          # same source Terraform's descriptor uses.
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region "$AWS_REGION")
+          ECS_CLUSTER="arn:aws:ecs:${AWS_REGION}:${ACCOUNT_ID}:cluster/${CLUSTER_NAME}"
+          echo "ECS_CLUSTER=$ECS_CLUSTER" >> "$GITHUB_ENV"
+          # The image-resolution step below composes the ECR registry from the same value.
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+          TD=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$CONTAINER_NAME" \
+            --region "$AWS_REGION" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          if [ -z "$TD" ] || [ "$TD" = "None" ]; then
+            echo "::error::Could not resolve the running task definition for $CONTAINER_NAME"
+            exit 1
+          fi
+          echo "TASK_DEFINITION=$TD" >> "$GITHUB_ENV"
+          echo "Borrowing: $TD"
+
+      - name: Resolve the image to migrate from
+        id: image
+        env:
+          CALLED_REPO: ${{ inputs.image_repo }}
+          CALLED_DIGEST: ${{ inputs.image_digest }}
+          MANUAL_TAG: ${{ inputs.image_tag }}
+        run: |
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          if [ -n "$CALLED_REPO" ] && [ -n "$CALLED_DIGEST" ]; then
+            # workflow_call: deploy.yml passes the repository and digest it just pushed, so the migrations that
+            # run are exactly the ones in the release being deployed.
+            IMAGE="${REGISTRY}/${CALLED_REPO}@${CALLED_DIGEST}"
+          else
+            TAG="${MANUAL_TAG:-}"
+            if [ -z "$TAG" ]; then
+              # Newest image in the repository, resolved by push time — a manual run should not have to know a
+              # commit SHA to apply already-released migrations.
+              TAG=$(aws ecr describe-images --repository-name "$SERVICE_ECR_REPOSITORY" \
+                --region "$AWS_REGION" \
+                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text)
+            fi
+            IMAGE="${REGISTRY}/${SERVICE_ECR_REPOSITORY}:${TAG}"
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Migrating from: $IMAGE"
+
+      - name: Run migration task
+        id: run
+        env:
+          ACTION: ${{ inputs.action }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+
+          # `migrate deploy` applies committed migrations and is the only mutating command used here.
+          case "$ACTION" in
+            deploy) PRISMA_CMD="prisma migrate deploy" ;;
+            status) PRISMA_CMD="prisma migrate status" ;;
+            *) echo "::error::unsupported action '$ACTION'"; exit 1 ;;
+          esac
+
+          # Which package's schema/migration history this run applies — the other half of "which database",
+          # alongside CONTAINER_NAME (which task definition, hence which secrets/network, is borrowed).
+          case "$TARGET" in
+            verification-svc) MIGRATE_PACKAGE="packages/db" ;;
+            query-svc) MIGRATE_PACKAGE="packages/db-query" ;;
+            *) echo "::error::unsupported target '$TARGET'"; exit 1 ;;
+          esac
+
+          COMMAND="cd /app/$MIGRATE_PACKAGE && ./node_modules/.bin/$PRISMA_CMD"
+          SEED_ENV='[]'
+
+          # `tsx` (not `node`) because scripts/ is TypeScript that is never compiled into dist/.
+          if [ "$ACTION" = "deploy" ] && [ "$TARGET" = "query-svc" ]; then
+            # The file must exist in the IMAGE, so a new environment adds it in the same PR that adds the
+            # environment.
+            TVL_SOURCE="config/trusted-verifiers.${ENVIRONMENT}.json"
+            COMMAND="$COMMAND && echo '--- seeding the Trusted Verifiers List (SCVS_TRUSTED_VERIFIERS_SOURCE=$TVL_SOURCE) ---'"
+            COMMAND="$COMMAND && cd /app && ./node_modules/.bin/tsx scripts/seed-tvl.ts"
+            SEED_ENV=$(jq -nc --arg v "$TVL_SOURCE" \
+              '[{name:"SCVS_TRUSTED_VERIFIERS_SOURCE", value:$v}]')
+            echo "Will seed the TVL from $TVL_SOURCE after the migration"
+          fi
+
+          # Invokes the Prisma binary directly rather than through `pnpm exec`: docker/ service.Dockerfile's
+          # runtime stage never runs `corepack enable`, so `pnpm` is not on PATH there (only the build stage
+          # enables it).
+          REGISTER_ARNS=$(aws ecs register-task-definition \
+            --region "$AWS_REGION" \
+            --cli-input-json "$( \
+              aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" --region "$AWS_REGION" \
+                --query 'taskDefinition.{containerDefinitions:containerDefinitions,requiresCompatibilities:requiresCompatibilities,networkMode:networkMode,cpu:cpu,memory:memory,executionRoleArn:executionRoleArn,taskRoleArn:taskRoleArn,runtimePlatform:runtimePlatform}' \
+                --output json \
+              | jq --arg img "$IMAGE" --arg ru "root" --arg fam "$MIGRATE_FAMILY" \
+                  '.containerDefinitions |= map(.image=$img | .user=$ru) | .family=$fam' \
+            )" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          # point run-task at the root sibling family; the same container name is preserved
+          MIGRATE_TD="$REGISTER_ARNS"
+
+          # It is `[]` for every run that does not seed.
+          OVERRIDES=$(jq -nc \
+            --arg name "$CONTAINER_NAME" \
+            --arg cmd "$COMMAND" \
+            --argjson env "$SEED_ENV" \
+            '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd], environment:$env}]}')
+
+          # The service's own `awsvpcConfiguration` is by definition the network that reaches this environment's
+          # RDS instance, so this is both correct per environment and self-healing when Terraform moves a
+          # subnet.
+          NETWORK=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$CONTAINER_NAME" \
+            --region "$AWS_REGION" \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration' \
+            --output json \
+            | jq -c '{awsvpcConfiguration:{subnets:.subnets, securityGroups:.securityGroups, assignPublicIp:"DISABLED"}}')
+
+          if [ "$(jq -r '.awsvpcConfiguration.subnets | length' <<<"$NETWORK")" = "0" ]; then
+            echo "::error::$CONTAINER_NAME in $ECS_CLUSTER reports no subnets — cannot place the migration task"
+            exit 1
+          fi
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$MIGRATE_TD" \
+            --launch-type FARGATE \
+            --region "$AWS_REGION" \
+            --network-configuration "$NETWORK" \
+            --overrides "$OVERRIDES" \
+            --started-by "gha-db-migrate-${GITHUB_RUN_ID}" \
+            --query 'tasks[0].taskArn' --output text)
+
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+            echo "::error::ECS did not accept the migration task"
+            exit 1
+          fi
+          echo "task=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "Task: $TASK_ARN"
+
+          echo "Waiting for it to stop..."
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" --region "$AWS_REGION"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --region "$AWS_REGION" \
+            --query "tasks[0].containers[?name=='${CONTAINER_NAME}'].exitCode | [0]" --output text)
+          REASON=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --region "$AWS_REGION" --query 'tasks[0].stoppedReason' --output text)
+
+          echo "exit_code=$EXIT_CODE stopped_reason=$REASON"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      # The task's own output is the useful artifact — "migrations applied" vs "already up to date" vs a
+      # specific SQL error — and it only exists in CloudWatch.
+      - name: Print migration task logs
+        if: always() && steps.run.outputs.task != ''
+        env:
+          TASK_ARN: ${{ steps.run.outputs.task }}
+        run: |
+          CONFIG=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
+            --region "$AWS_REGION" \
+            --query "taskDefinition.containerDefinitions[?name=='${CONTAINER_NAME}'].logConfiguration.options | [0]")
+          GROUP=$(echo "$CONFIG" | jq -r '."awslogs-group" // empty')
+          PREFIX=$(echo "$CONFIG" | jq -r '."awslogs-stream-prefix" // empty')
+          if [ -z "$GROUP" ]; then
+            echo "::warning::task definition has no awslogs configuration; cannot fetch logs"
+            exit 0
+          fi
+          STREAM="${PREFIX}/${CONTAINER_NAME}/${TASK_ARN##*/}"
+          aws logs get-log-events --log-group-name "$GROUP" --log-stream-name "$STREAM" \
+            --region "$AWS_REGION" --limit 200 --query 'events[].message' --output text \
+            | tee migration.log
+          {
+            # The backslashes before every backtick are load-bearing: this is a DOUBLE-quoted shell string, so
+            # an unescaped pair runs what it wraps.
+            echo "### \`${{ inputs.target }}\` — \`prisma migrate ${{ inputs.action }}\`${{ inputs.action == 'deploy' && inputs.target == 'query-svc' && ' + \`seed-tvl\`' || '' }} output"
+            echo '```'
+            cat migration.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if the migration task did not succeed
+        if: always() && steps.run.outputs.exit_code != '0'
+        run: |
+          echo "::error::migration task exited ${{ steps.run.outputs.exit_code }} — see the logs above"
+          exit 1

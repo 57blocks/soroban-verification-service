@@ -1,0 +1,271 @@
+# Publishes both services' OpenAPI specifications as release assets and `@scvs/sdk` to this account's
+# CodeArtifact npm registry. Why the specs are here rather than in the result root:
+# docs/features/sdk/decisions/openapi-release-assets.md. What each ref releases, and why the channel is a
+# hard gate rather than a convention: invariants.md rule 30.
+
+name: release
+
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && inputs.version != ''
+      && format('release {0} (manual{1})', inputs.version, inputs.commit != '' && format(' @ {0}', inputs.commit) || '')
+      || startsWith(github.ref, 'refs/tags/') && format('release {0}', github.ref_name)
+      || (github.ref == 'refs/heads/main' && 'dev prerelease from main' || format('dry run on {0}', github.ref_name)) }}
+
+on:
+  push:
+    branches:
+      - main # the dev channel: a merge that touches the SDK publishes a prerelease and proves it installs
+    tags:
+      - "v*" # the staging and stable channels, told apart by the tag's own semver
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          The release to cut, e.g. v0.1.2 (stable -> latest) or v0.1.2-rc.1 (staging). The run pins the
+          tag to main's HEAD and creates the real tag and GitHub release for you. Leave empty to mint a
+          dev prerelease from main by hand instead.
+        required: false
+        default: ""
+      commit:
+        description: >-
+          Release this commit instead of main's HEAD — the one a deploy's channel-alignment check printed,
+          so the dist-tag serving an environment can be made to match what it runs. Still has to be an
+          ancestor of main.
+        required: false
+        default: ""
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # creating a release and uploading its assets
+  id-token: write # OIDC -> AWS role assumption, for the CodeArtifact publish
+
+env:
+  AWS_REGION: ap-southeast-2
+  # Terraform-owned names (soroban-aws-infrastructure `modules/codeartifact`, applied from envs/global).
+  SCVS_CODEARTIFACT_DOMAIN: sv-packages
+  SCVS_CODEARTIFACT_REPOSITORY: sv-npm
+
+jobs:
+  # Its own job so the decision is visible in the Actions list before anything is built, and so a ref that
+  # releases nothing costs one checkout rather than a full build.
+  channel:
+    name: Resolve the release channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      dist_tag: ${{ steps.resolve.outputs.dist_tag }}
+      publish_sdk: ${{ steps.resolve.outputs.publish_sdk }}
+      publish_assets: ${{ steps.resolve.outputs.publish_assets }}
+      # The commit everything downstream builds, stamps and tags — the checked-out one unless a dispatch named
+      # another.
+      commit: ${{ steps.resolve.outputs.sha }}
+    steps:
+      # Full history and tags: the rule reads the highest stable tag to derive a dev version, and proves a
+      # release tag is an ancestor of main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # A tag push checks out the tag, and `main` is not necessarily a remote-tracking ref afterwards. Without
+      # this the ancestor check cannot run, and it reports that rather than passing.
+      - name: Fetch main to prove the tag against
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      # A merge that changes nothing the tarball is built from publishes nothing, so `dev` does not gain a
+      # version per merge regardless of content. `event.before` is the push's own starting point, which is
+      # what makes a push carrying several commits read correctly; a dispatched run skips the gate.
+      - name: Resolve the channel, the version and the dist-tag
+        id: resolve
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          DISPATCH_COMMIT: ${{ inputs.commit }}
+        run: node eng-tools/resolve-release-channel.mjs
+
+  artifacts:
+    name: Build and publish release artifacts
+    needs: channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CHANNEL: ${{ needs.channel.outputs.channel }}
+      SDK_VERSION: ${{ needs.channel.outputs.version }}
+      DIST_TAG: ${{ needs.channel.outputs.dist_tag }}
+      # Every reader below uses this rather than GITHUB_SHA: a dispatch may release a commit that is not the
+      # one this workflow was started from, and the stamp, the tag and the provenance check must agree on which.
+      SDK_COMMIT: ${{ needs.channel.outputs.commit }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.channel.outputs.commit }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # After the install, before the build: every reader downstream — the tarball, the packaging gate, the
+      # publish, the registry gate — must see one number, and no lockfile entry pins it (`workspace:*`).
+      - name: Stamp the resolved version into the SDK manifest
+        if: needs.channel.outputs.publish_sdk == 'true'
+        run: node eng-tools/stamp-sdk-version.mjs
+
+      # packages/db's build reads these at prisma.config.ts's top level, so the build cannot start without them.
+      - name: Build (topological)
+        run: pnpm run build
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: scvs
+          POSTGRES_USER: scvs
+          POSTGRES_PASSWORD: placeholder
+
+      # The SDK's own suite includes the browser-bundle check, which bundles the published output for
+      # --platform=browser and executes it.
+      - name: Test the SDK
+        run: pnpm --filter @scvs/sdk run test
+
+      # publint + are-the-types-wrong + a real `pnpm pack` installed outside the workspace, whose declarations
+      # are typechecked as a consumer sees them. This is the last reader before a version becomes immutable.
+      - name: Check SDK packaging
+        run: pnpm --filter @scvs/sdk run check:packaging
+
+      # Skipped on the dev channel only: ci.yml already generates both specs on every push to main, and a
+      # prerelease has no GitHub release to carry them.
+      - name: Generate the OpenAPI specifications
+        if: needs.channel.outputs.channel != 'dev'
+        run: pnpm run generate:openapi
+
+      - name: Collect the specifications
+        if: needs.channel.outputs.channel != 'dev'
+        run: |
+          mkdir -p release-artifacts
+          cp services/verification-svc/openapi.json release-artifacts/verification-svc.openapi.json
+          cp services/query-svc/openapi.json release-artifacts/query-svc.openapi.json
+          # Fail loudly rather than uploading an empty file: a spec is generated by booting the real Nest app,
+          # so an empty one means the boot produced nothing and the asset would be a lie.
+          for spec in release-artifacts/*.json; do
+            test -s "$spec" || { echo "::error::$spec is empty"; exit 1; }
+            node -e "JSON.parse(require('node:fs').readFileSync('$spec','utf8'))" \
+              || { echo "::error::$spec is not valid JSON"; exit 1; }
+          done
+          ls -l release-artifacts
+
+      - name: Upload the specifications for inspection
+        if: needs.channel.outputs.channel != 'dev'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openapi-specifications
+          path: release-artifacts/*.json
+          if-no-files-found: error
+
+      # `gh release upload` requires a release to already exist, and **pushing a tag does not create one** — so
+      # uploading alone would fail on the only trigger that is supposed to publish. A dispatched run has no
+      # tag at all, so gh creates both (the tag at the running commit, the release) in one call. A non-stable
+      # channel's release is marked a prerelease, which is the channel made visible to a human reading the
+      # releases page.
+      - name: Attach the specifications to the release
+        if: needs.channel.outputs.publish_assets == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v${SDK_VERSION}"
+          FLAGS=()
+          if [ "${CHANNEL}" != "stable" ]; then FLAGS+=(--prerelease); fi
+          # A tag-triggered run has its tag already; a dispatched one does not, and gh must create it — at the
+          # commit being released, which is not necessarily the one the dispatch ran from.
+          if [ "${GITHUB_REF_TYPE}" = "branch" ]; then FLAGS+=(--target "${SDK_COMMIT}"); fi
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --title "${TAG}" --generate-notes "${FLAGS[@]}"
+          fi
+          gh release upload "${TAG}" release-artifacts/*.json --clobber
+
+      # ── @scvs/sdk -> CodeArtifact ───────────────────────────────────────────────────────────────
+      # Last in the job on purpose: a published package version is the only step here that cannot be undone or
+      # re-run, so everything that can still fail runs before it.
+      - name: Note that the SDK was not published
+        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN == ''
+        run: echo "::warning::SDK_PUBLISH_ROLE_ARN is unset, so @scvs/sdk was not published. Set the repository variable once the infra repo's envs/global is applied."
+
+      - name: Configure AWS credentials (OIDC)
+        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          # A repository-level variable, not one of the per-environment DEPLOY_ROLE_ARNs: this job declares no
+          # `environment:`, so those would resolve empty, and publishing is not a per-environment act.
+          role-to-assume: ${{ vars.SDK_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Writes `@scvs:registry` plus an auth token into npm's config.
+      - name: Authenticate npm against CodeArtifact
+        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+        run: |
+          aws codeartifact login --tool npm \
+            --domain "${SCVS_CODEARTIFACT_DOMAIN}" \
+            --repository "${SCVS_CODEARTIFACT_REPOSITORY}" \
+            --namespace scvs
+
+      - name: Publish @scvs/sdk
+        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+        working-directory: clients/sdk
+        run: |
+          set -euo pipefail
+
+          published() {
+            aws codeartifact describe-package-version \
+              --domain "${SCVS_CODEARTIFACT_DOMAIN}" \
+              --repository "${SCVS_CODEARTIFACT_REPOSITORY}" \
+              --format npm --namespace scvs --package sdk \
+              --package-version "${SDK_VERSION}" >/dev/null 2>&1
+          }
+
+          # A CodeArtifact version is immutable, so "already there" is only safe when it is the SAME source.
+          # The stale `0.1.0` is exactly this case: present, and built before the declaration fix.
+          if published; then
+            FROM=$(npm view "@scvs/sdk@${SDK_VERSION}" scvs.gitSha 2>/dev/null || true)
+            if [ "${FROM}" = "${SDK_COMMIT}" ]; then
+              echo "::notice::@scvs/sdk@${SDK_VERSION} was already published from this commit — re-verifying only"
+            else
+              echo "::error::@scvs/sdk@${SDK_VERSION} is already in ${SCVS_CODEARTIFACT_REPOSITORY}, built from ${FROM:-a commit it never recorded}, not ${SDK_COMMIT}. A version is immutable: release a new one instead of reusing this."
+              exit 1
+            fi
+          else
+            npm publish --dry-run --tag "${DIST_TAG}"
+            npm publish --tag "${DIST_TAG}"
+
+            # An exit code is not evidence that anything was published: `pnpm publish` exits 0 on a package it
+            # skipped, and a scope pointed at the wrong registry succeeds against that one.
+            if ! published; then
+              echo "::error::npm publish reported success but @scvs/sdk@${SDK_VERSION} is not in ${SCVS_CODEARTIFACT_REPOSITORY}"
+              exit 1
+            fi
+            echo "::notice::published @scvs/sdk@${SDK_VERSION} to ${SCVS_CODEARTIFACT_REPOSITORY} under dist-tag \`${DIST_TAG}\`"
+          fi
+
+      # `--tag` is the only thing separating a dev build from what `npm install @scvs/sdk` resolves, and an
+      # exit code is not evidence it landed. Read back with a throwaway cache and a bounded retry:
+      # `npm publish --dry-run` leaves the PRE-publish packument in npm's cache, which made a single
+      # immediate read a flaky gate — it passed on one run and reported an empty dist-tag on the next.
+      - name: Verify the channel landed on its dist-tag
+        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+        run: node eng-tools/check-published-dist-tags.mjs
+
+      # `describe-package-version` proves a version **exists**; only an installing consumer proves it is usable.
+      - name: Verify the published SDK installs and runs (E2E-SDK-06/internal_registry)
+        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+        env:
+          SCVS_SDK_VERSION: ${{ needs.channel.outputs.version }}
+        run: pnpm --filter @scvs/sdk run check:registry-install
