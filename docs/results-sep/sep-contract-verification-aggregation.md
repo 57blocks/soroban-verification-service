@@ -517,6 +517,4 @@ should be able to know that.
 
 ## Changelog
 
-- `0.1.0` — Initial draft. Split out of *Contract Verification Results* `0.1.0`
-  §§6–7, unchanged in substance: no document, route or field defined there or
-  here changes. Adds Security Concerns and worked examples.
+- `0.1.0` — Initial draft.
