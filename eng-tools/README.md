@@ -36,6 +36,7 @@ not its scratch directory.
 | [`check-test-row-cleanup.mjs`](check-test-row-cleanup.mjs) | `check:test-row-cleanup` | `ci.yml` | a suite deletes only rows it created, scoped by an `in:` on a column it owns |
 | [`check-builder-isolation.mjs`](check-builder-isolation.mjs) | `check:builder-isolation` | `ci.yml` | no builder entrypoint reaches both container-execution capability and attacker-controlled input |
 | [`check-fixture-tables.mjs`](check-fixture-tables.mjs) | `check:fixture-tables` | `ci.yml` | the compose-built fixtures' `(cliver, rsver)` pairs agree across the three places that record them |
+| [`check-mount-paths.mjs`](check-mount-paths.mjs) | `check:mount-paths` | `deploy-builder.yml`, `deploy-composer.yml` | every declared bind mount is host-visible at its own path |
 | [`check-tool-index.mjs`](check-tool-index.mjs) | `check:tool-index` | `ci.yml` | this table, and the two rules above it |
 | [`check-docs.mjs`](check-docs.mjs) | `check:docs` | `ci.yml` | tracked docs stay under their byte budget, every relative link resolves, a spec's `Verified by:` names a real test, and `docs/invariants.md`'s code-location column names a real path. Each rule activates only once its target file exists |
 | [`check-secrets.mjs`](check-secrets.mjs) | `check:secrets` | `ci.yml` (needs a Docker daemon; no network beyond the image pull) | this repository holds no gitleaks finding and no deployment identifier beyond what [`internal-identifiers.json`](internal-identifiers.json) already records. That baseline is a ratchet: it only shrinks |

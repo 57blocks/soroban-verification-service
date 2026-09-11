@@ -35,6 +35,7 @@
     "check:test-row-cleanup": "node eng-tools/check-test-row-cleanup.mjs",
     "check:builder-isolation": "node eng-tools/check-builder-isolation.mjs",
     "check:fixture-tables": "node eng-tools/check-fixture-tables.mjs",
+    "check:mount-paths": "node eng-tools/check-mount-paths.mjs",
     "check:host-routing": "node eng-tools/check-host-routing.mjs",
     "check:composition-template": "node eng-tools/check-composition-template.mjs",
     "check:composition-matrix": "node eng-tools/check-composition-matrix.mjs",

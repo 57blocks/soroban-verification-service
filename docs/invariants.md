@@ -37,6 +37,10 @@ below whose violation is expensive enough to warrant one).
 | 25 | A newer artifact-schema major version that an orchestrator does not support must fail terminally and visibly (`artifact_schema_unsupported`) within minutes — never silently retry forever. | `packages/core/contract/` | — |
 | 26 | The project is licensed Apache-2.0 — a single license, not a dual grant — and every user-facing surface naming the license must say Apache-2.0 and nothing else. | `LICENSE`, `package.json` | — |
 | 27 | The published contract (status object, aggregated document, report artifact links) follows the Results SEP this project authors: verifier-keyed entries with no history field, `results_urls` entries carry `{type, url, sha256}` (and, for our own publishes, a `location` axis), and every document declares `schema`/`schema_version`. | `packages/core/src/registry.ts`, `packages/storage-layout/src/publish.ts` | — |
+| 28 | A Batch job is dispatched by job-definition **family name**, never a revision ARN — `SubmitJob` resolves the latest ACTIVE revision itself. The `batch:SubmitJob` grant must list **both** ARN forms (`job-definition/<family>` and `…:*`): `:*` cannot match an unqualified ARN. | `packages/aws/src/batch.ts` | — |
+| 29 | A service image reaches a running service through a per-environment **mutable alias tag**, never a digest written into a task definition: CI moves the tag, and the task definition and its pointer belong to Terraform. CI registers no service task definition. | `scripts/ci/promote-image-alias.sh`, `scripts/ci/roll-service-to-alias.sh` | — |
+| 30 | The git ref decides the version, the release channel and the dist-tag; the committed manifest version is a placeholder, and exactly one reader owns that mapping. | `eng-tools/resolve-release-channel.mjs` | — |
+| 31 | A trust input — the trusted image set, the Trusted Verifiers List, the published policy — changes by deploy only. No route mutates one in a running verifier, and `policy.json` stays byte-identical for the process's lifetime. | `config/verifier-policy.example.json`, `services/orchestrator-svc/src/modules/build-environments/` | — |
 
 ## The 3 rules with a full reason
 

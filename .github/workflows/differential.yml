@@ -1,0 +1,96 @@
+name: Differential Harness
+
+# There is deliberately no oracle-digest `env:` wiring here; the eight oracles are committed literals.
+# The argument is in `services/builder/test/differential/oracles.ts`.
+
+# Called by the operations repository.
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: "The application commit this run acts on. Also the ref its tooling is checked out at."
+        type: string
+        required: true
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+      host-label:
+        description: "Label written into the differential result manifest."
+        type: string
+        required: false
+        default: "github-arm64"
+      compare-host-manifests:
+        description: "Also run the reproducibility suite. Needs a second manifest already committed under test/differential/results/."
+        type: boolean
+        required: false
+        default: false
+permissions:
+  id-token: write # OIDC -> AWS role assumption, for the stellar-cli cache read
+  contents: read
+
+concurrency:
+  group: differential-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  differential:
+    # `vars.DEPLOY_ROLE_ARN` is per-environment and there is no repository-level one, so without this the role
+    # resolves empty. Account-wide work, so it pins dev's, exactly as stellar-cli.yml does for the same cache.
+    environment: dev
+    runs-on: ubuntu-24.04-arm
+    # The run is now 8 base fixtures (`fixtures.ts`) plus 7 cross-oracle legs, and each leg is a reference build
+    # and a sandbox build of the same source.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      # Without this the harness dies before its first test: fetch-or-build-stellar-cli.sh's first act is
+      # `s3api head-bucket`, and it exits 1 rather than confuse an unreachable cache with a miss. This
+      # workflow was the only one of that script's five callers with no credentials, so it had never run.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `packages/*` resolve to a gitignored `dist/`, so on a fresh runner `runner.ts`'s `@scvs/core` import
+      # has nothing to resolve — the harness failed here on its first-ever run. Filtered to the builder's own
+      # dependency closure (`@scvs/core` + itself): a full `pnpm run build` would drag in packages/db, whose
+      # build reads POSTGRES_* at prisma.config.ts's top level and which no differential spec imports.
+      - name: Build the harness's dependency closure
+        run: npx turbo run build --filter=@scvs/builder
+
+      - name: Run differential harness
+        env:
+          SCVS_DIFFERENTIAL_HOST_LABEL: ${{ inputs.host-label }}
+          SCVS_COMPARE_HOST_MANIFESTS: ${{ inputs.compare-host-manifests && '1' || '0' }}
+          AWS_REGION: ap-southeast-2
+        run: bash scripts/ci/run-differential-harness.sh
+
+      # The manifest is the run's only durable output and T2's only input, and until now every run threw its
+      # own away — which is the whole reason `reproducibility.spec.ts` has never had two manifests to compare.
+      # `plan.md` §3 says they are *committed*, so this artifact is what a human commits.
+      - name: Upload the host manifest
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: differential-host-manifest-${{ inputs.host-label }}
+          path: test/differential/results/*.json
+          if-no-files-found: warn

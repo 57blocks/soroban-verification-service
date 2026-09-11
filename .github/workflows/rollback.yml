@@ -1,0 +1,131 @@
+name: Rollback service image
+
+# The run title carries the environment being rolled back.
+run-name: Rollback service image → ${{ inputs.environment }}
+
+# It builds nothing and registers nothing.
+
+# Called by the operations repository, which owns the trigger.
+on:
+  workflow_call:
+    inputs:
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+      environment:
+        description: "Which environment to roll back."
+        type: string
+        required: true
+      commit_sha:
+        description: "Full commit SHA to roll back to — must already be pushed to the registry by a deploy."
+        type: string
+        required: true
+      target:
+        description: "Which image to roll back: `service` (all three resident services) or `web`."
+        type: string
+        required: true
+permissions:
+  id-token: write
+  contents: read
+
+# Shares deploy.yml's lock name so a rollback and a deploy of the same environment cannot interleave: both end
+# in `update-service`, and the loser would silently win.
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.commit_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Read the CI descriptor (version handshake)
+        id: descriptor
+        run: |
+          set -euo pipefail
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment }}" 2,3)
+          echo "cluster=$(jq -r '.cluster' <<<"$DESC")" >> "$GITHUB_OUTPUT"
+          echo "repository=$(jq -r --arg t "${{ inputs.target }}" '.ecr[$t]' <<<"$DESC")" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the services this image runs
+        id: services
+        run: |
+          if [ "${{ inputs.target }}" = "web" ]; then
+            echo "names=web" >> "$GITHUB_OUTPUT"
+          else
+            echo "names=verification-svc orchestrator-svc query-svc" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Refuses on a still-digest-pinned task definition. Moving the alias would look like a rollback and change
+      # nothing, which is the failure mode this whole ADR is about.
+      - name: Check the task definitions read the alias
+        env:
+          CLUSTER: ${{ steps.descriptor.outputs.cluster }}
+          SERVICES: ${{ steps.services.outputs.names }}
+        run: |
+          set -euo pipefail
+          for SERVICE in $SERVICES; do
+            TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].taskDefinition' --output text)
+            IMAGE=$(aws ecs describe-task-definition --task-definition "$TD" \
+              --query "taskDefinition.containerDefinitions[?name=='${SERVICE}'].image | [0]" --output text)
+            case "$IMAGE" in
+              *:deployed)
+                echo "$SERVICE reads the alias ($IMAGE)"
+                ;;
+              *)
+                echo "::error::$SERVICE's task definition pins $IMAGE, so moving the alias would change nothing."
+                echo "::error::Alias rollback needs the alias-tag infrastructure (invariants.md rule 29) applied to ${{ inputs.environment }} first."
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Resolve the digest for ${{ inputs.commit_sha }}
+        id: digest
+        env:
+          REPOSITORY: ${{ steps.descriptor.outputs.repository }}
+        run: |
+          set -euo pipefail
+          DIGEST=$(aws ecr describe-images --repository-name "$REPOSITORY" \
+            --image-ids "imageTag=${{ inputs.commit_sha }}" \
+            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::$REPOSITORY has no image tagged ${{ inputs.commit_sha }} — that commit was never deployed to this environment"
+            exit 1
+          fi
+          echo "value=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Move the :deployed alias to that digest
+        run: |
+          bash scripts/ci/promote-image-alias.sh \
+            "${{ steps.descriptor.outputs.repository }}" "${{ steps.digest.outputs.value }}"
+
+      - name: Roll the services onto it
+        env:
+          CLUSTER: ${{ steps.descriptor.outputs.cluster }}
+          SERVICES: ${{ steps.services.outputs.names }}
+        run: |
+          # shellcheck disable=SC2086
+          bash scripts/ci/roll-service-to-alias.sh "$CLUSTER" "${{ steps.digest.outputs.value }}" $SERVICES

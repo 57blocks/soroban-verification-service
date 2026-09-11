@@ -1,0 +1,378 @@
+name: E2E integration
+
+# The run title carries the environment under test.
+run-name: E2E integration → ${{ inputs.environment }}
+
+# Called by the operations repository, which owns the trigger and the live environment it runs against.
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: "The application commit this run acts on. Also the ref its tooling is checked out at."
+        type: string
+        required: true
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+      environment:
+        description: "Deployment environment to test — dev or staging."
+        type: string
+        required: true
+      test_suite:
+        description: "Test scope: smoke, e2e, or perf. perf runs the Locust open-model run against the persistent target pool."
+        type: string
+        required: true
+      perf_users:
+        description: "Concurrent complete verification flows, for the perf suite."
+        type: string
+        required: false
+        default: "10"
+      perf_drain_timeout_ms:
+        description: "Approved terminal drain timeout in milliseconds, for the perf suite."
+        type: string
+        required: false
+        default: "14400000"
+      perf_duration_seconds:
+        description: "Test duration in seconds, for the perf suite."
+        type: string
+        required: false
+        default: "600"
+      perf_think_time_seconds:
+        description: "Per-user think time in seconds, for the perf suite."
+        type: string
+        required: false
+        default: "60"
+      perf_max_rebuilds:
+        description: "Global cap on real rebuild submissions, for the perf suite."
+        type: string
+        required: false
+        default: "100"
+    secrets:
+      SCVS_FIXTURE_TESTNET_SECRET_KEY:
+        description: "Testnet account the fixture builder deploys from. A signing key; scoped to the caller's environment."
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+# One dev service deployment and one Batch queue. Let an active run finish; a second runner would turn quota and
+# queue contention into failures that say nothing about either commit.
+concurrency:
+  group: e2e-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    # This workflow intentionally exercises contracts built on the AMD64 fixture image.
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    # PERF-01 may use an approved four-hour window. Keep ordinary E2E runs at their existing limit while
+    # allowing the selected performance test to finish and report its result.
+    timeout-minutes: ${{ inputs.test_suite == 'perf' && 360 || 180 }}
+    env:
+      # The selected environment's role can access only that environment's CI cache. Set per
+      # GitHub Environment by the caller; there is no fallback, because a deployment identifier
+      # is never a literal in this repository.
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      SCVS_E2E: "1"
+      # Where this deployment answers. Supplied per GitHub Environment; the guard step below
+      # fails loudly rather than letting an unset variable read as an empty URL.
+      SCVS_E2E_VERIFY_URL: ${{ vars.SCVS_E2E_VERIFY_URL }}
+      SCVS_E2E_QUERY_URL: ${{ vars.SCVS_E2E_QUERY_URL }}
+      SCVS_E2E_WEB_URL: ${{ vars.SCVS_E2E_WEB_URL }}
+      SCVS_E2E_RESULT_ROOT: ${{ vars.SCVS_E2E_RESULT_ROOT }}
+      SCVS_E2E_VERIFIER_NAME: ${{ vars.SCVS_E2E_VERIFIER_NAME }}
+      SCVS_E2E_ENV: ${{ inputs.environment || 'dev' }}
+      SCVS_E2E_NETWORK: testnet
+      SCVS_E2E_FIXTURES: ${{ github.workspace }}/artifacts/e2e-fixtures/e2e-fixtures.ci.json
+      SCVS_E2E_PRIVATE_UPLOAD_PATH: ${{ github.workspace }}/artifacts/e2e-fixtures/archives/canonical-source.tar.gz
+      SCVS_E2E_RUN_ID: ci-${{ inputs.environment || 'dev' }}-${{ github.run_id }}-${{ github.run_attempt }}
+      SCVS_FIXTURE_DEPLOYMENT_SCOPE: ci-${{ inputs.environment || 'dev' }}-${{ github.run_id }}-${{ github.run_attempt }}
+      SCVS_FIXTURE_DEPLOYMENTS: ${{ github.workspace }}/artifacts/e2e-fixtures/testnet-deployments.ci.ndjson
+      # Every suite writes its Jest/Playwright JSON report here, and the summary step renders them.
+      SCVS_E2E_REPORT_DIR: ${{ github.workspace }}/artifacts/e2e-reports
+      SCVS_E2E_JOB_TIMEOUT_MS: "1200000"
+      SCVS_E2E_POLL_INTERVAL_MS: "3000"
+      SCVS_E2E_REQUEST_TIMEOUT_MS: "60000"
+      SCVS_FIXTURE_TAR_BIN: bsdtar
+      SCVS_FIXTURE_ALLOW_PLATFORM_HASH: "1"
+      SCVS_FIXTURE_BUILD_IMAGE: ${{ vars.SCVS_FIXTURE_BUILD_IMAGE || 'docker.io/stellar/stellar-cli@sha256:c280e64614eae7a5ebb4c60625fd8cc5f79fc5c075f0fb892a1a5c08c43abe35' }}
+    steps:
+      - name: Check out selected revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The SDK cases run `clients/sdk`'s package entry (`dist/index.js`) from a separate consumer process.
+      - name: Build the SDK consumed by the E2E cases
+        if: ${{ inputs.test_suite != 'perf' }}
+        run: pnpm exec turbo run build --filter=@scvs/sdk
+
+      - name: Install Playwright Chromium
+        if: ${{ inputs.test_suite != 'perf' }}
+        run: pnpm --filter @scvs/e2e-tests exec playwright install --with-deps chromium
+
+      # Fixture inventory hashes were generated with BSD tar. Use the same implementation in CI; GNU tar
+      # produces different USTAR bytes even when owner metadata is equivalent.
+      - name: Install BSD tar for deterministic fixture archives
+        if: ${{ inputs.test_suite != 'perf' }}
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libarchive-tools
+          command -v bsdtar
+          bsdtar --version
+
+      # Generated archives are intentionally ignored reproducible inputs. This downloads only
+      # byte-pinned public source and does not receive the signing credential. It has no Stellar
+      # CLI dependency, so run it before fetching the pinned CLI to fail fast on source or tar
+      # reproducibility errors.
+      - name: Prepare local source fixtures
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_E2E_FIXTURES: test/integration/fixtures/e2e-fixtures.dev.json
+        run: bash test/fixtures/e2e/prepare-ci-sources.sh
+
+      - name: Configure AWS credentials for CLI cache
+        if: ${{ inputs.test_suite != 'perf' }}
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - name: Read the CI descriptor for the CLI cache
+        if: ${{ inputs.test_suite != 'perf' }}
+        run: |
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment || 'dev' }}" 2,3)
+          echo "SCVS_CI_CACHE_BUCKET=$(jq -r '.artifacts_bucket' <<<"$DESC")" >> "$GITHUB_ENV"
+
+      # Fetches the official release pinned by version and tarball/binary digest in docker/stellar-cli.pin.
+      - name: Fetch pinned official Stellar CLI
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_CLI_TARGET_ARCH: amd64
+        run: |
+          scripts/ci/fetch-or-build-stellar-cli.sh
+          install -m 0755 docker/prebuilt/bin/amd64/stellar "$HOME/.cargo/bin/stellar"
+          stellar --version
+          stellar contract fetch --help >/dev/null
+          stellar contract info meta --help >/dev/null
+
+      # The run-local inventory contains adversarial, timeout, and retention fixtures in addition to the core
+      # source archives.
+      - name: Generate full E2E source fixture corpus
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_FIXTURE_TAR_BIN: bsdtar
+        run: bash test/fixtures/e2e/generate-fixtures.sh
+
+      - name: Build fresh core contract fixtures
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_FIXTURE_BUILD_SCOPE: ci
+          SCVS_FIXTURE_BUILD_VARIANT: ${{ env.SCVS_FIXTURE_DEPLOYMENT_SCOPE }}
+          SCVS_FIXTURE_OUTPUT_ROOT: ${{ github.workspace }}/artifacts/e2e-fixtures
+        run: bash test/fixtures/e2e/build-purpose-contracts.sh
+
+      # F-UPG's two deterministic source archives are required by the run-local inventory and by the separately
+      # triggered upgrade lifecycle.
+      - name: Build upgrade source fixtures
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_FIXTURE_BUILD_SCOPE: upgrade
+          SCVS_FIXTURE_OUTPUT_ROOT: ${{ github.workspace }}/artifacts/e2e-fixtures
+        run: bash test/fixtures/e2e/build-purpose-contracts.sh
+
+      # The protected testnet key exists only in this step's environment.
+      - name: Deploy fresh core contracts
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_FIXTURE_TESTNET_ACCOUNT: ${{ secrets.SCVS_FIXTURE_TESTNET_SECRET_KEY }}
+          SCVS_FIXTURE_DEPLOY_SET: core
+        run: |
+          if [[ -z "$SCVS_FIXTURE_TESTNET_ACCOUNT" ]]; then
+            echo "GitHub environment secret SCVS_FIXTURE_TESTNET_SECRET_KEY is required" >&2
+            exit 1
+          fi
+          bash test/fixtures/e2e/deploy-testnet.sh
+
+      - name: Generate run-local fixture inventory
+        if: ${{ inputs.test_suite != 'perf' }}
+        run: pnpm run e2e:generate-inventory
+
+      # PERF-01 uses committed targets and deliberately skips the run-local deploy step.
+      - name: Check persistent PERF fixture inventory
+        if: ${{ inputs.test_suite == 'perf' }}
+        env:
+          SCVS_E2E_FIXTURES: test/integration/fixtures/e2e-fixtures.dev.json
+          SCVS_FIXTURE_DEPLOYMENTS: ""
+          SCVS_FIXTURE_DEPLOYMENT_SCOPE: ""
+          SCVS_E2E_FIXTURE_REQUIRE_LOCAL_SOURCES: "0"
+        run: pnpm run e2e:check-fixtures
+
+      - name: Check run-local fixture inventory
+        if: ${{ inputs.test_suite != 'perf' }}
+        env:
+          SCVS_E2E_FIXTURES: artifacts/e2e-fixtures/e2e-fixtures.ci.json
+        run: pnpm run e2e:check-fixtures
+
+      - name: Typecheck E2E harness
+        run: pnpm --filter @scvs/e2e-tests run typecheck
+
+      # The source is this environment's deploy contract, not a copy of the number: `config/env-manifest.yaml`
+      # marks the four load-testing overrides `required_in: [dev, staging]`, so `assert-config-contract` is what
+      # keeps this file honest.
+      - name: Export the deployment's published submission quota
+        shell: bash
+        run: |
+          contract="config/deploy/${SCVS_E2E_ENV}/verification-svc.json"
+          if [[ ! -f "$contract" ]]; then
+            echo "no deploy contract at $contract — SEC-11/SEC-12 will skip" >&2
+            exit 0
+          fi
+          quota=$(jq -r '.secrets.variables.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW | (.value // .default // empty)' "$contract")
+          window=$(jq -r '.secrets.variables.SCVS_ABUSE_WINDOW_MS | (.value // .default // empty)' "$contract")
+          if [[ -n "$quota" ]]; then
+            echo "SCVS_E2E_QUOTA_SUBMIT=$quota" >> "$GITHUB_ENV"
+            echo "submission quota for $SCVS_E2E_ENV: $quota per window"
+          else
+            echo "$contract declares no SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW — SEC-11/SEC-12 will skip" >&2
+          fi
+          if [[ -n "$window" ]]; then
+            echo "SCVS_E2E_WINDOW_SUBMIT_MS=$window" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run smoke cases
+        if: ${{ inputs.test_suite == 'smoke' || inputs.test_suite == 'both' }}
+        env:
+          SCVS_E2E_REPORT_LABEL: smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run test:smoke 2>&1 | tee artifacts/e2e-smoke.log
+
+      - name: Run automated E2E cases
+        if: ${{ inputs.test_suite == 'e2e' || inputs.test_suite == 'both' }}
+        env:
+          SCVS_E2E_REPORT_LABEL: auto
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @scvs/e2e-tests run test:auto 2>&1 | tee artifacts/e2e-auto.log
+
+      # PERF-01 uses the committed, persistent F-PERF-VERIFIED pool.
+      - name: Run Locust E2E-PERF-01
+        if: ${{ inputs.test_suite == 'perf' }}
+        env:
+          SCVS_E2E_FIXTURES: ${{ github.workspace }}/test/integration/fixtures/e2e-fixtures.dev.json
+          SCVS_E2E_ALLOW_PERF: "1"
+          SCVS_E2E_PERF_DRAIN_TIMEOUT_MS: ${{ inputs.perf_drain_timeout_ms }}
+          SCVS_E2E_PERF_USERS: ${{ inputs.perf_users }}
+          SCVS_E2E_PERF_DURATION_SECONDS: ${{ inputs.perf_duration_seconds }}
+          SCVS_E2E_PERF_THINK_TIME_SECONDS: ${{ inputs.perf_think_time_seconds }}
+          SCVS_E2E_PERF_MAX_REBUILDS: ${{ inputs.perf_max_rebuilds }}
+          SCVS_E2E_PERF_OUTPUT_DIR: ${{ github.workspace }}/artifacts/e2e-reports/perf-01
+          SCVS_E2E_PERF_LOCUST_SUMMARY_PATH: ${{ github.workspace }}/artifacts/e2e-reports/perf-01/perf-01-summary.json
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          if ! [[ "$SCVS_E2E_PERF_DRAIN_TIMEOUT_MS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "perf_drain_timeout_ms must be a positive integer" >&2
+            exit 1
+          fi
+          if ! [[ "$SCVS_E2E_PERF_USERS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "perf_users must be a positive integer for PERF-01" >&2
+            exit 1
+          fi
+          if ! [[ "$SCVS_E2E_PERF_DURATION_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "perf_duration_seconds must be a positive integer for PERF-01" >&2
+            exit 1
+          fi
+          if ! [[ "$SCVS_E2E_PERF_THINK_TIME_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            echo "perf_think_time_seconds must be a non-negative number for PERF-01" >&2
+            exit 1
+          fi
+          if ! [[ "$SCVS_E2E_PERF_MAX_REBUILDS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "perf_max_rebuilds must be a positive integer for PERF-01" >&2
+            exit 1
+          fi
+          available_targets=$(jq -er '.performance_verified.targets | length' "$SCVS_E2E_FIXTURES")
+          if (( SCVS_E2E_PERF_USERS > available_targets )); then
+            echo "perf_users $SCVS_E2E_PERF_USERS exceeds the target pool size $available_targets" >&2
+            exit 1
+          fi
+          if (( SCVS_E2E_PERF_MAX_REBUILDS < SCVS_E2E_PERF_USERS )); then
+            echo "perf_max_rebuilds must be at least perf_users" >&2
+            exit 1
+          fi
+          max_elapsed_ms=$((SCVS_E2E_PERF_DURATION_SECONDS * 1000 + SCVS_E2E_PERF_DRAIN_TIMEOUT_MS + 600000))
+          if (( max_elapsed_ms > 21600000 )); then
+            echo "PERF-01 duration + final drain + 10-minute overhead must not exceed the 6-hour workflow limit" >&2
+            exit 1
+          fi
+          pnpm run test:perf:locust 2>&1 | tee artifacts/e2e-perf.log
+
+      - name: Run normal upgrade lifecycle E2E
+        # The harness (run-e2e-test.mjs → run-upgrade-normal-lifecycle.sh) is self-contained: it
+        # builds, deploys v1 at a run-scoped salt, upgrades, and validates its own inventory. Running
+        # it under always() keeps a failed test:auto step from skipping this independent, run-scoped
+        # case and losing its signal.
+        if: ${{ always() && (inputs.test_suite == 'e2e' || inputs.test_suite == 'both') }}
+        env:
+          SCVS_FIXTURE_TESTNET_ACCOUNT: ${{ secrets.SCVS_FIXTURE_TESTNET_SECRET_KEY }}
+          SCVS_E2E_REPORT_LABEL: upgrade-lifecycle
+        shell: bash
+        run: |
+          set -o pipefail
+          export SCVS_FIXTURE_STELLAR_BIN="$HOME/.cargo/bin/stellar"
+          pnpm --filter @scvs/e2e-tests run test -- \
+            cases/upg/upg-normal-lifecycle.spec.ts \
+            -t "normal upgrade lifecycle" 2>&1 | tee artifacts/e2e-upgrade-jest.log
+
+      # Rendered from the suites' own JSON reports rather than the logs, so a dispatch can be read without
+      # opening four thousand lines of Jest output.
+      - name: Publish test results to the job summary
+        if: always()
+        env:
+          SCVS_E2E_SUMMARY_TITLE: >-
+            E2E results — ${{ inputs.environment || 'dev' }} ·
+            ${{ inputs.test_suite }}${{ inputs.test_suite == 'perf' && ' (PERF-01)' || '' }}
+          SCVS_E2E_PERF_LOCUST_SUMMARY_PATH: ${{ github.workspace }}/artifacts/e2e-reports/perf-01/perf-01-summary.json
+        run: node eng-tools/write-e2e-summary.mjs
+
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.environment || 'dev' }}-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            artifacts/e2e-smoke.log
+            artifacts/e2e-auto.log
+            artifacts/e2e-perf.log
+            artifacts/e2e-upgrade-jest.log
+            artifacts/e2e-reports
+            artifacts/e2e-drift.ndjson
+            artifacts/e2e-playwright
+            artifacts/e2e-fixtures/e2e-fixtures.ci.json
+            artifacts/e2e-fixtures/testnet-deployments.ci.ndjson
+            artifacts/e2e-fixtures/purpose-built-wasm.ndjson
+            artifacts/e2e-fixtures/upgrade/**

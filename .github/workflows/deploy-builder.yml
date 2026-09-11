@@ -1,0 +1,289 @@
+name: Build & deploy builder image
+
+# Empty on push, which keeps GitHub's default title there — a run-name that evaluates to whitespace counts as
+# omitted.
+run-name: ${{ github.event_name == 'workflow_dispatch' && 'Build & deploy builder image → dev + staging (contract-gated)' || '' }}
+
+# Called by the operations repository. Registers both builder job-definition families from one
+# build, so it takes no environment input.
+on:
+  workflow_call:
+    inputs:
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+      source_sha:
+        description: >-
+          The application commit whose published image to deploy. This workflow builds nothing: the
+          image already exists, pushed by publish-images.yml, and is addressed by this commit.
+        type: string
+        required: true
+    secrets:
+      AWS_ACCOUNT_ID:
+        description: >-
+          The deploy-role fallback's account id. An identifier, not a credential — it is a secret
+          only so it stays out of the tree, and the caller passes it explicitly.
+        required: false
+
+permissions:
+  id-token: write # required for OIDC -> AWS role assumption
+  contents: read
+
+# Those jobs are gone, but a lock is still needed here and NOT for that reason: this workflow registers
+# revisions of one account-wide Batch job definition family, and dispatch now resolves the latest ACTIVE
+# revision by name.
+concurrency:
+  group: builder-job-definition
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+
+jobs:
+  build-and-deploy:
+    # Native arm64 runner.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    # Account-wide, so it always assumes dev's deploy role — but nothing about the *image* is dev's any more.
+    environment: dev
+    env:
+      # Plain variable: repository-level secrets do not reach jobs that reference an environment (the old
+      # secrets.AWS_ACCOUNT_ID fallback resolved empty here).
+      DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+    # No `outputs:` any more.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      # A Docker-managed volume, or a sourcePath that differs from its containerPath, mounts an empty directory
+      # and the build fails with "could not find Cargo.toml in /source".
+      - name: Check every bind mount is host-visible at an identical path
+        run: node eng-tools/check-mount-paths.mjs
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Two `fetch-or-build-stellar-cli.sh` steps stood here, one per architecture, because `builder.Dockerfile`
+      # baked the binary in.
+
+      # Before the descriptor read, because the tag list that read produces needs the registry hostname.
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      # Each environment's image now lives in its own repository, and the tag list below is what pushes the
+      # single build to all of them.
+      - name: Read every environment's CI descriptor
+        id: descriptor
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ steps.ecr-login.outputs.registry }}"
+          ARM64_TAGS=()
+          AMD64_TAGS=()
+          for ENV in dev staging; do
+            DESC=$(bash scripts/ci/load-ci-descriptor.sh "$ENV" 2,3)
+            echo "$DESC" > "/tmp/ci-descriptor.${ENV}.json"
+            REPO=$(jq -r '.ecr.builder // "null"' <<<"$DESC")
+            if [ "$REPO" = "null" ] || [ -z "$REPO" ]; then
+              echo "::error::$ENV's CI descriptor names no builder ECR repository"
+              exit 1
+            fi
+            ARM64_TAGS+=("${REGISTRY}/${REPO}:${{ inputs.source_sha }}-arm64")
+            AMD64_TAGS+=("${REGISTRY}/${REPO}:${{ inputs.source_sha }}-amd64")
+          done
+          {
+            echo "arm64_tags<<TAGS"
+            printf '%s\n' "${ARM64_TAGS[@]}"
+            echo "TAGS"
+            echo "amd64_tags<<TAGS"
+            printf '%s\n' "${AMD64_TAGS[@]}"
+            echo "TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # Two single-architecture images, copied rather than rebuilt — see deploy-composer.yml for
+      # why a deploy never builds. Each Batch compute environment is single-architecture, so these
+      # stay two images and never become one manifest list.
+      - name: Copy the published builder images into the deployment registry
+        id: stage
+        env:
+          SOURCE_IMAGE: ghcr.io/${{ github.repository_owner }}/sv-builder
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          ARM64_TAGS: ${{ steps.descriptor.outputs.arm64_tags }}
+          AMD64_TAGS: ${{ steps.descriptor.outputs.amd64_tags }}
+        run: |
+          set -euo pipefail
+          copy_arch() {
+            local arch="$1" tags="$2"
+            local digest
+            digest=$(docker buildx imagetools inspect "${SOURCE_IMAGE}:${SOURCE_SHA}-${arch}" \
+              --format '{{ .Manifest.Digest }}')
+            [ -n "$digest" ] || { echo "::error::no published image at ${SOURCE_IMAGE}:${SOURCE_SHA}-${arch}"; exit 1; }
+            echo "${arch}: ${SOURCE_IMAGE}@${digest}"
+            while IFS= read -r tag; do
+              [ -n "$tag" ] || continue
+              docker buildx imagetools create --tag "$tag" "${SOURCE_IMAGE}@${digest}"
+            done <<< "$tags"
+          }
+          copy_arch arm64 "$ARM64_TAGS"
+          copy_arch amd64 "$AMD64_TAGS"
+
+      # ── CE1 + CE4: two containers, and one job per capability-granting host ──────────────────────
+      # Two containers, same image, different command:
+      - name: Register new Batch job definition revisions
+        id: register
+        env:
+          # Deliberately named and grouped so the CE4 change is a two-line edit with a comment above it,
+          # rather than a number buried in a JSON blob.
+          BUILDER_VCPU: "1"
+          BUILDER_MEMORY_MIB: "1700"
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ steps.ecr-login.outputs.registry }}"
+          # arch -> the digest built for it above.
+          declare -A DIGEST_FOR_ARCH=(
+            [arm64]="${{ steps.build_arm64.outputs.digest }}"
+            [amd64]="${{ steps.build_amd64.outputs.digest }}"
+          )
+          # What this image writes into `recipe.json`, against what each environment's orchestrator recorded
+          # that it can read on its last rollout.
+          CONTRACT_VERSION=$(bash scripts/ci/read-contract-version.sh)
+          CONTRACT_MAJOR="${CONTRACT_VERSION%%.*}"
+          echo "this image writes recipe.json contract $CONTRACT_VERSION"
+          SKIPPED=()
+          REGISTERED=()
+          # Each family name is read from THAT environment's descriptor (dev's role can read both —
+          # ReadCiDescriptor in modules/iam).
+          for ENV in dev staging; do
+            DESC=$(cat "/tmp/ci-descriptor.${ENV}.json")
+            SUPPORTED=$(bash scripts/ci/orchestrator-contract-version.sh read "$ENV")
+            if [ "$SUPPORTED" = "none" ]; then
+              SKIPPED+=("$ENV — no orchestrator rollout has recorded a contract version yet")
+              continue
+            fi
+            # MAJOR decides it. A higher MINOR is additive by construction, so an orchestrator on 1.0 reads a
+            # 1.7 artifact; a higher MAJOR is exactly what it cannot read.
+            if [ "$CONTRACT_MAJOR" -gt "${SUPPORTED%%.*}" ]; then
+              SKIPPED+=("$ENV — orchestrator supports $SUPPORTED, this image writes $CONTRACT_VERSION")
+              continue
+            fi
+            REGISTRY_REPO="${REGISTRY}/$(jq -r '.ecr.builder' <<<"$DESC")"
+            declare -A IMAGE_FOR_ARCH=(
+              [arm64]="${REGISTRY_REPO}@${DIGEST_FOR_ARCH[arm64]}"
+              [amd64]="${REGISTRY_REPO}@${DIGEST_FOR_ARCH[amd64]}"
+            )
+            declare -A FAMILY_FOR_ARCH=(
+              [arm64]="$(jq -r '.batch.builder_job_definition_arm64 // "null"' <<<"$DESC")"
+              [amd64]="$(jq -r '.batch.builder_job_definition_amd64 // "null"' <<<"$DESC")"
+            )
+            for ARCH in arm64 amd64; do
+              FAMILY="${FAMILY_FOR_ARCH[$ARCH]}"
+              IMAGE="${IMAGE_FOR_ARCH[$ARCH]}"
+              if [ -z "$FAMILY" ] || [ "$FAMILY" = "null" ]; then
+                echo "::error::$ENV's CI descriptor names no ${ARCH} builder job-definition family." \
+                     "Apply soroban-aws-infrastructure (batch_builder_job_definition_name_amd64 +" \
+                     "ci_descriptor schema_version 2) to $ENV before deploying the builder."
+                exit 1
+              fi
+              ECS_PROPERTIES="{
+                  \"taskProperties\": [{
+                    \"volumes\": [
+                      {\"name\": \"docker-sock\", \"host\": {\"sourcePath\": \"/var/run/docker.sock\"}},
+                      {\"name\": \"scvs-shared\", \"host\": {\"sourcePath\": \"/tmp\"}}
+                    ],
+                    \"containers\": [
+                      {
+                        \"name\": \"materialise\",
+                        \"image\": \"${IMAGE}\",
+                        \"command\": [\"node\", \"services/builder/dist/materialise-entrypoint.js\"],
+                        \"essential\": false,
+                        \"resourceRequirements\": [
+                          {\"type\": \"VCPU\", \"value\": \"${BUILDER_VCPU}\"},
+                          {\"type\": \"MEMORY\", \"value\": \"${BUILDER_MEMORY_MIB}\"}
+                        ],
+                        \"environment\": [
+                          {\"name\": \"SCVS_HANDOFF_ROOT\", \"value\": \"/tmp\"}
+                        ],
+                        \"mountPoints\": [
+                          {\"sourceVolume\": \"scvs-shared\", \"containerPath\": \"/tmp\", \"readOnly\": false}
+                        ]
+                      },
+                      {
+                        \"name\": \"runner\",
+                        \"image\": \"${IMAGE}\",
+                        \"command\": [\"node\", \"services/builder/dist/entrypoint.js\"],
+                        \"essential\": true,
+                        \"dependsOn\": [{\"containerName\": \"materialise\", \"condition\": \"SUCCESS\"}],
+                        \"resourceRequirements\": [
+                          {\"type\": \"VCPU\", \"value\": \"${BUILDER_VCPU}\"},
+                          {\"type\": \"MEMORY\", \"value\": \"${BUILDER_MEMORY_MIB}\"}
+                        ],
+                        \"environment\": [
+                          {\"name\": \"SCVS_HANDOFF_ROOT\", \"value\": \"/tmp\"}
+                        ],
+                        \"mountPoints\": [
+                          {\"sourceVolume\": \"docker-sock\", \"containerPath\": \"/var/run/docker.sock\", \"readOnly\": false},
+                          {\"sourceVolume\": \"scvs-shared\", \"containerPath\": \"/tmp\", \"readOnly\": false}
+                        ]
+                      }
+                    ]
+                  }]
+                }"
+
+              # invariants.md rule 1's boundary, made mechanical by rule 23. config/deploy/<env>/builder.json
+              # lists 23 variables the sandbox must never be given; until this check existed nothing compared
+              # the registered document against that list, and the README said so outright. It runs BEFORE
+              # register, and a non-zero exit means the document crosses the trust boundary — never work
+              # around it.
+              jq -n --argjson p "$ECS_PROPERTIES" \
+                '{jobDefinitionName: "x", type: "container", ecsProperties: $p}' > /tmp/builder-jobdef.json
+              node eng-tools/check-taskdef-boundary.mjs --env "$ENV" --service builder /tmp/builder-jobdef.json
+
+              JOB_DEF_ARN=$(aws batch register-job-definition \
+                --job-definition-name "$FAMILY" \
+                --type container \
+                --platform-capabilities EC2 \
+                --region "${{ env.AWS_REGION }}" \
+                --ecs-properties "$ECS_PROPERTIES" \
+                --tags Project=sv,Environment=$ENV,ManagedBy=github-actions,Purpose=scvs-real-verify-pipeline,CommitSha=${{ inputs.source_sha }},Architecture=$ARCH \
+                --query 'jobDefinitionArn' --output text)
+              # Logged, not exported: nothing downstream consumes the revision ARN now.
+              echo "Registered $FAMILY ($ARCH): $JOB_DEF_ARN"
+            done
+            REGISTERED+=("$ENV at contract $CONTRACT_VERSION (orchestrator supports $SUPPORTED)")
+          done
+
+          {
+            echo "### Builder image → Batch job definitions"
+            echo
+            echo "This image writes \`recipe.json\` contract **$CONTRACT_VERSION**."
+            echo
+            for ENTRY in "${REGISTERED[@]:-}"; do [ -n "$ENTRY" ] && echo "- ✅ registered: $ENTRY"; done
+            for ENTRY in "${SKIPPED[@]:-}"; do [ -n "$ENTRY" ] && echo "- ⏭️ **skipped**: $ENTRY"; done
+            if [ "${#SKIPPED[@]}" -gt 0 ]; then
+              echo
+              echo "A skipped environment keeps running its previous builder image, which is safe."
+              echo "To move it forward, deploy **that environment's** orchestrator first"
+              echo "(\`deploy.yml\` → the environment), then re-run this workflow."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Red on a skip, deliberately. A skipped environment is a real divergence someone chose or someone
+          # forgot, and the whole failure this gate exists for was invisible for hours.
+          if [ "${#SKIPPED[@]}" -gt 0 ]; then
+            for ENTRY in "${SKIPPED[@]}"; do
+              echo "::error::builder not registered into $ENTRY — deploy that environment's orchestrator first"
+            done
+            exit 1
+          fi

@@ -1,0 +1,105 @@
+name: Build stellar-cli
+
+# Refreshes the cached `stellar` binary that docker/service.Dockerfile and docker/builder.Dockerfile bake in —
+# the official release docker/stellar-cli.pin names.
+# Called by the operations repository when the pin or the fetch script changes.
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: "The application commit this run acts on. Also the ref its tooling is checked out at."
+        type: string
+        required: true
+      source_repository:
+        description: >-
+          Where the application source lives. Defaults to this project; a fork running its own
+          deployment passes its own. Only ever read, and the repository is public, so no token.
+        type: string
+        required: false
+        default: 57blocks/soroban-verification-service
+    secrets:
+      AWS_ACCOUNT_ID:
+        description: >-
+          The deploy-role fallback's account id. An identifier, not a credential — it is a secret
+          only so it stays out of the tree, and the caller passes it explicitly.
+        required: false
+
+permissions:
+  id-token: write # OIDC -> AWS role assumption, for the cache read/write
+  contents: read
+
+# Two runs on the same pin would race on the same S3 key. Harmless — identical bytes, and each is checked
+# against the pinned digest before upload — but pointless, so they queue instead.
+concurrency:
+  group: stellar-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    # Account-wide (no environment input), so the job pins environment: dev for its deploy-role variable and its
+    # descriptor read.
+    environment: dev
+    # `fail-fast: false` so one leg's failure still leaves the other's entry refreshed.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    # Was 75, sized for the Rust compile. A download plus two sha256 passes over 150 MB is a couple of minutes;
+    # 15 leaves room for a slow GitHub release CDN and still fails fast on a hang.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: ${{ inputs.source_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          # Account-wide (no environment input), so it always uses dev's deploy role and dev's descriptor.
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - name: Read the CI descriptor (dev)
+        run: |
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh dev 2,3)
+          echo "$DESC" > /tmp/ci-descriptor.json
+          echo "SCVS_CI_CACHE_BUCKET=$(jq -r '.artifacts_bucket' <<<"$DESC")" >> "$GITHUB_ENV"
+
+      - name: Fetch or build, then cache
+        env:
+          # Explicit rather than inherited from the runner, so the cache key this writes is a property of the
+          # matrix leg and not of whatever hardware GitHub assigned.
+          SCVS_CLI_TARGET_ARCH: ${{ matrix.arch }}
+        run: scripts/ci/fetch-or-build-stellar-cli.sh
+
+      - name: Report what is now cached
+        env:
+          SCVS_CLI_TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          . docker/stellar-cli.pin
+          KEY="scvs-ci/stellar-cli/${STELLAR_CLI_VERSION}/${SCVS_CLI_TARGET_ARCH}/stellar"
+          BUCKET="${SCVS_CI_CACHE_BUCKET:-sv-dev-artifacts}"
+          arch_upper="$(printf '%s' "$SCVS_CLI_TARGET_ARCH" | tr '[:lower:]' '[:upper:]')"
+          binary_var="STELLAR_CLI_BINARY_SHA256_${arch_upper}"
+          {
+            echo "### \`stellar\` CLI cache — ${SCVS_CLI_TARGET_ARCH}"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| bucket | \`${BUCKET}\` |"
+            echo "| key | \`${KEY}\` |"
+            echo "| sha256 | \`$(cut -d' ' -f1 "docker/prebuilt/bin/${SCVS_CLI_TARGET_ARCH}/stellar.sha256")\` |"
+            echo "| pin | \`${STELLAR_CLI_VERSION}\`, official release |"
+            echo "| pinned digest | \`${!binary_var}\` (\`${binary_var}\`) |"
+            echo
+            echo "Consumed by \`docker/service.Dockerfile\` and \`docker/builder.Dockerfile\` through"
+            echo "\`COPY docker/prebuilt/bin/\${TARGETARCH}/stellar\`."
+          } >> "$GITHUB_STEP_SUMMARY"
