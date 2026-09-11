@@ -341,6 +341,16 @@ Finding this was the suite doing its job before it ran a single case, which is w
 divergence was invisible while the cases were prose and became obvious the moment something had to
 encode them as assertions.
 
+The same shape, again, on 2026-09-10: the harness — not a case — was the stale side. `GET …/log`
+became token-authenticated (build-log-access BL-1, landed 2026-09-08) and
+[`support/job.ts`](support/job.ts) still asked for it bare, so thirteen assertions across six specs
+read a `401 build_log_token_required` envelope where they expected a log. The implementation is
+right and the ladder is the requirement, so this was never a drift-ledger entry either: the harness
+now captures the one-time `build_log_token` out of each submission's 202 and sends it back in
+`X-Build-Log-Token`. The capture sits in `http()` rather than the submit helpers, because the token
+is issued exactly once and is never re-issued — see [`support/build-log-token.ts`](support/build-log-token.ts)
+for why no call site may be allowed to bypass it.
+
 **A gap entry must name a document that already records it.** A test failing for a reason nobody has
 written down is a bug and belongs in a plain `expect`. Adding a gap to quiet an unexplained failure
 turns a finding into furniture.

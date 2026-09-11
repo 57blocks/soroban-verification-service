@@ -1,4 +1,5 @@
 /** Submitting, and waiting. */
+import { buildLogTokenFor } from "./build-log-token.js";
 import { env } from "./env.js";
 import { expectStatus, http, postJson, sleep, type HttpResult } from "./http.js";
 import { jobLogUrl, jobUrl, submitUrl, preflightUrl, uploadSourceUrl } from "./routes.js";
@@ -117,9 +118,20 @@ export async function submitAndWait(
   return { ...terminal, jobId };
 }
 
-/** `GET …/log` returns `text/plain`, and 404s with a JSON envelope when the job recorded none. */
+/**
+ * `GET …/log` returns `text/plain`, and a JSON envelope on every other arm of BL-1's ladder: 401 with no
+ * `X-Build-Log-Token`, 404 with a wrong one *and* when the job recorded no log — the two are deliberately
+ * indistinguishable, so the route is not an oracle for which job ids exist — and 410 once the log expires.
+ *
+ * The token is attached from this run's own submissions. A job this run did not create has none, and the
+ * resulting 401 is the correct answer rather than a harness defect: its log belongs to the submission that
+ * created it.
+ */
 export async function readJobLog(jobId: string): Promise<HttpResult> {
-  return http(jobLogUrl(jobId), { headers: { accept: "text/plain" } });
+  const token = buildLogTokenFor(jobId);
+  return http(jobLogUrl(jobId), {
+    headers: { accept: "text/plain", ...(token ? { "x-build-log-token": token } : {}) },
+  });
 }
 
 /** Uploads raw archive bytes. */

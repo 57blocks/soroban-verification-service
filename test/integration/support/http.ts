@@ -1,6 +1,7 @@
 /** The HTTP client every case uses. */
 import { createHash } from "node:crypto";
 
+import { captureBuildLogToken } from "./build-log-token.js";
 import { env } from "./env.js";
 
 export interface HttpResult {
@@ -40,6 +41,11 @@ export async function http(url: string, options: HttpOptions = {}): Promise<Http
 
     const buffer = new Uint8Array(await response.arrayBuffer());
     const text = new TextDecoder().decode(buffer);
+    const json = tryJson(text);
+
+    // Here and not in the submit helpers: the token is returned exactly once and cannot be re-issued, so the
+    // capture has to sit somewhere no call site can bypass. See `build-log-token.ts`.
+    if (response.status === 202) captureBuildLogToken(json);
 
     return {
       status: response.status,
@@ -49,7 +55,7 @@ export async function http(url: string, options: HttpOptions = {}): Promise<Http
       bytes: buffer,
       durationMs: Date.now() - started,
       url,
-      json: tryJson(text),
+      json,
     };
   } finally {
     clearTimeout(timer);

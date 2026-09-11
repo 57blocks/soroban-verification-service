@@ -64,6 +64,12 @@ export interface SubmitQueued {
   status: "queued";
   job_id: string;
   target: VerificationTarget;
+  /**
+   * The one-time raw-build-log credential (build-log-access BL-1). Absent when this 202 attached to a job
+   * that was already in flight: that job's token went to the submission that created it, and is not
+   * re-issued. `support/build-log-token.ts` records it; no case should need to read it here.
+   */
+  build_log_token?: string;
   message?: string;
 }
 
