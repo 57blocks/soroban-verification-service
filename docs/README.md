@@ -33,11 +33,19 @@ stable identifiers that do not change when this code moves.
 | [`results-sep/`](results-sep/) | The result format and the aggregation surface, written as a Stellar ecosystem proposal, with JSON Schemas and worked examples |
 | [`registry-schemas/`](registry-schemas/) | The registry status object and error shapes |
 
-## Decisions
+## Specs — what this system promises, as built
 
-[`adr/`](adr/) holds the Architecture Decision Records — why the code is shaped the way it is. In a
-repository whose history begins at one commit, they are the only standing answer to that question,
-which is why they are here and why a change that establishes a new constraint should add one.
+[`specs/`](specs/) holds one document per area (submission, verification, build-environments,
+published-results, query-and-aggregation, data-and-lifecycle, configuration): the observable
+behavior and constraints that hold today, each claim followed by a `Verified by:` line pointing at
+the test that proves it. Present tense, no design history — when a spec and the code disagree, the
+spec is the defect.
+
+## Invariants
+
+[`invariants.md`](invariants.md) holds the rules that must remain true no matter how the code
+implementing them is rewritten — the only standing answer to "why is the code shaped this way" that
+survives a rewrite, which is why a change that establishes a new constraint should add a row there.
 
 A change itself is recorded in the pull request that makes it. There is no separate per-change
 document.

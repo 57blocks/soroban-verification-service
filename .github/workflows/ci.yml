@@ -95,6 +95,11 @@ jobs:
       - name: Check the tool index
         run: pnpm run check:tool-index
 
+      # Static source read only, no build and no database: doc byte budgets, relative link validity,
+      # spec-to-test bindings, and docs/invariants.md's code-location references.
+      - name: Check documentation contracts
+        run: pnpm run check:docs
+
       # Never a gate: an advisory appears when a researcher publishes, not when an author pushes. The tool
       # exits 0 by contract and writes its table to the run summary.
       - name: Report dependency advisories

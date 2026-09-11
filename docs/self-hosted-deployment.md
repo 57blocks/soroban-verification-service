@@ -3,12 +3,12 @@
 > **Audience**: an operator standing up their own verifier in their own AWS account — not this
 > project's reference deployment. If you are looking for how *this operator's* environments are run
 > day to day, that is internal operational material and is not what this document is.
-> **Scope**: **Verifier-only mode** (TRD §4.6) — your own identity, your own trust policy, your own
-> published result root. Query-only mode (aggregating other verifiers without rebuilding anything) and
-> Full stack are different deployment shapes; see `docs/design/operations.md`
-> for the mode table. This guide does not cover either.
-> **Authority for the architecture**: `docs/design/aws-deployment.md` and
-> [ADR-006](adr/ADR-006-terraform-owns-aws-infrastructure.md) describe the target shape this project
+> **Scope**: **Verifier-only mode** — your own identity, your own trust policy, your own published
+> result root. Query-only mode (aggregating other verifiers without rebuilding anything) and Full
+> stack are different deployment shapes; see [`docs/specs/configuration.md`](specs/configuration.md)
+> §10 for the mode table. This guide does not cover either.
+> **Authority for the architecture**: [rule 8 of `docs/invariants.md`](invariants.md) and
+> [`docs/specs/configuration.md`](specs/configuration.md) describe the target shape this project
 > itself runs in; this document is "how a stranger builds an equivalent shape in their own account,"
 > not a copy of either. Where this guide is silent on a detail, that document's *pattern* — not its
 > specific IDs — is the thing to follow.
@@ -47,8 +47,8 @@ the same architecture document.
 
 - An AWS account you control, and the ability to provision VPC, S3, RDS, ECS/Fargate, AWS Batch, SQS,
   ECR, IAM, and (if you want your own hostname in front of the results tree) CloudFront + ACM.
-- Terraform (or the IaC tool of your choice — this project uses Terraform, per ADR-006, but nothing
-  about the shape below requires it specifically).
+- Terraform (or the IaC tool of your choice — this project uses Terraform, per `docs/invariants.md`
+  rule 8, but nothing about the shape below requires it specifically).
 - Docker with multi-platform build support if you intend to build the container images yourself rather
   than adapting this repository's.
 - A naming convention you will apply consistently. This project's own convention is
@@ -61,15 +61,14 @@ the same architecture document.
 
 ## 2. What you provision, and why each piece is shaped the way it is
 
-Follow `docs/design/aws-deployment.md` §2's topology diagram for the full
-picture; the summary that matters for a first deployment:
+The summary that matters for a first deployment:
 
 | Piece | Shape | Why |
 | --- | --- | --- |
 | VPC + subnets | Public subnets for anything internet-facing (your API's load balancer), private subnets for services, data, and the batch fleet | `orchestrator-svc` takes no inbound traffic at all and should never sit behind a load balancer target group |
 | Object storage | Two buckets minimum: a **scratch** bucket (presigned-PUT uploads, short-lived) and a **results** bucket (your published result root — see §4) | Keeping them separate means your public result tree's access policy is never accidentally as permissive as your upload scratch space's |
 | Batch compute | At least one job queue + compute environment for the builder fleet | This is where untrusted rebuilds run — see §3 before provisioning its IAM |
-| Postgres | One instance is enough to start (verification-svc + orchestrator-svc share it) | If you later also run Query-only mode, that reads its own instance — see `docs/design/aws-deployment.md` §2 for why the two are kept apart |
+| Postgres | One instance is enough to start (verification-svc + orchestrator-svc share it) | If you later also run Query-only mode, that reads its own instance — the two are kept apart deliberately |
 | SQS queue | One queue for Batch job-state-change events, fed by an EventBridge rule watching your Batch job queue | This is how `orchestrator-svc` learns a rebuild finished — it does not poll Batch directly |
 | ECR repositories | One each for the builder image and your resident-service images | Push commit-SHA-digest tags; do not rely on a mutable `:latest` — see §5 |
 
@@ -82,7 +81,7 @@ piece is portable just because it's "just a database" or "just object storage."
 
 ## 3. The one invariant you must not relax: the builder holds no business credentials
 
-This is [ADR-002](adr/ADR-002-builder-holds-no-business-credentials.md)'s decision, and it is not
+This is [rule 1 of `docs/invariants.md`](invariants.md)'s decision, and it is not
 optional hardening — it is the reason a sandbox escape in the rebuild container does not become a
 compromise of your database, your credentials, or your published results. Concretely, when you
 provision the builder fleet's IAM:
@@ -181,11 +180,10 @@ existing tag fails, which is a feature, not friction.
 - If you intend for other verifiers or aggregators to eventually list you,
   [`docs/verifier-onboarding.md`](verifier-onboarding.md) covers what "being discoverable" actually
   requires — there is no registration step, but there is a self-description you need to get right.
-- `docs/design/aws-deployment.md` is the fuller architecture reference this
-  guide summarized; read it if you need more detail on any one piece (the IAM role tables in particular
-  go further than §3 above).
-- This project's own operational runbooks (`docs/runbooks/`) describe how *this* operator runs *its*
-  environments day to day. They are written against a specific account and are not a drop-in playbook
-  for yours, but the failure modes they document (a misconfigured publisher variable, a stuck build, an
-  image-trust change) are worth reading once you're operating for real — the shape of the problem
-  usually transfers even when the specific commands don't.
+- [`docs/specs/configuration.md`](specs/configuration.md) is the fuller reference this guide
+  summarized; read it if you need more detail on any one piece.
+- This project's own operational runbooks describe how *this* operator runs *its* environments day
+  to day. They live in the internal repository this project was exported from and are written
+  against a specific account, so they are not a drop-in playbook for yours — but the failure modes
+  they document (a misconfigured publisher variable, a stuck build, an image-trust change) are the
+  kind worth planning for once you're operating for real, even without the specific document.

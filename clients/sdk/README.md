@@ -88,7 +88,7 @@ const tvl = await fetch("https://example.com/trusted-verifiers.json").then((r) =
 const client = newClient({ tvl });
 
 // "Does any trusted verifier vouch for these bytes?" — no network parameter: a wasm hash is a
-// function of the bytes alone, so a verdict is not chain-scoped (ADR-007).
+// function of the bytes alone, so a verdict is not chain-scoped (docs/invariants.md rule 12).
 const byHash = await client.registry.byHash("9f2c1a7b…");
 
 // One named verifier's own document, unaggregated.
@@ -265,8 +265,7 @@ pnpm --filter @scvs/sdk run check:packaging    # publint + are-the-types-wrong o
 | `test/browser-bundle-test.ts` | Asserts the bundle imports exactly its declared dependencies and kept its decorator metadata, then bundles the published output for `--platform=browser` and **executes** it against the fixtures — "runs in a browser", not "resolves in a browser" |
 
 Why the package is bundled rather than shipped as plain `tsc` output, and why the validation libraries
-are excluded from that bundle: [`tsup.config.ts`](tsup.config.ts) and
-`bundle-workspace-deps.md`.
+are excluded from that bundle: [`tsup.config.ts`](tsup.config.ts).
 
 ## Installing
 
@@ -327,7 +326,6 @@ decision, not an engineering one.
 
 ## One window that has closed
 
-The clean break to `newClient`'s shape was free **exactly once, before the first real publish**
-(`decisions/the-tvl-is-a-parameter-not-a-url.md`).
+The clean break to `newClient`'s shape was free **exactly once, before the first real publish**.
 `0.1.0` was published on 2026-09-03, so that window is **spent**: changing the shape now is a breaking
 change owed a major version, not a free correction. This matters to whoever finishes that work.

@@ -15,10 +15,8 @@ field table together.
 carrying `results_urls`, and it carries them as bare URI strings; the consumer shape takes structured
 entries only, because tolerating a string let one reach a relayed aggregate where the Results SEP's
 schema types a link as an object. Both tests assert the split rather than working around it, and
-`200-out-of-band.json` is the base the rest of their cases build on. The decision is
-`the-read-side-accepts-structured-links-only.md`.
-This is a deliberate divergence from the draft, not drift — it is the one place our shape stopped
-following it.
+`200-out-of-band.json` is the base the rest of their cases build on. This is a deliberate divergence
+from the draft, not drift — it is the one place our shape stopped following it.
 
 `202-pending.json` and `200-unverified.json` are byte-identical: the draft distinguishes an enqueued
 `unverified` from a settled one by HTTP status, not by body. Both are kept so a reader does not

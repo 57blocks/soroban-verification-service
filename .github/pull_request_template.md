@@ -3,9 +3,9 @@
 
 ## Summary
 
-<!-- What changed and why. Link the feature docs (docs/features/<feature>/) or the ADR that
-     authorizes this behaviour. If neither exists and this is more than a trivial fix, that is
-     worth explaining here. -->
+<!-- What changed and why. Link the feature docs (docs/features/<feature>/) or the rule in
+     docs/invariants.md that authorizes this behaviour. If neither exists and this is more than a
+     trivial fix, that is worth explaining here. -->
 
 ## Test plan
 
@@ -25,9 +25,10 @@
      - Did any package gain or lose a workspace dependency?
      - Did a DTO move, or gain/lose a field? Did `pnpm run generate:api-client` output change?
      - Did the published artifact or result-tree format change?
-     - Does an existing ADR or design doc now describe something untrue? Update it in THIS PR.
+     - Does an existing rule in docs/invariants.md or design doc now describe something untrue?
+       Update it in THIS PR.
      - Does this establish a new pattern, or remove a constraint something else relies on?
-       That needs an ADR.
+       That needs a new row in docs/invariants.md.
 
      "None." -->
 
@@ -37,7 +38,7 @@
      roles, the public HTTP surface, DB migrations, credential and presigned-URL handling.
 
      If this touches the sandbox: did it gain a dependency, a credential, or a decision it should
-     not have? See docs/adr/ADR-002-builder-holds-no-business-credentials.md.
+     not have? See docs/invariants.md, rule 1.
 
      Also: does data already written to Postgres or the result tree still validate after this?
 

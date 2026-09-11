@@ -97,7 +97,7 @@ itself.
 This is the only place submitted, untrusted source code is actually built and executed. Its IAM role
 holding zero business credentials (no database access, no general object-storage access, no secrets)
 is what keeps a compromise of the build process from becoming a compromise of anything else — see this
-project's own [ADR-002](adr/ADR-002-builder-holds-no-business-credentials.md). It needs its own
+project's own [rule 1 of `docs/invariants.md`](invariants.md). It needs its own
 batch-compute environment and its own IAM role, distinct from `orchestrator-svc`'s.
 
 ### 2.6 `composer` (only if you serve cli-legacy targets)
@@ -114,8 +114,8 @@ batch-compute environment and its own IAM role, distinct from `orchestrator-svc`
 Unlike `builder`, `composer` never runs untrusted, submitter-supplied input — it only ever composes
 build environments from official, trusted components for a given toolchain pair. That's why its IAM
 role is shaped differently (it needs registry-push access `builder` must never have), not because it's
-less sensitive — see [ADR-017](adr/ADR-017-compose-once-cache-in-private-registry.md) and
-`design/build-environments.md` if you're standing this up. If you
+less sensitive — see [rule 18 of `docs/invariants.md`](invariants.md) and
+[`docs/specs/build-environments.md`](specs/build-environments.md) if you're standing this up. If you
 don't need to serve cli-legacy targets, skip this section entirely.
 
 ## 3. Summary table

@@ -1,7 +1,7 @@
 # Docker Compose
 
 `docker-compose.yml` runs local Postgres 16 for development (matches the engine major version of the
-shared dev RDS instance — see `../docs/design/aws-deployment.md`).
+shared dev RDS instance).
 Bring it up with:
 
 ```bash
@@ -30,9 +30,10 @@ dependency and not a deployment.
 | Postgres | localhost:5433 |
 | orchestrator-svc | no port — loopback health only, as in production |
 
-**It brings up the stack; it does not make the build path local.** ADR-003 has `orchestrator-svc`
-always dispatching to AWS Batch, deliberately: a second rebuild path is a second thing that can
-disagree with the reference implementation. Submission, status, publishing and querying all work
+**It brings up the stack; it does not make the build path local.** Rule 3 of `docs/invariants.md`
+has `orchestrator-svc` always dispatching to AWS Batch, deliberately: a second rebuild path is a
+second thing that can disagree with the reference implementation. Submission, status, publishing
+and querying all work
 here against local Postgres and a local result tree — but running an actual rebuild needs real
 values in the repository-root `.env` (`SCVS_BATCH_JOB_QUEUE_ARN_ARM64`,
 `SCVS_BATCH_JOB_QUEUE_ARN_AMD64`, `SCVS_BATCH_JOB_DEFINITION_ARN_ARM64`,
@@ -53,19 +54,17 @@ deployment's own bundle is `config/legal-documents.json`, which is what `dev` an
 
 Three properties of this file are conformance, not style, and should survive edits:
 
-- **`orchestrator-svc` is its own container.** S1/S19 require the worker to stay separated from the
-  API in *every* shape, single-host Compose included — "a compose file that collapses the worker into
-  the API process is not a smaller deployment, it is a non-conformant one"
-  (`operations.md` §1).
-- **One `scvs_results` volume, written by `orchestrator-svc` and mounted `:ro` by `query-svc`.**
-  `aws-deployment.md` §6.4 calls a writer/reader mismatch the single most likely misconfiguration in
-  the deployment; here they cannot diverge, and the read layer cannot mutate a published result.
+- **`orchestrator-svc` is its own container.** The worker stays separated from the API in *every*
+  shape, single-host Compose included — a compose file that collapses the worker into the API
+  process is not a smaller deployment, it is a non-conformant one.
+- **One `scvs_results` volume, written by `orchestrator-svc` and mounted `:ro` by `query-svc`.** A
+  writer/reader mismatch is the single most likely misconfiguration in the deployment; here they
+  cannot diverge, and the read layer cannot mutate a published result.
 - **`migrate` is a `service_completed_successfully` dependency**, not a race. A service booting
   against an unmigrated database fails on its first query rather than at boot.
 
-**Query-only is deliberately not here.** That mode must run with **no database** (TRD §4.6) and
-`query-svc` cannot yet — it takes Postgres for the Trusted Verifiers List, which is an open decision
-(`the-tvl-is-configuration-not-database-state.md`).
+**Query-only is deliberately not here.** That mode must run with **no database** and `query-svc`
+cannot yet — it takes Postgres for the Trusted Verifiers List, which is an open decision.
 A "Query-only" service here that quietly required Postgres would claim a conformance row this repo
 has not earned. Verifier-only is this file minus `query-svc` and `web`, and is left to the operator
 until it has a test that proves it.

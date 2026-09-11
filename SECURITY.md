@@ -91,14 +91,14 @@ for exact mechanics — this list is not exhaustive):
     recorded `(cliver, rsver)` pair and pushes it to its own private registry, so it does not pass the
     check above. Its trust comes from what goes into it: a digest-pinned Docker Official base, a
     checksum-pinned rustup installer, and a stellar-cli release asset verified against the digest
-    GitHub publishes ([ADR-009](docs/adr/ADR-009-build-environments-are-composed-from-official-components.md),
-    [ADR-017](docs/adr/ADR-017-compose-once-cache-in-private-registry.md)).
+    GitHub publishes ([`docs/invariants.md` rules 16–18](docs/invariants.md)).
 - **The two Batch jobs hold opposite capabilities, deliberately.** Composition runs in
   `services/composer`, whose trust boundary is the inverse of the builder's: the builder *runs*
   untrusted code and therefore holds nothing, while the composer runs no untrusted code but holds the
   one write capability (`ecr:PutImage`) the builder must never have. Neither reaches Postgres or the
   result storage — `config/env-manifest.yaml` lists those variables as `forbidden` for both groups, so
-  `pnpm run check:env` fails on either direction of drift rather than leaving it to review (ADR-012).
+  `pnpm run check:env` fails on either direction of drift rather than leaving it to review
+  ([`docs/invariants.md` rule 10](docs/invariants.md)).
   Both are container-execution-capable and both are therefore under CE1–CE5, for opposite reasons.
 - **Sandboxed rebuilds.** The `docker run` rebuild — the only rebuild path — uses `--cap-drop ALL`,
   `--security-opt no-new-privileges`, `--network none`, `--read-only`, a non-root `--user`, `nosuid`
