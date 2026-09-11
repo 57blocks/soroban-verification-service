@@ -39,15 +39,25 @@ on:
       image_repo:
         description: >-
           ECR repository (name only) of the image to run the migration from — deploy.yml passes the
-          one it just pushed. Split from the digest, never a full reference: the registry hostname
+          one it just staged. Split from the digest, never a full reference: the registry hostname
           embeds the account id, and a job output carrying it would be stripped by GitHub's
-          secret filter.
+          secret filter. Omitted by a standalone run, which resolves an image instead.
         type: string
-        required: true
+        required: false
+        default: ""
       image_digest:
-        description: "Digest of the image to run the migration from (deploy.yml's build output)."
+        description: "Digest of the image to run the migration from. Omitted by a standalone run."
         type: string
-        required: true
+        required: false
+        default: ""
+      image_tag:
+        description: >-
+          Standalone runs only, and optional even then: the tag to migrate from. With none, the
+          newest image in the repository by push time — a manual run should not have to know a
+          commit SHA to apply already-released migrations.
+        type: string
+        required: false
+        default: ""
     secrets:
       AWS_ACCOUNT_ID:
         description: >-
