@@ -113,7 +113,14 @@ jobs:
 
       # A service whose subject is reproducible builds should be able to answer "what produced this
       # image" about its own artifacts.
+      #
+      # Gated on visibility rather than skipped or forced: persisting an attestation is one of the
+      # features this organization's plan allows only on a public repository — the same wall branch
+      # protection sits behind. Unconditional, every image publishes and then the run goes red on
+      # the last step; `continue-on-error` would hide a genuine signing failure after publication.
+      # This turns itself on at the flip and means something from that moment.
       - name: Attest build provenance
+        if: github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/sv-${{ matrix.component }}
@@ -125,6 +132,7 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/sv-${{ matrix.component }}
           TAG: ${{ github.sha }}${{ matrix.tag_suffix }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          PROVENANCE: ${{ github.event.repository.visibility == 'public' && 'attested' || 'not attested — the plan allows it only on a public repository' }}
         run: |
           set -euo pipefail
           {
@@ -134,6 +142,7 @@ jobs:
             echo "| :--- | :--- |"
             echo "| tag | \`${IMAGE}:${TAG}\` |"
             echo "| digest | \`${DIGEST}\` |"
+            echo "| provenance | ${PROVENANCE} |"
             echo
             echo "Resolve it from anywhere, with no credential:"
             echo
