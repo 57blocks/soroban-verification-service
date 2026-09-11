@@ -193,7 +193,7 @@
         },
         "bldarg": {
           "type": "array",
-          "description": "SEP-58 v0.6.0: leading entry-point arguments. ORDER IS SIGNIFICANT; never sorted. Absent means `contract build`.",
+          "description": "SEP-58 v0.6.0: leading entry-point arguments. ORDER IS SIGNIFICANT; never sorted. Absent AND empty both mean SEP-58's default, `contract build` — a consumer must not read `[]` as an empty argument vector (see the SEP's status-object section).",
           "items": {
             "type": "string"
           }
