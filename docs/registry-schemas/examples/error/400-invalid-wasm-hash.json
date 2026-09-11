@@ -1,5 +1,0 @@
-{
-  "schema_version": "1.0",
-  "error": "400_invalid_wasm_hash",
-  "message": "wasm_hash is not a valid lowercase hex SHA-256."
-}

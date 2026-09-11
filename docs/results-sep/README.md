@@ -198,8 +198,9 @@ what the exercise did **not** cover. It was written against the single draft and
 finding about aggregation now lands in the second one. The drafts' author reads it while drafting; it is
 the return on aligning the code before writing the spec.
 
-[`../registry-schemas/`](../registry-schemas/) holds the Registry API draft (stellar-protocol#1944) the
-Results draft builds on — the previous target, kept as history and as **peer** fixtures.
+The Results draft builds on the Registry API draft
+([stellar-protocol#1944](https://github.com/stellar/stellar-protocol/pull/1944)); its worked examples
+are kept as **peer** fixtures at [`../../test/fixtures/registry/`](../../test/fixtures/registry/).
 
 ## Submission checklist
 

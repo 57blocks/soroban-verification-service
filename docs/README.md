@@ -31,7 +31,6 @@ stable identifiers that do not change when this code moves.
 | | |
 | --- | --- |
 | [`results-sep/`](results-sep/) | The result format and the aggregation surface, written as a Stellar ecosystem proposal, with JSON Schemas and worked examples |
-| [`registry-schemas/`](registry-schemas/) | The registry status object and error shapes |
 
 ## Specs — what this system promises, as built
 
