@@ -6,8 +6,8 @@
   "source_code_verifications": [
     {
       "verifier": {
-        "url": "https://verify.example.org",
-        "name": "Example Verify"
+        "name": "Example Verify",
+        "url": "https://verify.example.org"
       },
       "status": "unverified"
     }

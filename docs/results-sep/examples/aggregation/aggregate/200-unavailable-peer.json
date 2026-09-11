@@ -6,8 +6,8 @@
   "source_code_verifications": [
     {
       "verifier": {
-        "url": "https://verify.example.org",
-        "name": "Example Verify"
+        "name": "Example Verify",
+        "url": "https://verify.example.org"
       },
       "status": "verified",
       "recipe_source": "on_chain_metadata",
@@ -29,7 +29,7 @@
         {
           "type": "report",
           "location": "arweave",
-          "url": "ar://kP7nQx2LmR9vT4wY6bH1cJ8sD3fG5aZ0eN2iU7oX9yM",
+          "url": "https://gateway.irys.xyz/kP7nQx2LmR9vT4wY6bH1cJ8sD3fG5aZ0eN2iU7oX9yM",
           "sha256": "5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a392817060"
         }
       ],
