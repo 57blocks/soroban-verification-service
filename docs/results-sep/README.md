@@ -71,11 +71,11 @@ examples/
   results/      → contents/sep-contract-verification-results/examples/
     status/     200-verified · 200-mismatched · 202-pending
     page/       200-first-page · 200-last-page · 200-empty
-    error/      400-invalid-wasm-hash · 400-other · 404-not-found · 503-storage-unavailable
-                · 429-rate-limited-with-diagnostics
+    error/      400-invalid-wasm-hash · 400-invalid-cursor · 404-not-found
+                · 503-storage-unavailable
   aggregation/  → contents/sep-contract-verification-aggregation/examples/
     aggregate/  200-single · 200-disputed · 200-unavailable-peer · 200-no-data
-    page/       200-first-page
+    page/       200-first-page · 200-empty
     verifiers/  200-verifiers
     error/      400-invalid-cursor · 400-invalid-network · 404-contract-not-found
                 · 503-aggregation-unavailable
@@ -84,6 +84,16 @@ examples/
 **Nested by SEP where the schemas are flat**, and the asymmetry is not an oversight: schema filenames
 are globally unique (`stellar-*`), while `page/200-first-page.json` exists under both SEPs and would
 collide.
+
+**The aggregator's `page/` holds two of the verifier's three, and both halves of that are deliberate.**
+An aggregator's `200-last-page` would be `200-first-page` with `cursor: null` and the same 2 KB record
+copied under it, and Results §5's own `200-last-page` already demonstrates the null-cursor rule on the
+same envelope — so it is not written. `200-empty` is, and for a different reason than its Results twin,
+byte-identical though the two files are: it is the other half of the one MUST that is the aggregator's
+own. Before it has read its list for the first time an aggregator answers `503`
+`aggregation_unavailable` (`error/503-aggregation-unavailable.json`), never an empty `200` a consumer
+records as synchronised and never revisits. The two files are the same route's two answers, and only
+side by side do they say which is which.
 
 **Every example is a body this deployment can actually produce.** That rule cost three candidates: one
 relaying a #1944-shape peer, one relaying a peer at a higher `MINOR`, and a status object holding two
@@ -94,14 +104,44 @@ An example set that mixes observed bodies with imagined ones stops being evidenc
 thing it is good for. The rules stay stated in the drafts and pinned by tests (`clients/sdk`'s SO7
 case, `query-svc`'s higher-MINOR retention, `registry-status-test.ts`'s verifier-keyed merge).
 
+**Re-read against the code, the rule cost five more things.** An example set is only evidence if every
+byte of it came from somewhere, so each file was checked against the site that emits it rather than
+against the schema alone (the schemas pass either way — that is what makes this the check that finds
+things):
+
+- An Arweave link is `${SCVS_ARWEAVE_GATEWAY_URL}/${txId}`, not `ar://{txId}` — `gatewayUrlFor` in
+  orchestrator-svc's archive service builds it, and `ar://` was carried over from the Registry API
+  draft's examples. Five files.
+- Every Trusted Verifiers List entry a deployment serves carries `id`, because `toTrustedVerifier`
+  sets it unconditionally from the row's key; and an entry with **no** `bulk_load_url` is not served
+  at all — that function throws and the caller drops the row (static-only membership is foreclosed).
+  The example had neither the ids nor a `bulk_load_url` on its `paused` member.
+- A `429` carrying `rate_limited` comes from the abuse guard, which is mounted on submission routes
+  this SEP does not define. On §§4–5 a `429` is the global throttler, reshaped to `request_failed`.
+  The file it stood in for — an error body with a diagnostic field beside the four — is now §5's
+  `400 invalid_cursor`, which is a body this SEP's own route emits **and** carries `status_code`.
+- `unavailable_verifiers` names only members of the aggregator's own list, so the peer one example
+  reported as unreachable had to be in the list example. It now is.
+- `400_other` has no producer at all: the code appears in the read route's DTO enum, the generated
+  OpenAPI and **RC2**, and in no `throw` anywhere, and its `message` was written rather than read.
+  Its example is deleted. §4's table and the error schema's `description` already name both members of
+  that closed vocabulary, so nothing a reader needs went with it — while a fabricated body sitting in
+  a set whose whole value is that it was observed costs the other twenty their standing.
+
+Key order follows the emitting code where the code fixes it — `{name, url}` in a `verifier` block,
+`schema · schema_version · verifiers · updated_at` in the list document. It is not chased into a
+relayed entry, where `toEntry` spreads a stored recipe object whose own order this repository does not
+pin.
+
 Three of them exist to pin something the prose argues rather than to show a happy path:
 
 - **`results/status/202-pending.json`** is exactly `{verifier, status}` — SO3's rule that an
   `unverified` entry carries nothing else, which is the one place a schema conditional is doing real
   work.
-- **`results/error/429-rate-limited-with-diagnostics.json`** carries `status_code` beside the four
-  required fields. That is the error envelope's document-level openness, and it is real: both
-  services' `errorBody()` adds it, and only the per-hash read route's `errorEnvelope()` does not.
+- **`results/error/400-invalid-cursor.json`** carries `status_code` beside the four required fields.
+  That is the error envelope's document-level openness, and it is real: both services' `errorBody()`
+  adds it, and only the per-hash read route's `errorEnvelope()` does not — which is why this file is
+  the bulk-load route's `400` and not the read route's.
 - **`aggregation/aggregate/200-no-data.json`** is a `200`, not a `404`: an aggregator that holds no
   view says so in the body, and `query-svc`'s per-hash route never 404s.
 
