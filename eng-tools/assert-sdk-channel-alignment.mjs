@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Does the dist-tag serving an environment resolve to a build of the commit that environment runs? Reads the
- * registry through npm (a CodeArtifact login must already be in this npm config) and the SDK surface through
+ * registry through npm (the package is public, so no login is involved) and the SDK surface through
  * git, and reports drift at the severity that environment's channel carries.
  *
  *   node eng-tools/assert-sdk-channel-alignment.mjs --env staging --deployed-commit <sha>
@@ -21,7 +21,7 @@ import {
   sdkSurfaceDiff,
 } from "./release-channels.mjs";
 
-const PKG = "@scvs/sdk";
+const PKG = "soroban-verification-client";
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
   const at = args.indexOf(`--${name}`);

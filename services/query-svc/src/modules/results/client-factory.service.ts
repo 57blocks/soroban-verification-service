@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { TrustedVerifiersRepository } from "@scvs/db-query";
-import { newClient, type ResolvedVerifier, type SoveClient, type TrustedVerifier } from "@scvs/sdk";
+import { newClient, type ResolvedVerifier, type SoveClient, type TrustedVerifier } from "soroban-verification-client";
 import {
   loadTrustedVerifiersList,
   TRUSTED_VERIFIERS_LIST_SCHEMA,

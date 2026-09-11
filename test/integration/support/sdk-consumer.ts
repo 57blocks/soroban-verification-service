@@ -64,7 +64,7 @@ function newestMtimeMs(path: string): number {
 export function runSdkConsumer(input: SdkConsumerInput): SdkConsumerResult {
   if (!existsSync(sdkEntry)) {
     throw new Error(
-      `@scvs/sdk is not built: ${sdkEntry} is missing. Run \`pnpm exec turbo run build --filter=@scvs/sdk\`.`,
+      `soroban-verification-client is not built: ${sdkEntry} is missing. Run \`pnpm exec turbo run build --filter=soroban-verification-client\`.`,
     );
   }
 
@@ -74,15 +74,15 @@ export function runSdkConsumer(input: SdkConsumerInput): SdkConsumerResult {
   const changedAtMs = Math.max(...inlinedSources.map(newestMtimeMs));
   if (changedAtMs > builtAtMs) {
     throw new Error(
-      `@scvs/sdk's bundle is older than the sources it inlines ` +
+      `soroban-verification-client's bundle is older than the sources it inlines ` +
         `(built ${new Date(builtAtMs).toISOString()}, newest source ${new Date(changedAtMs).toISOString()}). ` +
         `These cases would validate the deployment against a stale contract and blame the deployment. ` +
-        `Run \`pnpm exec turbo run build --filter=@scvs/sdk\` and re-run.`,
+        `Run \`pnpm exec turbo run build --filter=soroban-verification-client\` and re-run.`,
     );
   }
 
   const consumer = `
-    import { newClient } from "@scvs/sdk";
+    import { newClient } from "soroban-verification-client";
 
     import { readFile } from "node:fs/promises";
 

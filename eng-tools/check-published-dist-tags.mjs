@@ -2,7 +2,7 @@
 /**
  * Proves the CHANNEL landed, not merely that npm exited 0: the dist-tag this run wrote must resolve to the
  * version it published, and `latest` must never hold a prerelease — that pairing is what stops
- * `npm install @scvs/sdk` from handing a consumer a dev build.
+ * `npm install soroban-verification-client` from handing a consumer a dev build.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -19,7 +19,7 @@ const ATTEMPTS = argOf("attempts", 12);
 const WAIT_MS = argOf("wait-ms", 5000);
 
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
-const pkg = "@scvs/sdk";
+const pkg = "soroban-verification-client";
 const version = process.env.SDK_VERSION?.trim();
 const distTag = process.env.DIST_TAG?.trim();
 
@@ -96,7 +96,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     ["channel", process.env.CHANNEL ?? "unknown"],
     ["dist-tag", `\`${distTag}\``],
     ["commit", sha ? `\`${sha}\`` : "unrecorded"],
-    ["registry", `${process.env.SCVS_CODEARTIFACT_DOMAIN ?? "?"}/${process.env.SCVS_CODEARTIFACT_REPOSITORY ?? "?"}`],
+    ["registry", process.env.SCVS_SDK_REGISTRY?.trim() || "the public npm registry"],
   ];
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,

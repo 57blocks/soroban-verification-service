@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Network } from "@scvs/sdk";
+import type { Network } from "soroban-verification-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PillIcon } from "@/components/ui/pill-icon";

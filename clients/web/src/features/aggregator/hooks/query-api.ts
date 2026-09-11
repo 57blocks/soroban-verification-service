@@ -1,4 +1,4 @@
-import { newHostedClient, type HostedQueryClient, type QueryApiFailure } from "@scvs/sdk";
+import { newHostedClient, type HostedQueryClient, type QueryApiFailure } from "soroban-verification-client";
 import { getQueryApiBase } from "@/lib/http";
 
 /**

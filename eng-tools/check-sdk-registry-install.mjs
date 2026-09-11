@@ -60,7 +60,7 @@ function registryFor(scope, cwd) {
   return "";
 }
 
-/** Three ways the consumer learns where to install from, in order: */
+/** Where the consumer installs from: an override, or the public registry npm already defaults to. */
 function configureRegistry(consumer, scope) {
   const scopedKey = scope ? `${scope}:registry` : "registry";
   const explicit = process.env.SCVS_SDK_REGISTRY?.trim();
@@ -68,39 +68,16 @@ function configureRegistry(consumer, scope) {
     writeFileSync(join(consumer, ".npmrc"), `${scopedKey}=${explicit}\n`, { mode: 0o600 });
     return explicit;
   }
-
-  const domain = process.env.SCVS_CODEARTIFACT_DOMAIN?.trim();
-  const repository = process.env.SCVS_CODEARTIFACT_REPOSITORY?.trim();
-  if (!domain || !repository) return registryFor(scope, consumer);
-
-  const region = process.env.AWS_REGION?.trim() ? ["--region", process.env.AWS_REGION.trim()] : [];
-  const endpoint = run(
-    "aws",
-    ["codeartifact", "get-repository-endpoint", "--domain", domain, "--repository", repository,
-      "--format", "npm", ...region, "--query", "repositoryEndpoint", "--output", "text"],
-    consumer,
-  ).trim();
-  const token = run(
-    "aws",
-    ["codeartifact", "get-authorization-token", "--domain", domain, ...region,
-      "--query", "authorizationToken", "--output", "text"],
-    consumer,
-  ).trim();
-  secrets.push(token);
-
-  writeFileSync(
-    join(consumer, ".npmrc"),
-    `${scopedKey}=${endpoint}\n//${endpoint.replace(/^https?:\/\//, "")}:_authToken=${token}\n`,
-    { mode: 0o600 },
-  );
-  return endpoint;
+  // No credential and no endpoint lookup: the package is public. That is the whole point of the
+  // check — it installs the way a stranger does, so anything that needs our account would fail here.
+  return registryFor(scope, consumer);
 }
 
 function diagnose(error) {
   const output = redact(`${error.stdout ?? ""}${error.stderr ?? ""}`);
   if (/E404|404 Not Found/.test(output)) return "the registry has no such version (E404)";
   if (/E401|E403|401 Unauthorized|403 Forbidden/.test(output)) {
-    return "the registry refused the credentials (E401/E403) — unreadable is reported as a failure, never as a skip";
+    return "the registry refused the request (E401/E403) — a public package should need no credential, so this is a failure and never a skip";
   }
   return output.trim().split("\n").slice(-5).join(" / ") || redact(error.message);
 }
@@ -130,7 +107,7 @@ try {
     registry = configureRegistry(consumer, scope);
   } catch (error) {
     findings.push(
-      `could not reach the CodeArtifact repository named by the environment: ${diagnose(error)} — ` +
+      `could not reach the registry: ${diagnose(error)} — ` +
         `see aws-deployment.md §3.5 for the four grants this needs`,
     );
   }

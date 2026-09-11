@@ -82,7 +82,7 @@ A local-development example with a single self-hosted verifier is
 root — the JSON above is that file's `verifiers` entry.
 
 ```ts
-import { newClient } from "@scvs/sdk";
+import { newClient } from "soroban-verification-client";
 
 const tvl = await fetch("https://example.com/trusted-verifiers.json").then((r) => r.json());
 const client = newClient({ tvl });
@@ -140,7 +140,7 @@ instead of one per verifier, it survives a verifier being slow, and it is the on
 contract address**, which needs a ledger read the browser cannot do.
 
 ```ts
-import { newHostedClient } from "@scvs/sdk";
+import { newHostedClient } from "soroban-verification-client";
 
 // Absolute anywhere; `""` — same origin as this page — only in a browser, which resolves it.
 const hosted = newHostedClient({ baseUrl: "https://dev.sv.example.com" });
@@ -176,7 +176,7 @@ declares, returns them raw, and never parses, renders, follows or trusts them ov
 itself.
 
 ```ts
-import { fetchAndVerifyResultUrl } from "@scvs/sdk";
+import { fetchAndVerifyResultUrl } from "soroban-verification-client";
 
 const artifact = await fetchAndVerifyResultUrl({
   type: "report",
@@ -246,12 +246,12 @@ const client = newClient({
 ## Development
 
 ```bash
-pnpm --filter @scvs/sdk run build              # tsup for the JS bundle, then API Extractor rolls up
+pnpm --filter soroban-verification-client run build              # tsup for the JS bundle, then API Extractor rolls up
                                                # the declarations (tsup's own dts pass can't — see
                                                # tsup.config.ts)
-pnpm --filter @scvs/sdk run typecheck          # tsc --noEmit over src/ and test/
-pnpm --filter @scvs/sdk run test               # the four suites below
-pnpm --filter @scvs/sdk run check:packaging    # publint + are-the-types-wrong over a real pack,
+pnpm --filter soroban-verification-client run typecheck          # tsc --noEmit over src/ and test/
+pnpm --filter soroban-verification-client run test               # the four suites below
+pnpm --filter soroban-verification-client run check:packaging    # publint + are-the-types-wrong over a real pack,
                                                # then install the tarball outside the workspace and
                                                # aggregate through it (needs the network)
 ```
@@ -269,30 +269,23 @@ are excluded from that bundle: [`tsup.config.ts`](tsup.config.ts).
 
 ## Installing
 
-Published to this account's private CodeArtifact npm registry (`sv-packages` / `sv-npm`).
-Point the `@scvs` scope at it once — the
-command derives the endpoint and a 12-hour token from your AWS credentials:
-
 ```bash
-aws codeartifact login --tool npm --domain sv-packages --repository sv-npm --namespace scvs
+npm install soroban-verification-client
 ```
 
-That writes your **user-level** `~/.npmrc`, which is what you want on a laptop and not what you want in
-another project's repository or its CI. For those, copy
-[`scripts/consumer/npmrc-bootstrap.sh`](../../scripts/consumer/npmrc-bootstrap.sh) into that project and run
-it there: it writes a project-local `.npmrc` scoping only `@scvs` to the registry, is idempotent so
-re-running just refreshes the token, and refuses to write into an `.npmrc` that git tracks — the file holds a
-live credential. Neither form hard-codes the account id; both resolve the endpoint at run time.
+Published to the public npm registry, with build provenance: the registry records which workflow run
+in which repository produced each version, and `npm audit signatures` verifies it. Nothing to
+configure, no registry to point at, no credential.
 
 Then pick a **channel**. The git ref decides it: `main` publishes a prerelease, a tag publishes a
 release, and `latest` never resolves to a prerelease.
 
 | Install | Gets you | Published by |
 | --- | --- | --- |
-| `npm install @scvs/sdk` | newest stable — the `latest` dist-tag | a `vX.Y.Z` tag |
-| `npm install @scvs/sdk@staging` | newest release candidate | a `vX.Y.Z-rc.N` tag |
-| `npm install @scvs/sdk@dev` | newest build off `main` | every merge that touches the SDK |
-| `npm install @scvs/sdk@0.1.2` | exactly that version | — |
+| `npm install soroban-verification-client` | newest stable — the `latest` dist-tag | a `vX.Y.Z` tag |
+| `npm install soroban-verification-client@staging` | newest release candidate | a `vX.Y.Z-rc.N` tag |
+| `npm install soroban-verification-client@dev` | newest build off `main` | every merge that touches the SDK |
+| `npm install soroban-verification-client@0.1.2` | exactly that version | — |
 
 Either tag channel can also be cut from the Actions tab without a terminal: run the `release` workflow and
 set `version` to `v0.1.2` (stable) or `v0.1.2-rc.1` (staging). The run pins the tag to `main`'s HEAD, runs
@@ -306,13 +299,13 @@ commit its running image was built from against the commit behind that environme
 that repairs it. So a `staging` install matching what `staging` runs is a gate, not a habit.
 
 `latest` **never** holds a prerelease: the release workflow reads both dist-tags back after every publish
-and fails if it does, so a plain `npm install @scvs/sdk` cannot handoff a `dev` build. That check is what
+and fails if it does, so a plain `npm install soroban-verification-client` cannot handoff a `dev` build. That check is what
 makes the table above a guarantee rather than a convention.
 
 Pin an exact version in anything you ship. `@dev` and `@staging` move on every qualifying merge and are
 for trying a change before it is released, not for depending on.
 
-A version is **immutable** — CodeArtifact never replaces one. A fix ships as a new version, which is why
+A version is **immutable** — npm never replaces one. A fix ships as a new version, which is why
 `0.1.0` is still in the registry with declarations a TypeScript consumer cannot resolve
 (the api-extractor fix
 landed after it). **Do not use `0.1.0`.**

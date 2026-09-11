@@ -1,4 +1,4 @@
-import { resultRootOf } from "@scvs/sdk";
+import { resultRootOf } from "soroban-verification-client";
 import { transportFailureCopy } from "../hooks/query-api";
 import { useTrustedVerifiers } from "../hooks/use-trusted-verifiers";
 import { LoadingRow, MutedNote } from "./Feedback";

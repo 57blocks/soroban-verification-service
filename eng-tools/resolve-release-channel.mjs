@@ -176,7 +176,7 @@ console.log(`── commit     ${short}`);
 console.log(`── channel    ${resolved.channel}`);
 console.log(
   resolved.publish_sdk === "true"
-    ? `── publishes  @scvs/sdk@${resolved.version} under dist-tag \`${resolved.dist_tag}\``
+    ? `── publishes  soroban-verification-client@${resolved.version} under dist-tag \`${resolved.dist_tag}\``
     : `── publishes  nothing${resolved.channel === "dev" ? " — the SDK is unchanged" : ": this ref releases neither the SDK nor release assets"}`,
 );
 if (changeReason) console.log(`── sdk gate   ${changeReason}`);

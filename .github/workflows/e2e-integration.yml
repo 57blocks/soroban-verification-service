@@ -122,7 +122,7 @@ jobs:
       # The SDK cases run `clients/sdk`'s package entry (`dist/index.js`) from a separate consumer process.
       - name: Build the SDK consumed by the E2E cases
         if: ${{ inputs.test_suite != 'perf' }}
-        run: pnpm exec turbo run build --filter=@scvs/sdk
+        run: pnpm exec turbo run build --filter=soroban-verification-client
 
       - name: Install Playwright Chromium
         if: ${{ inputs.test_suite != 'perf' }}

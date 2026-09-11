@@ -7,7 +7,7 @@ import {
   FetchPolicyError,
   RegistryDocumentError,
   type PeerRegistryStatusObject,
-} from "@scvs/sdk";
+} from "soroban-verification-client";
 import { isWasmHash } from "./use-hash-lookup";
 import type { AdditionalRoot } from "./use-additional-roots";
 

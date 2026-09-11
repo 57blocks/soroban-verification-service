@@ -1,4 +1,4 @@
-import type { AggregatedWasmStatus } from "@scvs/sdk";
+import type { AggregatedWasmStatus } from "soroban-verification-client";
 
 /** Verifiers this deployment could not reach. */
 export const UnavailableVerifiers = ({

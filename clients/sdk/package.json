@@ -1,5 +1,5 @@
 {
-  "name": "@scvs/sdk",
+  "name": "soroban-verification-client",
   "version": "0.0.0-managed-by-ci",
   "description": "Query and aggregate Soroban contract source-verification results across verifiers",
   "license": "Apache-2.0",

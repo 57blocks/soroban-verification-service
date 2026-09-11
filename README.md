@@ -356,7 +356,7 @@ deployment through its public surfaces only, and a no-op unless `SCVS_E2E` is se
 `test/integration/README.md`). The SDK carries its own runner:
 
 ```bash
-pnpm --filter @scvs/sdk run test
+pnpm --filter soroban-verification-client run test
 ```
 
 which exercises aggregation, registry reads, and the two browser-bundleability checks.

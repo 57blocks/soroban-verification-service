@@ -1,4 +1,4 @@
-import type { PeerRegistryVerification } from "@scvs/sdk";
+import type { PeerRegistryVerification } from "soroban-verification-client";
 import { cn } from "@/lib/utils";
 import { PeerLink } from "./PeerLink";
 

@@ -65,7 +65,7 @@ of this project's code at all, as long as it published to the same conventions.
 
 ## What this document is not
 
-Not a tutorial on `@scvs/sdk` — [`clients/sdk/README.md`](../clients/sdk/README.md) already covers
+Not a tutorial on `soroban-verification-client` — [`clients/sdk/README.md`](../clients/sdk/README.md) already covers
 reading results through a typed client, including validating a fetched manifest and following its
 templates for you. Read this document if you want to skip even that; read the SDK's if you'd rather not
 hand-roll URL construction and response validation yourself.

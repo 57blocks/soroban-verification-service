@@ -32,7 +32,7 @@ than by hand.
 - `fixture-verifier-b` returns `mismatch` for the same target.
 
 These fixtures are consumed by `clients/sdk`'s own test suite
-(`pnpm --filter @scvs/sdk run test`) and `query-svc`'s aggregation tests
+(`pnpm --filter soroban-verification-client run test`) and `query-svc`'s aggregation tests
 (`pnpm --filter @scvs/query-svc run test`). The root `package.json` does now define a few
 `test:*` scripts — `test:smoke` (runs `@scvs/e2e-tests`' smoke suite) and
 `test:perf:locust`/`test:perf:locust:open` (the performance harness under

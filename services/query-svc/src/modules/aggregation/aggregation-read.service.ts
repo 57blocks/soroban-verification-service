@@ -13,7 +13,7 @@ import {
   type BulkOrder,
   type UnavailableVerifier,
 } from "@scvs/core";
-import { computeAgreement } from "@scvs/sdk";
+import { computeAgreement } from "soroban-verification-client";
 
 /**
  * Assembles an aggregate from what the sync retained. Never fetches: a bulk-load page must not be delayed by a
