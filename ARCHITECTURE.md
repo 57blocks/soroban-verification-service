@@ -50,8 +50,8 @@ pnpm run generate:env-contract    # regenerates the observability descriptor che
 pnpm run generate:deploy-env      # regenerates config/deploy/<env>/<service>.json
 ```
 
-The deployment toolchain ADR-025 brought into this repository. All five take `--env`; the two writers
-take `--dry-run`:
+The deployment toolchain [rule 23 of `docs/invariants.md`](docs/invariants.md) brought into this
+repository. All five take `--env`; the two writers take `--dry-run`:
 
 ```bash
 pnpm run deploy:check-descriptor -- --env dev
@@ -66,9 +66,9 @@ pnpm run deploy:render-taskdef -- --env dev --service query-svc --image <ecr-ref
                                   # the task definition CI would register: the RUNNING one with the
                                   # image and every variable replaced, everything else untouched
 pnpm run deploy:check-taskdef -- --env dev --service builder <rendered.json>
-                                  # ADR-002's boundary. Runs in CI before every register, ECS and
-                                  # Batch alike, and fails closed — an input it cannot parse is a
-                                  # failure, never a skip
+                                  # rule 1's boundary (docs/invariants.md). Runs in CI before every
+                                  # register, ECS and Batch alike, and fails closed — an input it
+                                  # cannot parse is a failure, never a skip
 ```
 
 `check:env` is the odd one out: plain Node over
@@ -76,7 +76,7 @@ pnpm run deploy:check-taskdef -- --env dev --service builder <rendered.json>
 needs neither a build nor a database. It cross-checks `config/env-manifest.yaml` against the variables
 the code actually reads and against each service's `env.dto.ts`, and it fails on a variable that
 exists in one of the three and not the others — including a sandbox that reads something its
-`forbidden:` list denies it ([ADR-012](docs/adr/ADR-012-env-manifest-is-the-contract.md)). Adding an
+`forbidden:` list denies it ([rule 10](docs/invariants.md)). Adding an
 env var means touching three places; this is what makes forgetting one loud.
 
 It also checks the `forbidden:` lists **themselves**, not just against code: an entry naming a
@@ -96,8 +96,6 @@ the task graph, pnpm still runs each script. Consequences worth knowing before y
   tests sit outside the bundled entry, so nothing else would look at them. For every other package the
   task still resolves to "build the dependencies and run nothing", and `tsc` inside that package's own
   `build` is its real type check. So a green run here means *the SDK is clean*, not that the workspace is.
-
-Full rationale for every edge in the graph: `docs/technology-stack.md`.
 
 `packages/*` and `clients/api-client`/`clients/sdk` resolve to `dist/` (and `clients/api-client/src/generated/`
 is orval output) — both gitignored. Every consumer imports the compiled output, not the source, so **you
@@ -128,7 +126,7 @@ and then **executed**. The tests live outside `src/` so the published bundle shi
 is also why this is the one package with a real `typecheck` script.
 
 Those suites all share **one** Postgres, across services and across runs, and it is never reset.
-[ADR-015](docs/adr/ADR-015-test-suites-own-the-rows-they-create.md) is the rule that makes that
+[Rule 21 of `docs/invariants.md`](docs/invariants.md) is the rule that makes that
 survivable: **a suite may read the whole table, but may only write or delete rows it created** —
 track them with `@scvs/db/testing`'s `CreatedRows` and drop them in `afterAll`. Two things follow
 that are easy to get wrong. A time-ranged cleanup ("everything since `beforeAll`") deletes a
@@ -249,52 +247,26 @@ and every colour, radius, shadow, and animation is a token in `tailwind.config.j
 
 ### The verification pipeline
 
-1. **verification-svc** accepts a submission (`POST /v1/verifications`), persists a `queued` job via
-   `@scvs/db`, computes an idempotency key, and returns immediately. Job status is served both by
-   polling (`GET /v1/verifications/:id`) and SSE (`GET /v1/verifications/:id/events`).
-2. **orchestrator-svc** polls for `queued` jobs, checks the image-trust policy, resolves the deployed
-   Wasm hash + SEP-58 metadata via the Stellar CLI (`stellar contract fetch`/`info meta` — stable,
-   released commands; not the same CLI build the sandbox needs), resolves any private-upload source
-   ref to a presigned S3 URL, and **always** submits an AWS Batch job (never runs the build in-process
-   — there is no local-only fallback; local dev talks to the real shared AWS account too). **It also
-   decides the recipe's provenance**: `selectBuildMechanism` is pure and total and returns `build` for
-   every input since the CLI mechanism was retired; its branches survive to compute `reason`, which
-   is persisted and is what `recipe_source` is derived from. The builder does not choose. A cli-legacy pair with no published official image is resolved to a
-   composed environment first, which the **composer** fleet builds and caches (ADR-017).
-3. **builder** runs inside that Batch job. One path: a sandboxed `docker run` rebuild (`--cap-drop ALL`,
-   `--network none`, `--read-only`, non-root, `cargo vendor` dependency prefetch). The
-   `stellar contract verify` alternative was retired and the image bakes no `stellar` binary.
-   It never touches `@scvs/db` or holds business AWS credentials.
-   Two write-scoped presigned PUTs are its only outputs: `recipe.json`, and the rebuilt Wasm itself.
-4. Batch's terminal state change flows through EventBridge → SQS → orchestrator-svc's consumer, which
-   **fetches the uploaded Wasm and hashes those bytes itself** (`hashUploadedArtifact`) and computes the
-   verdict from that hash against a freshly read deployed hash. `BuildArtifact.rebuilt_wasm_hash` is
-   evidence only; on disagreement the bytes win (TB3). **Nothing retries**: a `cli_failure` is terminal
-   for every job attached to that rebuild (the last retry was removed along with the mode that earned it),
-   though a *stale* `cli_failure` is re-opened for the next job that attaches — a fresh attempt, not a
-   demotion. `comparison_mismatch` is a value with no producer — nothing in `run-cli.ts` emits it — so
-   treat its absence as normal.
-5. orchestrator-svc assembles and writes the published documents via `@scvs/storage-layout` —
-   `reports/<sha256>.json`, `wasms/<hash>.json`, `verifier-manifest.json`, `policy.json`, and public
-   `sources/` — then fires off an async two-phase Arweave archive backfill. The result root is
-   hash-keyed documents only; the old `by-hash`/`by-contract`/`feeds` lookup files are gone
-   ([ADR-010](docs/adr/ADR-010-result-root-holds-only-hash-keyed-documents.md)).
-6. **query-svc** is not part of this verifier's own deployment — it is a separate organisation's
-   aggregation service (TRD §4.6's Query-only mode), reading every verifier's results, including one
-   this operator also happens to run, over the public Results SEP read surface like any other Trusted Verifiers
-   List member. It never has a privileged path into a verifier's own storage or database
-   (`own-root-should-not-bypass-the-registry-api.md`).
-   A verifier's own published-results bulk-load stream (TRD §5.4's `GET /v1/wasms`; served at
-   `/api/verification/v1/wasms` since a later repath, with the `.json` spelling a deprecated alias until
-   2026-12-01) is served by **verification-svc**
-   itself, reading `jobs.published_updated_at` directly — not by query-svc.
+Which service does what, in order: **verification-svc** accepts a submission and persists a `queued`
+job; **orchestrator-svc** polls for queued jobs, resolves the deployed Wasm's on-chain identity, and
+dispatches an AWS Batch job (always — there is no local/in-process fallback); **builder** runs
+inside that Batch job as the only unit executing untrusted source, and holds no database access or
+business AWS credentials; orchestrator-svc's consumer then computes the verdict itself from
+freshly-fetched bytes and writes the published documents via `@scvs/storage-layout`; **query-svc**,
+a separate deployment, aggregates across verifiers over the public read surface and has no
+privileged path into any verifier's own storage.
+
+The full behavioral contract — chain-record classes, mechanism selection, the sandbox's two stages,
+byte-equivalence rules, the published result shape, failure taxonomy — is
+[`docs/specs/verification.md`](docs/specs/verification.md),
+[`docs/specs/build-environments.md`](docs/specs/build-environments.md), and
+[`docs/specs/published-results.md`](docs/specs/published-results.md), each claim backed by a test.
 
 ### Where a DTO belongs
 
-`packages/schema` is **gone** — see [ADR-005](docs/adr/ADR-005-dto-ownership-follows-use.md) for the
-decision and `docs/features/_ARCHIVED/retire-schema-package/` for the
-full teardown record. One class is
-still one thing — validation rule + TS type + Swagger schema — but ownership now follows use:
+`packages/schema` is **gone** — see [rule 7 of `docs/invariants.md`](docs/invariants.md) for the
+decision. One class is still one thing — validation rule + TS type + Swagger schema — but ownership
+now follows use:
 
 - **Used by more than one package → `packages/core`.** Enums/guards, `parseDto`/`AtLeastOneOf`, and the
   shared DTOs: `VerificationTarget`, the `SourceReference` family + `BuildRecipe`/`SubmittedSourceManifest`,
@@ -323,48 +295,16 @@ DTO between packages does not change the generated `openapi.json`.
 ### Config and secrets
 
 **[`config/env-manifest.yaml`](config/env-manifest.yaml) declares every environment variable** — its
-type, whether it is required, what a missing value costs (`fail: boot` / `first-use` / `silent`), which
-service reads it, and who supplies the value. Adding or removing one means editing the manifest, the
-service's `env.dto.ts`, and the code, in the same PR; `pnpm run check:env` fails otherwise
-([ADR-012](docs/adr/ADR-012-env-manifest-is-the-contract.md)). Read `fail: silent` entries before
-touching deployment config: those are the variables whose absence leaves a perfectly healthy service
-doing the wrong thing.
-
-`orchestrator-svc` requires real AWS access even for local development (Batch job queue/definition ARNs,
-`SCVS_JOB_STATE_CHANGE_QUEUE_URL`, staging S3 bucket) — it fails fast at startup if these are missing.
+type, whether it is required, what a missing value costs, which service reads it, and who supplies
+it. Adding or removing one means editing the manifest, the service's `env.dto.ts`, and the code, in
+the same PR; `pnpm run check:env` fails otherwise ([rule 10](docs/invariants.md)).
 
 Every service validates its environment at boot against a class-validator DTO
 (`services/<name>/src/config/env.dto.ts`, over `@scvs/config`'s shared base), reporting **all**
-problems at once before any provider is constructed. A malformed value is rejected rather than
-silently replaced by a default — which is what `numberEnv()` and the `as`-cast storage kind used to
-do. Database *presence* is the exception: it is enforced by `@scvs/db`'s `configureDb()`, which only
-serving entrypoints call, so `generate-openapi.ts` can still boot the real app with no database. See
-`docs/features/_ARCHIVED/config-env-consolidation/updates/`.
-`services/builder` never sees them; its instance/execution IAM roles are intentionally scoped to zero
-business permissions (ECR pull + logs only) — see
-`docs/design/aws-deployment.md` for why this
-asymmetry must never be "simplified" into one shared role.
+problems at once before any provider is constructed. `orchestrator-svc` requires real AWS access
+even for local development — it fails fast at startup if Batch/queue/bucket variables are missing.
 
-**AWS infrastructure is not defined in this repository.** It is Terraform, owned by DevOps, outside this
-repo — [ADR-006](docs/adr/ADR-006-terraform-owns-aws-infrastructure.md). What this repo owns is the
-container images, [`config/env-manifest.yaml`](config/env-manifest.yaml), and
-`docs/design/aws-deployment.md`, the contract that says what the
-infrastructure must provide. A change to a service's configuration surface belongs in that document,
-in the same PR.
-
-★ **Deployment configuration is no longer DevOps's to supply**
-([ADR-025](docs/adr/ADR-025-deployment-configuration-is-owned-by-this-repository.md), applied to `dev`
-2026-09-04). This repo owns the values too, not just the manifest's shape: CI writes each resident
-service's configuration into `scvs/<env>/<service>/config` in Secrets Manager, renders the task
-definition from the running one, and registers it. What stays DevOps's is the infrastructure those
-values name, and the **nine credentials** — CI holds no grant on `sv-<env>-rds-master-*` or
-`try-arweave/private-key`, in either direction. An identifier carrying an account id, region, or
-revision is still never committed here; it names a `value_from_output` path into
-`/scvs/<env>/ci/descriptor` and is resolved at deploy time.
-
-**Batch job definitions are the exception, deliberately.** `builder` and `composer` keep their
-variables plaintext: reading a secret needs `secretsmanager:GetSecretValue` on an execution role
-[ADR-002](docs/adr/ADR-002-builder-holds-no-business-credentials.md) scopes to zero business
-permissions. `eng-tools/check-taskdef-boundary.mjs` runs before every registration — ECS and Batch
-alike — and is what replaces the guarantee ADR-025 removed by making CI the writer. A non-zero exit
-there is never to be worked around.
+Infrastructure ownership, the configuration/credentials secret split, and the deployment pipeline's
+own contract are [rules 8, 10, 22–23 of `docs/invariants.md`](docs/invariants.md), detailed further
+in [`docs/specs/configuration.md`](docs/specs/configuration.md). A change to a service's
+configuration surface belongs in that spec, in the same PR.

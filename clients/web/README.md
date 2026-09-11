@@ -107,14 +107,10 @@ reload, which is what stops them becoming a second, unmaintained TVL.
 
 Gated by **`SCVS_ENABLE_AGGREGATOR`**, read from the container's environment at start-up (`"true"` in
 `dev`, absent elsewhere) — not the build-time `VITE_ENABLE_AGGREGATOR`, which survives for
-`pnpm run dev:web` only. **It is the only feature that renders another verifier's content, so
-S24–S26 apply to it and to nothing else here.** See
-`the-result-explorer-is-flag-off.md`
-for why the capability ships disabled,
-`the-aggregator-flag-is-set-at-container-start.md`
-for where the flag is read, and
-`the-aggregator-is-one-page.md`
-for the page's shape.
+`pnpm run dev:web` only. **It is the only feature that renders another verifier's content**, which is
+why it ships disabled by default, why the flag is read at container start rather than at build time
+(so an operator can toggle it without a rebuild), and why it stays a single page rather than growing
+its own feature tree.
 
 Rules that keep this from drifting:
 
@@ -123,7 +119,7 @@ Rules that keep this from drifting:
 - **Promote on second use, not on suspicion.** A helper stays in the feature that uses it until a
   second feature genuinely needs it, then it moves to `src/lib`, `src/hooks`, or `src/config` — the
   same ownership rule the backend applies to DTOs in
-  [ADR-005](../../docs/adr/ADR-005-dto-ownership-follows-use.md).
+  [rule 7 of `docs/invariants.md`](../../docs/invariants.md).
 - **Components render; hooks decide.** Panels take props and return markup. Anything stateful —
   submitting, streaming, storing — belongs in a hook under `hooks/`.
 - **Copy is data.** Section text, status text, and field help live in `content.ts`/`constants.ts`,
@@ -149,8 +145,8 @@ that is neither one of those routes nor a real file in `dist/` answers **404**, 
 
 Adding a route means adding it to `route-paths.ts`. `test/route-surface.spec.tsx` fails when the
 declared set and the mounted tree disagree, and `pnpm run check:host-routing` (repository root) serves
-the real `docker/web-nginx.conf` on nginx and probes what each position answers. The reasoning is in
-`../../docs/features/console/decisions/an-unrouted-path-answers-404.md`.
+the real `docker/web-nginx.conf` on nginx and probes what each position answers — see
+[`docs/specs/configuration.md`](../../docs/specs/configuration.md) §5 for the host routing contract.
 
 `<Link to="…">` call sites keep their path literals rather than referencing `ROUTE_PATHS` — TanStack
 type-checks those against the built tree, which is a stronger guarantee than a shared constant.
@@ -159,7 +155,7 @@ type-checks those against the built tree, which is a stronger guarantee than a s
 
 `/terms` and `/privacy` are **the reference deployment's documents** — the terms under which
 57Blocks operates its hosted instance. They are not part of the software's contract: the software is
-Apache-2.0 ([ADR-023](../../docs/adr/ADR-023-the-project-is-licensed-apache-2.md)), and the footer's
+Apache-2.0 ([rule 26 of `docs/invariants.md`](../../docs/invariants.md)), and the footer's
 licence line (`footerLegal` in `features/landing/content/brand.ts`) names that licence precisely so
 the two are not confused. **An operator self-hosting this client must replace the text in
 `features/legal/content/`** before serving it; shipping another operator's terms is worse than
@@ -281,7 +277,8 @@ VITE_QUERY_API_URL=""
 
 then `pnpm run dev:web`. The browser's requests stay same-origin, which is both what gets past CORS
 — a deployed environment does not allow `localhost` — and the shape the console actually ships in,
-where one ALB fronts the console and both APIs by path (`docs/design/aws-deployment.md` §4).
+where one ALB fronts the console and both APIs by path (see
+[`docs/specs/configuration.md`](../../docs/specs/configuration.md) §5, the host routing contract).
 
 One `/api` rule serves both services, and the job page's SSE stream is proxied too, so a live
 verification can be watched end to end.

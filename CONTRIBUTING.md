@@ -56,7 +56,7 @@ CI (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
   rebuilding. If you suspect a stale result, `turbo run <task> --force`. `test` is uncached on
   purpose — see docs/technology-stack.md.
 - Infrastructure is not defined in this repository — see
-  [ADR-006](docs/adr/ADR-006-terraform-owns-aws-infrastructure.md). If your change alters what a
+  [rule 8 of `docs/invariants.md`](docs/invariants.md). If your change alters what a
   deployment has to provide (a new environment variable, a new bucket prefix, a new IAM action), say
   so in the PR description and update
   [docs/infrastructure-requirements.md](docs/infrastructure-requirements.md) in the same PR — it is
@@ -96,11 +96,11 @@ where it goes. In short:
 - **The pull request is the record of the change.** What you did, why, and what you rejected goes in
   the description, where the diff is next to it and a reader can find both in one place. There is no
   separate per-change document to write.
-- **A decision that constrains code beyond your change belongs in [docs/adr/](docs/adr/)**, with an
-  entry in the index. That is the test: would someone reading unrelated code six months from now be
-  wrong without it?
-- **A document that describes the system rather than a change** — an architecture map, a design in
-  `docs/design/`, a guide — is updated in the same PR as the behaviour it describes.
+- **A rule that constrains code beyond your change belongs in
+  [`docs/invariants.md`](docs/invariants.md)**, as a new row. That is the test: would someone reading
+  unrelated code six months from now be wrong without it?
+- **A document that describes the system rather than a change** — an architecture map, a spec under
+  [`docs/specs/`](docs/specs/), a guide — is updated in the same PR as the behaviour it describes.
 - Before implementing a behaviour, confirm the decision authorizing it exists. If it doesn't, say so
   (`BLOCKER: <missing decision>`) rather than inventing it.
 
@@ -134,8 +134,7 @@ If you're changing a shape shared with `services/builder` over the wire (`BatchJ
 `BuildArtifact`/`recipe.json` contract), note that both sides now import the *same* class from
 `@scvs/core` — there is no second copy to keep in sync. Keep it that way: those two shapes must not
 move into `@scvs/aws`, because `services/builder` deliberately has no AWS dependency. See
-[docs/adr/ADR-002](docs/adr/ADR-002-builder-holds-no-business-credentials.md) and
-[ADR-005](docs/adr/ADR-005-dto-ownership-follows-use.md).
+[rules 1 and 7 of `docs/invariants.md`](docs/invariants.md).
 
 ## Licensing your contribution
 

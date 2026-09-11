@@ -1,7 +1,7 @@
 # E2E fixture kit
 
-This directory contains the reproducible inputs for the fixtures named in
-`docs/qa/e2e-test-plan.md` §3. Large generated archives and fetched Wasm files are written to
+This directory contains the reproducible inputs for the E2E suite's fixtures, referenced by
+`test/integration/README.md`. Large generated archives and fetched Wasm files are written to
 `artifacts/e2e-fixtures/`, which is intentionally ignored by Git.
 
 ## Generate the local data set

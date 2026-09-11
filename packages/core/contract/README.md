@@ -17,7 +17,7 @@ change to that document's shape visible and versioned instead of a runtime surpr
 
   A file here is **frozen once merged**. A diff to an existing version's snapshot, in a PR that did not
   introduce that version, is the one thing review must refuse — see
-  [ADR-022](../../../docs/adr/ADR-022-artifact-contract-is-versioned-and-orchestrator-deploys-first.md).
+  [rules 24–25 of `docs/invariants.md`](../../../docs/invariants.md).
 
   There is no `v0.0` snapshot: nothing described the contract before this versioning scheme, so the
   pre-versioning shape is recorded only by its corpus below.

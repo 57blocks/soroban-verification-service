@@ -1,6 +1,6 @@
 # Results SEP
 
-**Two drafts since 2026-09-10, on SDF's advice** (ADR-024's third amendment): the per-verifier read
+**Two drafts since 2026-09-10, on SDF's advice** (`docs/invariants.md` rule 27's amendment): the per-verifier read
 surface goes up first and on its own, and aggregation follows behind it.
 
 | Draft | Covers | Serves it here |
@@ -158,11 +158,9 @@ Two absences are deliberate:
 - **No `logo_url` anywhere.** The Limitations section of the Results draft says no reference
   implementation populates it; an example that did would contradict its own SEP.
 
-**Validating them.** `../features/read-and-aggregate/eng-tools/validate-sep-examples.mjs`
-checks all 21 against the six schemas (`node docs/features/read-and-aggregate/eng-tools/validate-sep-examples.mjs`).
-It is a throwaway under the feature, **not** a `check:` — nothing in CI runs it, and whether the
-examples deserve a permanent gate is its own decision; read
-`../features/docs-code-alignment/` before adding one.
+**Validating them.** All 21 examples are checked against the six schemas by a throwaway script, kept
+outside `eng-tools/` and **not** a `check:` — nothing in CI runs it, and whether the examples deserve
+a permanent gate is its own decision.
 
 **One check is not per-schema, and it is the one that matters.** Validating each example against its
 own schema is exactly what let the aggregation set drift: `relayed_verification` is open and names six

@@ -8,12 +8,16 @@ The verification frontend lives inside this workspace:
 
 `clients/web`
 
+New here, or an agent working in this repo? Start at [`AGENTS.md`](AGENTS.md) — a one-page signpost
+to everything below.
+
 ## Workspace Layout
 
 ```text
 packages/             Shared libraries, not independently deployed
   core/                 ★ the shared kernel: enums + guards, parseDto/validation helpers, and every
-                        class-validator DTO used by more than one package. See ADR-004, ADR-005.
+                        class-validator DTO used by more than one package. See docs/invariants.md
+                        rules 4, 5, 7.
   aws/                  Thin AWS client wrappers: S3, presigned URLs, Batch, EventBridge
   storage-layout/       S3 result layout: key conventions, published result-tree shapes, publish, read
   db/                   Prisma + Postgres: jobs/uploads/trusted-verifiers/abuse-control repos
@@ -29,8 +33,8 @@ services/             Independently deployable units, all NestJS
   builder/              ★ Runs inside AWS Batch — the only unit that executes untrusted source, with
                         zero DB or credential dependency. Standalone context, no HTTP
   composer/             ★ Also an AWS Batch job, also no DB or credentials — composes a build image
-                        from official components for a chain-derived (cliver, rsver) pair (ADR-009,
-                        ADR-017). One-shot, no HTTP
+                        from official components for a chain-derived (cliver, rsver) pair
+                        (docs/invariants.md rules 16, 18). One-shot, no HTTP
   query-svc/            Public multi-verifier aggregation over the Registry API of every Trusted
                         Verifiers List member, including one this operator also runs
 clients/              User/downstream-facing
@@ -41,7 +45,7 @@ clients/              User/downstream-facing
 docker/               builder/composer/service/web Dockerfiles, local dev Docker Compose (Postgres),
                       and docker-compose.full-stack.yml — all three layers on one host
 config/               Policy, trusted verifier list, env templates
-docs/                 Glossary, architecture overview, ADRs, feature records, runbooks —
+docs/                 Glossary, architecture overview, invariants, feature records, runbooks —
                       start at docs/README.md
 test/                 Integration/e2e, differential, performance suites and fixture data
 scripts/              seed-tvl.ts, plus ci/ helper scripts
@@ -52,7 +56,7 @@ scripts/              seed-tvl.ts, plus ci/ helper scripts
 - Public `source_uri` archive and private uploaded tarball source modes.
 - Digest-pinned SDF trusted build image policy.
 - Sandbox runner with resource limits and controlled egress.
-- Result publishing (in orchestrator-svc): hash-keyed status objects and full artifacts (ADR-010).
+- Result publishing (in orchestrator-svc): hash-keyed status objects and full artifacts (docs/invariants.md rule 14).
 - Public Query API.
 - TypeScript SDK.
 - Docker Compose, schemas, tests, and docs.
@@ -71,8 +75,8 @@ You need:
   `docker run` on your machine anymore.
 - A standard, stable Stellar CLI release (see step 2)
 - Your own AWS account, with a Batch job queue/job definition, an S3 bucket, and an SQS queue set up
-  for step 5 (see docs/design/aws-deployment.md for what
-  `orchestrator-svc` expects), and credentials with access to all three. `orchestrator-svc` always
+  for step 5 (see [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) for
+  what `orchestrator-svc` expects), and credentials with access to all three. `orchestrator-svc` always
   dispatches builds to real AWS Batch, so this is required even for local dev; there is no
   local-only fallback mode.
 
@@ -181,20 +185,18 @@ It has no ALB and takes no inbound business traffic — port 5002 backs a contai
 **There is no local-only build path.** Both Batch queue ARNs, both job definition ARNs,
 `SCVS_JOB_STATE_CHANGE_QUEUE_URL`, `SCVS_STORAGE_BUCKET` and working AWS credentials are required
 even for local dev; `orchestrator-svc` fails fast at startup without the SQS queue. See
-docs/design/aws-deployment.md §3.1 for what each resource needs to
-be able to do, so you can provision your own equivalents.
+[`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) for what each resource
+needs to be able to do, so you can provision your own equivalents.
 
 There are **two** Batch queues because each compute environment is single-architecture (arm:
 Graviton; x86: `c6i/c7i`) and a submission's build image is pulled and executed on that host, so
-dispatch reads which architectures the image publishes and picks the queue that can run it. See
-`docs/features/batch-queue-arch-routing/`.
+dispatch reads which architectures the image publishes and picks the queue that can run it.
 
 For the direct Docker rebuild path used by manual-evidence contracts, `services/builder` applies
 `SCVS_DOCKER_CPUS=2`, `SCVS_DOCKER_MEMORY=2g`, `SCVS_DOCKER_PIDS_LIMIT=512`. These are read inside
 the Batch container (`services/builder/src/config/configuration.ts`), not by `orchestrator-svc`, so
 they are configured on the Batch job definition CI registers — see
-`.github/workflows/deploy-builder.yml` and
-docs/design/aws-deployment.md §6.6.
+`.github/workflows/deploy-builder.yml`.
 
 The final rebuild runs with `--cap-drop ALL`, `--security-opt no-new-privileges`, `--network none`,
 `--read-only`, a non-root `--user`, a read-only `/source` mount and a writable `/out` mount. Before
@@ -269,7 +271,7 @@ re-delivery is expected, not duplication.
 Nothing above needs this — local development talks to AWS with your own credentials. This section is
 for a **fork or a fresh clone that must run the deploy workflows**, which authenticate to AWS by OIDC
 and therefore need two values GitHub cannot derive: they are the irreducible bootstrap, the values CI
-needs *before* it can read anything else (`docs/design/aws-deployment.md` §5.7).
+needs *before* it can read anything else.
 
 Everything else — cluster name, ECR repositories, Batch families, hosts — is read at run time from the
 per-environment CI descriptor in SSM, so only these two are configured by hand.
@@ -310,7 +312,7 @@ gh variable set DEPLOY_ROLE_ARN --env staging --body "arn:aws:iam::<account>:rol
 ```
 
 The roles themselves are Terraform's, in `soroban-aws-infrastructure` — this repository never creates
-AWS resources ([ADR-006](docs/adr/ADR-006-terraform-owns-aws-infrastructure.md)). Until
+AWS resources ([rule 8 of `docs/invariants.md`](docs/invariants.md)). Until
 `terragrunt apply` has run for an environment, its CI descriptor does not exist and deploys **skip
 with a notice rather than failing** — the honest signal that the infrastructure half has not landed.
 
@@ -349,8 +351,8 @@ environment.
   the Wasm-comparison diagnostics, source access, direct job pages, browser-local recent jobs, and the
   flag-gated `/query` aggregator.
 
-`test/integration/` is the black-box `@scvs/e2e-tests` suite — 119 cases from `docs/qa/cases/`, run
-against a real deployment through its public surfaces only, and a no-op unless `SCVS_E2E` is set (see
+`test/integration/` is the black-box `@scvs/e2e-tests` suite — 119 cases, run against a real
+deployment through its public surfaces only, and a no-op unless `SCVS_E2E` is set (see
 `test/integration/README.md`). The SDK carries its own runner:
 
 ```bash
@@ -387,7 +389,7 @@ For real testnet verification, submit a testnet contract ID or Wasm hash with a 
 **Not `bldimg`.** The build environment is derived from the deployed Wasm, never from the submission:
 a `bldimg` in the chain-injected section makes the target cli-58 and is used as-is once
 `evaluateBuildImage` accepts it; a target recording none is cli-legacy, and `services/composer`
-composes an image from the recorded `(cliver, rsver)` pair (ADR-009, ADR-017). The field survives on
+composes an image from the recorded `(cliver, rsver)` pair (docs/invariants.md rules 16, 18). The field survives on
 `SubmittedSourceManifest` for older clients and `resolveEnvironmentIdentity` never consults it.
 
 What the submitter supplies is the source and how it was built. The rebuilt Wasm hash is compared

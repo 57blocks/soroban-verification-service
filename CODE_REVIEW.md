@@ -50,12 +50,12 @@ In rough priority order:
    partial writes, and malformed submitted input are where this system breaks.
 2. **Trust boundary integrity.** Did the sandbox gain a dependency, a credential, or a decision it
    should not have? Did a verdict move to the untrusted side? See
-   [ADR-002](docs/adr/ADR-002-builder-holds-no-business-credentials.md).
+   [rule 1](docs/invariants.md).
 3. **Contract changes.** A changed DTO can silently change the generated OpenAPI, the published
    artifact format, or a persisted shape. Ask whether `pnpm run generate:api-client` output moved,
    and whether existing stored data still validates.
 4. **Decision authority.** If the change establishes a new pattern or removes a constraint, is there
-   an ADR? If not, that is the review comment.
+   a rule for it in [`docs/invariants.md`](docs/invariants.md)? If not, that is the review comment.
 5. **Docs in the same PR.** A boundary moved and the design doc did not — incomplete.
 6. Then the ordinary things: naming, dead code, test coverage of the actual risk.
 

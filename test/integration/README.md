@@ -1,18 +1,14 @@
 # `@scvs/e2e-tests` — black-box end-to-end suite
 
-Executable cases from `docs/qa/cases/`, run against a **real deployment**
-through its public surfaces only.
+Executable cases, run against a **real deployment** through its public surfaces only.
 
 This package is a constrained exception for a cross-service public black-box E2E suite.
 It is allowed to remain a workspace package because the cases cross verification-svc,
-orchestrator-svc, and query-svc without importing or stubbing any owned component. The governing
-conditions are recorded in
-`docs/features/e2e-fixture-isolation/decisions/cross-service-black-box-e2e-workspace-exception.md`.
+orchestrator-svc, and query-svc without importing or stubbing any owned component.
 
 ## What this is, and what it deliberately is not
 
-`docs/qa/e2e-test-plan.md` §1.1 sets four conditions for a
-scenario to count as E2E, and this package holds itself to all four:
+A scenario counts as E2E only if it holds to all four of these conditions:
 
 1. it enters through a public surface — HTTP endpoints, published static files;
 2. **no component this project owns is stubbed** — not the services, not the packages, not the
@@ -131,10 +127,10 @@ This follows the reasoning already in `services/builder/test/isolated-stage-egre
 Docker-gated test is `describe.skip` on every machine without one, which is indistinguishable from
 having no test at all while looking like coverage."*
 
-The 📐 skips are the ones worth reading. `docs/qa/cases/README.md` records nine numeric parameters
-the TRD never defines — tar entry limits, quotas, the build wall-clock ceiling — and says most of
-them belong in `policy.json`. A case whose parameter is missing skips rather than inventing one,
-because a case that invents its own threshold is asserting the harness's guess.
+The 📐 skips are the ones worth reading. Nine numeric parameters have no fixed spec value — tar
+entry limits, quotas, the build wall-clock ceiling — and most of them belong in `policy.json`. A
+case whose parameter is missing skips rather than inventing one, because a case that invents its
+own threshold is asserting the harness's guess.
 
 Three of the nine now have a citable source. Set `SCVS_E2E_ENV=dev|staging` and the harness reads the
 archive bounds from `config/deploy/<env>/builder.json` — `SCVS_MAX_SOURCE_ARCHIVE_ENTRIES`,
@@ -220,9 +216,9 @@ dependency or Batch path was unavailable. `published_*_sha256` is the SHA-256 of
 }
 ```
 
-`SCVS_E2E_SUB11_EVIDENCE_PATH` is produced by the sequence in `E2E-SUB.md`: hold dispatch, submit and
-observe `queued`, deploy the stricter policy to verification-svc and orchestrator-svc together, resume,
-wait for rejection, restore policy/capacity. Hash the exact published `policy.json` bytes in each state:
+`SCVS_E2E_SUB11_EVIDENCE_PATH` is produced by this sequence: hold dispatch, submit and observe
+`queued`, deploy the stricter policy to verification-svc and orchestrator-svc together, resume, wait
+for rejection, restore policy/capacity. Hash the exact published `policy.json` bytes in each state:
 
 ```json
 {
@@ -280,9 +276,8 @@ process receives facts and read-only public URLs.
 that a private upload's staging object is **gone** once the job terminates — and nothing on the public
 surface can see a staging object. There is no upload `GET`/`HEAD` route, the job body does not project
 `sourceRef`, and `GET …/log` refuses every key outside `build-logs/`. All three are the same privacy
-boundary: that bucket holds other submitters' private tarballs, and
-`../../docs/qa/cases/E2E-SRC.md` says not to weaken it to make the
-case easier.
+boundary: that bucket holds other submitters' private tarballs, and this case must not weaken it to
+make itself easier to write.
 
 So the case reads the object through a configured observer ([`support/staging.ts`](support/staging.ts))
 and skips, naming what is missing, when a run has none. Two are admissible:
@@ -300,10 +295,10 @@ The probe is recorded as a diagnostic and never as evidence.
 
 ## The drift ledger
 
-`docs/qa/cases/README.md` is explicit that the cases describe TRD 2.0 and *"the implementation must
-catch up"*. A suite has to do something honest with that. Failing on every divergence would produce
-a wall of red that says nothing new each run; quietly asserting what the implementation does
-instead would report conformance the system has not earned.
+A case can describe a target the implementation has not yet reached. A suite has to do something
+honest with that. Failing on every divergence would produce a wall of red that says nothing new
+each run; quietly asserting what the implementation does instead would report conformance the
+system has not earned.
 
 So known divergences are **recorded, not swallowed**. [`support/conformance.ts`](support/conformance.ts)
 holds one entry per gap, each naming the document that already records it, and a run ends with:
@@ -322,20 +317,19 @@ become ordinary.
 
 ### Where a case, not the implementation, was out of date
 
-Two assertions in `docs/qa/cases/` were written against **SO8**, which
-`IMPLEMENTATION-SPEC.md` marks *withdrawn 2026-08-12 (D2)*
-and [ADR-014](../../docs/adr/ADR-014-status-object-holds-the-latest-verified-only.md) explains:
+Two assertions were written against a status-object shape this project withdrew — see
+[rules 19–20 of `docs/invariants.md`](../../docs/invariants.md):
 `E2E-DEDUP-05/different_input_is_new_job` HA2 asserted *two* mismatched records for one hash, and
 `E2E-SRC-07` asserted the same. The status object holds **one entry per verifier per Wasm hash**, so
 neither could pass on a conformant deployment.
 
 These were **never** drift-ledger entries: the implementation is right and the cases were stale, so
-recording them as implementation drift would have pointed the finger backwards. Both case files, the
-plan's two parent rows, and a stale parenthetical in `E2E-DEDUP-04` HA2 were **corrected 2026-08-17**,
-and `docs/qa/cases/README.md` now carries the multiplicity rule as a directory-wide convention so the
-next case cannot re-derive the withdrawn shape. The specs here assert the corrected form: the single
-entry *moves* to the newer source, both report artifacts still resolve, and every candidate archive
-stays retrievable by its own `source_sha256` even after the index stops pointing at it.
+recording them as implementation drift would have pointed the finger backwards. Both case files, and
+a stale parenthetical in `E2E-DEDUP-04` HA2, were **corrected 2026-08-17**, and the multiplicity rule
+now stands as a directory-wide convention so the next case cannot re-derive the withdrawn shape. The
+specs here assert the corrected form: the single entry *moves* to the newer source, both report
+artifacts still resolve, and every candidate archive stays retrievable by its own `source_sha256`
+even after the index stops pointing at it.
 
 Finding this was the suite doing its job before it ran a single case, which is worth noting: the
 divergence was invisible while the cases were prose and became obvious the moment something had to
@@ -359,7 +353,7 @@ The known entries today:
 
 | Gap | Substance |
 | --- | --- |
-| `RC2/RC6-schema_version` | `query-svc` emits `{error, message, status_code}` with no `schema_version`; `verification-svc` does stamp it. Graded `partial` in `docs/design/trd-conformance.md`. |
+| `RC2/RC6-schema_version` | `query-svc` emits `{error, message, status_code}` with no `schema_version`; `verification-svc` does stamp it. |
 | `SO1-mismatch-vs-mismatched` | The published surface says `mismatched`, as SO1 requires. The *job* surface says `mismatch`. Two vocabularies, one word apart. |
 | ~~`ROUTE-SOURCE`~~ | **Removed 2026-08-20.** `GET /v1/source/{sha}` still does not exist, but an unimplemented TRD route is a defect rather than a divergence, so `E2E-SRC-01` now asserts it and a deployment without it is red. |
 | `SEC-03-reason` | None of the seven §4.5 reasons describes a reachable, hash-correct, malicious archive. |
@@ -380,9 +374,10 @@ The one that is not a rename: `GET /v1/source/{source_sha256}` has no implementa
 
 ## `no second build`
 
-The whole DEDUP group rests on §7.6 Rule A, which nothing published can express — there is no
-rebuild ID and no cache-hit indicator. `E2E-DEDUP.md` defines a three-condition substitute and
-[`support/dedup.ts`](support/dedup.ts) implements exactly that: the second run finishes in under a
+The whole DEDUP group rests on the rule that a repeated build is never redone, which nothing
+published can express directly — there is no rebuild ID and no cache-hit indicator. A
+three-condition substitute stands in for it, and [`support/dedup.ts`](support/dedup.ts) implements
+exactly that: the second run finishes in under a
 fifth of the first's wall clock, both reports carry the same rebuilt hash and size, and both build
 logs are byte-identical.
 
@@ -503,8 +498,9 @@ Three details about them are worth knowing before editing either case:
   `generate-e2e-ci-inventory.mjs` rewrites their `contract_id`/`wasm_hash` from F-LEG-1's deployment
   record alongside F-PRIV's; a stale target would mean planting bytes nobody is verifying, and the case
   would pass because the attack missed.
-- **Neither reads the status object.** F-LEG-1's case verifies that hash and ADR-014 keeps a `verified`
-  entry ahead of any later `mismatched`, so the published record correctly keeps saying `verified`. The
+- **Neither reads the status object.** F-LEG-1's case verifies that hash and rule 20 (`docs/invariants.md`)
+  keeps a `verified` entry ahead of any later `mismatched`, so the published record correctly keeps
+  saying `verified`. The
   verdict for these submissions is on the job surface and in their own report artifact.
 - **`SEC-02` fails when the plant did not happen.** A `build.rs` that silently failed to write would make
   the case pass while testing nothing, so a log with no `[F-ADV-BUILDRS] plant result=Ok` is a fixture
@@ -515,7 +511,7 @@ territory and belongs in a load harness.
 
 ### `F-S55-A/B/C/D/E/F` — SEP-55 marker fixtures
 
-The SEP-55 group tests **format detection, not verification** (`docs/qa/cases/E2E-SEP55.md`), so its
+The SEP-55 group tests **format detection, not verification**, so its
 cli-legacy variants are built from the same `verified-demo` source in the same digest-pinned official
 image and differ only in `--meta source_repo`. They share F-LEG-1's `source_sha256`, while their Wasm
 hashes differ with their metadata. F-S55-D is the separate cli-58 coexistence fixture.
@@ -696,16 +692,15 @@ dev/staging topology; controlled peer failures and policy-dispute aggregation st
 | VERIFY | **HEALTH** | — |
 | WEB | **01/public_console_preflight**; SDK-04/browser | Result explorer remains feature-flagged |
 | SDK | **01, 02, 04/node + browser, 07** | 03 has no public E2E; 06 is **RELEASE** and lives outside this harness (`eng-tools/check-sdk-registry-install.mjs`, run by `release.yml` after the publish step) — it needs a published version, not a deployment. Peer failure and `results_urls` safety are SDK component tests |
-| SRC | 01, 04, 05, **06**, 07 (rewritten per ADR-014), **08 (×2 rows)**, **11 + 11/negative_control** | 02 (subsumed by 04's upload path), 03 (AUTO-INFRA); 10 (MANUAL) |
+| SRC | 01, 04, 05, **06**, 07 (rewritten per docs/invariants.md rule 20), **08 (×2 rows)**, **11 + 11/negative_control** | 02 (subsumed by 04's upload path), 03 (AUTO-INFRA); 10 (MANUAL) |
 | SEP55 | **01, 03/legacy_source_repo, 03/contains_but_not_prefix, 03/case_variant, 03/empty_after_prefix, 04** | 02 (AUTO-INFRA, needs P8 per-domain egress blocking); 05, 06 (MANUAL) |
 | SEC | **01, 02**, 03 (×4), 04, 05/manifest_path_escape, 11, 12, 14/no_management_surface, 14/policy_matches_boot | 06, **07（由 builder 组件测试覆盖；无部署级网络遥测时不实现 E2E）**, 08–10, 15, 16 (AUTO-INFRA); 13 |
 
 ## Conventions
 
-- Specs live in `cases/`, mirroring `docs/qa/cases/`. `support/` is the harness and is excluded from
-  `testMatch`.
+- Specs live in `cases/`. `support/` is the harness and is excluded from `testMatch`.
 - A `describe` is named with its case ID, so a Jest report reads as a QA run and a failure names
-  something `docs/qa/cases/` can be searched for.
+  something searchable by ID.
 - Relative imports carry `.js` extensions — the repo is ESM and `moduleNameMapper` rewrites them
   back to `.ts`, same as every service's Jest config.
 - `--runInBand`, always. One deployment, one caller: parallel workers would race the submission
@@ -716,7 +711,7 @@ dev/staging topology; controlled peer failures and policy-dispute aggregation st
 ## What this suite creates, and does not clean up
 
 Every row it creates is created *by the deployment*, through the public API — there is no direct
-database access, so ADR-015's ownership rule is satisfied structurally rather than by bookkeeping.
+database access, so rule 21's ownership rule (`docs/invariants.md`) is satisfied structurally rather than by bookkeeping.
 
 But it does leave things behind: published results are immutable by design (`E2E-PUB-05`), and a
 `verified` verdict is terminal for the recipe that produced it (§7.6 Rule B). The run/case recipe

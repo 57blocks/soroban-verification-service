@@ -58,10 +58,10 @@ calling invalid.
 declares. They do not yet publish every other newly required TRD field, so a generated status document
 must not be labelled as passing this local schema merely because it passes the DTO validation.
 
-The local schema supersedes the older field descriptions in `docs/design/published-results.md` and
-the initial registry-status-object plan where they conflict. Any future upstream Registry API or
-SEP-58 schema update must be reviewed against TRD §5.2 before re-vendoring or changing
-`schema_version`.
+The local schema is authoritative over any older field description elsewhere where they conflict —
+see [`docs/specs/published-results.md`](../specs/published-results.md) for what this verifier
+promises about the status object. Any future upstream Registry API or SEP-58 schema update must be
+reviewed before re-vendoring or changing `schema_version`.
 
 When the upstream draft or merged SEP changes, update the source commit and the local TRD overlay
 explanation in the same change; do not silently replace the local schema with an upstream snapshot.

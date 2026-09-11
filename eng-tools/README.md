@@ -37,6 +37,7 @@ not its scratch directory.
 | [`check-builder-isolation.mjs`](check-builder-isolation.mjs) | `check:builder-isolation` | `ci.yml` | no builder entrypoint reaches both container-execution capability and attacker-controlled input |
 | [`check-fixture-tables.mjs`](check-fixture-tables.mjs) | `check:fixture-tables` | `ci.yml` | the compose-built fixtures' `(cliver, rsver)` pairs agree across the three places that record them |
 | [`check-tool-index.mjs`](check-tool-index.mjs) | `check:tool-index` | `ci.yml` | this table, and the two rules above it |
+| [`check-docs.mjs`](check-docs.mjs) | `check:docs` | `ci.yml` | tracked docs stay under their byte budget, every relative link resolves, a spec's `Verified by:` names a real test, and `docs/invariants.md`'s code-location column names a real path. Each rule activates only once its target file exists |
 | [`check-secrets.mjs`](check-secrets.mjs) | `check:secrets` | `ci.yml` (needs a Docker daemon; no network beyond the image pull) | this repository holds no gitleaks finding and no deployment identifier beyond what [`internal-identifiers.json`](internal-identifiers.json) already records. That baseline is a ratchet: it only shrinks |
 | [`check-host-routing.mjs`](check-host-routing.mjs) | `check:host-routing` | `ci.yml` (needs a Docker daemon; no network beyond the image pull) | serves `docker/web-nginx.conf` and the generated route allowlist on real nginx over a synthetic document root, and probes what each position answers — a console route the entry document, a real file itself, everything else `404` |
 | [`check-composition-template.mjs`](check-composition-template.mjs) | `check:composition-template` | `composition-template.yml` (dispatch; needs Docker and the network) | the composed build environment builds, and both halves of its `(cliver, rsver)` pair report what the template claims |
@@ -46,8 +47,7 @@ not its scratch directory.
 
 Run for the document they produce, never for a verdict. A `report:` exits 0 unconditionally — a tool
 that can exit non-zero is a `check:` wearing the wrong name — and writes its finding to
-`$GITHUB_STEP_SUMMARY`, because output that only reaches a log has reported nothing. See
-`an-advisory-report-is-not-a-gate.md`.
+`$GITHUB_STEP_SUMMARY`, because output that only reaches a log has reported nothing.
 
 | file | command | run by | what it publishes |
 | :---- | :---- | :---- | :---- |
@@ -63,7 +63,7 @@ that can exit non-zero is a `check:` wearing the wrong name — and writes its f
 | [`reset-local-db.mjs`](reset-local-db.mjs) | `db:reset:local` | nothing — it truncates the local development database, in foreign-key order |
 | [`generate-third-party-notices.mjs`](generate-third-party-notices.mjs) | `generate:third-party-notices` | `THIRD-PARTY-NOTICES`, from the production dependency graph — Apache-2.0 §4(d)'s propagation. Refuses to write one if a copyleft licence has entered the graph |
 
-## Deployment — `deploy:` (ADR-025)
+## Deployment — `deploy:` (`docs/invariants.md` rule 23)
 
 Read-only unless the row says otherwise. Each takes `--env` and `--service`; the two writers take
 `--dry-run`.
@@ -72,10 +72,10 @@ Read-only unless the row says otherwise. Each takes `--env` and `--service`; the
 | :---- | :---- | :---- | :---- |
 | [`render-taskdef.mjs`](render-taskdef.mjs) | `deploy:render-taskdef` | your deployment pipeline | prints the task definition CI would register — the RUNNING one with the image and every variable replaced, everything else byte-for-byte |
 | [`sync-secrets.mjs`](sync-secrets.mjs) | `deploy:sync-secrets` | your deployment pipeline | **writes** one service's configuration into `scvs/<env>/<service>/config`. Never touches a credential |
-| [`check-taskdef-boundary.mjs`](check-taskdef-boundary.mjs) | `deploy:check-taskdef` | your deployment pipeline, before every register | asserts a rendered task or job definition against ADR-002's trust boundary before anything registers it. Fails closed |
+| [`check-taskdef-boundary.mjs`](check-taskdef-boundary.mjs) | `deploy:check-taskdef` | your deployment pipeline, before every register | asserts a rendered task or job definition against rule 1's trust boundary (`docs/invariants.md`) before anything registers it. Fails closed |
 | [`check-descriptor-fields.mjs`](check-descriptor-fields.mjs) | `deploy:check-descriptor` | an operator | does `/scvs/<env>/ci/descriptor` carry every field the manifest resolves from it? The acceptance test for a descriptor change applied in `soroban-aws-infrastructure` |
 | [`assert-config-contract.mjs`](assert-config-contract.mjs) | `deploy:check-config-contract` | your deployment pipeline | the `[config-contract]` line each deployed service logs matches what the manifest says it should have received |
-| [`assert-host-routing.mjs`](assert-host-routing.mjs) | `deploy:check-host-routing` | your deployment pipeline, and an operator from `runbooks/api-returns-html-or-405.md` | black-box: a deployed origin answers every position `design/aws-deployment.md` §4 names. **No credentials of any kind** — HTTPS only |
+| [`assert-host-routing.mjs`](assert-host-routing.mjs) | `deploy:check-host-routing` | your deployment pipeline, and an operator troubleshooting a routing incident | black-box: a deployed origin answers every position [`docs/specs/configuration.md`](../docs/specs/configuration.md) §5 names. **No credentials of any kind** — HTTPS only |
 | [`assert-deploy-ref.mjs`](assert-deploy-ref.mjs) | `deploy:check-ref` | your deployment pipeline | refuses a deploy whose commit is not an ancestor of `main`. **No credentials** — pure git, and the first step of a deploy that can fail |
 | [`assert-sdk-channel-alignment.mjs`](assert-sdk-channel-alignment.mjs) | `deploy:check-sdk-channel` | your deployment pipeline | does the dist-tag serving an environment resolve to a build of the commit that environment runs? Hard on `staging`, a warning on `dev`. Reads the registry, so it holds the publish role rather than the deploy role |
 
