@@ -7,9 +7,9 @@ SEP: To Be Assigned
 Title: Contract Verification Results
 Author: Jia Chen <@jia57b>
 Status: Draft
-Created: 2026-06-04
+Created: 2026-09-10
 Updated: 2026-09-10
-Version: 0.2.0
+Version: 0.1.0
 Discussion: https://github.com/orgs/stellar/discussions/1945
 ```
 
@@ -725,10 +725,5 @@ no window where some documents are readable and others are not.
 
 ## Changelog
 
-- `0.2.0` — Split. Aggregation, the Trusted Verifiers List and the aggregator's
-  side of the bulk-load stream move to the companion *Contract Verification
-  Aggregation* proposal; no document, route or field defined here changes. Adds
-  Prior art and acknowledgements, a Security Concerns section the earlier
-  revision referred to and did not have, and worked examples.
-- `0.1.0` — Initial draft. Builds on stellar-protocol#1944 and the changes
-  accepted in its discussion.
+- `0.1.0` — Initial draft, building on the Contract Verification Registry API
+  draft ([stellar-protocol#1944](https://github.com/stellar/stellar-protocol/pull/1944)).
