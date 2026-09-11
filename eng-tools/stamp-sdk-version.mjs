@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The only writer of a real `@scvs/sdk` version: the tag is the version, so the committed manifest holds a
+ * The only writer of a real `soroban-verification-client` version: the tag is the version, so the committed manifest holds a
  * placeholder and CI stamps the resolved one in. It also records the commit, which is what lets the publish
  * step tell an idempotent re-run apart from a version being quietly reused for different source.
  */
@@ -26,4 +26,4 @@ manifest.version = version;
 manifest.scvs = { channel, gitSha: sha, ref: process.env.GITHUB_REF ?? "" };
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-console.log(`── stamped @scvs/sdk@${version} · channel ${channel} · ${sha.slice(0, 7)}`);
+console.log(`── stamped soroban-verification-client@${version} · channel ${channel} · ${sha.slice(0, 7)}`);

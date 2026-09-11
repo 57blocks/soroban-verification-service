@@ -120,7 +120,7 @@ cd services/orchestrator-svc && NODE_OPTIONS=--experimental-vm-modules npx jest 
 ```
 
 `clients/sdk`'s "test" is five standalone `tsx` scripts under `clients/sdk/test/`, not Jest:
-`pnpm --filter @scvs/sdk run test` runs the client suite, the hosted-mode suite, the Registry-read
+`pnpm --filter soroban-verification-client run test` runs the client suite, the hosted-mode suite, the Registry-read
 suite, and two browser gates — a module-graph walk and a bundle that is built for `--platform=browser`
 and then **executed**. The tests live outside `src/` so the published bundle ships none of them, which
 is also why this is the one package with a real `typecheck` script.

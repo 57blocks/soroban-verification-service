@@ -785,27 +785,13 @@ jobs:
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "── $IMAGE_REPO:deployed was built from ${COMMIT:0:7}"
 
-      - name: Note that the channel was not asserted
-        if: github.ref != 'refs/heads/main' || vars.SDK_PUBLISH_ROLE_ARN == ''
-        run: |
-          if [ "${{ vars.SDK_PUBLISH_ROLE_ARN }}" = "" ]; then
-            echo "::warning::SDK_PUBLISH_ROLE_ARN is unset, so the dist-tag serving this environment was not checked"
-          else
-            echo "::warning::the SDK channel was not asserted: this run's ref is ${{ github.ref }}, and the registry read is trusted from refs/heads/main only"
-          fi
-
-  # No `environment:` and no deploy role: this job reads the registry, and SDK_PUBLISH_ROLE_ARN is a
-  # repository-level variable for exactly that reason. Its OIDC trust names refs/heads/main, hence the ref gate.
+  # No `environment:` and no deploy role: the package is public, so this job only reads a registry
+  # anyone can read. The ref gate that used to be here went with the role that needed it.
   sdk-channel-alignment:
     needs: sdk-channel-commit
-    if: >-
-      always() && needs.sdk-channel-commit.result == 'success'
-      && github.ref == 'refs/heads/main' && vars.SDK_PUBLISH_ROLE_ARN != ''
+    if: always() && needs.sdk-channel-commit.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      SCVS_CODEARTIFACT_DOMAIN: sv-packages
-      SCVS_CODEARTIFACT_REPOSITORY: sv-npm
     steps:
       # Full history: proving the published build and the running one differ in nothing that ships means
       # diffing the SDK surface between two commits.
@@ -818,19 +804,6 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
-        with:
-          role-to-assume: ${{ vars.SDK_PUBLISH_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Authenticate npm against CodeArtifact
-        run: |
-          aws codeartifact login --tool npm \
-            --domain "${SCVS_CODEARTIFACT_DOMAIN}" \
-            --repository "${SCVS_CODEARTIFACT_REPOSITORY}" \
-            --namespace scvs
 
       # Hard failure on staging, a warning on dev: a merge that leaves the SDK untouched legitimately leaves
       # the `dev` dist-tag behind, while a staging environment nobody can install a matching SDK for is a defect.

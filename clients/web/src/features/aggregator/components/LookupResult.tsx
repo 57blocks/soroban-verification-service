@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import type { QueryApiFailure } from "@scvs/sdk";
+import type { QueryApiFailure } from "soroban-verification-client";
 import type { LookupState } from "../types";
 import { AggregatedStatusView } from "./AggregatedStatusView";
 import { LoadingRow, MutedNote } from "./Feedback";

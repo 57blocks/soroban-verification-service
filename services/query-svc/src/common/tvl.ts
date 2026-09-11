@@ -8,7 +8,7 @@ import {
   TRUSTED_VERIFIERS_LIST_SCHEMA_VERSION,
   trustedVerifierStatuses,
 } from "@scvs/storage-layout/shapes";
-import type { TrustedVerifier, TrustedVerifiersList } from "@scvs/sdk";
+import type { TrustedVerifier, TrustedVerifiersList } from "soroban-verification-client";
 
 export { TRUSTED_VERIFIERS_LIST_SCHEMA, TRUSTED_VERIFIERS_LIST_SCHEMA_VERSION };
 

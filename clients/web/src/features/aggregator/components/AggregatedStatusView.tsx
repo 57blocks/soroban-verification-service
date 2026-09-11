@@ -1,4 +1,4 @@
-import type { AggregatedWasmStatus } from "@scvs/sdk";
+import type { AggregatedWasmStatus } from "soroban-verification-client";
 
 type Agreement = AggregatedWasmStatus["agreement"];
 import { UnavailableVerifiers } from "./UnavailableVerifiers";

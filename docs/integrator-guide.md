@@ -9,7 +9,7 @@
 
 | If you want to... | Use | Covered in |
 | --- | --- | --- |
-| Query results in TypeScript/JavaScript, with typed responses and error handling already done for you | `@scvs/sdk` | [`clients/sdk/README.md`](../clients/sdk/README.md) |
+| Query results in TypeScript/JavaScript, with typed responses and error handling already done for you | `soroban-verification-client` | [`clients/sdk/README.md`](../clients/sdk/README.md) |
 | Submit a contract for verification, or check/stream a job's status | verification-svc's submission API | [`docs/submission-api-guide.md`](submission-api-guide.md) |
 | Query an aggregator's results over plain HTTP, from another language or without the SDK | query-svc's aggregation API | [`docs/aggregator-query-api-guide.md`](aggregator-query-api-guide.md) |
 | Read a published result with no API at all — just static files | The raw result tree | [`docs/reading-the-result-tree.md`](reading-the-result-tree.md) |
@@ -21,7 +21,7 @@ TypeScript/JavaScript runtime.
 
 ## What every integrator should know before choosing
 
-- **Submitting and reading are two different interfaces**, on two different services. `@scvs/sdk` is
+- **Submitting and reading are two different interfaces**, on two different services. `soroban-verification-client` is
   explicitly a *query* client — "not a submission client," per its own README. If you need to submit a
   contract, that's [`docs/submission-api-guide.md`](submission-api-guide.md) regardless of whether you
   also use the SDK to read the result afterward.
@@ -42,7 +42,7 @@ document on its own:
    returns a job ID immediately.
 2. **Track it** — poll `GET .../v1/verifications/:job_id` or subscribe to its SSE event stream.
 3. **Once terminal, read the published result** from the verifier's Result Publishing surface — a
-   separate service from the one you submitted to. Use `@scvs/sdk`'s `client.registry.byHash(...)`, a
+   separate service from the one you submitted to. Use `soroban-verification-client`'s `client.registry.byHash(...)`, a
    direct call per [`docs/aggregator-query-api-guide.md`](aggregator-query-api-guide.md), or a raw
    fetch per [`docs/reading-the-result-tree.md`](reading-the-result-tree.md) — pick whichever fits the
    rest of your stack.

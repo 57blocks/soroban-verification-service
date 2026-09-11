@@ -1,4 +1,4 @@
-import type { QueryApiFailure } from "@scvs/sdk";
+import type { QueryApiFailure } from "soroban-verification-client";
 import { queryApi, transportFailureCopy } from "./query-api";
 import { useAggregateLookup } from "./use-aggregate-lookup";
 import type { LookupState } from "../types";

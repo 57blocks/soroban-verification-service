@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test } from "vitest";
-import type { AggregatedRegistryVerification } from "@scvs/sdk";
+import type { AggregatedRegistryVerification } from "soroban-verification-client";
 import { PeerLink } from "@/features/aggregator/components/PeerLink";
 import { VerifierResult } from "@/features/aggregator/components/VerifierResult";
 import { isWasmHash } from "@/features/aggregator/hooks/use-hash-lookup";

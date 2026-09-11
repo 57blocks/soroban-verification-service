@@ -21,7 +21,7 @@
     "@scvs/core": "workspace:*",
     "@scvs/db-query": "workspace:*",
     "@scvs/openapi": "workspace:*",
-    "@scvs/sdk": "workspace:*",
+    "soroban-verification-client": "workspace:*",
     "@scvs/storage-layout": "workspace:*",
     "@stellar/stellar-base": "^15.0.0",
     "class-validator": "^0.14.4",

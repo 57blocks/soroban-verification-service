@@ -24,7 +24,7 @@ function browserBundleUrl(): string {
     "pnpm",
     [
       "--filter",
-      "@scvs/sdk",
+      "soroban-verification-client",
       "exec",
       "esbuild",
       "dist/index.js",

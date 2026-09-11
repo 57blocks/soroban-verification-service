@@ -118,7 +118,7 @@ if (!findings.length) {
     run("node", ["run.mjs"], consumer);
 
     // Here rather than only in the registry gate: this reader runs on every branch and PR, while that one runs
-    // after a CodeArtifact version exists and can never be replaced. `0.1.0` shipped broken through this gap.
+    // after a published version exists and can never be replaced. `0.1.0` shipped broken through this gap.
     const finding = typecheckInstalledDeclarations({
       consumerDir: consumer,
       packageName: manifest.name,

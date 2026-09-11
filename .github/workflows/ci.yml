@@ -137,7 +137,7 @@ jobs:
       # gate rather than a release-time discovery: publint + are-the-types-wrong run over a real `pnpm pack`,
       # which is what catches a dist that resolves in-workspace and breaks for a consumer.
       - name: Check SDK packaging
-        run: pnpm --filter @scvs/sdk run check:packaging
+        run: pnpm --filter soroban-verification-client run check:packaging
 
       # Both documents' component schemas are derived from the DTOs' validation metadata, and
       # `applyDerivedSchemas` throws on a dangling $ref or a property no validator typed.

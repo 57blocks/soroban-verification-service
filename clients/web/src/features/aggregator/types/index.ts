@@ -1,4 +1,4 @@
-import type { AggregatedWasmStatus, QueryApiFailure } from "@scvs/sdk";
+import type { AggregatedWasmStatus, QueryApiFailure } from "soroban-verification-client";
 
 /** One lookup against query-svc, by hash or by address. */
 export type LookupState =

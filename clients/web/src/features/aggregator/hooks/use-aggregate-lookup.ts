@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryApiFailureOf, type AggregatedWasmStatus } from "@scvs/sdk";
+import { queryApiFailureOf, type AggregatedWasmStatus } from "soroban-verification-client";
 import type { LookupState } from "../types";
 
 /**

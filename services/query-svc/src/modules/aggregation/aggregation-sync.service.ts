@@ -9,7 +9,7 @@ import {
   type PeerRegistryVerification,
   type UnavailableVerifier,
 } from "@scvs/core";
-import { RegistryDocumentError, type SoveClient, type TrustedVerifier } from "@scvs/sdk";
+import { RegistryDocumentError, type SoveClient, type TrustedVerifier } from "soroban-verification-client";
 import { toTrustedVerifier } from "../../common/tvl.js";
 import { SoveClientFactory } from "../results/client-factory.service.js";
 import type { AppConfigService } from "../../config/configuration.js";

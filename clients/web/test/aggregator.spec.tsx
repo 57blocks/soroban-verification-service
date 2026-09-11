@@ -190,7 +190,7 @@ describe("looking up one hash in this deployment's aggregate", () => {
   });
 });
 
-// The page reads through `@scvs/sdk`'s hosted mode, so the SDK's consumer rules are the page's rules — and a
+// The page reads through `soroban-verification-client`'s hosted mode, so the SDK's consumer rules are the page's rules — and a
 // publish that breaks one shows up here rather than in an integrator's bug report.
 describe("the aggregate is read through the SDK", () => {
   const lookUpHash = async () => {

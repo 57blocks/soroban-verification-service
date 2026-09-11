@@ -1,4 +1,4 @@
-import type { Network, QueryApiFailure } from "@scvs/sdk";
+import type { Network, QueryApiFailure } from "soroban-verification-client";
 import { queryApi } from "./query-api";
 import { useAggregateLookup } from "./use-aggregate-lookup";
 import { lookupFailureCopy } from "./use-hash-lookup";

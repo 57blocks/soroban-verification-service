@@ -1,7 +1,9 @@
-# Publishes both services' OpenAPI specifications as release assets and `@scvs/sdk` to this account's
-# CodeArtifact npm registry. Why the specs are here rather than in the result root:
-# docs/features/sdk/decisions/openapi-release-assets.md. What each ref releases, and why the channel is a
-# hard gate rather than a convention: invariants.md rule 30.
+# Publishes both services' OpenAPI specifications as release assets, and `soroban-verification-client`
+# to the public npm registry. What each ref releases, and why the channel is a hard gate rather than
+# a convention: invariants.md rule 30.
+#
+# This workflow needs no cloud credential. It keeps its own triggers for that reason, while the
+# deployment workflows beside it are reusable and triggered from elsewhere.
 
 name: release
 
@@ -40,13 +42,10 @@ concurrency:
 
 permissions:
   contents: write # creating a release and uploading its assets
-  id-token: write # OIDC -> AWS role assumption, for the CodeArtifact publish
+  id-token: write # npm trusted publishing, and the provenance it stamps
 
 env:
   AWS_REGION: ap-southeast-2
-  # Terraform-owned names (soroban-aws-infrastructure `modules/codeartifact`, applied from envs/global).
-  SCVS_CODEARTIFACT_DOMAIN: sv-packages
-  SCVS_CODEARTIFACT_REPOSITORY: sv-npm
 
 jobs:
   # Its own job so the decision is visible in the Actions list before anything is built, and so a ref that
@@ -135,12 +134,12 @@ jobs:
       # The SDK's own suite includes the browser-bundle check, which bundles the published output for
       # --platform=browser and executes it.
       - name: Test the SDK
-        run: pnpm --filter @scvs/sdk run test
+        run: pnpm --filter soroban-verification-client run test
 
       # publint + are-the-types-wrong + a real `pnpm pack` installed outside the workspace, whose declarations
       # are typechecked as a consumer sees them. This is the last reader before a version becomes immutable.
       - name: Check SDK packaging
-        run: pnpm --filter @scvs/sdk run check:packaging
+        run: pnpm --filter soroban-verification-client run check:packaging
 
       # Skipped on the dev channel only: ci.yml already generates both specs on every push to main, and a
       # prerelease has no GitHub release to carry them.
@@ -193,79 +192,70 @@ jobs:
           fi
           gh release upload "${TAG}" release-artifacts/*.json --clobber
 
-      # ── @scvs/sdk -> CodeArtifact ───────────────────────────────────────────────────────────────
-      # Last in the job on purpose: a published package version is the only step here that cannot be undone or
-      # re-run, so everything that can still fail runs before it.
-      - name: Note that the SDK was not published
-        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN == ''
-        run: echo "::warning::SDK_PUBLISH_ROLE_ARN is unset, so @scvs/sdk was not published. Set the repository variable once the infra repo's envs/global is applied."
-
-      - name: Configure AWS credentials (OIDC)
-        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
-        with:
-          # A repository-level variable, not one of the per-environment DEPLOY_ROLE_ARNs: this job declares no
-          # `environment:`, so those would resolve empty, and publishing is not a per-environment act.
-          role-to-assume: ${{ vars.SDK_PUBLISH_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      # Writes `@scvs:registry` plus an auth token into npm's config.
-      - name: Authenticate npm against CodeArtifact
-        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+      # ── soroban-verification-client -> the public npm registry ──────────────────────────────────
+      # Last in the job on purpose: a published version is the only step here that cannot be undone
+      # or re-run, so everything that can still fail runs before it.
+      #
+      # No token and no cloud role. npm's trusted publishing takes the workflow's OIDC identity, so
+      # the credential is the run itself and there is nothing to leak or rotate. It also stamps
+      # provenance, which for a project whose subject is reproducible builds is the point rather
+      # than a bonus. Configured once on the registry side, against this repository and this
+      # workflow; until that exists, the publish step fails and says so.
+      - name: Use an npm that can publish with OIDC
+        if: needs.channel.outputs.publish_sdk == 'true'
         run: |
-          aws codeartifact login --tool npm \
-            --domain "${SCVS_CODEARTIFACT_DOMAIN}" \
-            --repository "${SCVS_CODEARTIFACT_REPOSITORY}" \
-            --namespace scvs
+          set -euo pipefail
+          have=$(npm --version)
+          need=11.5.1
+          if [ "$(printf '%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+            echo "npm ${have} predates trusted publishing; installing a newer one"
+            npm install -g npm@latest
+          fi
+          npm --version
 
-      - name: Publish @scvs/sdk
-        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+      - name: Publish soroban-verification-client
+        if: needs.channel.outputs.publish_sdk == 'true'
         working-directory: clients/sdk
         run: |
           set -euo pipefail
 
-          published() {
-            aws codeartifact describe-package-version \
-              --domain "${SCVS_CODEARTIFACT_DOMAIN}" \
-              --repository "${SCVS_CODEARTIFACT_REPOSITORY}" \
-              --format npm --namespace scvs --package sdk \
-              --package-version "${SDK_VERSION}" >/dev/null 2>&1
-          }
+          published() { npm view "soroban-verification-client@${SDK_VERSION}" version >/dev/null 2>&1; }
 
-          # A CodeArtifact version is immutable, so "already there" is only safe when it is the SAME source.
-          # The stale `0.1.0` is exactly this case: present, and built before the declaration fix.
+          # A published version is immutable, so "already there" is only safe when it is the SAME
+          # source. Re-running a release that got as far as publishing must not fail the run, and
+          # must not silently accept a version built from something else.
           if published; then
-            FROM=$(npm view "@scvs/sdk@${SDK_VERSION}" scvs.gitSha 2>/dev/null || true)
+            FROM=$(npm view "soroban-verification-client@${SDK_VERSION}" scvs.gitSha 2>/dev/null || true)
             if [ "${FROM}" = "${SDK_COMMIT}" ]; then
-              echo "::notice::@scvs/sdk@${SDK_VERSION} was already published from this commit — re-verifying only"
+              echo "::notice::soroban-verification-client@${SDK_VERSION} was already published from this commit — re-verifying only"
             else
-              echo "::error::@scvs/sdk@${SDK_VERSION} is already in ${SCVS_CODEARTIFACT_REPOSITORY}, built from ${FROM:-a commit it never recorded}, not ${SDK_COMMIT}. A version is immutable: release a new one instead of reusing this."
+              echo "::error::soroban-verification-client@${SDK_VERSION} is already on the registry, built from ${FROM:-a commit it never recorded}, not ${SDK_COMMIT}. A version is immutable: release a new one instead of reusing this."
               exit 1
             fi
           else
             npm publish --dry-run --tag "${DIST_TAG}"
-            npm publish --tag "${DIST_TAG}"
+            npm publish --tag "${DIST_TAG}" --provenance
 
-            # An exit code is not evidence that anything was published: `pnpm publish` exits 0 on a package it
-            # skipped, and a scope pointed at the wrong registry succeeds against that one.
+            # An exit code is not evidence that anything was published: `pnpm publish` exits 0 on a
+            # package it skipped, and a misdirected registry succeeds against that one.
             if ! published; then
-              echo "::error::npm publish reported success but @scvs/sdk@${SDK_VERSION} is not in ${SCVS_CODEARTIFACT_REPOSITORY}"
+              echo "::error::npm publish reported success but soroban-verification-client@${SDK_VERSION} is not on the registry"
               exit 1
             fi
-            echo "::notice::published @scvs/sdk@${SDK_VERSION} to ${SCVS_CODEARTIFACT_REPOSITORY} under dist-tag \`${DIST_TAG}\`"
+            echo "::notice::published soroban-verification-client@${SDK_VERSION} under dist-tag \`${DIST_TAG}\`"
           fi
 
-      # `--tag` is the only thing separating a dev build from what `npm install @scvs/sdk` resolves, and an
+      # `--tag` is the only thing separating a dev build from what `npm install soroban-verification-client` resolves, and an
       # exit code is not evidence it landed. Read back with a throwaway cache and a bounded retry:
       # `npm publish --dry-run` leaves the PRE-publish packument in npm's cache, which made a single
       # immediate read a flaky gate — it passed on one run and reported an empty dist-tag on the next.
       - name: Verify the channel landed on its dist-tag
-        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+        if: needs.channel.outputs.publish_sdk == 'true'
         run: node eng-tools/check-published-dist-tags.mjs
 
-      # `describe-package-version` proves a version **exists**; only an installing consumer proves it is usable.
-      - name: Verify the published SDK installs and runs (E2E-SDK-06/internal_registry)
-        if: needs.channel.outputs.publish_sdk == 'true' && vars.SDK_PUBLISH_ROLE_ARN != ''
+      # A registry read proves a version **exists**; only an installing consumer proves it is usable.
+      - name: Verify the published SDK installs and runs
+        if: needs.channel.outputs.publish_sdk == 'true'
         env:
           SCVS_SDK_VERSION: ${{ needs.channel.outputs.version }}
-        run: pnpm --filter @scvs/sdk run check:registry-install
+        run: pnpm --filter soroban-verification-client run check:registry-install

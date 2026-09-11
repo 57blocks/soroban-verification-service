@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryApiFailureOf, type PeerTrustedVerifiersList, type QueryApiFailure } from "@scvs/sdk";
+import { queryApiFailureOf, type PeerTrustedVerifiersList, type QueryApiFailure } from "soroban-verification-client";
 import { queryApi } from "./query-api";
 
 export type TrustedVerifiersState = {

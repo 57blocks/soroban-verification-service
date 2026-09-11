@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchAndVerifyResultUrl } from "@scvs/sdk";
+import { fetchAndVerifyResultUrl } from "soroban-verification-client";
 import type { ArtifactRecipeFacts, PublishedArtifactState } from "../types";
 
 type ArtifactDocument = {

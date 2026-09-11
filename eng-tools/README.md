@@ -87,8 +87,8 @@ Read-only unless the row says otherwise. Each takes `--env` and `--service`; the
 | [`resolve-release-channel.mjs`](resolve-release-channel.mjs) | `release:resolve-channel` | your release pipeline | the one place that decides what a git ref releases. Runnable locally with `--ref` |
 | [`stamp-sdk-version.mjs`](stamp-sdk-version.mjs) | `release:stamp-version` | your release pipeline | **writes** the resolved version and commit into `clients/sdk/package.json`. CI's only real writer of a version |
 | [`check-published-dist-tags.mjs`](check-published-dist-tags.mjs) | `release:check-dist-tags` | your release pipeline | the dist-tag this run wrote resolves to the version it published, and `latest` never holds a prerelease |
-| [`check-sdk-pack-install.mjs`](check-sdk-pack-install.mjs) | `@scvs/sdk` `check:packaging` | `ci.yml`, your release pipeline | packs the SDK, installs the tarball outside the workspace, runs one aggregation through it |
-| [`check-sdk-registry-install.mjs`](check-sdk-registry-install.mjs) | `@scvs/sdk` `check:registry-install` | your release pipeline | installs the SDK from the **registry** and asserts what a consumer can actually see |
+| [`check-sdk-pack-install.mjs`](check-sdk-pack-install.mjs) | `soroban-verification-client` `check:packaging` | `ci.yml`, your release pipeline | packs the SDK, installs the tarball outside the workspace, runs one aggregation through it |
+| [`check-sdk-registry-install.mjs`](check-sdk-registry-install.mjs) | `soroban-verification-client` `check:registry-install` | your release pipeline | installs the SDK from the **registry** and asserts what a consumer can actually see |
 
 ## E2E harness — `e2e:`
 
