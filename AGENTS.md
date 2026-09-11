@@ -19,7 +19,7 @@ the whole tree — every row below is under a few KB.
 | Stand up your own verifier | [`docs/self-hosted-deployment.md`](docs/self-hosted-deployment.md), [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) |
 | Know what review actually checks | [`CODE_REVIEW.md`](CODE_REVIEW.md) |
 | Report a vulnerability, or understand the trust model | [`SECURITY.md`](SECURITY.md) |
-| Know the wire format other software depends on | [`docs/results-sep/README.md`](docs/results-sep/README.md), [`docs/registry-schemas/README.md`](docs/registry-schemas/README.md) |
+| Know the wire format other software depends on | [`docs/results-sep/README.md`](docs/results-sep/README.md) |
 
 ## Twelve words that mean something specific here
 

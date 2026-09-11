@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sv.57blocks.com/schemas/stellar-verification-status-1.0.schema.json",
-  "$comment": "Contract Verification Results SEP (draft) — the per-verifier status object, TRD 2.1 §5.2 / §5.7. Closed for a producer: a document of schema_version 1.0 carries exactly these fields. A consumer validates with additionalProperties relaxed (IMPLEMENTATION-SPEC CV6) so a higher MINOR stays readable. Incorporates the Registry API draft (stellar-protocol#1944) and replaces docs/registry-schemas/status-object-1.0.schema.json as this repository's target.",
+  "$comment": "Contract Verification Results SEP (draft) — the per-verifier status object, TRD 2.1 §5.2 / §5.7. Closed for a producer: a document of schema_version 1.0 carries exactly these fields. A consumer validates with additionalProperties relaxed (IMPLEMENTATION-SPEC CV6) so a higher MINOR stays readable. Incorporates the Registry API draft (stellar-protocol#1944).",
   "title": "Contract Verification Status Object (Results SEP 1.0)",
   "description": "The static document at <result-root>/wasms/{wasm_hash}.json, and the body of a verifier's dynamic GET /v1/wasms/{wasm_hash}.json (200 = these bytes; 202 = one unverified entry while a verification is in flight).",
   "type": "object",

@@ -17,7 +17,7 @@ import { createResultStorage } from "./storage-backend.js";
 import { wasmStatusKey } from "./keys.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const draftExamplesDir = resolve(here, "../../../docs/registry-schemas/examples/status");
+const draftExamplesDir = resolve(here, "../../../test/fixtures/registry");
 const sepExample = resolve(here, "../../../test/fixtures/registry-sep/200-verified.json");
 
 // Plain-script test, following clients/sdk's src/sdk-test.ts convention rather than Jest.
