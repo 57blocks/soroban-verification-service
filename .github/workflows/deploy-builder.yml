@@ -112,6 +112,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      # While the packages are private this authenticates as the CALLER — the operations
+      # repository, which the packages grant read to. Once they are public the pull needs no
+      # credential and this step costs a second and nothing else. The token is the caller's, so the
+      # caller's job has to allow `packages: read`.
+      - name: Log in to the container registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       # Two single-architecture images, copied rather than rebuilt — see deploy-composer.yml for
       # why a deploy never builds. Each Batch compute environment is single-architecture, so these
       # stay two images and never become one manifest list.
