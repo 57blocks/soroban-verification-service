@@ -134,6 +134,7 @@ Normative schema:
       "recipe_source": "on_chain_metadata",
       "image_trust_level": "sdf_trusted",
       "bldimg": "docker.io/stellar/stellar-cli@sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "bldarg": [],
       "bldopt": [
         "--package=token"
       ],

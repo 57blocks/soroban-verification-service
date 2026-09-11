@@ -170,6 +170,7 @@ Normative schema:
       "recipe_source": "on_chain_metadata",
       "image_trust_level": "sdf_trusted",
       "bldimg": "docker.io/stellar/stellar-cli@sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "bldarg": [],
       "bldopt": ["--package=token"],
       "source_sha256": "9c8b7a6d5e4f30211f2e3d4c5b6a79880f1e2d3c4b5a69788796a5b4c3d2e1f0",
       "processed_at": "2026-09-08T09:58:11Z",
@@ -233,6 +234,26 @@ provenance has not run, and the build environment may still be resolving.
 These two replace the Registry API draft's single `out_of_band` boolean, and
 they are independent: where the recipe came from says nothing about how much
 the environment that ran it can be trusted.
+
+**The build inputs are SEP-58's, carried and not redefined.** `bldimg`,
+`bldarg` and `bldopt` are the recipe as it was recorded. This SEP adds no
+meaning to them: it does not define their vocabulary, and it does not require
+any of them on a `verified` or `mismatched` entry — a verifier with nothing to
+record for one omits it, and an `unverified` entry carries none of them under
+the rule above. Two properties a carrier has to respect anyway.
+
+`bldarg` is **ordered**, and nothing that carries it may sort or reorder it: a
+reordered argument vector is a different build, and the document would then
+describe a recipe that was never run.
+
+**An absent `bldarg` and an empty one mean the same thing** — SEP-58's default,
+`contract build`. A consumer MUST NOT read `[]` as an empty argument vector; a
+producer MAY publish either, and this SEP's reference implementation publishes
+`[]`. It is stated because the two spellings are identical in effect and
+trivially different in code: a reader that takes `[]` literally derives a
+recipe nobody ran, rebuilds to different bytes, and reports a mismatch that is
+its own. `bldopt` needs no companion rule — it has no default, so an empty one
+means no build options and says so.
 
 #### 3.3 `results_urls` and `verified_source_code_uris`
 
