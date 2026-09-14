@@ -2,7 +2,7 @@ import "reflect-metadata";
 // Loads this process's .env files — cwd first, then the workspace root's shared one.
 import "@scvs/config/load-env";
 import { formatConfigContractLogLine } from "@scvs/config";
-import { ScvsLogger } from "@scvs/core";
+import { applyHttpServerTimeouts, ScvsLogger } from "@scvs/core";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -47,8 +47,12 @@ async function bootstrap(): Promise<NestExpressApplication> {
 if (process.env.NODE_ENV !== "test") {
   bootstrap()
     .then(async (app) => {
-      const port = app.get<AppConfigService>(ConfigService).get("port", { infer: true });
+      const config = app.get<AppConfigService>(ConfigService);
+      const port = config.get("port", { infer: true });
       await app.listen(port);
+      // After listen(), never before: Nest has no `http.Server` to configure until it is bound. This service is
+      // public, unauthenticated and unthrottled, so these deadlines are the only bound on a connection it holds.
+      applyHttpServerTimeouts(app.getHttpServer(), config.get("httpTimeouts", { infer: true }));
       // After listening, and never from a lifecycle hook: `generate-openapi.ts` initialises this application
       // with no database.
       app.get(AggregationSyncService).start();

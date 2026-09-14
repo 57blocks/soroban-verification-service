@@ -66,6 +66,61 @@ groups:
           deregistration delay + one health-check interval, or the balancer is still routing when the
           process leaves. The builder deliberately does not inherit this: a Batch job is one-shot and
           draining a process that exits on its own is meaningless.
+      SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 65000
+        code: packages/core/src/http-timeouts.ts, services/*/src/main.ts
+        note: >-
+          How long an idle connection is kept for reuse. **Must exceed the ALB's idle timeout (60 s,
+          the AWS default this deployment has never overridden), or the balancer reuses a connection
+          Node has already closed and answers 502 on it.** Node's own default is 5 s, which is below
+          it — that is the defect this variable exists to make visible and adjustable. Raising the
+          ALB's idle timeout means raising this in the same change, and vice versa;
+          `FRONTING_PROXY_IDLE_TIMEOUT_MS` in `packages/core/src/http-timeouts.ts` carries the
+          balancer's number and a test asserts the ordering.
+
+          Coupled in the opposite direction to `SCVS_JOB_STREAM_SAFETY_POLL_MS`, which must stay well
+          BELOW the same ALB number. Both depend on one value Terraform owns in another repository.
+      SCVS_HTTP_HEADERS_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 70000
+        code: packages/core/src/http-timeouts.ts, services/*/src/main.ts
+        note: >-
+          How long the request head may take to arrive. Must be greater than
+          SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS — Node measures this deadline from when the connection goes
+          idle, so the shorter of the two tears a reused connection down instead of closing it
+          cleanly. `applyHttpServerTimeouts` refuses the inverted ordering at boot.
+      SCVS_HTTP_REQUEST_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 300000
+        code: packages/core/src/http-timeouts.ts, services/*/src/main.ts
+        note: >-
+          From the first byte of a request to the last byte of its body, and therefore the bound on how
+          long ONE connection may hold verification-svc's buffered upload
+          (`raw-archive-body.middleware.ts` accumulates up to SCVS_MAX_SOURCE_ARCHIVE_BYTES in memory).
+
+          The default is Node's own 300000, kept deliberately: this change makes the value explicit and
+          adjustable, it does not re-choose it. Lowering it trades a slow submitter's upload against
+          memory held per connection, and the dev task is 512 MiB — roughly six concurrent 50 MiB
+          buffers before it is OOM-killed, with `desiredCount: 1` behind it. Choosing a lower number
+          needs measured archive sizes and upload durations; see docs/specs/configuration.md §11.
+
+          A zero is REFUSED, not accepted as "no deadline": that is the fail-open this variable removes.
       CORS_ORIGIN:
         type: string
         required: no

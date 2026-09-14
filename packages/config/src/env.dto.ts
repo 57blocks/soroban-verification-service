@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString } from "class-validator";
+import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, Matches } from "class-validator";
 
 /** All three of these fail **silently** without it: */
 
@@ -30,6 +30,29 @@ export class SharedEnvDto {
   // it before the process leaves.
   @IsOptional() @IsNumberString({}, { message: "SCVS_DRAIN_GRACE_MS must be a number" })
   SCVS_DRAIN_GRACE_MS?: string;
+
+  // Positive, not merely numeric, on all three: Node reads a `0` as "no deadline", which is the fail-open
+  // `applyHttpServerTimeouts` exists to remove. Refusing it here reports it as a configuration mistake at boot
+  // rather than as a server that starts clean and holds connections forever.
+  @IsOptional()
+  @Matches(/^[1-9]\d*$/, {
+    message: "SCVS_HTTP_REQUEST_TIMEOUT_MS must be a positive number of milliseconds",
+  })
+  SCVS_HTTP_REQUEST_TIMEOUT_MS?: string;
+
+  @IsOptional()
+  @Matches(/^[1-9]\d*$/, {
+    message: "SCVS_HTTP_HEADERS_TIMEOUT_MS must be a positive number of milliseconds",
+  })
+  SCVS_HTTP_HEADERS_TIMEOUT_MS?: string;
+
+  // Must stay above the fronting balancer's idle timeout; `applyHttpServerTimeouts` enforces the ordering
+  // against the other two, and @scvs/core's FRONTING_PROXY_IDLE_TIMEOUT_MS carries the balancer's own number.
+  @IsOptional()
+  @Matches(/^[1-9]\d*$/, {
+    message: "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS must be a positive number of milliseconds",
+  })
+  SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS?: string;
 
   // Not only the AWS SDK's region: `getStagingStorageConfig()` reads it too, and its fallback is `us-east-1`,
   // so an unset value points the staging-bucket client at the wrong region and fails per-object rather than at

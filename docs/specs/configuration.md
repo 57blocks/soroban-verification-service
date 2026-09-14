@@ -126,3 +126,30 @@ at all is not supported: preflight, submission, and job status are served routes
 cannot answer.
 
 Verified by: `docs/self-hosted-deployment.md`, `docs/infrastructure-requirements.md`.
+
+## 11. A server that binds a port sets its own deadlines
+
+Node's `http.Server` defaults are not a neutral fallback, so no entrypoint is allowed to inherit
+them. Two of the three matter for different reasons.
+
+**Keep-alive must outlast whatever fronts the server.** Node closes an idle connection after 5 s;
+the ALB in front of the public services holds one for 60 s and will reuse it. The balancer then
+sends a request into a connection the server has already closed and answers **502**, at random, to
+a client that did nothing wrong. The keep-alive deadline is therefore set above the balancer's idle
+timeout, and `FRONTING_PROXY_IDLE_TIMEOUT_MS` carries the balancer's own number so the ordering is
+asserted rather than remembered. This couples to `SCVS_JOB_STREAM_SAFETY_POLL_MS` from the opposite
+side — §7 requires that one to stay well *below* the same number — and both depend on one value
+Terraform owns in another repository.
+
+**The request deadline is what bounds a connection holding an upload.** `POST /v1/uploads/source`
+accumulates the body in memory up to `SCVS_MAX_SOURCE_ARCHIVE_BYTES`, so this deadline, and nothing
+else, decides how long one slow connection may hold that buffer. Its value is deliberately still
+Node's own 300 000 ms: making it explicit and adjustable is a separate change from re-choosing it,
+and choosing a lower number needs measured archive sizes and upload durations rather than a guess.
+
+The ordering between the three is enforced, not documented: the headers deadline must exceed the
+keep-alive deadline, the request deadline must not undercut the headers deadline, and a zero — which
+Node reads as "no deadline" — is refused on all three. A violation stops the boot.
+
+Verified by: `packages/core/src/http-timeouts.ts`, `packages/core/src/http-timeouts-test.ts`,
+`eng-tools/check-http-timeouts.mjs`, `config/env-manifest.yaml`.

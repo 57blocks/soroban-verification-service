@@ -2,7 +2,7 @@ import "reflect-metadata";
 // Loads this process's .env files — cwd first, then the workspace root's shared one.
 import "@scvs/config/load-env";
 import { formatConfigContractLogLine } from "@scvs/config";
-import { ScvsLogger } from "@scvs/core";
+import { applyHttpServerTimeouts, ScvsLogger } from "@scvs/core";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -31,8 +31,12 @@ async function bootstrap(): Promise<NestExpressApplication> {
 if (process.env.NODE_ENV !== "test") {
   bootstrap()
     .then(async (app) => {
-      const port = app.get<AppConfigService>(ConfigService).get("port", { infer: true });
+      const config = app.get<AppConfigService>(ConfigService);
+      const port = config.get("port", { infer: true });
       await app.listen(port, HEALTH_HOST);
+      // Same deadlines as the two public services even though this listener is loopback-only and serves nothing
+      // but /health: one set of values across the three is what keeps them from drifting apart unnoticed.
+      applyHttpServerTimeouts(app.getHttpServer(), config.get("httpTimeouts", { infer: true }));
       return port;
     })
     .then((port) => {

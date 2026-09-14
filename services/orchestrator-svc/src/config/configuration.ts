@@ -2,6 +2,7 @@ import type { ConfigService } from "@nestjs/config";
 import {
   buildArchitectures,
   DEFAULT_MAX_JOB_RETRY_ATTEMPTS,
+  HTTP_TIMEOUT_DEFAULTS,
   type BuildArchitecture,
 } from "@scvs/core";
 import { readDbEnv } from "@scvs/db";
@@ -69,6 +70,16 @@ const configuration = () => ({
   // deregister us before we leave.
   drainGraceMs: numberEnv("SCVS_DRAIN_GRACE_MS", 15_000),
   port: numberEnv("PORT", 5002),
+  // The three `http.Server` deadlines main.ts applies after listen(). Node's own defaults are not neutral —
+  // its 5 s keepAliveTimeout sits below the balancer's idle timeout and answers 502 on a reused connection.
+  httpTimeouts: {
+    requestTimeoutMs: numberEnv("SCVS_HTTP_REQUEST_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.requestTimeoutMs),
+    headersTimeoutMs: numberEnv("SCVS_HTTP_HEADERS_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.headersTimeoutMs),
+    keepAliveTimeoutMs: numberEnv(
+      "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs,
+    ),
+  },
   // The database connection app.module.ts feeds to DbModule.forRootAsync, so it travels ConfigService like
   // every other setting instead of @scvs/db reading POSTGRES_* off process.env itself. readDbEnv() deliberately
   // does not validate: this loader also runs where no database environment exists (generate-openapi.ts in CI).
