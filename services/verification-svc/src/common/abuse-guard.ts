@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { ScvsLogger } from "@scvs/core";
 import { AbuseControlRepository } from "@scvs/db";
 import type { Request } from "express";
 import type { AppConfigService } from "../config/configuration.js";
@@ -62,5 +63,28 @@ export class AbuseGuardService {
     );
     const count = await this.abuseControl.incrementAbuseCounter(fingerprint, route, windowStart);
     return { allowed: count <= maxPerWindow };
+  }
+
+  /**
+   * `checkAbuse`, wrapped so a database failure fails open rather than taking the route down — deliberate,
+   * which is why it must be loud: the log line this writes is the only sign the quota stopped being enforced.
+   * Shared by every caller of `checkAbuse` so the fail-open behavior can only drift in one place.
+   */
+  async checkAbuseFailOpen(
+    req: Request,
+    route: string,
+    maxPerWindow: number,
+    windowMs: number,
+    logger: ScvsLogger,
+  ): Promise<boolean> {
+    try {
+      const { allowed } = await this.checkAbuse(req, route, maxPerWindow, windowMs);
+      return allowed;
+    } catch (error) {
+      logger.error("DB-backed abuse check failed, failing open", {
+        error: error instanceof Error ? error : String(error),
+      });
+      return true;
+    }
   }
 }

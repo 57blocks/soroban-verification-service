@@ -40,26 +40,16 @@ export class AbuseGuard implements CanActivate {
     // The matched route pattern, not the URL: a path parameter in the key would give every distinct id its own
     // budget, which is no budget at all.
     const route = req.route?.path;
-    try {
-      // An unmatched route resolves to the strictest tier rather than the loosest.
-      const maxPerWindow =
-        route === undefined || SUBMISSION_ROUTES.has(route)
-          ? this.configService.get("submitAbuseMaxPerWindow", { infer: true })
-          : this.configService.get("abuseMaxPerWindow", { infer: true });
-      const windowMs = this.configService.get("abuseWindowMs", { infer: true });
-      const { allowed } = await this.abuse.checkAbuse(req, route ?? "unmatched", maxPerWindow, windowMs);
-      if (!allowed) {
-        throw new ApiError(429, { error: "rate_limited", message: "Too many requests, please try again later." });
-      }
-      return true;
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-      // Failing open is deliberate (the guard must not take the API down with the database), which is exactly
-      // why it must be loud: this record is the only sign the quota is not being enforced.
-      this.logger.error("DB-backed abuse check failed, failing open", {
-        error: error instanceof Error ? error : String(error),
-      });
-      return true;
+    // An unmatched route resolves to the strictest tier rather than the loosest.
+    const maxPerWindow =
+      route === undefined || SUBMISSION_ROUTES.has(route)
+        ? this.configService.get("submitAbuseMaxPerWindow", { infer: true })
+        : this.configService.get("abuseMaxPerWindow", { infer: true });
+    const windowMs = this.configService.get("abuseWindowMs", { infer: true });
+    const allowed = await this.abuse.checkAbuseFailOpen(req, route ?? "unmatched", maxPerWindow, windowMs, this.logger);
+    if (!allowed) {
+      throw new ApiError(429, { error: "rate_limited", message: "Too many requests, please try again later." });
     }
+    return true;
   }
 }

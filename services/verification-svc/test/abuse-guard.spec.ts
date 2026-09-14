@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Request } from "express";
+import { ScvsLogger } from "@scvs/core";
 import {
   AbuseControlRepository,
   createPrismaClient,
@@ -197,6 +198,20 @@ describe("AbuseGuardService", () => {
       else process.env.SCVS_THROTTLE_LIMIT = saved;
     }
   });
+
+  // Both of checkAbuseFailOpen's callers (this guard, RawArchiveBodyMiddleware) rely on this: the check must
+  // not take the route down with the database.
+  it("fails open when the underlying check errors, and does not throw", async () => {
+    const brokenAbuseControl = {
+      incrementAbuseCounter: () => Promise.reject(new Error("connection refused")),
+    } as unknown as AbuseControlRepository;
+    const broken = new AbuseGuardService(brokenAbuseControl, { get: () => FINGERPRINT_KEY } as never);
+    const logger = new ScvsLogger("test");
+
+    await expect(
+      broken.checkAbuseFailOpen(requestFromNewClient(), ROUTE, 3, WINDOW_MS, logger),
+    ).resolves.toBe(true);
+  });
 });
 
 /**
@@ -218,13 +233,13 @@ describe("AbuseGuard tier selection", () => {
     const guard = new AbuseGuard(
       { get: (key: string) => budgets[key] } as never,
       {
-        checkAbuse: async (
+        checkAbuseFailOpen: async (
           _req: unknown,
           route: string,
           maxPerWindow: number,
         ) => {
           seen.push({ route, maxPerWindow });
-          return { allowed: true };
+          return true;
         },
       } as never,
     );
@@ -274,13 +289,13 @@ describe("AbuseGuard fallback when the route pattern is unavailable", () => {
     const guard = new AbuseGuard(
       { get: (key: string) => budgets[key] } as never,
       {
-        checkAbuse: async (
+        checkAbuseFailOpen: async (
           _req: unknown,
           route: string,
           maxPerWindow: number,
         ) => {
           seen.push({ route, maxPerWindow });
-          return { allowed: true };
+          return true;
         },
       } as never,
     );

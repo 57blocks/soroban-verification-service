@@ -48,18 +48,12 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
             "status remains readable.",
         }),
       );
-      req.destroy();
+      this.discardAndClose(req, res);
       return;
     }
 
-    if (!(await this.isWithinAbuseBudget(req))) {
-      res.status(429).json(errorBody(429, { error: "rate_limited", message: "Too many requests, please try again later." }));
-      req.destroy();
-      return;
-    }
-
-    // Reject before a single byte is buffered when the client already declares an oversized body — the
-    // per-chunk check below still catches a missing or understated Content-Length.
+    // Free and synchronous, so it runs before the DB-backed abuse check below: a flood of requests that only
+    // ever declare an oversized body should not each cost a Postgres round-trip to reject.
     const declaredLength = Number(req.headers["content-length"]);
     if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
       res.status(413).json(
@@ -68,7 +62,20 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
           message: `Source archive exceeds ${maxUploadBytes} bytes.`,
         }),
       );
-      req.destroy();
+      this.discardAndClose(req, res);
+      return;
+    }
+
+    const allowed = await this.abuse.checkAbuseFailOpen(
+      req,
+      UPLOAD_SOURCE_ROUTE,
+      this.configService.get("submitAbuseMaxPerWindow", { infer: true }),
+      this.configService.get("abuseWindowMs", { infer: true }),
+      this.logger,
+    );
+    if (!allowed) {
+      res.status(429).json(errorBody(429, { error: "rate_limited", message: "Too many requests, please try again later." }));
+      this.discardAndClose(req, res);
       return;
     }
 
@@ -77,17 +84,22 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       Number.isFinite(declaredLength) ? declaredLength : Math.min(UNSIZED_BODY_INITIAL_BYTES, maxUploadBytes),
     );
     let size = 0;
+    // Multiple "data" events can each push size past the ceiling before req.destroy() takes effect — without
+    // this, a second rejection would call res.json() on an already-sent response and throw unhandled.
+    let rejected = false;
 
     req.on("data", (chunk: Buffer) => {
+      if (rejected) return;
       size += chunk.length;
       if (size > maxUploadBytes) {
+        rejected = true;
         res.status(413).json(
           errorBody(413, {
             error: "source_archive_too_large",
             message: `Source archive exceeds ${maxUploadBytes} bytes.`,
           }),
         );
-        req.destroy();
+        this.discardAndClose(req, res);
         return;
       }
       const offset = size - chunk.length;
@@ -101,6 +113,7 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
     });
 
     req.on("end", () => {
+      if (rejected) return;
       (req as Request & { body: Buffer }).body = buffer.subarray(0, size);
       next();
     });
@@ -108,21 +121,16 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
     req.on("error", next);
   }
 
-  /** Mirrors `AbuseGuard.canActivate`'s fail-open behavior: a DB-backed check must not take the API down. */
-  private async isWithinAbuseBudget(req: Request): Promise<boolean> {
-    try {
-      const { allowed } = await this.abuse.checkAbuse(
-        req,
-        UPLOAD_SOURCE_ROUTE,
-        this.configService.get("submitAbuseMaxPerWindow", { infer: true }),
-        this.configService.get("abuseWindowMs", { infer: true }),
-      );
-      return allowed;
-    } catch (error) {
-      this.logger.error("DB-backed abuse check failed, failing open", {
-        error: error instanceof Error ? error : String(error),
-      });
-      return true;
-    }
+  /**
+   * After sending a rejection, the client may still be mid-write on a body we're never going to read. `req`
+   * defaults to paused — nothing drains the socket's receive buffer unless something reads it — so an
+   * unconsumed stream can fill that buffer, apply TCP backpressure, and stall the very response we just sent.
+   * `resume()` puts the stream in flowing mode so the rest of the body is read and discarded rather than left
+   * to back up the connection; `req.destroy()` waits for the response to actually finish sending, since an
+   * immediate destroy would race that in-flight write.
+   */
+  private discardAndClose(req: Request, res: Response): void {
+    req.resume();
+    res.on("finish", () => req.destroy());
   }
 }
