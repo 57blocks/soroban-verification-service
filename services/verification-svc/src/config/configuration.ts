@@ -29,6 +29,9 @@ const configuration = () => ({
   // (composer), scaled up because a verify/build sandbox routinely runs longer (full `cargo vendor` + compile).
   stagingSweepJobAgeCeilingMs: numberEnv("SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS", 14_400_000),
   maxSourceArchiveBytes: numberEnv("SCVS_MAX_SOURCE_ARCHIVE_BYTES", 50 * 1024 * 1024),
+  requestTimeoutMs: numberEnv("SCVS_REQUEST_TIMEOUT_MS", 30_000),
+  headersTimeoutMs: numberEnv("SCVS_HEADERS_TIMEOUT_MS", 10_000),
+  keepAliveTimeoutMs: numberEnv("SCVS_KEEPALIVE_TIMEOUT_MS", 5_000),
   abuseWindowMs: numberEnv("SCVS_ABUSE_WINDOW_MS", 60_000),
   // No default on purpose: an absent key must be a boot failure, never a fallback that is the same on every
   // deployment and therefore no key at all. `env.dto.ts` is what actually stops the boot.

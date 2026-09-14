@@ -13,6 +13,21 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction): void {
     const maxUploadBytes = this.configService.get("maxSourceArchiveBytes", { infer: true });
+
+    // Reject before a single byte is buffered when the client already declares an oversized body — the
+    // per-chunk check below still catches a missing or understated Content-Length.
+    const declaredLength = Number(req.headers["content-length"]);
+    if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
+      res.status(413).json(
+        errorBody(413, {
+          error: "source_archive_too_large",
+          message: `Source archive exceeds ${maxUploadBytes} bytes.`,
+        }),
+      );
+      req.destroy();
+      return;
+    }
+
     const chunks: Buffer[] = [];
     let size = 0;
 
