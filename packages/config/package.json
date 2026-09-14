@@ -22,7 +22,7 @@
   "dependencies": {
     "@nestjs/common": "^11.2.3",
     "@scvs/core": "workspace:*",
-    "class-validator": "^0.14.4",
+    "class-validator": "^0.15.1",
     "dotenv": "^16.6.1"
   },
   "devDependencies": {
