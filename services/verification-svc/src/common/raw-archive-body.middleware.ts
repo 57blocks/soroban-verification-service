@@ -3,11 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { DrainState, ScvsLogger } from "@scvs/core";
 import type { NextFunction, Request, Response } from "express";
 import { AbuseGuardService } from "./abuse-guard.js";
+import { UPLOAD_SOURCE_ROUTE } from "./abuse.guard.js";
 import { errorBody } from "./api-error.exception.js";
 import type { AppConfigService } from "../config/configuration.js";
-
-/** Must match `abuse.guard.ts`'s `SUBMISSION_ROUTES` key for this same path. */
-const ROUTE = "api/verification/v1/uploads/source";
 
 /**
  * Starting allocation for a body with no Content-Length to size it by. Small on purpose: a client can omit
@@ -115,7 +113,7 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
     try {
       const { allowed } = await this.abuse.checkAbuse(
         req,
-        ROUTE,
+        UPLOAD_SOURCE_ROUTE,
         this.configService.get("submitAbuseMaxPerWindow", { infer: true }),
         this.configService.get("abuseWindowMs", { infer: true }),
       );

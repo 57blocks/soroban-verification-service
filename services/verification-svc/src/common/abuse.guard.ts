@@ -7,13 +7,17 @@ import { ApiError } from "./api-error.exception.js";
 import type { AppConfigService } from "../config/configuration.js";
 
 /**
+ * Exported so `raw-archive-body.middleware.ts` can key its own abuse check on the exact same string this
+ * guard would have used, had it still applied to that route — middleware runs before Nest resolves
+ * `req.route.path`, so it cannot read the pattern back the way this guard does.
+ */
+export const UPLOAD_SOURCE_ROUTE = "/api/verification/v1/uploads/source";
+
+/**
  * Routes on the stricter budget. Both are the same caller in the same flow — a client uploading source is one
  * about to submit — so they are one tier, not two.
  */
-const SUBMISSION_ROUTES = new Set([
-  "/api/verification/v1/verifications",
-  "/api/verification/v1/uploads/source",
-]);
+const SUBMISSION_ROUTES = new Set(["/api/verification/v1/verifications", UPLOAD_SOURCE_ROUTE]);
 
 /**
  * The Postgres-backed sliding-window guard, applied via `@UseGuards(AbuseGuard)` on

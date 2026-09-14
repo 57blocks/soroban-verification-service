@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import type { Request, Response } from "express";
 import { RawArchiveBodyMiddleware } from "../src/common/raw-archive-body.middleware.js";
 import type { AbuseGuardService } from "../src/common/abuse-guard.js";
+import { UPLOAD_SOURCE_ROUTE } from "../src/common/abuse.guard.js";
 import type { DrainState } from "@scvs/core";
 
 const MAX_BYTES = 1024;
@@ -77,6 +78,23 @@ describe("RawArchiveBodyMiddleware", () => {
     // the per-chunk accumulator.
     req.emit("data", Buffer.from("x"));
     expect(dataListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("keys the abuse check on the exact route string AbuseGuard's SUBMISSION_ROUTES would have used", async () => {
+    const abuse = abuseGuardService();
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuse, drainState());
+    const req = new FakeRequest();
+    req.headers["content-length"] = "1";
+    const res = fakeResponse();
+    const next = jest.fn();
+
+    await middleware.use(req as unknown as Request, res, next);
+    req.emit("data", Buffer.from("x"));
+    req.emit("end");
+
+    // A mismatched route string here would split this route's quota into two independent counters instead of
+    // the one submission-tier budget it shares with /verifications.
+    expect(abuse.checkAbuse).toHaveBeenCalledWith(req, UPLOAD_SOURCE_ROUTE, expect.anything(), expect.anything());
   });
 
   it("fails open when the abuse check itself errors", async () => {
