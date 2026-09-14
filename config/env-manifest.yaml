@@ -922,8 +922,8 @@ services:
         default: 10000
         note: >-
           Node's own default (60000). Bounds how long the client has to finish sending request headers;
-          must stay below SCVS_REQUEST_TIMEOUT_MS and above SCVS_KEEPALIVE_TIMEOUT_MS (Node enforces this
-          ordering at the http.Server level).
+          must stay below SCVS_REQUEST_TIMEOUT_MS and above SCVS_KEEPALIVE_TIMEOUT_MS — Node does not
+          validate or enforce this ordering itself, so an inverted configuration is accepted silently.
       SCVS_KEEPALIVE_TIMEOUT_MS:
         type: number
         default: 5000
