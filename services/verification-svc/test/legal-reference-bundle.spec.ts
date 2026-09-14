@@ -78,8 +78,27 @@ describe("the configured bundle is one this service can actually serve", () => {
 });
 
 describe("the terms say what the Service actually does", () => {
-  it("state that published content cannot be removed", () => {
-    expect(text("terms")).toMatch(/cannot delete, alter, or recall/);
+  // Withdrawing source from Arweave split one claim into two, and the terms are only correct if they carry
+  // both halves: the report stays beyond recall, and our copy of public source no longer is. A test that
+  // asserted the old single claim would now be enforcing a false statement, so it asserts the pair instead.
+  it("separate the report, which cannot be recalled, from source, which can", () => {
+    const terms = text("terms");
+    expect(terms).toMatch(/it cannot afterwards be altered or withdrawn by anyone, including us/);
+    expect(terms).toMatch(/a request to remove published source can be acted on/i);
+    expect(terms).toMatch(/We do not monitor or pre-screen submitted material/);
+    // The sentence that made prevention the only remedy went with the architecture that forced it.
+    expect(terms).not.toMatch(/prevention is the only remedy/);
+  });
+
+  it("name the contracting entity and the law that governs them", () => {
+    const terms = text("terms");
+    // `text()` joins the sections only, and the contracting entity belongs in the intro — where a reader
+    // meets it before anything it governs — so that half is asserted against the intro itself.
+    const intro = bundle.documents.find((document) => document.slug === "terms")!.intro;
+    expect(intro).toMatch(/57Blocks Technology Inc\., a California corporation/);
+    expect(terms).toMatch(/governed by the laws of the State of California/);
+    // A public issue tracker is not a channel for a rights claim; a postal address is.
+    expect(terms).toMatch(/3001 Bishop Dr, Suite 300, San Ramon/);
   });
 
   it("say a verdict is not an audit", () => {

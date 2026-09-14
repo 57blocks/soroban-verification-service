@@ -1,6 +1,6 @@
 {
   "schema": "scvs-legal-documents-v1",
-  "version": "2026-09-08",
+  "version": "2026-09-14",
   "effective_date": null,
   "operator_name": "57Blocks",
   "service_name": "Soroban Verify",
@@ -11,7 +11,7 @@
       "slug": "terms",
       "title": "Terms of Service",
       "document_title": "Terms of Service | Soroban Verify",
-      "intro": "These terms govern your use of Soroban Verify, the hosted Soroban source verification service operated by 57Blocks at this domain (the \"Service\"). They cover the hosted Service only. The software behind it is open source under the [Apache License 2.0](https://sv.57blocks.com/schemas/LICENSE), and your use of that software is governed by that license, not by these terms.",
+      "intro": "These terms govern your use of Soroban Verify, the hosted Soroban source verification service operated at this domain by 57Blocks Technology Inc., a California corporation with an address at 3001 Bishop Dr, Suite 300, San Ramon, California [POSTAL CODE], United States (\"57Blocks\", \"we\", or \"us\") (the \"Service\"). They cover the hosted Service only. The software behind it is open source under the [Apache License 2.0](https://sv.57blocks.com/schemas/LICENSE), and your use of that software is governed by that license, not by these terms.",
       "sections": [
         {
           "id": "what-the-service-does",
@@ -43,11 +43,13 @@
         },
         {
           "id": "public-declaration",
-          "heading": "4. The public declaration is permanent",
+          "heading": "4. What publishing does, and what can be undone",
           "blocks": [
-            "When you submit source, you choose whether to declare it public. The default is not public. This is the only storage choice you make, and it cannot be changed after submission.",
-            "If you declare source public, the Service stores a copy, serves it by its SHA-256 hash from this verifier's result root, and references it from the published result. Published results are content-addressed, archived to the Arweave permanent storage network, and mirrored by other verifiers and by consumers of results. **The Service cannot delete, alter, or recall content once it is published.** A request to remove published source or a published result cannot be honoured, whoever makes it and for whatever reason.",
-            "Do not declare source public unless you are entitled to publish it under those conditions. If you declare public source that you had no right to publish, you are solely responsible for that declaration and for any claim arising from it, and you agree to indemnify 57Blocks against such claims to the extent permitted by law.",
+            "When you submit source, you choose whether to declare it public. The default is not public. You make that choice once, at submission.",
+            "If you declare source public, the Service stores a copy, serves it by its SHA-256 hash from this verifier's result root, and points at it from the published result. Other verifiers and consumers of results may mirror that copy, and we do not control what they keep.",
+            "**Two things happen when a result publishes, and only one of them is permanent.** The verification report — the verdict, and the record of what was built and compared — is written to the Arweave permanent storage network, where it cannot afterwards be altered or withdrawn by anyone, including us. That is deliberate: a verdict nobody can quietly revise is the point of the Service. **The source archive is not written there.** It is held in storage we control.",
+            "**So a request to remove published source can be acted on.** If you send us a sufficiently specific notice — that material infringes your rights, discloses something it should not, or is unlawful — we can remove or disable our copy, remove the pointer to it from the result, and attach a correction or dispute note. What we cannot do is reach copies other people have already taken, or alter the report itself. We do not monitor or pre-screen submitted material and have no general obligation to do so, which is not the same as refusing to act once told.",
+            "Do not declare source public unless you are entitled to publish it. If you declare public source that you had no right to publish, you are responsible for that declaration and for any claim arising from it, and you agree to indemnify 57Blocks against such claims to the extent permitted by law.",
             "If you do not declare source public, the Service deletes the bytes when the job terminates, on every outcome including failure, and retains only the SHA-256 hash of the archive as a commitment to what was verified. There is no private storage tier, no encryption service, and no way to retrieve non-public source after submission."
           ]
         },
@@ -73,14 +75,14 @@
                 "Do not submit content you have no right to submit, or content whose publication would be unlawful."
               ]
             },
-            "A submission that violates these rules may be refused or discarded. Because published content cannot be removed, prevention is the only remedy the Service has. That is why the public declaration is yours to make and yours to answer for."
+            "A submission that violates these rules may be refused or discarded. Prevention is the better remedy and the one we would rather rely on — a published report cannot be withdrawn, and copies of public source that others have taken are beyond us — but it is no longer the only one: our own copy of published source can be removed, as section 4 describes. The public declaration is still yours to make and yours to answer for."
           ]
         },
         {
           "id": "availability-and-changes",
           "heading": "7. Availability and changes",
           "blocks": [
-            "The Service is provided free of charge and on a best-effort basis, with no service-level commitment. It may be changed, suspended, or discontinued at any time. Published results and archived content persist independently of the Service: in this verifier's result root for its operating lifetime, and in the Arweave archive indefinitely.",
+            "The Service is provided free of charge and on a best-effort basis, with no service-level commitment. It may be changed, suspended, or discontinued at any time. Published reports persist independently of the Service: in this verifier's result root for its operating lifetime, and in the Arweave archive indefinitely. Public source persists only in the result root, so it lasts as long as we operate the Service and no longer — the report keeps its SHA-256 hash either way, so what was verified stays on the record.",
             "These terms may change. The version in effect is the one published at this address, and its [revision history](https://github.com/57blocks/soroban-verification-service/commits/main/config/legal-documents.json) is public."
           ]
         },
@@ -103,21 +105,24 @@
           "id": "governing-law",
           "heading": "10. Governing law and disputes",
           "blocks": [
-            "The governing law and the forum for any dispute under these terms will be stated here once legal review is complete."
+            "These terms, and any dispute arising from them, are governed by the laws of the State of California, excluding its conflict-of-laws rules.",
+            "The forum for a dispute will be stated here before these terms take effect. Nothing in them deprives anyone of a protection that cannot be waived where they live."
           ]
         },
         {
           "id": "contact",
           "heading": "11. Contact",
           "blocks": [
-            "Questions about these terms: open an issue in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public. Do not send confidential material through it."
+            "Questions about the Service or these terms: open an issue in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public. Do not send confidential material through it.",
+            "**Legal notices**, including claims that published material infringes your rights: 57Blocks Technology Inc., 3001 Bishop Dr, Suite 300, San Ramon, California [POSTAL CODE], United States. A monitored electronic address for legal and privacy notices will be published here before these terms take effect."
           ]
         }
       ],
       "open_items": [
-        "Liability for an incorrect public declaration (TRD §10 item 6). Section 4 drafts the submitter-responsible position with an indemnity. Not yet agreed with 57Blocks counsel or with SDF.",
-        "Governing law and forum (section 10).",
-        "Whether a notice-and-response process is needed for published references to source (the report's source pointer, the stored copy in this verifier's result root) given that the Arweave copy of the report cannot be removed.",
+        "The forum for disputes (section 10). Governing law is settled as California; the venue is not.",
+        "The liability cap in section 8 still reads \"the amount you paid, which is nothing\". Counsel advises a non-zero fixed cap with carve-outs for liability that cannot lawfully be limited. The amount is not settled, and California limits what may be excluded.",
+        "A monitored electronic address for legal and privacy notices, and the person who owns it. The postal address is settled; the electronic channel is not.",
+        "Whether a designated copyright agent is registered, and the response times we commit to.",
         "Whether and how the Stellar Development Foundation should be named: as the grant funder, as the publisher of the official build components, or not at all."
       ]
     },
@@ -125,7 +130,7 @@
       "slug": "privacy",
       "title": "Privacy Notice",
       "document_title": "Privacy Notice | Soroban Verify",
-      "intro": "This notice describes what Soroban Verify, operated by 57Blocks at this domain (the \"Service\"), processes when you use it, and what happens to that data. It is written to match what the Service actually does. Where the Service's design makes something impossible, such as deleting a published result, this notice says so rather than promising it.",
+      "intro": "This notice describes what Soroban Verify, operated at this domain by 57Blocks Technology Inc., a California corporation with an address at 3001 Bishop Dr, Suite 300, San Ramon, California [POSTAL CODE], United States (\"57Blocks\", \"we\", or \"us\") (the \"Service\"), processes when you use it, and what happens to that data. It is written to match what the Service actually does. Where the Service's design makes something impossible, such as altering a published report, this notice says so rather than promising it.",
       "sections": [
         {
           "id": "summary",
@@ -159,7 +164,7 @@
           "id": "source",
           "heading": "3. Source you submit",
           "blocks": [
-            "**Declared public.** A copy is stored durably, served by its SHA-256 hash from this verifier's result root, and referenced from the published result. It is therefore available to anyone, mirrored by other verifiers and consumers, and referenced from the Arweave archive. Source archives commonly contain personal data placed there by their authors: names and email addresses in Cargo.toml, git metadata, comments, licence headers. Once published, none of it can be removed. Check what is in the archive before declaring it public.",
+            "**Declared public.** A copy is stored durably, served by its SHA-256 hash from this verifier's result root, and referenced from the published result. It is therefore available to anyone, mirrored by other verifiers and consumers, and may be mirrored by other verifiers and by consumers of results. Source archives commonly contain personal data placed there by their authors: names and email addresses in Cargo.toml, git metadata, comments, licence headers. Once published, none of it can be removed. Check what is in the archive before declaring it public.",
             "**Not declared public.** The bytes are deleted when the job terminates, on every path including failure, and only the SHA-256 hash of the archive is retained and published. The staging location is excluded from backups. While the job runs, the bytes exist in that staging location and inside the sandbox, and nowhere else.",
             "**Referenced by URL.** The Service fetches the URL you supply. The URL itself becomes part of the job record and, if the source is declared public, of the published result."
           ]
@@ -168,7 +173,7 @@
           "id": "what-is-published",
           "heading": "4. What is published",
           "blocks": [
-            "For each verification that reaches a verdict: a report document holding the verdict, the Wasm hash, the source hash and, for public source, its pointer, the build recipe and environment, sandbox diagnostics, and timestamps; an index entry per Wasm hash; and this verifier's manifest and policy. Reports are archived to Arweave. All of it is public, content-addressed, and permanent. By design it contains no personal data other than what may be inside public source."
+            "For each verification that reaches a verdict: a report document holding the verdict, the Wasm hash, the source hash and, for public source, its pointer, the build recipe and environment, sandbox diagnostics, and timestamps; an index entry per Wasm hash; and this verifier's manifest and policy. Reports are archived to Arweave and are permanent. Public source is not archived there: it is held in storage we control and can be removed on a valid notice, which is what section 6 describes. All of it is public, content-addressed, and permanent. By design it contains no personal data other than what may be inside public source."
           ]
         },
         {
@@ -191,7 +196,7 @@
           "id": "your-rights",
           "heading": "6. Your rights and their limits",
           "blocks": [
-            "Because the Service holds no identity, it cannot look up \"your\" data: a job is yours if you hold its link, and a fingerprint is a hash. Published content cannot be deleted, altered, or recalled by anyone, including 57Blocks. That is a property of the design, and it is the reason the public declaration defaults to not public. Anything not published, such as a job that never reached a verdict, deletes itself on the schedule in section 2 without you asking; to have one removed sooner, contact us through the channel in section 9. The raw build log is the one thing you can delete yourself, with the token you were issued — and the same token is the only way to read it, so clearing your browser storage ends your access to it as surely as the 7-day expiry does.",
+            "Because the Service holds no identity, it cannot look up \"your\" data: a job is yours if you hold its link, and a fingerprint is a hash. A **published report** cannot be deleted, altered, or recalled by anyone, including 57Blocks — it is on a permanent storage network, and that is deliberate. **Public source is different.** It is held in storage we control, so on a sufficiently specific notice we can remove our copy, remove the pointer to it, and attach a correction or dispute note to the result. We cannot reach copies other people have already taken. The public declaration still defaults to not public, because what we can undo is our own copy and not its spread. Anything not published, such as a job that never reached a verdict, deletes itself on the schedule in section 2 without you asking; to have one removed sooner, contact us through the channel in section 9. The raw build log is the one thing you can delete yourself, with the token you were issued — and the same token is the only way to read it, so clearing your browser storage ends your access to it as surely as the 7-day expiry does.",
             "Statutory rights over personal data, where they apply to you, will be described here once legal review is complete."
           ]
         },
@@ -218,8 +223,9 @@
         }
       ],
       "open_items": [
-        "The controller's legal identity and address, and the legal basis for each processing purpose in section 2, for readers in jurisdictions that require them.",
-        "Retention period of the load-balancer and web-server access logs (section 2). Stated as \"a limited period\" pending confirmation from DevOps of the configured value.",
+        "The legal basis for each processing purpose in section 2, for readers in jurisdictions that require one to be stated. The controller is now identified.",
+        "Retention period of the load-balancer and web-server access logs (section 2). Stated as \"a limited period\" pending confirmation of the configured value.",
+        "Statutory rights over personal data, and the private channel for exercising them (section 6).",
         "Whether Stellar's legal team wants SDF's role described here."
       ]
     }
