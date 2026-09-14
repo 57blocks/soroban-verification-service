@@ -117,9 +117,27 @@ describe("the terms say what the Service actually does", () => {
   // it is — so this asserts the channel exists, not that an agent is designated.
   it("give both documents a private channel for notices, not only the public tracker", () => {
     for (const slug of ["terms", "privacy"] as const) {
-      expect(text(slug)).toMatch(/sv\.support@57blocks\.com/);
+      expect(text(slug)).toMatch(/sv\.legal@57blocks\.com/);
     }
     expect(text("terms")).not.toMatch(/designated agent|registered with the U\.S\. Copyright Office/i);
+  });
+
+  // The load balancer writes no access log — the Terraform enables none — so a notice describing one was
+  // wrong in the same way the bearer-link description had been: accurate when written, never revisited.
+  it("describe the logs that exist, with the period they are actually kept for", () => {
+    const privacy = text("privacy");
+    expect(privacy).toMatch(/is \*\*not\*\* configured to write access logs/);
+    expect(privacy).toMatch(/deleted after 30 days/);
+    expect(privacy).not.toMatch(/a limited period under the hosting provider's configuration/);
+  });
+
+  it("state a basis for each purpose without asserting that EU law reaches the Service", () => {
+    const privacy = text("privacy");
+    expect(privacy).toMatch(/If EU or UK data protection law applies to you/);
+    expect(privacy).toMatch(/performance of the agreement/);
+    expect(privacy).toMatch(/legitimate interests/);
+    // Consent that can be withdrawn is the wrong basis for a security control, and counsel said so.
+    expect(privacy).toMatch(/We do not rely on consent/);
   });
 
   it("say a verdict is not an audit", () => {
