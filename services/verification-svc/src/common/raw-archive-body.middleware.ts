@@ -50,9 +50,7 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       return;
     }
 
-    // Sized off the declared length (already proven within the ceiling above) so a normal upload allocates
-    // once and copies each chunk into place, rather than accumulating a chunk array whose later concatenation
-    // would briefly hold both the parts and the whole. No Content-Length falls back to the ceiling itself.
+    // Not a chunk array concatenated at the end: that briefly holds both the parts and the whole at once.
     let buffer = Buffer.allocUnsafe(Number.isFinite(declaredLength) ? declaredLength : maxUploadBytes);
     let size = 0;
 
@@ -69,8 +67,7 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
         return;
       }
       const offset = size - chunk.length;
-      // Only reachable when the body outgrows an understated Content-Length; max(size, ...) covers a single
-      // chunk large enough that doubling alone would still undershoot it.
+      // max(size, ...): doubling alone can still undershoot a single large chunk.
       if (size > buffer.length) {
         const grown = Buffer.allocUnsafe(Math.min(Math.max(buffer.length * 2, size), maxUploadBytes));
         buffer.copy(grown, 0, 0, offset);
