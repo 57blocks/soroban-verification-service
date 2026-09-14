@@ -125,4 +125,38 @@ describe("RawArchiveBodyMiddleware", () => {
     expect(res.status).not.toHaveBeenCalled();
     expect((req as unknown as { body: Buffer }).body).toEqual(Buffer.from("abcdef"));
   });
+
+  it("assembles the body correctly with no Content-Length to size the initial allocation by", async () => {
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const req = new FakeRequest();
+    const res = fakeResponse();
+    const next = jest.fn();
+
+    await middleware.use(req as unknown as Request, res, next);
+    req.emit("data", Buffer.from("abc"));
+    req.emit("data", Buffer.from("def"));
+    req.emit("end");
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect((req as unknown as { body: Buffer }).body).toEqual(Buffer.from("abcdef"));
+  });
+
+  it("grows the buffer and keeps the full body when actual bytes outgrow an understated Content-Length", async () => {
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const req = new FakeRequest();
+    req.headers["content-length"] = "2"; // undersold: the client actually sends more
+    const res = fakeResponse();
+    const next = jest.fn();
+
+    await middleware.use(req as unknown as Request, res, next);
+    req.emit("data", Buffer.from("ab"));
+    // 6 bytes against a 2-byte initial allocation: doubling once (to 4) would still undershoot, exercising the
+    // max(buffer.length * 2, size) branch rather than just size > buffer.length.
+    req.emit("data", Buffer.from("cdefgh"));
+    req.emit("end");
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+    expect((req as unknown as { body: Buffer }).body).toEqual(Buffer.from("abcdefgh"));
+  });
 });

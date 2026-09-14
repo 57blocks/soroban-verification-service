@@ -50,7 +50,12 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       return;
     }
 
-    const chunks: Buffer[] = [];
+    // Sized off the declared length when there is one — the check above already proved it is within the
+    // ceiling — so a normal upload allocates exactly once and copies each chunk straight into place, rather
+    // than accumulating a chunk array and concatenating it (which briefly held both the parts and the whole).
+    // A request with no Content-Length (e.g. chunked transfer-encoding) allocates the ceiling itself, since
+    // there is nothing else to size it by.
+    let buffer = Buffer.allocUnsafe(Number.isFinite(declaredLength) ? declaredLength : maxUploadBytes);
     let size = 0;
 
     req.on("data", (chunk: Buffer) => {
@@ -65,11 +70,20 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
         req.destroy();
         return;
       }
-      chunks.push(chunk);
+      const offset = size - chunk.length;
+      // Only reachable when the actual body outgrows a Content-Length that undersold it — still bounded by
+      // the ceiling check above, so growth stops at maxUploadBytes regardless of how it got here. Doubling
+      // may itself undershoot a single large chunk, hence the outer max(size, ...).
+      if (size > buffer.length) {
+        const grown = Buffer.allocUnsafe(Math.min(Math.max(buffer.length * 2, size), maxUploadBytes));
+        buffer.copy(grown, 0, 0, offset);
+        buffer = grown;
+      }
+      chunk.copy(buffer, offset);
     });
 
     req.on("end", () => {
-      (req as Request & { body: Buffer }).body = Buffer.concat(chunks);
+      (req as Request & { body: Buffer }).body = buffer.subarray(0, size);
       next();
     });
 
