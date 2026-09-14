@@ -10,6 +10,13 @@ import type { AppConfigService } from "../config/configuration.js";
 const ROUTE = "api/verification/v1/uploads/source";
 
 /**
+ * Starting allocation for a body with no Content-Length to size it by. Small on purpose: a client can omit
+ * the header at will, and preallocating the ceiling itself would let that alone force a full-size allocation
+ * per connection — the growth path below (same one an understated Content-Length uses) picks up from here.
+ */
+const UNSIZED_BODY_INITIAL_BYTES = 64 * 1024;
+
+/**
  * Accumulates the raw request body as a Buffer instead of parsing it as JSON — uploads are binary tarballs.
  *
  * Also carries this route's drain and abuse checks, run here rather than through `@UseGuards(DrainGuard,
@@ -68,7 +75,9 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
     }
 
     // Not a chunk array concatenated at the end: that briefly holds both the parts and the whole at once.
-    let buffer = Buffer.allocUnsafe(Number.isFinite(declaredLength) ? declaredLength : maxUploadBytes);
+    let buffer = Buffer.allocUnsafe(
+      Number.isFinite(declaredLength) ? declaredLength : Math.min(UNSIZED_BODY_INITIAL_BYTES, maxUploadBytes),
+    );
     let size = 0;
 
     req.on("data", (chunk: Buffer) => {

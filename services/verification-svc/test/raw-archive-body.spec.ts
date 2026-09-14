@@ -165,6 +165,31 @@ describe("RawArchiveBodyMiddleware", () => {
     expect((req as unknown as { body: Buffer }).body).toEqual(Buffer.from("abcdef"));
   });
 
+  it("does not preallocate the full ceiling for a request with no Content-Length", async () => {
+    // A ceiling far above the small initial allocation, so an omitted Content-Length can't be mistaken for one
+    // that happens to be small anyway.
+    const bigCeiling = 50 * 1024 * 1024;
+    const config = { get: () => bigCeiling } as unknown as ConstructorParameters<typeof RawArchiveBodyMiddleware>[0];
+    const middleware = new RawArchiveBodyMiddleware(config, abuseGuardService(), drainState());
+    const req = new FakeRequest();
+    const res = fakeResponse();
+    const next = jest.fn();
+    const allocSpy = jest.spyOn(Buffer, "allocUnsafe");
+
+    try {
+      await middleware.use(req as unknown as Request, res, next);
+      req.emit("data", Buffer.from("abc"));
+      req.emit("end");
+
+      // The first allocation (before any data arrives) must be small — a client can omit Content-Length at
+      // will, and preallocating the ceiling itself would let that alone force a 50MB allocation per connection.
+      expect(allocSpy.mock.calls[0]?.[0]).toBeLessThan(bigCeiling);
+      expect((req as unknown as { body: Buffer }).body).toEqual(Buffer.from("abc"));
+    } finally {
+      allocSpy.mockRestore();
+    }
+  });
+
   it("grows the buffer and keeps the full body when actual bytes outgrow an understated Content-Length", async () => {
     const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(), drainState());
     const req = new FakeRequest();
