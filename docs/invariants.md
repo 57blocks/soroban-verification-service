@@ -41,6 +41,7 @@ below whose violation is expensive enough to warrant one).
 | 29 | A service image reaches a running service through a per-environment **mutable alias tag**, never a digest written into a task definition: CI moves the tag, and the task definition and its pointer belong to Terraform. CI registers no service task definition. | `scripts/ci/promote-image-alias.sh`, `scripts/ci/roll-service-to-alias.sh` | — |
 | 30 | The git ref decides the version, the release channel and the dist-tag; the committed manifest version is a placeholder, and exactly one reader owns that mapping. | `eng-tools/resolve-release-channel.mjs` | — |
 | 31 | A trust input — the trusted image set, the Trusted Verifiers List, the published policy — changes by deploy only. No route mutates one in a running verifier, and `policy.json` stays byte-identical for the process's lifetime. | `config/verifier-policy.example.json`, `services/orchestrator-svc/src/modules/build-environments/` | — |
+| 32 | A route that buffers its entire request body into memory completes rate-limiting and size-ceiling checks before reading any byte of it — never as a controller guard, which only runs after the body is already buffered. | `services/verification-svc/src/common/raw-archive-body.middleware.ts` | — |
 
 ## The 3 rules with a full reason
 
