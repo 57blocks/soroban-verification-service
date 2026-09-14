@@ -21,8 +21,7 @@ const SUBMISSION_ROUTES = new Set(["/api/verification/v1/verifications", UPLOAD_
 
 /**
  * The Postgres-backed sliding-window guard, applied via `@UseGuards(AbuseGuard)` on
- * `/api/verification/v1/preflight`, `/api/verification/v1/verifications` and
- * `/api/verification/v1/uploads/source`.
+ * `/api/verification/v1/preflight`, `/api/verification/v1/verifications`, and the build-log routes.
  */
 @Injectable()
 export class AbuseGuard implements CanActivate {

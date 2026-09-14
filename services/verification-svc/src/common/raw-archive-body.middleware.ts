@@ -123,11 +123,9 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
 
   /**
    * After sending a rejection, the client may still be mid-write on a body we're never going to read. `req`
-   * defaults to paused — nothing drains the socket's receive buffer unless something reads it — so an
-   * unconsumed stream can fill that buffer, apply TCP backpressure, and stall the very response we just sent.
-   * `resume()` puts the stream in flowing mode so the rest of the body is read and discarded rather than left
-   * to back up the connection; `req.destroy()` waits for the response to actually finish sending, since an
-   * immediate destroy would race that in-flight write.
+   * defaults to paused, so an unconsumed stream fills the socket's receive buffer, applies TCP backpressure,
+   * and can stall the very response we just sent. `resume()` drains the rest of the body instead; `destroy()`
+   * waits for the response to actually finish sending, since an immediate destroy would race that write.
    */
   private discardAndClose(req: Request, res: Response): void {
     req.resume();
