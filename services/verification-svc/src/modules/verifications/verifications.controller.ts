@@ -204,7 +204,9 @@ export class VerificationsController {
 
   @Post("api/verification/v1/uploads/source")
   @Header("Cache-Control", "no-store")
-  @UseGuards(DrainGuard, AbuseGuard)
+  // AbuseGuard is deliberately absent here: RawArchiveBodyMiddleware runs the same check, before the body is
+  // buffered rather than after.
+  @UseGuards(DrainGuard)
   // Reads `process.env` directly rather than through `ConfigService`: `@Throttle(...)` is a decorator argument,
   // evaluated at class-definition time (module load), before Nest's DI container exists.
   @Throttle({ default: { limit: Number(process.env.SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE || 60), ttl: 60_000 } })
