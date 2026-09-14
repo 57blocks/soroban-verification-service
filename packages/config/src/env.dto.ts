@@ -54,6 +54,14 @@ export class SharedEnvDto {
   })
   SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS?: string;
 
+  // Zero IS accepted here, unlike the three above: it is how a deployment with nothing in front of it declares
+  // that, and `applyHttpServerTimeouts` then skips the keep-alive comparison instead of failing the boot.
+  @IsOptional()
+  @Matches(/^\d+$/, {
+    message: "SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS must be a whole number of milliseconds",
+  })
+  SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS?: string;
+
   // Not only the AWS SDK's region: `getStagingStorageConfig()` reads it too, and its fallback is `us-east-1`,
   // so an unset value points the staging-bucket client at the wrong region and fails per-object rather than at
   // boot.

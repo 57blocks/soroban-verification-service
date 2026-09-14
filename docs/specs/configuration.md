@@ -147,9 +147,15 @@ else, decides how long one slow connection may hold that buffer. Its value is de
 Node's own 300 000 ms: making it explicit and adjustable is a separate change from re-choosing it,
 and choosing a lower number needs measured archive sizes and upload durations rather than a guess.
 
-The ordering between the three is enforced, not documented: the headers deadline must exceed the
-keep-alive deadline, the request deadline must not undercut the headers deadline, and a zero — which
-Node reads as "no deadline" — is refused on all three. A violation stops the boot.
+The relationships are enforced, not documented. The keep-alive deadline must exceed the fronting
+proxy's idle timeout, which is itself configuration rather than a constant, so a deployment behind
+something other than this one's ALB supplies its own number and a deployment with nothing in front
+of it says so with a `0` — the one value among these four where zero is meaningful. The headers
+deadline must exceed the keep-alive deadline, and the request deadline must not undercut the headers
+deadline. A zero on any of the three deadlines is refused, because Node reads it as "no deadline",
+and so is any value above Node's 32-bit timer ceiling, above which the duration is truncated and the
+configured number stops applying. A violation stops the boot rather than being clamped to something
+workable: a silently substituted value is an unreviewed default again.
 
 Verified by: `packages/core/src/http-timeouts.ts`, `packages/core/src/http-timeouts-test.ts`,
 `eng-tools/check-http-timeouts.mjs`, `config/env-manifest.yaml`.

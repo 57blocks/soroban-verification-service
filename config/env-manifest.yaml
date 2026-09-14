@@ -86,6 +86,24 @@ groups:
 
           Coupled in the opposite direction to `SCVS_JOB_STREAM_SAFETY_POLL_MS`, which must stay well
           BELOW the same ALB number. Both depend on one value Terraform owns in another repository.
+      SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 60000
+        code: packages/core/src/http-timeouts.ts, services/*/src/config/configuration.ts
+        note: >-
+          The idle timeout of whatever fronts this server — the ALB's 60 s here — declared so
+          SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS can be CHECKED against it at boot rather than merely
+          documented as needing to exceed it. A keep-alive at or below this value stops the boot.
+
+          A deployment with nothing in front of it sets this to 0, which skips the comparison. That is
+          the one place a zero is a legitimate value among these four; the three deadlines refuse it.
+          It exists because this repository is one verifier's deployment, not the only topology: a
+          self-hoster behind nginx supplies their own number instead of inheriting this one's ALB.
       SCVS_HTTP_HEADERS_TIMEOUT_MS:
         type: number
         required: no

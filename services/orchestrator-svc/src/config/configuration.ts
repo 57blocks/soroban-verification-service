@@ -79,6 +79,12 @@ const configuration = () => ({
       "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS",
       HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs,
     ),
+    // What keepAliveTimeoutMs is checked against, so the 502 rule holds for a deployment fronted by something
+    // other than this one's ALB. `0` says nothing fronts this server and skips the check.
+    frontingProxyIdleTimeoutMs: numberEnv(
+      "SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS",
+      HTTP_TIMEOUT_DEFAULTS.frontingProxyIdleTimeoutMs,
+    ),
   },
   // The database connection app.module.ts feeds to DbModule.forRootAsync, so it travels ConfigService like
   // every other setting instead of @scvs/db reading POSTGRES_* off process.env itself. readDbEnv() deliberately

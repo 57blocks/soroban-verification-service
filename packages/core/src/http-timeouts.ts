@@ -12,6 +12,12 @@ export type HttpServerTimeouts = {
   headersTimeoutMs: number;
   /** How long an idle connection is kept for reuse. Must exceed the idle timeout of whatever fronts this server. */
   keepAliveTimeoutMs: number;
+  /**
+   * The idle timeout of the proxy or balancer in front of this server, which `keepAliveTimeoutMs` is checked
+   * against. `0` declares that nothing fronts it and skips that check — a loopback-only listener, or a
+   * self-hosted deployment exposing the port directly.
+   */
+  frontingProxyIdleTimeoutMs: number;
 };
 
 /**
@@ -28,6 +34,13 @@ export class HttpTimeoutConfigError extends Error {
 const FIELDS = ["requestTimeoutMs", "headersTimeoutMs", "keepAliveTimeoutMs"] as const;
 
 /**
+ * Node's timer ceiling. Above it the duration is silently truncated to this value — roughly 24 days, not the
+ * ~1 ms that `setTimeout`'s own overflow rule would give — and the configured number stops meaning anything.
+ * Measured, not assumed: `TimeoutOverflowWarning` says "truncated to 2147483647".
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
  * Applies the three deadlines to an already-listening server.
  *
  * Call it *after* `listen()`: Nest has no `http.Server` to hand out before then.
@@ -42,9 +55,37 @@ export function applyHttpServerTimeouts(server: Server, timeouts: HttpServerTime
         `${field} must be a positive whole number of milliseconds; got ${JSON.stringify(value)}`,
       );
     }
+    if (value > MAX_TIMEOUT_MS) {
+      throw new HttpTimeoutConfigError(
+        `${field} (${value}) exceeds Node's timer ceiling of ${MAX_TIMEOUT_MS}ms, above which the duration is ` +
+          `truncated and the configured value stops applying`,
+      );
+    }
   }
 
-  const { requestTimeoutMs, headersTimeoutMs, keepAliveTimeoutMs } = timeouts;
+  if (
+    !Number.isInteger(timeouts.frontingProxyIdleTimeoutMs) ||
+    timeouts.frontingProxyIdleTimeoutMs < 0 ||
+    timeouts.frontingProxyIdleTimeoutMs > MAX_TIMEOUT_MS
+  ) {
+    throw new HttpTimeoutConfigError(
+      `frontingProxyIdleTimeoutMs must be a whole number of milliseconds between 0 and ${MAX_TIMEOUT_MS}; ` +
+        `got ${JSON.stringify(timeouts.frontingProxyIdleTimeoutMs)}`,
+    );
+  }
+
+  const { requestTimeoutMs, headersTimeoutMs, keepAliveTimeoutMs, frontingProxyIdleTimeoutMs } = timeouts;
+
+  // The 502 this whole module exists for, enforced rather than left to the default: a balancer that holds an
+  // idle connection longer than the server does will reuse one the server has already closed. `0` is how a
+  // deployment with nothing in front of it says so — it is not a disabled check by accident.
+  if (frontingProxyIdleTimeoutMs > 0 && keepAliveTimeoutMs <= frontingProxyIdleTimeoutMs) {
+    throw new HttpTimeoutConfigError(
+      `keepAliveTimeoutMs (${keepAliveTimeoutMs}) must exceed the fronting proxy's idle timeout ` +
+        `(${frontingProxyIdleTimeoutMs}), or the proxy reuses a connection this server has already closed and ` +
+        `answers 502. Set frontingProxyIdleTimeoutMs to 0 only when nothing fronts this server.`,
+    );
+  }
 
   // Node measures the headers deadline from when the connection goes idle, not from the first byte of the next
   // request. An idle connection whose headers deadline is the shorter of the two is therefore torn down mid-reuse
@@ -90,4 +131,5 @@ export const HTTP_TIMEOUT_DEFAULTS: HttpServerTimeouts = {
   // Above FRONTING_PROXY_IDLE_TIMEOUT_MS, which is the whole point: below it, the balancer reuses a connection
   // Node has already closed and answers 502.
   keepAliveTimeoutMs: 65_000,
+  frontingProxyIdleTimeoutMs: FRONTING_PROXY_IDLE_TIMEOUT_MS,
 };
