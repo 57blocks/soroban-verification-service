@@ -6,7 +6,7 @@ import { AbuseGuardService } from "./abuse-guard.js";
 import { errorBody } from "./api-error.exception.js";
 import type { AppConfigService } from "../config/configuration.js";
 
-/** This route's own budget (`abuse.guard.ts`'s SUBMISSION_ROUTES tier) — kept in sync with that guard's key. */
+/** Must match `abuse.guard.ts`'s `SUBMISSION_ROUTES` key for this same path. */
 const ROUTE = "api/verification/v1/uploads/source";
 
 /**

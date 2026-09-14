@@ -203,11 +203,9 @@ describe("AbuseGuardService", () => {
  * The guard's own tier selection, which `AbuseGuardService` above never sees: it matches the matched-route
  * pattern against a hardcoded set of literal paths.
  *
- * `/api/verification/v1/uploads/source` is deliberately absent from the table below: `@UseGuards(AbuseGuard)`
- * no longer sits on that route (verifications.controller.ts) — RawArchiveBodyMiddleware runs the same check
- * before the body is buffered instead. `AbuseGuard`'s own SUBMISSION_ROUTES constant still names that path
- * (raw-archive-body.middleware.ts's ROUTE key must match it), which is why the guard's tier selection would
- * still classify it correctly if it ever ran — but nothing in this controller invokes the guard for it anymore.
+ * `uploads/source` is exercised directly on the guard below, not through the controller: that route no longer
+ * has `@UseGuards(AbuseGuard)` (RawArchiveBodyMiddleware runs the check instead), but `SUBMISSION_ROUTES` still
+ * names it.
  */
 describe("AbuseGuard tier selection", () => {
   const guardFor = (routePath: string) => {
@@ -247,18 +245,13 @@ describe("AbuseGuard tier selection", () => {
     expect(seen).toEqual([{ route: routePath, maxPerWindow: expected }]);
   });
 
-  // Not a route this controller ever invokes the guard for (see the describe block's comment above) — this
-  // confirms the constant itself still carries the strict tier, which is the invariant raw-archive-body's own
-  // fail-open behavior relies on staying true.
-  it("would still bill uploads/source against the strict budget, if anything invoked the guard for it", async () => {
+  it("bills uploads/source against the strict budget", async () => {
     const { guard, context, seen } = guardFor("/api/verification/v1/uploads/source");
     await guard.canActivate(context);
     expect(seen).toEqual([{ route: "/api/verification/v1/uploads/source", maxPerWindow: 6 }]);
   });
 
-  // Verifications and uploads/source are the same tier but not the same counter — independent budgets are
-  // what make a client's total the sum rather than the largest. Exercised on the guard directly rather than
-  // through the controller (see above): the point is the guard's own keying, not which routes invoke it today.
+  // Same tier, independent budgets — a client's total is their sum, not the largest.
   it("keys the counter on the route, so same-tier routes do not share one", async () => {
     const submit = guardFor("/api/verification/v1/verifications");
     const upload = guardFor("/api/verification/v1/uploads/source");
