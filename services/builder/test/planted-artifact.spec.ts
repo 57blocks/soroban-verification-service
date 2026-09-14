@@ -174,7 +174,12 @@ describe("T13 — a build.rs cannot plant its way to a verdict", () => {
 
     const selection = selectArtifactFromOutput({
       candidates: await candidatesIn(dir),
-      reports: parseBuildArtifactReports(`Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`),
+      reports: parseBuildArtifactReports(
+        [
+          `Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`,
+          `Wasm Hash: ${"a".repeat(64)}`,
+        ].join("\n"),
+      ),
       artifactDir: dir,
     });
 
@@ -182,7 +187,48 @@ describe("T13 — a build.rs cannot plant its way to a verdict", () => {
     if (selection.ok) {
       expect(selection.hostPath).toBe(join(dir, "hello_world.wasm"));
       expect(selection.containerPath).toBe(`${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`);
+      expect(selection.sha256).toBe("a".repeat(64));
     }
+  });
+
+  it("a coherent forged report still wins — the residual risk this layer does not close", async () => {
+    // **Records what is true, not what is safe.** A forgery naming the same path with a hash matching the
+    // bytes it planted is internally consistent, and the compile shares the tool's output stream — so no
+    // report-layer rule separates them. What is left to beat is the timing: the plant must land before the
+    // tool hashes and hold until the container exits, or the trusted-side hash fires the mismatch.
+    const dir = await artifactDir();
+    await writeFile(join(dir, "hello_world.wasm"), DEPLOYED_BYTES);
+
+    const selection = selectArtifactFromOutput({
+      candidates: await candidatesIn(dir),
+      reports: parseBuildArtifactReports(
+        [
+          `Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`,
+          `Wasm Hash: ${"a".repeat(64)}`,
+          // Appended by the compile, after the tool's summary.
+          `Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`,
+          `Wasm Hash: ${"b".repeat(64)}`,
+        ].join("\n"),
+      ),
+      artifactDir: dir,
+    });
+
+    expect(selection.ok).toBe(true);
+    if (selection.ok) expect(selection.sha256).toBe("b".repeat(64));
+  });
+
+  it("★ an artifact no report stated a hash for is refused, not uploaded unchecked", async () => {
+    const dir = await artifactDir();
+    await writeFile(join(dir, "hello_world.wasm"), DEPLOYED_BYTES);
+
+    const selection = selectArtifactFromOutput({
+      candidates: await candidatesIn(dir),
+      reports: parseBuildArtifactReports(`Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`),
+      artifactDir: dir,
+    });
+
+    expect(selection.ok).toBe(false);
+    if (!selection.ok) expect(selection.reason).toBe("artifact_report_hash_missing");
   });
 
   it("an artifact the tool wrote but no report names is refused, not adopted", async () => {
@@ -212,5 +258,28 @@ describe("T13 — a build.rs cannot plant its way to a verdict", () => {
 
     expect(selection.ok).toBe(false);
     if (!selection.ok) expect(selection.reason).toBe("artifact_output_missing");
+  });
+
+  it("★ a bare report appended after the tool's own cannot discard the hash it stated", async () => {
+    // Reports are matched last-first and a hash binds to the line above it, so a trailing bare report wins
+    // the scan carrying nothing — silencing the tool is not needed to drop the hash it stated.
+    const dir = await artifactDir();
+    await writeFile(join(dir, "hello_world.wasm"), Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01]));
+
+    const selection = selectArtifactFromOutput({
+      candidates: await candidatesIn(dir),
+      reports: parseBuildArtifactReports(
+        [
+          `Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`,
+          `Wasm Hash: ${"a".repeat(64)}`,
+          // Appended by a proc macro's stderr, which reaches the parsed buffer verbatim.
+          `Wasm File: ${CONTAINER_ARTIFACT_DIR}/hello_world.wasm`,
+        ].join("\n"),
+      ),
+      artifactDir: dir,
+    });
+
+    expect(selection.ok).toBe(true);
+    if (selection.ok) expect(selection.sha256).toBe("a".repeat(64));
   });
 });

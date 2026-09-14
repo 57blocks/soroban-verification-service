@@ -473,7 +473,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   // Cross-check against the hash the tool itself printed: equal hashes mean the bytes we are about to upload
   // are the bytes the tool said it produced.
   const reportedHash = selection.sha256;
-  if (reportedHash && reportedHash !== rebuiltHash) {
+  if (reportedHash !== rebuiltHash) {
     return cliFailure(
       "reported_artifact_hash_mismatch",
       "docker_build_image_rebuild",
@@ -492,7 +492,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   const artifactDiagnostics = {
     artifact_selection: "output_mount_confirmed_by_report" as const,
     reported_artifact_path: selection.containerPath,
-    ...(reportedHash ? { reported_artifact_hash_verified: true } : {}),
+    reported_artifact_hash_verified: true,
     // Published so a submitter can see that their archive shipped build output and that we ignored it.
     pre_existing_wasm_count: preExistingWasm.size,
   };

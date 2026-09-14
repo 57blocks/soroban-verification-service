@@ -393,7 +393,8 @@ describe("selectArtifactFromOutput", () => {
   it("takes the sole artifact the tool reported", () => {
     const result = selectArtifactFromOutput({
       candidates: [candidate],
-      reports: [{ containerPath: "/artifact/my_contract.wasm" }],
+      // Carries a hash because a selection without one is refused (`artifact_report_hash_missing`).
+      reports: [{ containerPath: "/artifact/my_contract.wasm", sha256: "a".repeat(64) }],
       artifactDir: dir,
     });
     expect(result.ok).toBe(true);
