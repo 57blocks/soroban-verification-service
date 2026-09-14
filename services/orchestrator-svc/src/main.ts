@@ -33,10 +33,10 @@ if (process.env.NODE_ENV !== "test") {
     .then(async (app) => {
       const config = app.get<AppConfigService>(ConfigService);
       const port = config.get("port", { infer: true });
-      await app.listen(port, HEALTH_HOST);
+      const httpServer = await app.listen(port, HEALTH_HOST);
       // Same deadlines as the two public services even though this listener is loopback-only and serves nothing
       // but /health: one set of values across the three is what keeps them from drifting apart unnoticed.
-      applyHttpServerTimeouts(app.getHttpServer(), config.get("httpTimeouts", { infer: true }));
+      applyHttpServerTimeouts(httpServer, config.get("httpTimeouts", { infer: true }));
       return port;
     })
     .then((port) => {

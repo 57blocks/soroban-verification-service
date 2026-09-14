@@ -73,16 +73,16 @@ const configuration = () => ({
   // The three `http.Server` deadlines main.ts applies after listen(). Node's own defaults are not neutral —
   // its 5 s keepAliveTimeout sits below the balancer's idle timeout and answers 502 on a reused connection.
   httpTimeouts: {
-    requestTimeoutMs: numberEnv("SCVS_HTTP_REQUEST_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.requestTimeoutMs),
-    headersTimeoutMs: numberEnv("SCVS_HTTP_HEADERS_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.headersTimeoutMs),
+    requestTimeoutMs: numberEnv("SCVS_REQUEST_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.requestTimeoutMs),
+    headersTimeoutMs: numberEnv("SCVS_HEADERS_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.headersTimeoutMs),
     keepAliveTimeoutMs: numberEnv(
-      "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      "SCVS_KEEPALIVE_TIMEOUT_MS",
       HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs,
     ),
     // What keepAliveTimeoutMs is checked against, so the 502 rule holds for a deployment fronted by something
     // other than this one's ALB. `0` says nothing fronts this server and skips the check.
     frontingProxyIdleTimeoutMs: numberEnv(
-      "SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS",
+      "SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS",
       HTTP_TIMEOUT_DEFAULTS.frontingProxyIdleTimeoutMs,
     ),
   },

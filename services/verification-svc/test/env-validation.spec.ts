@@ -40,20 +40,20 @@ describe("createEnvValidator", () => {
   // rules; verification-svc's validator is where they are exercised.
   describe("the HTTP server deadlines", () => {
     it.each([
-      "SCVS_HTTP_REQUEST_TIMEOUT_MS",
-      "SCVS_HTTP_HEADERS_TIMEOUT_MS",
-      "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      "SCVS_REQUEST_TIMEOUT_MS",
+      "SCVS_HEADERS_TIMEOUT_MS",
+      "SCVS_KEEPALIVE_TIMEOUT_MS",
     ])("rejects %s=0 rather than reading it as Node's \"no deadline\"", (name) => {
-      // A `0` is the exact fail-open rule 32 removes: it would boot clean and hold connections forever.
+      // A `0` is the exact fail-open rule 33 removes: it would boot clean and hold connections forever.
       expect(() => validate({ ...KEY, [name]: "0" })).toThrow(
         new RegExp(`${name} must be a positive number of milliseconds`),
       );
     });
 
     it.each([
-      "SCVS_HTTP_REQUEST_TIMEOUT_MS",
-      "SCVS_HTTP_HEADERS_TIMEOUT_MS",
-      "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS",
+      "SCVS_REQUEST_TIMEOUT_MS",
+      "SCVS_HEADERS_TIMEOUT_MS",
+      "SCVS_KEEPALIVE_TIMEOUT_MS",
     ])("rejects a negative or non-numeric %s", (name) => {
       expect(() => validate({ ...KEY, [name]: "-1" })).toThrow();
       expect(() => validate({ ...KEY, [name]: "abc" })).toThrow();
@@ -63,9 +63,9 @@ describe("createEnvValidator", () => {
       expect(() =>
         validate({
           ...KEY,
-          SCVS_HTTP_REQUEST_TIMEOUT_MS: "120000",
-          SCVS_HTTP_HEADERS_TIMEOUT_MS: "70000",
-          SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS: "65000",
+          SCVS_REQUEST_TIMEOUT_MS: "120000",
+          SCVS_HEADERS_TIMEOUT_MS: "70000",
+          SCVS_KEEPALIVE_TIMEOUT_MS: "65000",
         }),
       ).not.toThrow();
     });
@@ -74,7 +74,7 @@ describe("createEnvValidator", () => {
       // An inverted pair is individually well-formed, so the DTO passes it and the boot-time helper is what
       // refuses it. Asserting that here keeps the split deliberate rather than an oversight.
       expect(() =>
-        validate({ ...KEY, SCVS_HTTP_HEADERS_TIMEOUT_MS: "1", SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS: "65000" }),
+        validate({ ...KEY, SCVS_HEADERS_TIMEOUT_MS: "1", SCVS_KEEPALIVE_TIMEOUT_MS: "65000" }),
       ).not.toThrow();
     });
   });

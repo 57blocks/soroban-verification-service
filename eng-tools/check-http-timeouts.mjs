@@ -35,7 +35,7 @@ for (const service of readdirSync(SERVICES).sort()) {
     findings.push(
       `${relative(ROOT, main)} binds a port but never calls applyHttpServerTimeouts(). Without it the server ` +
         `takes Node's defaults, whose 5s keepAliveTimeout sits below the load balancer's idle timeout and ` +
-        `answers 502 on a reused connection. See docs/invariants.md rule 32.`,
+        `answers 502 on a reused connection. See docs/invariants.md rule 33.`,
     );
   }
 }

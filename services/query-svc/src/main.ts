@@ -49,10 +49,10 @@ if (process.env.NODE_ENV !== "test") {
     .then(async (app) => {
       const config = app.get<AppConfigService>(ConfigService);
       const port = config.get("port", { infer: true });
-      await app.listen(port);
+      const httpServer = await app.listen(port);
       // After listen(), never before: Nest has no `http.Server` to configure until it is bound. This service is
       // public, unauthenticated and unthrottled, so these deadlines are the only bound on a connection it holds.
-      applyHttpServerTimeouts(app.getHttpServer(), config.get("httpTimeouts", { infer: true }));
+      applyHttpServerTimeouts(httpServer, config.get("httpTimeouts", { infer: true }));
       // After listening, and never from a lifecycle hook: `generate-openapi.ts` initialises this application
       // with no database.
       app.get(AggregationSyncService).start();

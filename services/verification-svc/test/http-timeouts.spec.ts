@@ -11,10 +11,10 @@ import configuration from "../src/config/configuration.js";
  * and `check:http-timeouts` is what covers it.
  */
 const NAMES = [
-  "SCVS_HTTP_REQUEST_TIMEOUT_MS",
-  "SCVS_HTTP_HEADERS_TIMEOUT_MS",
-  "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS",
-  "SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS",
+  "SCVS_REQUEST_TIMEOUT_MS",
+  "SCVS_HEADERS_TIMEOUT_MS",
+  "SCVS_KEEPALIVE_TIMEOUT_MS",
+  "SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS",
 ] as const;
 
 describe("the HTTP deadlines this service loads", () => {
@@ -39,9 +39,9 @@ describe("the HTTP deadlines this service loads", () => {
   });
 
   it("reaches a real http.Server with the loaded values, not the defaults", () => {
-    process.env.SCVS_HTTP_REQUEST_TIMEOUT_MS = "123000";
-    process.env.SCVS_HTTP_HEADERS_TIMEOUT_MS = "99000";
-    process.env.SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS = "90000";
+    process.env.SCVS_REQUEST_TIMEOUT_MS = "123000";
+    process.env.SCVS_HEADERS_TIMEOUT_MS = "99000";
+    process.env.SCVS_KEEPALIVE_TIMEOUT_MS = "90000";
 
     const server = createServer();
     applyHttpServerTimeouts(server, configuration().httpTimeouts);
@@ -53,15 +53,15 @@ describe("the HTTP deadlines this service loads", () => {
 
   it("refuses to boot on a keep-alive under the balancer's idle timeout", () => {
     // The regression the default alone does not prevent: a well-formed override that reintroduces the 502.
-    process.env.SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS = "5000";
+    process.env.SCVS_KEEPALIVE_TIMEOUT_MS = "5000";
     expect(() => applyHttpServerTimeouts(createServer(), configuration().httpTimeouts)).toThrow(
       /must exceed the fronting proxy's idle timeout/,
     );
   });
 
   it("accepts a short keep-alive once the deployment declares nothing fronts it", () => {
-    process.env.SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS = "0";
-    process.env.SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS = "5000";
+    process.env.SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS = "0";
+    process.env.SCVS_KEEPALIVE_TIMEOUT_MS = "5000";
 
     const server = createServer();
     applyHttpServerTimeouts(server, configuration().httpTimeouts);

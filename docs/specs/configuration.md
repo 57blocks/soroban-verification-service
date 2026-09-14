@@ -147,15 +147,22 @@ else, decides how long one slow connection may hold that buffer. Its value is de
 Node's own 300 000 ms: making it explicit and adjustable is a separate change from re-choosing it,
 and choosing a lower number needs measured archive sizes and upload durations rather than a guess.
 
-The relationships are enforced, not documented. The keep-alive deadline must exceed the fronting
-proxy's idle timeout, which is itself configuration rather than a constant, so a deployment behind
-something other than this one's ALB supplies its own number and a deployment with nothing in front
-of it says so with a `0` — the one value among these four where zero is meaningful. The headers
-deadline must exceed the keep-alive deadline, and the request deadline must not undercut the headers
-deadline. A zero on any of the three deadlines is refused, because Node reads it as "no deadline",
-and so is any value above Node's 32-bit timer ceiling, above which the duration is truncated and the
-configured number stops applying. A violation stops the boot rather than being clamped to something
-workable: a silently substituted value is an unreviewed default again.
+Only one relationship between them is enforced, because only one has a failure mode: the keep-alive
+deadline must exceed the fronting proxy's idle timeout. That timeout is itself configuration rather
+than a constant, so a deployment behind something other than this one's ALB supplies its own number
+and one with nothing in front of it says so with a `0` — the only value among the four where a zero
+is meaningful. A zero on any of the three deadlines is refused, because Node reads it as "no
+deadline", and so is any value above Node's 32-bit timer ceiling, above which the duration is
+truncated and the configured number stops applying. A violation stops the boot rather than being
+clamped: a silently substituted value is an unreviewed default again.
+
+No ordering is required *between* the request and headers deadlines, and the headers deadline does
+not need to exceed the keep-alive one. Both beliefs are common and both are false here: the request
+and headers deadlines are independent, with a stalled head closed at whichever is shorter, and Node
+times headers from the first byte of a request rather than from when a connection goes idle. The
+shipped defaults — a 10 s headers deadline under a 65 s keep-alive — are exactly the shape the second
+belief would forbid. Both deadlines are also swept on `connectionsCheckingInterval` (Node's default,
+30 s) rather than armed per socket, so a stalled request outlives its deadline by up to one sweep.
 
 Verified by: `packages/core/src/http-timeouts.ts`, `packages/core/src/http-timeouts-test.ts`,
 `eng-tools/check-http-timeouts.mjs`, `config/env-manifest.yaml`.

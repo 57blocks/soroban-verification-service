@@ -66,79 +66,49 @@ groups:
           deregistration delay + one health-check interval, or the balancer is still routing when the
           process leaves. The builder deliberately does not inherit this: a Batch job is one-shot and
           draining a process that exits on its own is meaningless.
-      SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS:
+      SCVS_KEEPALIVE_TIMEOUT_MS:
         type: number
-        required: no
-        fail: n/a
-        source: literal
-        tier: knob
-        inject: ecs-secrets
         default: 65000
-        code: packages/core/src/http-timeouts.ts, services/*/src/main.ts
         note: >-
-          How long an idle connection is kept for reuse. **Must exceed the ALB's idle timeout (60 s,
-          the AWS default this deployment has never overridden), or the balancer reuses a connection
-          Node has already closed and answers 502 on it.** Node's own default is 5 s, which is below
-          it — that is the defect this variable exists to make visible and adjustable. Raising the
-          ALB's idle timeout means raising this in the same change, and vice versa;
-          `FRONTING_PROXY_IDLE_TIMEOUT_MS` in `packages/core/src/http-timeouts.ts` carries the
-          balancer's number and a test asserts the ordering.
+          How long an idle connection is kept for reuse. **Must exceed
+          SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS, or the balancer reuses a connection this server has
+          already closed and answers 502 on it.** `applyHttpServerTimeouts` refuses the inversion at
+          boot.
 
-          Coupled in the opposite direction to `SCVS_JOB_STREAM_SAFETY_POLL_MS`, which must stay well
-          BELOW the same ALB number. Both depend on one value Terraform owns in another repository.
-      SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS:
+          Node's default is 5000 and the ALB's idle timeout is 60000, so the default is the defect:
+          this is the one value here that is NOT Node's, and raising it is what H-6 asked for.
+      SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS:
         type: number
-        required: no
-        fail: n/a
-        source: literal
-        tier: knob
-        inject: ecs-secrets
         default: 60000
-        code: packages/core/src/http-timeouts.ts, services/*/src/config/configuration.ts
         note: >-
-          The idle timeout of whatever fronts this server — the ALB's 60 s here — declared so
-          SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS can be CHECKED against it at boot rather than merely
-          documented as needing to exceed it. A keep-alive at or below this value stops the boot.
-
-          A deployment with nothing in front of it sets this to 0, which skips the comparison. That is
-          the one place a zero is a legitimate value among these four; the three deadlines refuse it.
-          It exists because this repository is one verifier's deployment, not the only topology: a
-          self-hoster behind nginx supplies their own number instead of inheriting this one's ALB.
-      SCVS_HTTP_HEADERS_TIMEOUT_MS:
+          The idle timeout of whatever fronts this server — the ALB's 60 s here — declared so the
+          keep-alive above can be CHECKED against it rather than merely documented. A deployment
+          behind something else supplies its own number; one with nothing in front sets 0, which
+          skips the comparison. It is the only value among these four where a zero is legitimate.
+      SCVS_REQUEST_TIMEOUT_MS:
         type: number
-        required: no
-        fail: n/a
-        source: literal
-        tier: knob
-        inject: ecs-secrets
-        default: 70000
-        code: packages/core/src/http-timeouts.ts, services/*/src/main.ts
+        default: 30000
         note: >-
-          How long the request head may take to arrive. Must be greater than
-          SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS — Node measures this deadline from when the connection goes
-          idle, so the shorter of the two tears a reused connection down instead of closing it
-          cleanly. `applyHttpServerTimeouts` refuses the inverted ordering at boot.
-      SCVS_HTTP_REQUEST_TIMEOUT_MS:
+          Node's own http.Server default (300000) leaves a slow-body connection open far longer than any
+          legitimate upload needs. Bounds the whole request, from the first byte received to the response
+          finishing, and is therefore what bounds a connection holding verification-svc's buffered upload.
+
+          No ordering against SCVS_HEADERS_TIMEOUT_MS is required, despite the claim this note used to
+          carry: the two are independent, a stalled request head is closed at whichever is SHORTER, and
+          both are live. Measured 2026-09-14.
+      SCVS_HEADERS_TIMEOUT_MS:
         type: number
-        required: no
-        fail: n/a
-        source: literal
-        tier: knob
-        inject: ecs-secrets
-        default: 300000
-        code: packages/core/src/http-timeouts.ts, services/*/src/main.ts
+        default: 10000
         note: >-
-          From the first byte of a request to the last byte of its body, and therefore the bound on how
-          long ONE connection may hold verification-svc's buffered upload
-          (`raw-archive-body.middleware.ts` accumulates up to SCVS_MAX_SOURCE_ARCHIVE_BYTES in memory).
+          Node's own default (60000). Bounds how long the client has to finish sending request headers.
 
-          The default is Node's own 300000, kept deliberately: this change makes the value explicit and
-          adjustable, it does not re-choose it. Lowering it trades a slow submitter's upload against
-          memory held per connection, and the dev task is 512 MiB — roughly six concurrent 50 MiB
-          buffers before it is OOM-killed, with `desiredCount: 1` behind it. Choosing a lower number
-          needs measured archive sizes and upload durations; see docs/specs/configuration.md §11.
+          It does NOT need to sit above SCVS_KEEPALIVE_TIMEOUT_MS: Node measures this deadline from the
+          first byte of a request, not from when a connection goes idle, so an idle keep-alive connection
+          is not affected by it. Measured 2026-09-14; the earlier note asserted the opposite.
 
-          A zero is REFUSED, not accepted as "no deadline": that is the fail-open this variable removes.
+          ★ Both this and SCVS_REQUEST_TIMEOUT_MS are swept on `connectionsCheckingInterval` (Node's
+          default, 30000 ms) rather than armed per socket, so the effective kill time for a stalled
+          request is its deadline plus up to one sweep.
       CORS_ORIGIN:
         type: string
         required: no

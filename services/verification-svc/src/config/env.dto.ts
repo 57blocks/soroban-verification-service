@@ -22,6 +22,9 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_MAX_SOURCE_ARCHIVE_BYTES must be a number" })
   SCVS_MAX_SOURCE_ARCHIVE_BYTES?: string;
 
+
+
+
   // The one variable in this DTO that is not optional: without it the abuse fingerprint would fall back to an
   // empty HMAC key, which is the reversible hash this replaced.
   @IsNotEmpty({ message: "SCVS_ABUSE_FINGERPRINT_KEY must be set — see docs/features/retention-and-pseudonymisation/design.md §5" })

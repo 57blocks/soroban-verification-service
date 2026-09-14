@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Request } from "express";
+import { ScvsLogger } from "@scvs/core";
 import {
   AbuseControlRepository,
   createPrismaClient,
@@ -197,11 +198,29 @@ describe("AbuseGuardService", () => {
       else process.env.SCVS_THROTTLE_LIMIT = saved;
     }
   });
+
+  // Both of checkAbuseFailOpen's callers (this guard, RawArchiveBodyMiddleware) rely on this: the check must
+  // not take the route down with the database.
+  it("fails open when the underlying check errors, and does not throw", async () => {
+    const brokenAbuseControl = {
+      incrementAbuseCounter: () => Promise.reject(new Error("connection refused")),
+    } as unknown as AbuseControlRepository;
+    const broken = new AbuseGuardService(brokenAbuseControl, { get: () => FINGERPRINT_KEY } as never);
+    const logger = new ScvsLogger("test");
+
+    await expect(
+      broken.checkAbuseFailOpen(requestFromNewClient(), ROUTE, 3, WINDOW_MS, logger),
+    ).resolves.toBe(true);
+  });
 });
 
 /**
  * The guard's own tier selection, which `AbuseGuardService` above never sees: it matches the matched-route
  * pattern against a hardcoded set of literal paths.
+ *
+ * `uploads/source` is exercised directly on the guard below, not through the controller: that route no longer
+ * has `@UseGuards(AbuseGuard)` (RawArchiveBodyMiddleware runs the check instead), but `SUBMISSION_ROUTES` still
+ * names it.
  */
 describe("AbuseGuard tier selection", () => {
   const guardFor = (routePath: string) => {
@@ -214,13 +233,13 @@ describe("AbuseGuard tier selection", () => {
     const guard = new AbuseGuard(
       { get: (key: string) => budgets[key] } as never,
       {
-        checkAbuse: async (
+        checkAbuseFailOpen: async (
           _req: unknown,
           route: string,
           maxPerWindow: number,
         ) => {
           seen.push({ route, maxPerWindow });
-          return { allowed: true };
+          return true;
         },
       } as never,
     );
@@ -234,7 +253,6 @@ describe("AbuseGuard tier selection", () => {
 
   it.each([
     ["/api/verification/v1/verifications", 6],
-    ["/api/verification/v1/uploads/source", 6],
     ["/api/verification/v1/preflight", 18],
   ])("bills %s against the %i budget", async (routePath, expected) => {
     const { guard, context, seen } = guardFor(routePath as string);
@@ -242,9 +260,14 @@ describe("AbuseGuard tier selection", () => {
     expect(seen).toEqual([{ route: routePath, maxPerWindow: expected }]);
   });
 
-  // The two submission routes are the same tier but not the same counter — their budgets are independent, which
-  // is what makes a client's total the sum rather than the largest.
-  it("keys the counter on the route, so the two submission routes do not share one", async () => {
+  it("bills uploads/source against the strict budget", async () => {
+    const { guard, context, seen } = guardFor("/api/verification/v1/uploads/source");
+    await guard.canActivate(context);
+    expect(seen).toEqual([{ route: "/api/verification/v1/uploads/source", maxPerWindow: 6 }]);
+  });
+
+  // Same tier, independent budgets — a client's total is their sum, not the largest.
+  it("keys the counter on the route, so same-tier routes do not share one", async () => {
     const submit = guardFor("/api/verification/v1/verifications");
     const upload = guardFor("/api/verification/v1/uploads/source");
     await submit.guard.canActivate(submit.context);
@@ -266,13 +289,13 @@ describe("AbuseGuard fallback when the route pattern is unavailable", () => {
     const guard = new AbuseGuard(
       { get: (key: string) => budgets[key] } as never,
       {
-        checkAbuse: async (
+        checkAbuseFailOpen: async (
           _req: unknown,
           route: string,
           maxPerWindow: number,
         ) => {
           seen.push({ route, maxPerWindow });
-          return { allowed: true };
+          return true;
         },
       } as never,
     );

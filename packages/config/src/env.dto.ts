@@ -36,31 +36,31 @@ export class SharedEnvDto {
   // rather than as a server that starts clean and holds connections forever.
   @IsOptional()
   @Matches(/^[1-9]\d*$/, {
-    message: "SCVS_HTTP_REQUEST_TIMEOUT_MS must be a positive number of milliseconds",
+    message: "SCVS_REQUEST_TIMEOUT_MS must be a positive number of milliseconds",
   })
-  SCVS_HTTP_REQUEST_TIMEOUT_MS?: string;
+  SCVS_REQUEST_TIMEOUT_MS?: string;
 
   @IsOptional()
   @Matches(/^[1-9]\d*$/, {
-    message: "SCVS_HTTP_HEADERS_TIMEOUT_MS must be a positive number of milliseconds",
+    message: "SCVS_HEADERS_TIMEOUT_MS must be a positive number of milliseconds",
   })
-  SCVS_HTTP_HEADERS_TIMEOUT_MS?: string;
+  SCVS_HEADERS_TIMEOUT_MS?: string;
 
   // Must stay above the fronting balancer's idle timeout; `applyHttpServerTimeouts` enforces the ordering
   // against the other two, and @scvs/core's FRONTING_PROXY_IDLE_TIMEOUT_MS carries the balancer's own number.
   @IsOptional()
   @Matches(/^[1-9]\d*$/, {
-    message: "SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS must be a positive number of milliseconds",
+    message: "SCVS_KEEPALIVE_TIMEOUT_MS must be a positive number of milliseconds",
   })
-  SCVS_HTTP_KEEP_ALIVE_TIMEOUT_MS?: string;
+  SCVS_KEEPALIVE_TIMEOUT_MS?: string;
 
   // Zero IS accepted here, unlike the three above: it is how a deployment with nothing in front of it declares
   // that, and `applyHttpServerTimeouts` then skips the keep-alive comparison instead of failing the boot.
   @IsOptional()
   @Matches(/^\d+$/, {
-    message: "SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS must be a whole number of milliseconds",
+    message: "SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS must be a whole number of milliseconds",
   })
-  SCVS_HTTP_FRONTING_PROXY_IDLE_TIMEOUT_MS?: string;
+  SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS?: string;
 
   // Not only the AWS SDK's region: `getStagingStorageConfig()` reads it too, and its fallback is `us-east-1`,
   // so an unset value points the staging-bucket client at the wrong region and fails per-object rather than at

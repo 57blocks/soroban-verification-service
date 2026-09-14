@@ -44,6 +44,14 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
  * Applies the three deadlines to an already-listening server.
  *
  * Call it *after* `listen()`: Nest has no `http.Server` to hand out before then.
+ *
+ * Only one relationship between them is enforced, and it is the one with a real failure mode — see
+ * `frontingProxyIdleTimeoutMs`. `requestTimeout` and `headersTimeout` are independent: a stalled request head
+ * is closed at whichever of the two is shorter, so neither ordering between them is required. Measured, because
+ * the opposite is widely repeated and this module used to assert it.
+ *
+ * Both are swept on `connectionsCheckingInterval` (Node's default: 30_000 ms), not armed per socket, so the
+ * effective kill time for a stalled request is its deadline plus up to one sweep.
  */
 export function applyHttpServerTimeouts(server: Server, timeouts: HttpServerTimeouts): void {
   for (const field of FIELDS) {
@@ -87,23 +95,6 @@ export function applyHttpServerTimeouts(server: Server, timeouts: HttpServerTime
     );
   }
 
-  // Node measures the headers deadline from when the connection goes idle, not from the first byte of the next
-  // request. An idle connection whose headers deadline is the shorter of the two is therefore torn down mid-reuse
-  // instead of being closed cleanly at the keep-alive deadline, which the client sees as a reset.
-  if (headersTimeoutMs <= keepAliveTimeoutMs) {
-    throw new HttpTimeoutConfigError(
-      `headersTimeoutMs (${headersTimeoutMs}) must be greater than keepAliveTimeoutMs (${keepAliveTimeoutMs})`,
-    );
-  }
-
-  // The head is part of the request, so a request deadline below the headers deadline makes the latter
-  // unreachable — the connection dies on the request deadline and the headers setting never applies.
-  if (requestTimeoutMs < headersTimeoutMs) {
-    throw new HttpTimeoutConfigError(
-      `requestTimeoutMs (${requestTimeoutMs}) must be at least headersTimeoutMs (${headersTimeoutMs})`,
-    );
-  }
-
   server.requestTimeout = requestTimeoutMs;
   server.headersTimeout = headersTimeoutMs;
   server.keepAliveTimeout = keepAliveTimeoutMs;
@@ -123,13 +114,13 @@ export const FRONTING_PROXY_IDLE_TIMEOUT_MS = 60_000;
  * apart and so a change to any of them is a change to a single reviewed line.
  */
 export const HTTP_TIMEOUT_DEFAULTS: HttpServerTimeouts = {
-  // Node's own default, kept deliberately: this value bounds how long one connection may hold a buffered
-  // upload, so lowering it trades a slow submitter's upload against memory held per connection. Changing it
-  // needs measured archive sizes and upload durations, not a guess — see docs/specs/configuration.md §11.
-  requestTimeoutMs: 300_000,
-  headersTimeoutMs: 70_000,
-  // Above FRONTING_PROXY_IDLE_TIMEOUT_MS, which is the whole point: below it, the balancer reuses a connection
-  // Node has already closed and answers 502.
+  // Bounds the whole request, so it is also what bounds a connection holding verification-svc's buffered
+  // upload. 30 s against a 50 MiB ceiling asks ~14 Mbit/s of a submitter; that trade was made deliberately
+  // when the upload path was hardened, and this only carries it to the other two services.
+  requestTimeoutMs: 30_000,
+  headersTimeoutMs: 10_000,
+  // NOT Node's 5 s. Below the balancer's idle timeout, the balancer reuses a connection Node has already
+  // closed and answers 502 to a client that did nothing wrong — the whole reason this module exists.
   keepAliveTimeoutMs: 65_000,
   frontingProxyIdleTimeoutMs: FRONTING_PROXY_IDLE_TIMEOUT_MS,
 };

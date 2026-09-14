@@ -19,8 +19,8 @@ function test(name: string, fn: () => void): void {
 }
 
 const VALID: HttpServerTimeouts = {
-  requestTimeoutMs: 300_000,
-  headersTimeoutMs: 70_000,
+  requestTimeoutMs: 30_000,
+  headersTimeoutMs: 10_000,
   keepAliveTimeoutMs: 65_000,
   frontingProxyIdleTimeoutMs: FRONTING_PROXY_IDLE_TIMEOUT_MS,
 };
@@ -34,13 +34,12 @@ const server = () => createServer();
 test("applies all three deadlines to the server", () => {
   const s = server();
   applyHttpServerTimeouts(s, VALID);
-  assert.equal(s.requestTimeout, 300_000);
-  assert.equal(s.headersTimeout, 70_000);
+  assert.equal(s.requestTimeout, 30_000);
+  assert.equal(s.headersTimeout, 10_000);
   assert.equal(s.keepAliveTimeout, 65_000);
 });
 
 test("the shipped defaults are themselves a valid combination", () => {
-  // Without this, a future edit to HTTP_TIMEOUT_DEFAULTS could ship a combination that only fails at boot.
   const s = server();
   applyHttpServerTimeouts(s, HTTP_TIMEOUT_DEFAULTS);
   assert.equal(s.keepAliveTimeout, HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs);
@@ -55,16 +54,14 @@ test("the default keep-alive outlives the fronting proxy's idle timeout", () => 
 });
 
 test("a keep-alive at or under the proxy's idle timeout is refused, not merely discouraged", () => {
-  // A well-formed override that silently reintroduces the 502 this change exists to fix. The default being
-  // correct is not enough: the relationship has to hold for whatever an operator sets.
-  for (const keepAliveTimeoutMs of [1, 30_000, FRONTING_PROXY_IDLE_TIMEOUT_MS]) {
+  // A well-formed override that silently reintroduces the 502. The default being correct is not enough.
+  for (const keepAliveTimeoutMs of [1, 5_000, 30_000, FRONTING_PROXY_IDLE_TIMEOUT_MS]) {
     assert.throws(
       () => applyHttpServerTimeouts(server(), { ...VALID, keepAliveTimeoutMs }),
       /must exceed the fronting proxy's idle timeout/,
       `keepAliveTimeoutMs = ${keepAliveTimeoutMs} must be refused`,
     );
   }
-  // One millisecond over is the boundary, and it is legal.
   const s = server();
   applyHttpServerTimeouts(s, { ...VALID, keepAliveTimeoutMs: FRONTING_PROXY_IDLE_TIMEOUT_MS + 1 });
   assert.equal(s.keepAliveTimeout, FRONTING_PROXY_IDLE_TIMEOUT_MS + 1);
@@ -78,44 +75,26 @@ test("a server with nothing in front of it declares 0 and keeps a short keep-ali
   assert.equal(s.keepAliveTimeout, 5_000);
 });
 
-test("a value above Node's timer ceiling is refused rather than silently truncated", () => {
-  // Measured: Node does NOT collapse these to ~1 ms the way setTimeout's overflow rule does — it truncates to
-  // the ceiling, so a 24-day keep-alive is what an operator actually gets. Either way the number they wrote
-  // stops applying, which is the thing this module promises.
-  for (const field of ["requestTimeoutMs", "headersTimeoutMs", "keepAliveTimeoutMs"] as const) {
-    assert.throws(
-      () => applyHttpServerTimeouts(server(), { ...VALID, [field]: MAX_TIMEOUT_MS + 1 }),
-      (error: Error) =>
-        error instanceof HttpTimeoutConfigError && /Node's timer ceiling/.test(error.message),
-      `${field} above the ceiling must be refused`,
-    );
-  }
-  assert.throws(
-    () =>
-      applyHttpServerTimeouts(server(), { ...VALID, frontingProxyIdleTimeoutMs: MAX_TIMEOUT_MS + 1 }),
-    HttpTimeoutConfigError,
-  );
-});
-
-test("the ceiling itself is accepted — the bound is exclusive above it, not a round-number guess", () => {
+test("no ordering is required between the request and headers deadlines", () => {
+  // Measured: the two are independent and a stalled head is closed at whichever is SHORTER — neither makes
+  // the other unreachable. This module refused `request < headers` on the opposite belief until 2026-09-14.
   const s = server();
-  applyHttpServerTimeouts(s, {
-    ...VALID,
-    requestTimeoutMs: MAX_TIMEOUT_MS,
-    headersTimeoutMs: MAX_TIMEOUT_MS,
-    keepAliveTimeoutMs: MAX_TIMEOUT_MS - 1,
-  });
-  assert.equal(s.requestTimeout, MAX_TIMEOUT_MS);
+  applyHttpServerTimeouts(s, { ...VALID, requestTimeoutMs: 600, headersTimeoutMs: 3_000 });
+  assert.equal(s.requestTimeout, 600);
+  assert.equal(s.headersTimeout, 3_000);
 });
 
-test("a negative fronting-proxy timeout is refused, though zero is not", () => {
-  assert.throws(
-    () => applyHttpServerTimeouts(server(), { ...VALID, frontingProxyIdleTimeoutMs: -1 }),
-    /frontingProxyIdleTimeoutMs must be a whole number/,
-  );
+test("a headers deadline under the keep-alive deadline is allowed", () => {
+  // Also measured: Node times headers from the first byte of a request, not from when a connection goes idle,
+  // so a short headers deadline does not break reuse of a long-lived idle connection. The shipped defaults
+  // are exactly this shape, so refusing it would refuse our own configuration.
+  const s = server();
+  applyHttpServerTimeouts(s, { ...VALID, headersTimeoutMs: 10_000, keepAliveTimeoutMs: 65_000 });
+  assert.equal(s.headersTimeout, 10_000);
+  assert.equal(s.keepAliveTimeout, 65_000);
 });
 
-test("zero is refused on every field — it is Node's spelling of no deadline", () => {
+test("zero is refused on every deadline — it is Node's spelling of no deadline", () => {
   for (const field of ["requestTimeoutMs", "headersTimeoutMs", "keepAliveTimeoutMs"] as const) {
     assert.throws(
       () => applyHttpServerTimeouts(server(), { ...VALID, [field]: 0 }),
@@ -135,30 +114,35 @@ test("negative, fractional and non-finite values are refused", () => {
   }
 });
 
-test("the headers deadline must outlast the keep-alive deadline", () => {
+test("a value above Node's timer ceiling is refused rather than silently truncated", () => {
+  // Measured: Node does NOT collapse these to ~1 ms the way setTimeout's overflow rule does — it truncates to
+  // the ceiling, so a 24-day keep-alive is what an operator actually gets. Either way the number they wrote
+  // stops applying, which is the thing this module promises.
+  for (const field of ["requestTimeoutMs", "headersTimeoutMs", "keepAliveTimeoutMs"] as const) {
+    assert.throws(
+      () => applyHttpServerTimeouts(server(), { ...VALID, [field]: MAX_TIMEOUT_MS + 1 }),
+      (error: Error) =>
+        error instanceof HttpTimeoutConfigError && /Node's timer ceiling/.test(error.message),
+      `${field} above the ceiling must be refused`,
+    );
+  }
   assert.throws(
-    () =>
-      applyHttpServerTimeouts(server(), {
-        ...VALID,
-        headersTimeoutMs: 65_000,
-        keepAliveTimeoutMs: 65_000,
-      }),
-    /headersTimeoutMs \(65000\) must be greater than keepAliveTimeoutMs \(65000\)/,
+    () => applyHttpServerTimeouts(server(), { ...VALID, frontingProxyIdleTimeoutMs: MAX_TIMEOUT_MS + 1 }),
+    HttpTimeoutConfigError,
   );
 });
 
-test("the request deadline must not undercut the headers deadline", () => {
-  assert.throws(
-    () => applyHttpServerTimeouts(server(), { ...VALID, requestTimeoutMs: 69_999 }),
-    /requestTimeoutMs \(69999\) must be at least headersTimeoutMs \(70000\)/,
-  );
-});
-
-test("equal request and headers deadlines are allowed", () => {
-  // The boundary is legal: the head may consume the entire request window when there is no body to follow.
+test("the ceiling itself is accepted — the bound is exclusive above it, not a round-number guess", () => {
   const s = server();
-  applyHttpServerTimeouts(s, { ...VALID, requestTimeoutMs: 70_000 });
-  assert.equal(s.requestTimeout, 70_000);
+  applyHttpServerTimeouts(s, { ...VALID, requestTimeoutMs: MAX_TIMEOUT_MS });
+  assert.equal(s.requestTimeout, MAX_TIMEOUT_MS);
+});
+
+test("a negative fronting-proxy timeout is refused, though zero is not", () => {
+  assert.throws(
+    () => applyHttpServerTimeouts(server(), { ...VALID, frontingProxyIdleTimeoutMs: -1 }),
+    /frontingProxyIdleTimeoutMs must be a whole number/,
+  );
 });
 
 test("a rejected combination leaves the server untouched", () => {
@@ -180,4 +164,4 @@ test("a rejected combination leaves the server untouched", () => {
   );
 });
 
-console.log("HTTP server timeouts: 14 cases passed");
+console.log("HTTP server timeouts: 13 cases passed");

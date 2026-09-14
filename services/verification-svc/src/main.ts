@@ -72,11 +72,11 @@ if (process.env.NODE_ENV !== "test") {
     .then(async (app) => {
       const config = app.get<AppConfigService>(ConfigService);
       const port = config.get("port", { infer: true });
-      await app.listen(port);
-      // After listen(), never before: Nest has no `http.Server` to configure until it is bound. Left unset,
-      // Node's own 5 s keepAliveTimeout sits below the balancer's idle timeout and turns a reused connection
-      // into a 502.
-      applyHttpServerTimeouts(app.getHttpServer(), config.get("httpTimeouts", { infer: true }));
+      const httpServer = await app.listen(port);
+      // After listen(), never before: there is no `http.Server` to configure until it is bound. Node's own
+      // defaults leave a slow-body connection open far longer than any legitimate upload needs, and its 5 s
+      // keep-alive sits *below* the balancer's idle timeout, which turns a reused connection into a 502.
+      applyHttpServerTimeouts(httpServer, config.get("httpTimeouts", { infer: true }));
       return port;
     })
     .then((port) => {
