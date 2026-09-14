@@ -99,6 +99,27 @@ describe("the terms say what the Service actually does", () => {
     expect(terms).toMatch(/governed by the laws of the State of California/);
     // A public issue tracker is not a channel for a rights claim; a postal address is.
     expect(terms).toMatch(/3001 Bishop Dr, Suite 300, San Ramon/);
+    expect(terms).toMatch(/exclusive jurisdiction and venue of the state and federal courts located in Contra Costa County/);
+  });
+
+  // A cap of zero is the one a court is likeliest to strike, and striking it leaves no cap at all — so the
+  // number being non-zero is the point, and the carve-outs are what keep it from overreaching in the other
+  // direction. California forbids excluding fraud, willful injury, and violation of law outright.
+  it("cap liability at a non-zero amount, and carve out what cannot lawfully be limited", () => {
+    const terms = text("terms");
+    expect(terms).toMatch(/AGGREGATE LIABILITY .* WILL NOT EXCEED US\$500/);
+    expect(terms).toMatch(/DO NOT APPLY TO LIABILITY THAT CANNOT LAWFULLY BE LIMITED OR EXCLUDED/);
+    expect(terms).not.toMatch(/THE AMOUNT YOU PAID FOR THE SERVICE, WHICH IS NOTHING/);
+  });
+
+  // Counsel's objection was that a public issue tracker is not a channel for a rights claim or a privacy
+  // request. Both documents must name a real one, and the notice may not be published as registered until
+  // it is — so this asserts the channel exists, not that an agent is designated.
+  it("give both documents a private channel for notices, not only the public tracker", () => {
+    for (const slug of ["terms", "privacy"] as const) {
+      expect(text(slug)).toMatch(/sv\.support@57blocks\.com/);
+    }
+    expect(text("terms")).not.toMatch(/designated agent|registered with the U\.S\. Copyright Office/i);
   });
 
   it("say a verdict is not an audit", () => {

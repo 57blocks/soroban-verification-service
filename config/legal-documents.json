@@ -1,6 +1,6 @@
 {
   "schema": "scvs-legal-documents-v1",
-  "version": "2026-09-14",
+  "version": "2026-09-15",
   "effective_date": null,
   "operator_name": "57Blocks",
   "service_name": "Soroban Verify",
@@ -91,7 +91,8 @@
           "heading": "8. Disclaimer of warranties and limitation of liability",
           "blocks": [
             "THE SERVICE AND ALL RESULTS ARE PROVIDED \"AS IS\" AND \"AS AVAILABLE\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AND NON-INFRINGEMENT. 57Blocks DOES NOT WARRANT THAT ANY RESULT IS CORRECT, THAT A VERIFIED CONTRACT IS SAFE, OR THAT THE SERVICE WILL BE AVAILABLE OR ERROR-FREE.",
-            "TO THE MAXIMUM EXTENT PERMITTED BY LAW, 57Blocks AND ITS CONTRIBUTORS ARE NOT LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF FUNDS, DATA, OR PROFITS, ARISING FROM YOUR USE OF THE SERVICE OR YOUR RELIANCE ON ANY RESULT, EVEN IF ADVISED OF THE POSSIBILITY. WHERE LIABILITY CANNOT BE EXCLUDED, IT IS LIMITED TO THE AMOUNT YOU PAID FOR THE SERVICE, WHICH IS NOTHING."
+            "TO THE MAXIMUM EXTENT PERMITTED BY LAW, 57Blocks AND ITS AFFILIATES, CONTRIBUTORS, AND PERSONNEL ARE NOT LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF FUNDS, DATA, PROFITS, GOODWILL, OR BUSINESS OPPORTUNITY, ARISING FROM YOUR USE OF THE SERVICE OR YOUR RELIANCE ON ANY RESULT, EVEN IF ADVISED OF THE POSSIBILITY.",
+            "TO THE MAXIMUM EXTENT PERMITTED BY LAW, THEIR AGGREGATE LIABILITY FOR ALL CLAIMS ARISING FROM OR RELATED TO THE SERVICE WILL NOT EXCEED US$500. THESE LIMITATIONS DO NOT APPLY TO LIABILITY THAT CANNOT LAWFULLY BE LIMITED OR EXCLUDED — UNDER CALIFORNIA LAW THAT INCLUDES FRAUD, WILLFUL INJURY, AND VIOLATION OF LAW — AND THEY DO NOT LIMIT YOUR OWN OBLIGATIONS UNDER THESE TERMS."
           ]
         },
         {
@@ -106,7 +107,7 @@
           "heading": "10. Governing law and disputes",
           "blocks": [
             "These terms, and any dispute arising from them, are governed by the laws of the State of California, excluding its conflict-of-laws rules.",
-            "The forum for a dispute will be stated here before these terms take effect. Nothing in them deprives anyone of a protection that cannot be waived where they live."
+            "The parties consent to the exclusive jurisdiction and venue of the state and federal courts located in Contra Costa County, California. Nothing in these terms deprives anyone of a protection that cannot be waived where they live."
           ]
         },
         {
@@ -114,15 +115,13 @@
           "heading": "11. Contact",
           "blocks": [
             "Questions about the Service or these terms: open an issue in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public. Do not send confidential material through it.",
-            "**Legal notices**, including claims that published material infringes your rights: 57Blocks Technology Inc., 3001 Bishop Dr, Suite 300, San Ramon, California [POSTAL CODE], United States. A monitored electronic address for legal and privacy notices will be published here before these terms take effect."
+            "**Legal notices**, including a claim that published material infringes your rights, and **privacy requests**: sv.support@57blocks.com, or by post to 57Blocks Technology Inc., 3001 Bishop Dr, Suite 300, San Ramon, California [POSTAL CODE], United States."
           ]
         }
       ],
       "open_items": [
-        "The forum for disputes (section 10). Governing law is settled as California; the venue is not.",
-        "The liability cap in section 8 still reads \"the amount you paid, which is nothing\". Counsel advises a non-zero fixed cap with carve-outs for liability that cannot lawfully be limited. The amount is not settled, and California limits what may be excluded.",
-        "A monitored electronic address for legal and privacy notices, and the person who owns it. The postal address is settled; the electronic channel is not.",
-        "Whether a designated copyright agent is registered, and the response times we commit to.",
+        "Whether a copyright agent is designated and registered with the U.S. Copyright Office. Registration is a statutory precondition for the hosting safe harbour, not a formality — until it is filed, this document names a channel but claims no registered agent.",
+        "The postal code in the address above.",
         "Whether and how the Stellar Development Foundation should be named: as the grant funder, as the publisher of the official build components, or not at all."
       ]
     },
@@ -218,14 +217,15 @@
           "id": "contact",
           "heading": "9. Contact",
           "blocks": [
-            "Questions about this notice: open an issue in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public. Do not send confidential material through it."
+            "Questions about this notice, and requests under section 6: sv.support@57blocks.com, or by post to 57Blocks Technology Inc., 3001 Bishop Dr, Suite 300, San Ramon, California [POSTAL CODE], United States.",
+            "General questions about the Service may also be raised in the [public repository](https://github.com/57blocks/soroban-verification-service/issues). That channel is public — do not send personal or confidential material through it."
           ]
         }
       ],
       "open_items": [
-        "The legal basis for each processing purpose in section 2, for readers in jurisdictions that require one to be stated. The controller is now identified.",
+        "The legal basis for each processing purpose in section 2, for readers in jurisdictions that require one to be stated.",
         "Retention period of the load-balancer and web-server access logs (section 2). Stated as \"a limited period\" pending confirmation of the configured value.",
-        "Statutory rights over personal data, and the private channel for exercising them (section 6).",
+        "The postal code in the address above.",
         "Whether Stellar's legal team wants SDF's role described here."
       ]
     }
