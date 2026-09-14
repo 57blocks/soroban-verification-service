@@ -126,3 +126,43 @@ at all is not supported: preflight, submission, and job status are served routes
 cannot answer.
 
 Verified by: `docs/self-hosted-deployment.md`, `docs/infrastructure-requirements.md`.
+
+## 11. A server that binds a port sets its own deadlines
+
+Node's `http.Server` defaults are not a neutral fallback, so no entrypoint is allowed to inherit
+them. Two of the three matter for different reasons.
+
+**Keep-alive must outlast whatever fronts the server.** Node closes an idle connection after 5 s;
+the ALB in front of the public services holds one for 60 s and will reuse it. The balancer then
+sends a request into a connection the server has already closed and answers **502**, at random, to
+a client that did nothing wrong. The keep-alive deadline is therefore set above the balancer's idle
+timeout, and `FRONTING_PROXY_IDLE_TIMEOUT_MS` carries the balancer's own number so the ordering is
+asserted rather than remembered. This couples to `SCVS_JOB_STREAM_SAFETY_POLL_MS` from the opposite
+side — §7 requires that one to stay well *below* the same number — and both depend on one value
+Terraform owns in another repository.
+
+**The request deadline is what bounds a connection holding an upload.** `POST /v1/uploads/source`
+accumulates the body in memory up to `SCVS_MAX_SOURCE_ARCHIVE_BYTES`, so this deadline, and nothing
+else, decides how long one slow connection may hold that buffer. Its value is deliberately still
+Node's own 300 000 ms: making it explicit and adjustable is a separate change from re-choosing it,
+and choosing a lower number needs measured archive sizes and upload durations rather than a guess.
+
+Only one relationship between them is enforced, because only one has a failure mode: the keep-alive
+deadline must exceed the fronting proxy's idle timeout. That timeout is itself configuration rather
+than a constant, so a deployment behind something other than this one's ALB supplies its own number
+and one with nothing in front of it says so with a `0` — the only value among the four where a zero
+is meaningful. A zero on any of the three deadlines is refused, because Node reads it as "no
+deadline", and so is any value above Node's 32-bit timer ceiling, above which the duration is
+truncated and the configured number stops applying. A violation stops the boot rather than being
+clamped: a silently substituted value is an unreviewed default again.
+
+No ordering is required *between* the request and headers deadlines, and the headers deadline does
+not need to exceed the keep-alive one. Both beliefs are common and both are false here: the request
+and headers deadlines are independent, with a stalled head closed at whichever is shorter, and Node
+times headers from the first byte of a request rather than from when a connection goes idle. The
+shipped defaults — a 10 s headers deadline under a 65 s keep-alive — are exactly the shape the second
+belief would forbid. Both deadlines are also swept on `connectionsCheckingInterval` (Node's default,
+30 s) rather than armed per socket, so a stalled request outlives its deadline by up to one sweep.
+
+Verified by: `packages/core/src/http-timeouts.ts`, `packages/core/src/http-timeouts-test.ts`,
+`eng-tools/check-http-timeouts.mjs`, `config/env-manifest.yaml`.

@@ -1,6 +1,6 @@
 import type { ConfigService } from "@nestjs/config";
 import { readDbEnv } from "@scvs/db-query";
-import { MAX_BULK_LIMIT, MIN_BULK_LIMIT } from "@scvs/core";
+import { HTTP_TIMEOUT_DEFAULTS, MAX_BULK_LIMIT, MIN_BULK_LIMIT } from "@scvs/core";
 
 function numberEnv(name: string, fallback: number): number {
   const value = process.env[name];
@@ -30,6 +30,22 @@ const configuration = () => ({
   // deregister us before we leave.
   drainGraceMs: numberEnv("SCVS_DRAIN_GRACE_MS", 15_000),
   port: numberEnv("PORT", 5001),
+  // The three `http.Server` deadlines main.ts applies after listen(). Node's own defaults are not neutral —
+  // its 5 s keepAliveTimeout sits below the balancer's idle timeout and answers 502 on a reused connection.
+  httpTimeouts: {
+    requestTimeoutMs: numberEnv("SCVS_REQUEST_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.requestTimeoutMs),
+    headersTimeoutMs: numberEnv("SCVS_HEADERS_TIMEOUT_MS", HTTP_TIMEOUT_DEFAULTS.headersTimeoutMs),
+    keepAliveTimeoutMs: numberEnv(
+      "SCVS_KEEPALIVE_TIMEOUT_MS",
+      HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs,
+    ),
+    // What keepAliveTimeoutMs is checked against, so the 502 rule holds for a deployment fronted by something
+    // other than this one's ALB. `0` says nothing fronts this server and skips the check.
+    frontingProxyIdleTimeoutMs: numberEnv(
+      "SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS",
+      HTTP_TIMEOUT_DEFAULTS.frontingProxyIdleTimeoutMs,
+    ),
+  },
   // The database connection app.module.ts feeds to DbModule.forRootAsync, so it travels ConfigService like
   // every other setting instead of a package reading POSTGRES_* off process.env itself.
   postgres: readDbEnv(),

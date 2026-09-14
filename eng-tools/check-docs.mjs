@@ -39,7 +39,9 @@ const fail = (what) => findings.push(what);
 const BUDGETS = {
   "AGENTS.md": 6 * 1024,
   "CLAUDE.md": 256,
-  "docs/invariants.md": 14 * 1024,
+  // Raised from 14 KiB on 2026-09-14: rule 32 left four bytes of headroom, so the old cap could no longer
+  // admit ANY new rule. A cap that forces a real constraint to go unrecorded is not a size discipline.
+  "docs/invariants.md": 15 * 1024,
   "docs/specs/build-environments.md": 8 * 1024,
   "docs/specs/configuration.md": 12 * 1024,
   "docs/specs/data-and-lifecycle.md": 12 * 1024,

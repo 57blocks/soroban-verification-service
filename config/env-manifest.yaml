@@ -66,6 +66,49 @@ groups:
           deregistration delay + one health-check interval, or the balancer is still routing when the
           process leaves. The builder deliberately does not inherit this: a Batch job is one-shot and
           draining a process that exits on its own is meaningless.
+      SCVS_KEEPALIVE_TIMEOUT_MS:
+        type: number
+        default: 65000
+        note: >-
+          How long an idle connection is kept for reuse. **Must exceed
+          SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS, or the balancer reuses a connection this server has
+          already closed and answers 502 on it.** `applyHttpServerTimeouts` refuses the inversion at
+          boot.
+
+          Node's default is 5000 and the ALB's idle timeout is 60000, so the default is the defect:
+          this is the one value here that is NOT Node's, and raising it is what H-6 asked for.
+      SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS:
+        type: number
+        default: 60000
+        note: >-
+          The idle timeout of whatever fronts this server — the ALB's 60 s here — declared so the
+          keep-alive above can be CHECKED against it rather than merely documented. A deployment
+          behind something else supplies its own number; one with nothing in front sets 0, which
+          skips the comparison. It is the only value among these four where a zero is legitimate.
+      SCVS_REQUEST_TIMEOUT_MS:
+        type: number
+        default: 30000
+        note: >-
+          Node's own http.Server default (300000) leaves a slow-body connection open far longer than any
+          legitimate upload needs. Bounds the whole request, from the first byte received to the response
+          finishing, and is therefore what bounds a connection holding verification-svc's buffered upload.
+
+          No ordering against SCVS_HEADERS_TIMEOUT_MS is required, despite the claim this note used to
+          carry: the two are independent, a stalled request head is closed at whichever is SHORTER, and
+          both are live. Measured 2026-09-14.
+      SCVS_HEADERS_TIMEOUT_MS:
+        type: number
+        default: 10000
+        note: >-
+          Node's own default (60000). Bounds how long the client has to finish sending request headers.
+
+          It does NOT need to sit above SCVS_KEEPALIVE_TIMEOUT_MS: Node measures this deadline from the
+          first byte of a request, not from when a connection goes idle, so an idle keep-alive connection
+          is not affected by it. Measured 2026-09-14; the earlier note asserted the opposite.
+
+          ★ Both this and SCVS_REQUEST_TIMEOUT_MS are swept on `connectionsCheckingInterval` (Node's
+          default, 30000 ms) rather than armed per socket, so the effective kill time for a stalled
+          request is its deadline plus up to one sweep.
       CORS_ORIGIN:
         type: string
         required: no
@@ -910,24 +953,6 @@ services:
           a legitimate long build's staging bytes vanish mid-build. 4 hours; this codebase has no
           existing configured wall-clock cap for a verify/build Batch job to borrow instead.
       SCVS_MAX_SOURCE_ARCHIVE_BYTES: { type: number, default: 52428800 }
-      SCVS_REQUEST_TIMEOUT_MS:
-        type: number
-        default: 30000
-        note: >-
-          Node's own http.Server default (300000) leaves a slow-body connection open far longer than any
-          legitimate upload needs. Bounds the whole request, from the first byte received to the response
-          finishing; must stay above SCVS_HEADERS_TIMEOUT_MS.
-      SCVS_HEADERS_TIMEOUT_MS:
-        type: number
-        default: 10000
-        note: >-
-          Node's own default (60000). Bounds how long the client has to finish sending request headers;
-          must stay below SCVS_REQUEST_TIMEOUT_MS and above SCVS_KEEPALIVE_TIMEOUT_MS — Node does not
-          validate or enforce this ordering itself, so an inverted configuration is accepted silently.
-      SCVS_KEEPALIVE_TIMEOUT_MS:
-        type: number
-        default: 5000
-        note: Node's own default (5000, unchanged) — kept here only so all three timeouts are tunable together.
       SCVS_THROTTLE_LIMIT:
         type: number
         default: 60

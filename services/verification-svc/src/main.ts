@@ -2,7 +2,7 @@ import "reflect-metadata";
 // Loads this process's .env files — cwd first, then the workspace root's shared one.
 import "@scvs/config/load-env";
 import { formatConfigContractLogLine } from "@scvs/config";
-import { ScvsLogger } from "@scvs/core";
+import { applyHttpServerTimeouts, ScvsLogger } from "@scvs/core";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -73,11 +73,10 @@ if (process.env.NODE_ENV !== "test") {
       const config = app.get<AppConfigService>(ConfigService);
       const port = config.get("port", { infer: true });
       const httpServer = await app.listen(port);
-      // Node's own defaults (300s/60s/5s) leave a slow-body connection — or one that never sends a body at
-      // all — open far longer than any legitimate upload needs.
-      httpServer.requestTimeout = config.get("requestTimeoutMs", { infer: true });
-      httpServer.headersTimeout = config.get("headersTimeoutMs", { infer: true });
-      httpServer.keepAliveTimeout = config.get("keepAliveTimeoutMs", { infer: true });
+      // After listen(), never before: there is no `http.Server` to configure until it is bound. Node's own
+      // defaults leave a slow-body connection open far longer than any legitimate upload needs, and its 5 s
+      // keep-alive sits *below* the balancer's idle timeout, which turns a reused connection into a 502.
+      applyHttpServerTimeouts(httpServer, config.get("httpTimeouts", { infer: true }));
       return port;
     })
     .then((port) => {

@@ -85,6 +85,11 @@ jobs:
       - name: Check the builder's capability split
         run: pnpm run check:builder-isolation
 
+      # A server that binds a port without setting its deadlines takes Node's, whose keep-alive is shorter than
+      # the balancer's idle timeout. That call sits past `listen()`, where no test runs.
+      - name: Check the HTTP server timeouts are applied
+        run: pnpm run check:http-timeouts
+
       # The compose-built fixtures' `(cliver, rsver)` pairs are written down in three places that cannot
       # see each other.
       - name: Check the fixture pair tables agree

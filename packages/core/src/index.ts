@@ -29,6 +29,7 @@ export * from "./logging.js";
 export * from "./redact.js";
 export * from "./metrics.js";
 export * from "./drain.js";
+export * from "./http-timeouts.js";
 export * from "./validators/at-least-one-of.js";
 export * from "./validators/closed-to.js";
 export * from "./validators/lowercase-hex.js";

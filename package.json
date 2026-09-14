@@ -34,6 +34,7 @@
     "check:secrets": "node eng-tools/check-secrets.mjs",
     "check:test-row-cleanup": "node eng-tools/check-test-row-cleanup.mjs",
     "check:builder-isolation": "node eng-tools/check-builder-isolation.mjs",
+    "check:http-timeouts": "node eng-tools/check-http-timeouts.mjs",
     "check:fixture-tables": "node eng-tools/check-fixture-tables.mjs",
     "check:mount-paths": "node eng-tools/check-mount-paths.mjs",
     "check:host-routing": "node eng-tools/check-host-routing.mjs",

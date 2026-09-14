@@ -22,14 +22,8 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_MAX_SOURCE_ARCHIVE_BYTES must be a number" })
   SCVS_MAX_SOURCE_ARCHIVE_BYTES?: string;
 
-  @IsOptional() @IsNumberString({}, { message: "SCVS_REQUEST_TIMEOUT_MS must be a number" })
-  SCVS_REQUEST_TIMEOUT_MS?: string;
 
-  @IsOptional() @IsNumberString({}, { message: "SCVS_HEADERS_TIMEOUT_MS must be a number" })
-  SCVS_HEADERS_TIMEOUT_MS?: string;
 
-  @IsOptional() @IsNumberString({}, { message: "SCVS_KEEPALIVE_TIMEOUT_MS must be a number" })
-  SCVS_KEEPALIVE_TIMEOUT_MS?: string;
 
   // The one variable in this DTO that is not optional: without it the abuse fingerprint would fall back to an
   // empty HMAC key, which is the reversible hash this replaced.

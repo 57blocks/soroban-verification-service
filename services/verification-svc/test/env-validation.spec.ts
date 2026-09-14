@@ -36,6 +36,49 @@ describe("createEnvValidator", () => {
     );
   });
 
+  // The three HTTP deadlines are declared on SharedEnvDto, so every service that extends it inherits these
+  // rules; verification-svc's validator is where they are exercised.
+  describe("the HTTP server deadlines", () => {
+    it.each([
+      "SCVS_REQUEST_TIMEOUT_MS",
+      "SCVS_HEADERS_TIMEOUT_MS",
+      "SCVS_KEEPALIVE_TIMEOUT_MS",
+    ])("rejects %s=0 rather than reading it as Node's \"no deadline\"", (name) => {
+      // A `0` is the exact fail-open rule 33 removes: it would boot clean and hold connections forever.
+      expect(() => validate({ ...KEY, [name]: "0" })).toThrow(
+        new RegExp(`${name} must be a positive number of milliseconds`),
+      );
+    });
+
+    it.each([
+      "SCVS_REQUEST_TIMEOUT_MS",
+      "SCVS_HEADERS_TIMEOUT_MS",
+      "SCVS_KEEPALIVE_TIMEOUT_MS",
+    ])("rejects a negative or non-numeric %s", (name) => {
+      expect(() => validate({ ...KEY, [name]: "-1" })).toThrow();
+      expect(() => validate({ ...KEY, [name]: "abc" })).toThrow();
+    });
+
+    it("accepts the three set together to positive values", () => {
+      expect(() =>
+        validate({
+          ...KEY,
+          SCVS_REQUEST_TIMEOUT_MS: "120000",
+          SCVS_HEADERS_TIMEOUT_MS: "70000",
+          SCVS_KEEPALIVE_TIMEOUT_MS: "65000",
+        }),
+      ).not.toThrow();
+    });
+
+    it("leaves the ordering between them to applyHttpServerTimeouts, not this gate", () => {
+      // An inverted pair is individually well-formed, so the DTO passes it and the boot-time helper is what
+      // refuses it. Asserting that here keeps the split deliberate rather than an oversight.
+      expect(() =>
+        validate({ ...KEY, SCVS_HEADERS_TIMEOUT_MS: "1", SCVS_KEEPALIVE_TIMEOUT_MS: "65000" }),
+      ).not.toThrow();
+    });
+  });
+
   it("reports every problem at once, not just the first", () => {
     try {
       validate({ ...KEY, PORT: "x", SCVS_ABUSE_WINDOW_MS: "y", SCVS_JOB_MAX_WAIT_MS: "z" });
