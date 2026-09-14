@@ -1,6 +1,6 @@
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ScvsLogger } from "@scvs/core";
+import { DrainState, ScvsLogger } from "@scvs/core";
 import type { NextFunction, Request, Response } from "express";
 import { AbuseGuardService } from "./abuse-guard.js";
 import { errorBody } from "./api-error.exception.js";
@@ -12,9 +12,11 @@ const ROUTE = "api/verification/v1/uploads/source";
 /**
  * Accumulates the raw request body as a Buffer instead of parsing it as JSON — uploads are binary tarballs.
  *
- * Also carries this route's abuse check, run here rather than through `@UseGuards(AbuseGuard)` on the
- * controller: a guard only runs once the body has already been fully buffered, which defeats the point of
- * metering an upload before memory is spent on it.
+ * Also carries this route's drain and abuse checks, run here rather than through `@UseGuards(DrainGuard,
+ * AbuseGuard)` on the controller: a guard only runs once the body has already been fully buffered, which
+ * defeats the point of metering an upload before memory is spent on it. Drain runs first, matching the
+ * ordering `submit` uses on the controller — refusing a submission the instance is about to stop serving
+ * should not consume the submitter's abuse-check quota.
  */
 @Injectable()
 export class RawArchiveBodyMiddleware implements NestMiddleware {
@@ -25,10 +27,25 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(AbuseGuardService) private readonly abuse: AbuseGuardService,
+    @Inject(DrainState) private readonly drain: DrainState,
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     const maxUploadBytes = this.configService.get("maxSourceArchiveBytes", { infer: true });
+
+    if (this.drain.isDraining) {
+      res.status(503).json(
+        errorBody(503, {
+          error: "draining",
+          message:
+            "This instance is shutting down and is not accepting new submissions. Retry — the load " +
+            "balancer will route you to another instance. Jobs already accepted are unaffected and their " +
+            "status remains readable.",
+        }),
+      );
+      req.destroy();
+      return;
+    }
 
     if (!(await this.isWithinAbuseBudget(req))) {
       res.status(429).json(errorBody(429, { error: "rate_limited", message: "Too many requests, please try again later." }));

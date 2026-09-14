@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import type { Request, Response } from "express";
 import { RawArchiveBodyMiddleware } from "../src/common/raw-archive-body.middleware.js";
 import type { AbuseGuardService } from "../src/common/abuse-guard.js";
+import type { DrainState } from "@scvs/core";
 
 const MAX_BYTES = 1024;
 
@@ -15,6 +16,11 @@ function abuseGuardService(allowed = true) {
   return {
     checkAbuse: jest.fn().mockResolvedValue({ allowed }),
   } as unknown as AbuseGuardService;
+}
+
+/** Not draining by default; `draining: true` exercises the drain-rejection branch. */
+function drainState(draining = false) {
+  return { isDraining: draining } as unknown as DrainState;
 }
 
 /** `req` is a readable stream; the middleware only touches `headers`, `on`, and `destroy`. */
@@ -34,8 +40,26 @@ function fakeResponse() {
 }
 
 describe("RawArchiveBodyMiddleware", () => {
+  it("rejects while draining, before the abuse check runs at all", async () => {
+    const abuse = abuseGuardService();
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuse, drainState(true));
+    const req = new FakeRequest();
+    const res = fakeResponse();
+    const next = jest.fn();
+
+    await middleware.use(req as unknown as Request, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: "draining" }));
+    expect(req.destroy).toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    // Draining must not spend the submitter's abuse-check budget — same ordering the submit route's
+    // DrainGuard-before-AbuseGuard controller guards enforce.
+    expect(abuse.checkAbuse).not.toHaveBeenCalled();
+  });
+
   it("rejects over the abuse budget before reading any body, without buffering a chunk", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(false));
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(false), drainState());
     const req = new FakeRequest();
     const res = fakeResponse();
     const next = jest.fn();
@@ -57,7 +81,7 @@ describe("RawArchiveBodyMiddleware", () => {
 
   it("fails open when the abuse check itself errors", async () => {
     const abuse = { checkAbuse: jest.fn().mockRejectedValue(new Error("db down")) } as unknown as AbuseGuardService;
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuse);
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuse, drainState());
     const req = new FakeRequest();
     req.headers["content-length"] = "6";
     const res = fakeResponse();
@@ -72,7 +96,7 @@ describe("RawArchiveBodyMiddleware", () => {
   });
 
   it("rejects before reading any body when Content-Length already exceeds the ceiling", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(), drainState());
     const req = new FakeRequest();
     req.headers["content-length"] = String(MAX_BYTES + 1);
     const res = fakeResponse();
@@ -96,7 +120,7 @@ describe("RawArchiveBodyMiddleware", () => {
   });
 
   it("accepts a request with no Content-Length and falls back to the per-chunk ceiling", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(), drainState());
     const req = new FakeRequest();
     const res = fakeResponse();
     const next = jest.fn();
@@ -110,7 +134,7 @@ describe("RawArchiveBodyMiddleware", () => {
   });
 
   it("buffers chunks and calls next() with the assembled body when under the ceiling", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(), drainState());
     const req = new FakeRequest();
     req.headers["content-length"] = "6";
     const res = fakeResponse();
@@ -127,7 +151,7 @@ describe("RawArchiveBodyMiddleware", () => {
   });
 
   it("assembles the body correctly with no Content-Length to size the initial allocation by", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(), drainState());
     const req = new FakeRequest();
     const res = fakeResponse();
     const next = jest.fn();
@@ -142,7 +166,7 @@ describe("RawArchiveBodyMiddleware", () => {
   });
 
   it("grows the buffer and keeps the full body when actual bytes outgrow an understated Content-Length", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService());
+    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(), drainState());
     const req = new FakeRequest();
     req.headers["content-length"] = "2"; // undersold: the client actually sends more
     const res = fakeResponse();

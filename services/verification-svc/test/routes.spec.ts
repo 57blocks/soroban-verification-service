@@ -133,10 +133,12 @@ describe("status routes stay exempt from the abuse guard", () => {
     // this assertion would pass while the routes were in fact guarded.
     expect(Reflect.getMetadata("__guards__", VerificationsController)).toBeUndefined();
 
-    // The other half of the same fact: the submission routes DO carry the guard, so the assertions above are
-    // about these two routes rather than about the guard never being applied at all.
+    // The other half of the same fact: submit DOES carry the guard, so the assertions above are about these
+    // two routes rather than about the guard never being applied at all.
     expect(guards("submit").length).toBeGreaterThan(0);
-    expect(guards("uploadSource").length).toBeGreaterThan(0);
+    // uploadSource carries no controller guard at all — RawArchiveBodyMiddleware runs the equivalent drain and
+    // abuse checks itself, before the body is buffered rather than after (raw-archive-body.middleware.ts).
+    expect(guards("uploadSource")).toHaveLength(0);
   });
 });
 
