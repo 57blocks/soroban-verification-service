@@ -50,7 +50,7 @@ export function selectArtifactFromOutput(input: {
   reports: BuildArtifactReport[];
   artifactDir: string;
 }):
-  | { ok: true; hostPath: string; containerPath: string; sha256?: string }
+  | { ok: true; hostPath: string; containerPath: string; sha256: string }
   | { ok: false; reason: string; detail: string } {
   if (input.reports.length === 0) {
     return {
@@ -90,14 +90,20 @@ export function selectArtifactFromOutput(input: {
       outsideMount ??= { reason: resolved.reason, detail: resolved.detail };
       continue;
     }
-    if (resolved.hostPath === candidate) {
+    if (resolved.hostPath !== candidate) continue;
+
+    // A `Wasm Hash:` binds to the report above it, so the winning report is not always the one carrying it.
+    const sha256 = report.sha256 ?? lastHashFor(input.reports.slice(0, index), candidate, input.artifactDir);
+    if (!sha256) {
+      // Every oracle in `test/differential/oracles.ts` prints one, 25.1.0 through 27.1.0 — so an absent hash
+      // is not an old-CLI compatibility case, and relaxing this back to a skip would be a fail-open.
       return {
-        ok: true,
-        hostPath: candidate,
-        containerPath: report.containerPath,
-        ...(report.sha256 ? { sha256: report.sha256 } : {}),
+        ok: false,
+        reason: "artifact_report_hash_missing",
+        detail: `No report stated a sha256 for ${report.containerPath}; the artifact cannot be confirmed.`,
       };
     }
+    return { ok: true, hostPath: candidate, containerPath: report.containerPath, sha256 };
   }
   if (outsideMount) return { ok: false, ...outsideMount };
   return {
@@ -108,6 +114,21 @@ export function selectArtifactFromOutput(input: {
       `instead: ${input.reports.map((r) => r.containerPath).join(", ")}. A report the build itself can ` +
       "print does not decide which file is the rebuild.",
   };
+}
+
+/** The last hash any of `earlier` stated for `candidate`, in print order. */
+function lastHashFor(
+  earlier: BuildArtifactReport[],
+  candidate: string,
+  artifactDir: string,
+): string | undefined {
+  for (let index = earlier.length - 1; index >= 0; index -= 1) {
+    const report = earlier[index];
+    if (!report.sha256) continue;
+    const resolved = resolveReportedArtifact(report.containerPath, artifactDir);
+    if (resolved.ok && resolved.hostPath === candidate) return report.sha256;
+  }
+  return undefined;
 }
 
 /** Every `.wasm` under `root`, not following symlinks: **AR2**'s pre-build snapshot, and AR1's post-build candidate listing. */

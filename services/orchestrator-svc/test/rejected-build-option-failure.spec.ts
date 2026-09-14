@@ -68,6 +68,19 @@ describe("a build option the verifier added and the image rejects", () => {
   });
 });
 
+describe("an artifact no report stated a hash for", () => {
+  const record = rebuild("artifact_report_hash_missing");
+
+  it("is build_failed, and deliberately not internal_error", () => {
+    // The same code also covers a compile that printed a report of its own — the source's doing, not ours.
+    expect(rebuildFailureReason(record)).toBe("build_failed");
+  });
+
+  it("stays non-retryable, so a refused artifact is not handed another attempt", () => {
+    expect(isRetryableFailure(rebuildFailureReason(record))).toBe(false);
+  });
+});
+
 describe("everything else is unchanged", () => {
   it("keeps the generic detail when no option was identified", () => {
     expect(rebuildFailureDetail(rebuild("rebuild_command_failed"))).toBe(GENERIC);

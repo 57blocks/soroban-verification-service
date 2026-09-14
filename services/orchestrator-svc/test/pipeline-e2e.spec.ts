@@ -1308,6 +1308,9 @@ describe("ADR-008 pipeline, end to end", () => {
         expected: "internal_error",
       },
       { errorCode: "manifest_path_not_found", expected: "build_failed" },
+      // Reads like the `source_archive_reader_unavailable` row above and lands on the other side: the same
+      // code also covers a compile that printed a report of its own, which is the source's doing.
+      { errorCode: "artifact_report_hash_missing", expected: "build_failed" },
       // Retryability is unchanged: both arms are non-retryable, so only what the submitter is told moves.
       { errorCode: "absolute_manifest_path_not_supported", expected: "policy_rejected" },
       { errorCode: "manifest_path_escapes_source", expected: "policy_rejected" },
