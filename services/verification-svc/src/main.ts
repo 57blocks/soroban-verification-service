@@ -70,10 +70,14 @@ async function bootstrap(): Promise<NestExpressApplication> {
 if (process.env.NODE_ENV !== "test") {
   bootstrap()
     .then(async (app) => {
-      const port = app
-        .get<AppConfigService>(ConfigService)
-        .get("port", { infer: true });
-      await app.listen(port);
+      const config = app.get<AppConfigService>(ConfigService);
+      const port = config.get("port", { infer: true });
+      const httpServer = await app.listen(port);
+      // Node's own defaults (300s/60s/5s) leave a slow-body connection — or one that never sends a body at
+      // all — open far longer than any legitimate upload needs.
+      httpServer.requestTimeout = config.get("requestTimeoutMs", { infer: true });
+      httpServer.headersTimeout = config.get("headersTimeoutMs", { infer: true });
+      httpServer.keepAliveTimeout = config.get("keepAliveTimeoutMs", { infer: true });
       return port;
     })
     .then((port) => {

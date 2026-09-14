@@ -910,6 +910,24 @@ services:
           a legitimate long build's staging bytes vanish mid-build. 4 hours; this codebase has no
           existing configured wall-clock cap for a verify/build Batch job to borrow instead.
       SCVS_MAX_SOURCE_ARCHIVE_BYTES: { type: number, default: 52428800 }
+      SCVS_REQUEST_TIMEOUT_MS:
+        type: number
+        default: 30000
+        note: >-
+          Node's own http.Server default (300000) leaves a slow-body connection open far longer than any
+          legitimate upload needs. Bounds the whole request, from the first byte received to the response
+          finishing; must stay above SCVS_HEADERS_TIMEOUT_MS.
+      SCVS_HEADERS_TIMEOUT_MS:
+        type: number
+        default: 10000
+        note: >-
+          Node's own default (60000). Bounds how long the client has to finish sending request headers;
+          must stay below SCVS_REQUEST_TIMEOUT_MS and above SCVS_KEEPALIVE_TIMEOUT_MS — Node does not
+          validate or enforce this ordering itself, so an inverted configuration is accepted silently.
+      SCVS_KEEPALIVE_TIMEOUT_MS:
+        type: number
+        default: 5000
+        note: Node's own default (5000, unchanged) — kept here only so all three timeouts are tunable together.
       SCVS_THROTTLE_LIMIT:
         type: number
         default: 60
