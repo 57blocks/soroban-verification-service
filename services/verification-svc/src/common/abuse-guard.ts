@@ -46,13 +46,31 @@ export type AbuseCheckResult =
   | { allowed: true }
   | { allowed: false; reason: "rate_limited" | "fail_closed" };
 
-/** Both `checkAbuseFailOpen` callers (the guard, the middleware) build the same 503 body from this. */
-export const FAIL_CLOSED_ERROR = {
+const RATE_LIMITED_ERROR = {
+  error: "rate_limited",
+  message: "Too many requests, please try again later.",
+} as const;
+
+const FAIL_CLOSED_ERROR = {
   error: "abuse_check_unavailable",
   message:
     "The abuse-check database is currently unreachable, so this route cannot verify your request budget " +
     "and is refusing new requests rather than admitting them unchecked. Retry shortly.",
 } as const;
+
+/**
+ * The status code and body a rejected `AbuseCheckResult` maps to — the one place both `checkAbuseFailOpen`
+ * callers (the guard, the middleware) get this mapping from, so it can only drift in one place. Each caller
+ * still sends the response its own way (`ApiError` vs `res.status().json()`), which is why this returns the
+ * pieces rather than sending anything itself.
+ */
+export function abuseCheckError(
+  result: Extract<AbuseCheckResult, { allowed: false }>,
+): { statusCode: 429 | 503; detail: typeof RATE_LIMITED_ERROR | typeof FAIL_CLOSED_ERROR } {
+  return result.reason === "fail_closed"
+    ? { statusCode: 503, detail: FAIL_CLOSED_ERROR }
+    : { statusCode: 429, detail: RATE_LIMITED_ERROR };
+}
 
 @Injectable()
 export class AbuseGuardService {
@@ -120,8 +138,10 @@ export class AbuseGuardService {
     } catch (error) {
       this.consecutiveFailOpens++;
       if (this.consecutiveFailOpens > failOpenThreshold) {
-        logger.error("DB-backed abuse check failed repeatedly, failing CLOSED", {
+        // Not "failed repeatedly": with a threshold of 0, consecutive_failures is 1 here.
+        logger.error("DB-backed abuse check failed, failing CLOSED", {
           consecutive_failures: this.consecutiveFailOpens,
+          fail_open_threshold: failOpenThreshold,
           error: error instanceof Error ? error : String(error),
         });
         return { allowed: false, reason: "fail_closed" };

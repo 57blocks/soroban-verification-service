@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Inject, Injectable } from "@nestjs/commo
 import { ConfigService } from "@nestjs/config";
 import { ScvsLogger } from "@scvs/core";
 import type { Request } from "express";
-import { AbuseGuardService, FAIL_CLOSED_ERROR } from "./abuse-guard.js";
+import { abuseCheckError, AbuseGuardService } from "./abuse-guard.js";
 import { ApiError } from "./api-error.exception.js";
 import type { AppConfigService } from "../config/configuration.js";
 
@@ -54,10 +54,8 @@ export class AbuseGuard implements CanActivate {
       this.configService.get("abuseFailOpenThreshold", { infer: true }),
     );
     if (!result.allowed) {
-      if (result.reason === "fail_closed") {
-        throw new ApiError(503, FAIL_CLOSED_ERROR);
-      }
-      throw new ApiError(429, { error: "rate_limited", message: "Too many requests, please try again later." });
+      const { statusCode, detail } = abuseCheckError(result);
+      throw new ApiError(statusCode, detail);
     }
     return true;
   }

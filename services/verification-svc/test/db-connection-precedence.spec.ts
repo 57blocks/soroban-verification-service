@@ -102,16 +102,28 @@ describe("readDbEnv", () => {
     });
   });
 
-  it("omits a pool-tuning field rather than passing NaN when its variable is unset, non-numeric, or non-positive", () => {
+  it("omits connectionTimeoutMillis and max rather than passing NaN or a non-positive value through", () => {
     for (const key of DB_KEYS) delete process.env[key];
     process.env.SCVS_DB_CONNECTION_TIMEOUT_MS = "not-a-number";
-    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "0";
-    // SCVS_DB_POOL_MAX left unset entirely.
+    process.env.SCVS_DB_POOL_MAX = "0";
 
     const config = readDbEnv();
     expect(config).not.toHaveProperty("connectionTimeoutMillis");
-    expect(config).not.toHaveProperty("idleTimeoutMillis");
     expect(config).not.toHaveProperty("max");
+  });
+
+  it("omits idleTimeoutMillis for a non-numeric or negative value, but keeps an explicit 0", () => {
+    for (const key of DB_KEYS) delete process.env[key];
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "not-a-number";
+    expect(readDbEnv()).not.toHaveProperty("idleTimeoutMillis");
+
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "-1";
+    expect(readDbEnv()).not.toHaveProperty("idleTimeoutMillis");
+
+    // pg's own documented meaning for 0 is "never evict an idle client", not "unset" — dropping it would
+    // silently substitute pg's 10000ms default for an operator's explicit override.
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "0";
+    expect(readDbEnv()).toMatchObject({ idleTimeoutMillis: 0 });
   });
 });
 

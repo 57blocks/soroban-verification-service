@@ -2,7 +2,7 @@ import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { DrainState, ScvsLogger } from "@scvs/core";
 import type { NextFunction, Request, Response } from "express";
-import { AbuseGuardService, FAIL_CLOSED_ERROR } from "./abuse-guard.js";
+import { abuseCheckError, AbuseGuardService } from "./abuse-guard.js";
 import { UPLOAD_SOURCE_ROUTE } from "./abuse.guard.js";
 import { errorBody } from "./api-error.exception.js";
 import type { AppConfigService } from "../config/configuration.js";
@@ -75,13 +75,8 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       this.configService.get("abuseFailOpenThreshold", { infer: true }),
     );
     if (!result.allowed) {
-      if (result.reason === "fail_closed") {
-        res.status(503).json(errorBody(503, FAIL_CLOSED_ERROR));
-      } else {
-        res
-          .status(429)
-          .json(errorBody(429, { error: "rate_limited", message: "Too many requests, please try again later." }));
-      }
+      const { statusCode, detail } = abuseCheckError(result);
+      res.status(statusCode).json(errorBody(statusCode, detail));
       this.discardAndClose(req, res);
       return;
     }

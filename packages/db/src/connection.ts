@@ -40,14 +40,20 @@ export function readDbEnv(): DbConnectionInput {
   };
 }
 
-/** A present-but-non-numeric override is dropped rather than passed through as `NaN` — see `client.ts` for the default. */
+/**
+ * A present-but-non-numeric override is dropped rather than passed through as `NaN` — see `client.ts` for the
+ * default. `connectionTimeoutMillis`/`max` of `0` are dropped too (neither has a usable zero value — `0` on
+ * `pg`'s own `connectionTimeoutMillis` means unbounded wait, the exact default this package overrides).
+ * `idleTimeoutMillis` is the one field where `0` is `pg`'s own documented value ("never evict an idle client")
+ * rather than an error, so it alone is accepted at `0`.
+ */
 function readPoolTuningEnv(): PoolTuning {
   const connectionTimeoutMillis = Number(process.env.SCVS_DB_CONNECTION_TIMEOUT_MS);
   const idleTimeoutMillis = Number(process.env.SCVS_DB_IDLE_TIMEOUT_MS);
   const max = Number(process.env.SCVS_DB_POOL_MAX);
   return {
     ...(Number.isFinite(connectionTimeoutMillis) && connectionTimeoutMillis > 0 ? { connectionTimeoutMillis } : {}),
-    ...(Number.isFinite(idleTimeoutMillis) && idleTimeoutMillis > 0 ? { idleTimeoutMillis } : {}),
+    ...(Number.isFinite(idleTimeoutMillis) && idleTimeoutMillis >= 0 ? { idleTimeoutMillis } : {}),
     ...(Number.isFinite(max) && max > 0 ? { max } : {}),
   };
 }

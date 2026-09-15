@@ -414,7 +414,7 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: 5000
-        code: packages/db-query/src/client.ts::resolvePoolConfig
+        code: packages/db/src/client.ts::resolvePoolConfig
         note: Same variable NAME and default as the `postgres` group's own entry — see there for the rationale.
       SCVS_DB_IDLE_TIMEOUT_MS:
         type: number
@@ -424,7 +424,7 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: ~
-        code: packages/db-query/src/client.ts::resolvePoolConfig
+        code: packages/db/src/client.ts::resolvePoolConfig
       SCVS_DB_POOL_MAX:
         type: number
         required: no
@@ -433,7 +433,7 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: ~
-        code: packages/db-query/src/client.ts::resolvePoolConfig
+        code: packages/db/src/client.ts::resolvePoolConfig
       DATABASE_URL:
         type: url
         required: no
@@ -1203,10 +1203,11 @@ services:
         code: services/verification-svc/src/common/abuse-guard.ts::AbuseGuardService.checkAbuseFailOpen
         note: >-
           Consecutive DB-backed abuse-check failures, with no intervening success, before the guard stops
-          failing open and starts answering 503 instead of admitting the request. Per-instance, in-memory
-          counter — not shared across replicas, so the fail-closed transition staggers across instances
-          under sustained failure rather than landing everywhere at once. 10 is a starting point, not
-          measured against production load.
+          failing open and starts answering 503 instead of admitting the request. 0 is legal and means
+          zero tolerance — the very first failure fails closed. Per-instance, in-memory counter — not
+          shared across replicas, so the fail-closed transition staggers across instances under sustained
+          failure rather than landing everywhere at once. 10 is a starting point, not measured against
+          production load.
       SCVS_JOB_STREAM_WINDOW_MS: { type: number, default: 900000 }
       SCVS_JOB_MAX_WAIT_MS: { type: number, default: 3600000 }
       SCVS_ACTIVE_JOB_DEDUP_STALE_MS:
