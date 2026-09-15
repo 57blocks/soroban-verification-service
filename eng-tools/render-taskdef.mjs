@@ -3,7 +3,7 @@
  * Renders a service's ECS task definition from the deployment contract.
  *
  *   node eng-tools/render-taskdef.mjs --env dev --service query-svc \
- *     --image <digest-or-ref> [--descriptor @file] [--baseline @file] > /tmp/td.json
+ *     --image <digest-or-ref> [--descriptor @file] [--contract @file] [--baseline @file] > /tmp/td.json
  *
  * ADR-025's write half. It takes the RUNNING task definition as its baseline and replaces only the
  * two things this repository owns — the container image, and every environment variable — leaving
@@ -34,7 +34,7 @@ const image = flag("image");
 
 if (!service || !image) {
   console.error(
-    "usage: render-taskdef.mjs --env <env> --service <name> --image <ref> [--descriptor @file] [--baseline @file]"
+    "usage: render-taskdef.mjs --env <env> --service <name> --image <ref> [--descriptor @file] [--contract @file] [--baseline @file]"
   );
   process.exit(2);
 }
@@ -69,13 +69,15 @@ const loadJson = (raw, what) => {
 
 // ── Inputs ──────────────────────────────────────────────────────────────────────────────────────
 
-const contract = (() => {
-  try {
-    return JSON.parse(readFileSync(`config/deploy/${targetEnv}/${service}.json`, "utf8"));
-  } catch {
-    return die(`no contract at config/deploy/${targetEnv}/${service}.json`);
-  }
-})();
+const contract =
+  loadJson(flag("contract"), "contract") ??
+  (() => {
+    try {
+      return JSON.parse(readFileSync(`config/deploy/${targetEnv}/${service}.json`, "utf8"));
+    } catch {
+      return die(`no contract at config/deploy/${targetEnv}/${service}.json`);
+    }
+  })();
 
 if (contract.kind !== "ecs-service" && contract.kind !== "ecs-task") {
   die(`${service} is kind: ${contract.kind} — this renders ECS task definitions only (ADR-025 keeps Batch on plaintext)`);
