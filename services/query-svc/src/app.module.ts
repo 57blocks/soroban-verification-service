@@ -40,13 +40,9 @@ import { QuerySvcEnvDto } from "./config/env.dto.js";
       useFactory: (configService: AppConfigService) =>
         configService.get("drainGraceMs", { infer: true }),
     }),
-    // The read surface's only entry control: this service is public and unauthenticated, so the quota is what
-    // stands in for the account it does not have.
-    //
-    // The counter `ThrottlerGuard` keys is per (caller, route handler), not one shared bucket per caller — so
-    // this is a ceiling each route carries independently, and a caller working several routes at once is
-    // bounded by the sum rather than by this number. That is the behaviour the tight address tier depends on:
-    // its budget cannot be spent, or widened, by traffic to any other route.
+    // The read surface's only entry control, this service having no account to bound instead. The counter is
+    // per (caller, route handler), not one bucket per caller, so each route carries this ceiling
+    // independently — which is what keeps the tight address tier out of reach of traffic to any other route.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) => ({

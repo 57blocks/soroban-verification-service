@@ -2,12 +2,9 @@ import request from "supertest";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 
 /**
- * Set BEFORE the app module is loaded, and the reason `createTestApp` is imported dynamically below: the
- * address tier is a `@Throttle()` decorator argument, evaluated when `ResultsController` is defined. A static
- * import of the bootstrap would run that decorator during this file's own import, ahead of any assignment here.
- *
- * `jest.setup.cjs` raises both ceilings out of the way for every other suite; these override that, so this file
- * is the one place the quotas are actually exercised.
+ * Set before the app module loads, and why `createTestApp` is imported dynamically: the address tier is a
+ * `@Throttle()` argument, evaluated when `ResultsController` is defined, which a static import would run
+ * ahead of these assignments.
  */
 const GLOBAL_LIMIT = 10;
 const ADDRESS_LIMIT = 3;
@@ -102,12 +99,7 @@ describe("the address route's tighter tier", () => {
   });
 });
 
-/**
- * `SwaggerModule.setup()` registers its routes on the HTTP adapter, where no Nest guard runs — `APP_GUARD`
- * never sees them and `@SkipThrottle()` has nothing to act on. They are covered by express middleware instead
- * (`adapter-route-throttle.middleware.ts`), counting through the same storage as the guard, so an
- * unauthenticated reader cannot pull the document in a loop for free.
- */
+/** Swagger registers on the HTTP adapter, out of the guard chain — covered by middleware instead. */
 describe("the documentation surface, throttled outside the guard chain", () => {
   it.each(["/api/query/v1/openapi.json", "/api/query/v1/docs"])(
     "%s is refused past the ceiling, in the same envelope as any other route",

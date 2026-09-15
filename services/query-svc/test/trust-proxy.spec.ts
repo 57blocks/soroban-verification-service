@@ -2,12 +2,9 @@ import request from "supertest";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 
 /**
- * What `main.ts`'s `trust proxy` setting is worth, measured through the guard that depends on it — the same
- * shape as verification-svc's spec of the same name.
- *
- * Without the setting every request arrives from the loopback peer address and the whole internet shares one
- * counter. That failure is invisible in a single-caller test: the quota still refuses, it just refuses the
- * wrong people. So the subject here is *separation* — two callers, one budget each.
+ * What `trust proxy` is worth, measured through the guard that depends on it. Without it every caller shares
+ * the loopback peer address and one counter — invisible to a single-caller test, since the quota still
+ * refuses, just the wrong people. The subject is therefore separation, not refusal.
  */
 const LIMIT = 2;
 process.env.SCVS_QUERY_THROTTLE_LIMIT = String(LIMIT);

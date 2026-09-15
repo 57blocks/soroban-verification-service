@@ -25,11 +25,7 @@ function boundedBulkPageLimit(name: string, fallback: number, min: number, max: 
   return parsed;
 }
 
-/**
- * The address tier's effective limit. Exported because `results.controller.ts` must read the same number from
- * a `@Throttle()` decorator — evaluated at class-definition time, before any Nest container exists — and a
- * second literal in that decorator is how the two would drift apart.
- */
+/** Exported so the `@Throttle()` decorator and the ordering check below read one number, not two literals. */
 export const DEFAULT_ADDRESS_THROTTLE_LIMIT = 60;
 
 function queryThrottleLimit(): number {
@@ -43,10 +39,8 @@ export function addressThrottleLimit(): number {
 }
 
 /**
- * `@Throttle` REPLACES the global limit for the route it decorates rather than stacking a second window under
- * it, so an address tier at or above the global one widens that route's allowance instead of narrowing it —
- * the exact opposite of what it is there for, and invisible at runtime because nothing looks wrong.
- * Checked at boot, where a misconfiguration is still cheap — the manifest carries the derivation.
+ * An address tier at or above the global one widens that route instead of narrowing it, and nothing looks
+ * wrong at runtime. Checked at boot, where it is still cheap.
  */
 function assertTierOrdering(globalLimit: number, addressLimit: number): void {
   if (addressLimit < globalLimit) return;

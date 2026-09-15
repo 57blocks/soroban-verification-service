@@ -37,12 +37,9 @@ export class HealthController {
   }
 
   /**
-   * Readiness: should the balancer still send this task reads?
-   *
-   * Every route but this tree reads Postgres, so a task that cannot reach it can serve nothing — answering 200
-   * here while the database is gone keeps a useless instance in the target group. The probe is bounded (see
-   * `DbHealthService.ping`), and the bound must stay below the balancer's own health-check timeout, or the
-   * balancer gives up before this route answers and the report is never read.
+   * Every route but this tree reads Postgres, so answering 200 with the database gone keeps a useless instance
+   * in the target group. The probe's bound must stay below the balancer's health-check timeout, or the
+   * balancer gives up before the answer arrives.
    */
   @Get("ready")
   @ApiOperation({ summary: "Readiness — false while draining, or while Postgres is unreachable." })

@@ -5,11 +5,7 @@ import { DbHealthService } from "@scvs/db-query";
 import { DrainState } from "@scvs/core";
 import { createTestApp } from "./bootstrap.js";
 
-/**
- * `/health/ready` answered 200 with the database gone until this suite existed — it called `readiness(drain,
- * {})`, an empty check set, so the only thing that could make it false was draining. A probe that cannot fail
- * for the reason the balancer needs is not a probe.
- */
+/** `/health/ready` used to call `readiness(drain, {})` — an empty check set, so only draining made it false. */
 let app: NestExpressApplication;
 let dbHealth: DbHealthService;
 

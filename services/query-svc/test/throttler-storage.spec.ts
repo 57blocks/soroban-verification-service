@@ -1,13 +1,9 @@
 import { FixedWindowThrottlerStorage } from "../src/common/fixed-window-throttler.storage.js";
 
 /**
- * The defect this storage exists to avoid, pinned as a test.
- *
- * `@nestjs/throttler`'s bundled `ThrottlerStorageService` keeps its decay timers in a list keyed by throttler
- * NAME, and unblocking one caller cancels every caller's pending decrement. Because `increment` refreshes the
- * window's end but never resets `totalHits`, those counts then never come down. The first case below fails
- * against that implementation and passes against this one; the rest are the ordinary behaviour the guard
- * depends on.
+ * The bundled `ThrottlerStorageService` keys its decay timers by throttler NAME, so unblocking one caller
+ * cancels every caller's pending decrement — and `increment` refreshes the window's end without resetting
+ * `totalHits`, so those counts never come down. The first two cases fail against it.
  */
 const NAME = "default";
 const TTL = 200;

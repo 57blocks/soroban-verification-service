@@ -58,19 +58,10 @@ export class ResultsController {
 
   @Get("api/query/v1/contracts/:network/:contract_id")
   /**
-   * The only route on this service that reaches a third party: resolving an address is one outbound Soroban RPC
-   * call per request, uncached by design (see `resolve` below), so one admitted request here costs an upstream
-   * request too. That is why this tier is an order of magnitude tighter than the global one — it is sized
-   * against what the upstream endpoint tolerates, not against what this service could serve.
-   *
-   * `@Throttle` REPLACES the global limit for this route rather than stacking a second window under it, so this
-   * number must stay BELOW `SCVS_QUERY_THROTTLE_LIMIT` or it widens the budget instead of narrowing it.
-   *
-   * `addressThrottleLimit()` reads `process.env` directly rather than going through `ConfigService`, the same
-   * documented exception verification-svc's upload route takes: a decorator argument is evaluated when the
-   * class is defined, before Nest's container exists. The value is therefore fixed at import time — changing
-   * it needs a restart. It is a shared function rather than a second literal so this number and the one
-   * `configuration.ts` checks the ordering against cannot disagree.
+   * The only route that reaches a third party — one outbound RPC per admitted request, uncached (see
+   * `resolve`) — so this tier is sized against what the upstream tolerates, and `@Throttle` replacing the
+   * global limit rather than stacking under it is why boot refuses a value at or above it. The limit comes
+   * from `process.env`, a decorator argument being evaluated before any container exists.
    */
   @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })
