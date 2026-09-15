@@ -123,8 +123,8 @@ export function dockerPrefetchPolicyDiagnostics(input: {
     dependency_prefetch: "cargo_vendor",
     dependency_prefetch_policy: "allowlist",
     dependency_prefetch_allowed_hosts: input.policy.allowed_hosts,
-    // Both carry a URL read out of the submitter's own Cargo files, so both go through redaction — userinfo and
-    // query strings in a submitted registry URL are exactly what it is for.
+    // Both carry a URL read out of an untrusted Cargo file, so both go through redaction — userinfo and
+    // query strings in such a URL are exactly what it is for.
     dependency_prefetch_blocked_url: redactSecrets(input.policy.blocked_url),
     stderr_excerpt: excerpt(input.policy.detail),
     reference_alignment: referenceAlignment(),

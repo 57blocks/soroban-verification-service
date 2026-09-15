@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,7 @@ import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR, parseBuildArtifactReports, s
 import { CONTAINER_CLI_ENTRYPOINT, assembleBuildCommand, rejectedBuildArgument, resolveAddedEnvironment } from "./argument-policy.js";
 import { dockerEnvOptions, leadingBuildArgs, replayableBuildOptions, resolveManifestPath } from "./build-options.js";
 import { cliFailure, dockerBuildDiagnostics, dockerPrefetchDiagnostics, dockerPrefetchPolicyDiagnostics, dockerUnavailableDiagnostics } from "./diagnostics.js";
-import { evaluatePrefetchEgressPolicy } from "./egress-policy.js";
+import { evaluatePrefetchEgressPolicy, evaluateVendoredEgressPolicy } from "./egress-policy.js";
 import { referenceAlignment } from "./reference-alignment.js";
 import { cliTimeoutMs, dockerFinalSandboxOptions, dockerResourceLimits } from "./run-cli.config.js";
 import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResult } from "./run-cli.types.js";
@@ -223,6 +223,34 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
       }),
     );
   }
+  const vendoredEgressPolicy = await evaluateVendoredEgressPolicy(vendorDir, egressPolicy.allowed_hosts);
+  if (!vendoredEgressPolicy.ok) {
+    return cliFailure(
+      "dependency_prefetch_policy_rejected",
+      "docker_build_image_rebuild",
+      null,
+      {
+        runner: "docker_build_image_rebuild",
+        build_image: input.build.image,
+        source_root: offlineSourceRoot,
+        manifest_path: offlineManifestPath,
+        container_manifest_path: containerManifest.path,
+        out_dir: outDir,
+        blocked_url: vendoredEgressPolicy.blocked_url,
+        detail: `Transitive dependency introduced a disallowed host: ${vendoredEgressPolicy.detail}`,
+      },
+      dockerPrefetchPolicyDiagnostics({
+        input,
+        sourceRoot: offlineSourceRoot,
+        outDir,
+        manifestPath: offlineManifestPath,
+        containerManifestPath: containerManifest.path,
+        resourceLimits,
+        policy: vendoredEgressPolicy,
+      }),
+    );
+  }
+
   // The submitted source may carry its own `.cargo/config.toml` (commonly `[build] rustflags`, which changes
   // codegen and therefore the Wasm bytes).
   const sourceCargoOverride = await detectSourceCargoSourceOverride(offlineSourceRoot);

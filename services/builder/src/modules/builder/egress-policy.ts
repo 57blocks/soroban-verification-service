@@ -13,19 +13,8 @@ export async function evaluatePrefetchEgressPolicy(
   config?: RunCliRuntimeConfig
 ): Promise<PrefetchEgressPolicy> {
   const allowedHosts = prefetchAllowedHosts(config);
-  const urls = await collectCargoPrefetchUrls(sourceRoot);
-  for (const url of urls) {
-    const decision = evaluatePrefetchUrl(url, allowedHosts);
-    if (!decision.ok) {
-      return {
-        ok: false,
-        allowed_hosts: allowedHosts,
-        blocked_url: url,
-        detail: decision.reason,
-      };
-    }
-  }
-  return { ok: true, allowed_hosts: allowedHosts };
+  const urls = await collectCargoPrefetchUrls(sourceRoot, { skipVendorDirs: true });
+  return evaluatePrefetchUrls(urls, allowedHosts);
 }
 
 export function evaluatePrefetchUrl(
@@ -67,11 +56,40 @@ export function evaluatePrefetchUrl(
   return { ok: true };
 }
 
+/**
+ * A transitive dependency's own `git`/`source` pointer exists on disk only after `cargo vendor` has
+ * fetched it, so this re-runs the same allowlist against the vendored output. Rejects the build result;
+ * the fetch itself has already happened by the time this runs.
+ */
+export async function evaluateVendoredEgressPolicy(
+  vendorDir: string,
+  allowedHosts: string[]
+): Promise<PrefetchEgressPolicy> {
+  const urls = await collectCargoPrefetchUrls(vendorDir, { skipVendorDirs: false });
+  return evaluatePrefetchUrls(urls, allowedHosts);
+}
+
+function evaluatePrefetchUrls(urls: string[], allowedHosts: string[]): PrefetchEgressPolicy {
+  for (const url of urls) {
+    const decision = evaluatePrefetchUrl(url, allowedHosts);
+    if (!decision.ok) {
+      return {
+        ok: false,
+        allowed_hosts: allowedHosts,
+        blocked_url: url,
+        detail: decision.reason,
+      };
+    }
+  }
+  return { ok: true, allowed_hosts: allowedHosts };
+}
+
 export async function collectCargoPrefetchUrls(
-  sourceRoot: string
+  sourceRoot: string,
+  options: { skipVendorDirs: boolean } = { skipVendorDirs: true }
 ): Promise<string[]> {
   const files: string[] = [];
-  await collectCargoPolicyFiles(sourceRoot, files);
+  await collectCargoPolicyFiles(sourceRoot, files, options.skipVendorDirs);
   const urls = new Set<string>();
   for (const file of files) {
     const text = await readFile(file, "utf8").catch(() => "");
@@ -126,7 +144,8 @@ export function stripTomlComments(text: string): string {
 
 export async function collectCargoPolicyFiles(
   dir: string,
-  files: string[]
+  files: string[],
+  skipVendorDirs = true
 ): Promise<void> {
   let entries;
   try {
@@ -134,13 +153,16 @@ export async function collectCargoPolicyFiles(
   } catch {
     return;
   }
+  const skippedDirs = skipVendorDirs
+    ? [".git", "target", "vendor", "node_modules"]
+    : [".git", "target", "node_modules"];
   for (const entry of entries) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if ([".git", "target", "vendor", "node_modules"].includes(entry.name)) {
+      if (skippedDirs.includes(entry.name)) {
         continue;
       }
-      await collectCargoPolicyFiles(path, files);
+      await collectCargoPolicyFiles(path, files, skipVendorDirs);
       continue;
     }
     if (
