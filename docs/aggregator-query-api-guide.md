@@ -47,6 +47,24 @@ apart records "fully synchronised, zero results" the first time it happens to po
 status code exists so that mistake isn't possible. Don't treat a 503 here as a transient error to
 silently retry into an empty-page assumption; wait for it to clear into real pages.
 
+### Rate limits
+
+Every route here carries a per-caller quota, and a request past it is refused with **429
+`rate_limited`** in the same error envelope as any other failure — not an opaque body, and never a 5xx.
+Back off and retry; there is no account to raise, because there is no account at all.
+
+Two things are worth building against rather than discovering:
+
+- **`GET .../v1/contracts/{network}/{contract_id}` is budgeted an order of magnitude tighter than the
+  rest.** Resolving an address costs this service an outbound RPC call to the ledger on every request,
+  so that route is bounded by what the upstream tolerates. If you are enriching a list of contracts,
+  resolve the addresses once and then work by Wasm hash — `GET .../v1/wasms/{wasm_hash}` is on the wide
+  budget, and it is the same aggregated body.
+- **The budget is per route.** Being cut off on one route does not cut you off on the others, so a
+  429 on the address route is not a reason to stop reading by hash.
+
+Operators run their own numbers, so don't hardcode a rate: read the `429` and back off.
+
 ### Verifiers list
 
 `GET .../v1/verifiers`

@@ -3,6 +3,25 @@ import { IsIn, IsNumberString, IsOptional, IsUrl, Matches } from "class-validato
 
 /** This service's environment contract, validated once at boot by `ConfigModule.forRoot({ validate })`. */
 export class QuerySvcEnvDto extends SharedEnvDto {
+  @IsOptional()
+  @IsNumberString({}, { message: "SCVS_QUERY_THROTTLE_LIMIT must be a number" })
+  SCVS_QUERY_THROTTLE_LIMIT?: string;
+
+  // Validated here even though `results.controller.ts` reads it off `process.env` rather than through
+  // ConfigService — a `@Throttle()` argument is evaluated at class-definition time, before any container
+  // exists. Boot validation is the only place a typo in it can still be caught.
+  @IsOptional()
+  @IsNumberString({}, { message: "SCVS_QUERY_ADDRESS_THROTTLE_LIMIT must be a number" })
+  SCVS_QUERY_ADDRESS_THROTTLE_LIMIT?: string;
+
+  // Positive, not just numeric: a `0` would make the readiness probe report the database unreachable on
+  // every call, taking a healthy deployment out of service at boot.
+  @IsOptional()
+  @Matches(/^[1-9]\d*$/, {
+    message: "SCVS_READINESS_DB_TIMEOUT_MS must be a positive number of milliseconds",
+  })
+  SCVS_READINESS_DB_TIMEOUT_MS?: string;
+
   // Positive, not just numeric: the SDK refuses a non-positive timeout, so a `0` would boot clean and then fail
   // every query.
   @IsOptional()

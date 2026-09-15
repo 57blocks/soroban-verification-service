@@ -50,6 +50,13 @@ const configuration = () => ({
   // every other setting instead of a package reading POSTGRES_* off process.env itself.
   postgres: readDbEnv(),
   corsOrigin: process.env.CORS_ORIGIN || "*",
+  // The global read budget, per client address per minute. Wide on purpose: every route it covers is answered
+  // from this service's own database, so it is a bound on abuse rather than a quota anyone should feel. The
+  // one route that reaches a third party carries its own, much tighter ceiling — see results.controller.ts.
+  queryThrottleLimit: numberEnv("SCVS_QUERY_THROTTLE_LIMIT", 600),
+  // How long the readiness probe waits for `SELECT 1` before reporting the database unreachable. Must stay
+  // below the balancer's health-check timeout: past it the balancer stops waiting and the answer is moot.
+  readinessDbTimeoutMs: numberEnv("SCVS_READINESS_DB_TIMEOUT_MS", 2_000),
   queryTimeoutMs: numberEnv("SCVS_QUERY_TIMEOUT_MS", 5_000),
   queryCacheTtlMs: numberEnv("SCVS_QUERY_CACHE_TTL_MS", 30_000),
   // How often the retained aggregation is refreshed. Zero disables the timer entirely, for a deployment driving

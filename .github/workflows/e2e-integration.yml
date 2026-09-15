@@ -258,6 +258,29 @@ jobs:
             echo "SCVS_E2E_WINDOW_SUBMIT_MS=$window" >> "$GITHUB_ENV"
           fi
 
+      # Same source, the other service's contract. Without this E2E-QRY-13 skips, and a deployment-level
+      # quota nobody measures is a quota nobody knows is enforced.
+      - name: Export the deployment's published query quota
+        shell: bash
+        run: |
+          contract="config/deploy/${SCVS_E2E_ENV}/query-svc.json"
+          if [[ ! -f "$contract" ]]; then
+            echo "no deploy contract at $contract — QRY-13 will skip" >&2
+            exit 0
+          fi
+          # The ADDRESS tier, not the global one: QRY-13 probes the route that reaches an upstream RPC, which
+          # is the ceiling worth measuring against a real deployment.
+          quota=$(jq -r '.secrets.variables.SCVS_QUERY_ADDRESS_THROTTLE_LIMIT | (.value // .default // empty)' "$contract")
+          if [[ -n "$quota" ]]; then
+            echo "SCVS_E2E_QUOTA_QUERY=$quota" >> "$GITHUB_ENV"
+            echo "address-route quota for $SCVS_E2E_ENV: $quota per window"
+          else
+            echo "$contract declares no SCVS_QUERY_ADDRESS_THROTTLE_LIMIT — QRY-13 will skip" >&2
+          fi
+          # No variable carries this one: the throttler's window is the `ttl` hardcoded beside the limit in
+          # results.controller.ts. Exported anyway so the case reads the real figure rather than its own default.
+          echo "SCVS_E2E_WINDOW_QUERY_MS=60000" >> "$GITHUB_ENV"
+
       - name: Run smoke cases
         if: ${{ inputs.test_suite == 'smoke' || inputs.test_suite == 'both' }}
         env:
