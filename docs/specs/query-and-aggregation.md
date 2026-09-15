@@ -113,6 +113,13 @@ state ratchets everyone else's count up until they are refused inside their own 
 The quota bounds what one caller extracts. It is not a bound on this deployment's aggregate
 outbound rate to an upstream RPC endpoint, which many callers across many tasks can still exceed.
 
+It is also a per-process count, with no tier shared between tasks. A caller outside the balancer
+therefore meets the task count times the configured ceiling, so the end-to-end case asserts that
+excess is refused and refused cleanly, and deliberately does not assert what the ceiling is. That the
+ceiling a deployment configures is the ceiling it runs is a deploy-time property, checked where the
+task definition is rendered from the contract — not something a client can measure through a
+balancer.
+
 Verified by: `services/query-svc/src/common/fixed-window-throttler.storage.ts` (FixedWindowThrottlerStorage),
 `services/query-svc/test/throttler-storage.spec.ts` (one caller's counter is its own),
 `services/query-svc/src/common/adapter-route-throttle.middleware.ts` (adapterRouteThrottle),
