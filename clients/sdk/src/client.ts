@@ -22,6 +22,7 @@ import {
   originsFromVerifiers,
   readBoundedBytes,
   FetchPolicyError,
+  type FetchPolicy,
   type FetchPolicyInput,
 } from "./fetch-policy.js";
 import {
@@ -47,6 +48,13 @@ export type SoveClientOptions = {
   /** Absolute base for resolving relative references in TVL entries (`url`, `manifest_url`). */
   baseUrl?: string;
   fetch?: typeof fetch;
+  /**
+   * Same shape as `fetch`, built from the policy this client resolves internally (TVL origins, scheme,
+   * private-range setting) rather than handed one ready-made — a transport that pins DNS resolution against
+   * private ranges needs to know `allowedOrigins` before its first request, and only `newClient` knows that
+   * once `policy` below and the TVL have both been applied. Takes precedence over `fetch` when both are given.
+   */
+  fetchFactory?: (policy: FetchPolicy) => typeof fetch;
   /** Applied to every fetch this client makes. Default 5_000. */
   timeoutMs?: number;
   /** Defaults to https-only with origins pinned to the TVL's own. Override for a local dev root. */
@@ -132,7 +140,8 @@ export function newClient(options: SoveClientOptions): SoveClient {
     // origin allowed.
     ...definedOnly(options.policy),
   });
-  const guardedFetch = createGuardedFetch(policy, options.fetch ?? fetch);
+  const impl = options.fetchFactory ? options.fetchFactory(policy) : (options.fetch ?? fetch);
+  const guardedFetch = createGuardedFetch(policy, impl);
 
   const getJson = async (url: string): Promise<unknown> => {
     const response = await guardedFetch(url);
@@ -183,10 +192,13 @@ export function newClient(options: SoveClientOptions): SoveClient {
     },
     results: {
       verifyUrl(entry, verifyOptions) {
+        // `impl`, not `options.fetch`: a caller that supplied only `fetchFactory` (the pinned-DNS transport,
+        // for instance) must not have a peer-supplied results_urls entry silently fetched through the
+        // unpinned global `fetch` instead — `impl` is the one transport every other method here already uses.
         return fetchAndVerifyResultUrl(entry, {
           ...verifyOptions,
           policy,
-          ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+          fetch: impl,
         });
       },
     },

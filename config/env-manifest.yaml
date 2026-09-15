@@ -2244,6 +2244,19 @@ services:
           safe and a dev-only root unreachable, not the reverse. Never set it in a deployed
           environment — with it on, a Trusted Verifiers List entry can point the aggregator at the
           instance metadata endpoint.
+      SCVS_QUERY_PIN_DNS_RESOLUTION:
+        type: boolean
+        default: true
+        tier: knob
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          Whether peer fetches (TVL sync, bulk load) go through the DNS-pinned transport
+          (packages/core/src/pinned-fetch.ts) instead of the global `fetch`, closing the DNS-rebinding
+          gap `checkUrl` alone cannot. Inverted from `SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS` above:
+          absent or true is the strict, protected default, and it is `false` — not `true` — that
+          disables a defense. The only known reason to set it is a test double that intercepts peer
+          responses via `globalThis.fetch`, which the pinned transport bypasses by design and so
+          cannot see. Do NOT set `false` in a deployed environment.
     # Not read by this service, but validated anyway because QuerySvcEnvDto extends SharedEnvDto directly, and
     # SharedEnvDto covers the `stellar-cli` group's four variables in the same class as `base`/`postgres`.
     dto_over_declares:

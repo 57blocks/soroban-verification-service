@@ -194,6 +194,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "SCVS_QUERY_ADDRESS_THROTTLE_LIMIT", observable: "presence", digest: false },
     { name: "SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS", observable: "presence", digest: false },
     { name: "SCVS_QUERY_CACHE_TTL_MS", observable: "presence", digest: false },
+    { name: "SCVS_QUERY_PIN_DNS_RESOLUTION", observable: "presence", digest: false },
     { name: "SCVS_QUERY_THROTTLE_LIMIT", observable: "presence", digest: false },
     { name: "SCVS_QUERY_TIMEOUT_MS", observable: "presence", digest: false },
     { name: "SCVS_READINESS_DB_TIMEOUT_MS", observable: "presence", digest: false },

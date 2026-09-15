@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsx src/registry-status-test.ts && tsx src/publish-source-test.ts && tsx src/verifier-policy-test.ts"
+    "test": "tsx src/registry-status-test.ts && tsx src/publish-source-test.ts && tsx src/verifier-policy-test.ts && tsx src/trusted-verifier-url-test.ts"
   },
   "dependencies": {
     "@scvs/aws": "workspace:*",

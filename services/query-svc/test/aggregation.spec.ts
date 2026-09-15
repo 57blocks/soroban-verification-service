@@ -4,6 +4,12 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AggregationRepository, TrustedVerifiersRepository, createPrismaClient, readDbEnv } from "@scvs/db-query";
 import { AggregationSyncService } from "../src/modules/aggregation/aggregation-sync.service.js";
 
+// This suite stands in for a peer by replacing `globalThis.fetch` (see `serve()` below). The pinned transport
+// bypasses that global by design — its whole point is seeing the real DNS answer `globalThis.fetch` cannot
+// expose — so a test double there is invisible to it. Read before `bootstrap.js` builds the app, which is
+// where `pinDnsResolution` is read once and fixed for the process's life.
+process.env.SCVS_QUERY_PIN_DNS_RESOLUTION = "false";
+
 const { createTestApp } = await import("./bootstrap.js");
 
 const prisma = createPrismaClient(readDbEnv());

@@ -7,6 +7,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   ValidateNested,
 } from "class-validator";
 // Subpath imports, not `@scvs/core`'s barrel: the barrel re-exports `rebuild-key.js` (`node:crypto`), and
@@ -35,16 +36,36 @@ export class TrustedVerifier {
   @IsString() id!: string;
   /** The operator's own label, for its own display. Not identity, and not the verifier's own name. */
   @IsString() display_name!: string;
-  /** The verifier's result root, and this entry's identity. */
-  @IsString() url!: string;
-  @IsString() manifest_url!: string;
+  /**
+   * The verifier's result root, and this entry's identity. Every TVL entry URL becomes an outbound fetch
+   * origin (`originsFromVerifiers`), so its scheme is constrained the same way `SCVS_TRUSTED_VERIFIERS_SOURCE`
+   * already is: `checkUrl`'s private-range and DNS-rebinding checks only run at request time, but a
+   * non-`https:` scheme here is wrong regardless of what a name resolves to, so it is caught here instead of
+   * waiting for the first fetch to refuse it. `require_tld: false` matches `checkUrl`'s own tolerance for an
+   * IP-literal or bare hostname (e.g. a self-hosted deployment's internal DNS) — `checkUrl`, not this field,
+   * is what refuses a private range.
+   */
+  @IsUrl(
+    { protocols: ["https"], require_protocol: true, require_tld: false },
+    { message: "url must be an https: URL" },
+  )
+  url!: string;
+  @IsUrl(
+    { protocols: ["https"], require_protocol: true, require_tld: false },
+    { message: "manifest_url must be an https: URL" },
+  )
+  manifest_url!: string;
   @IsOptional()
   @IsString()
   trust_tier?: string;
   @IsIn(trustedVerifierStatuses)
   status!: TrustedVerifierStatus;
   /** Where this verifier serves its own bulk load. */
-  @IsString() bulk_load_url!: string;
+  @IsUrl(
+    { protocols: ["https"], require_protocol: true, require_tld: false },
+    { message: "bulk_load_url must be an https: URL" },
+  )
+  bulk_load_url!: string;
 }
 
 export const TRUSTED_VERIFIERS_LIST_SCHEMA = "stellar-trusted-verifiers-list" as const;

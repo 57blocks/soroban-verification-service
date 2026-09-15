@@ -1,6 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { TrustedVerifiersRepository } from "@scvs/db-query";
 import { newClient, type ResolvedVerifier, type SoveClient, type TrustedVerifier } from "soroban-verification-client";
+import { canPin } from "@scvs/core/pinned-fetch";
+import { RESULT_FETCH_FACTORY, type ResultFetchFactory } from "./result-fetch-factory.js";
 import {
   loadTrustedVerifiersList,
   TRUSTED_VERIFIERS_LIST_SCHEMA,
@@ -18,6 +20,7 @@ export class SoveClientFactory {
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(TrustedVerifiersRepository) private readonly verifiers: TrustedVerifiersRepository,
+    @Inject(RESULT_FETCH_FACTORY) private readonly fetchFactory: ResultFetchFactory,
   ) {}
 
   /**
@@ -26,16 +29,19 @@ export class SoveClientFactory {
    */
   async forCurrentTvl(): Promise<{ client: SoveClient; verifiers: readonly ResolvedVerifier[] }> {
     const tvl = await loadTrustedVerifiersList(this.verifiers, { activeOnly: true });
+    const policy = this.policy();
     const client = newClient({
       tvl,
       timeoutMs: this.configService.get("queryTimeoutMs", { infer: true }),
-      ...(this.policy() ? { policy: this.policy() } : {}),
+      fetchFactory: this.fetchFactoryFor(policy),
+      ...(policy ? { policy } : {}),
     });
     return { client, verifiers: client.verifiers };
   }
 
   /** One verifier's own client, for the sync path — which always knows whose entry it is reading. */
   async forVerifier(verifier: TrustedVerifier): Promise<SoveClient> {
+    const policy = this.policy();
     return newClient({
       tvl: {
         schema: TRUSTED_VERIFIERS_LIST_SCHEMA,
@@ -44,7 +50,9 @@ export class SoveClientFactory {
         updated_at: new Date().toISOString(),
       },
       timeoutMs: this.configService.get("queryTimeoutMs", { infer: true }),
-      ...(this.policy() ? { policy: this.policy() } : {}),
+      // The sync path repeats this request on every tick, so it's the one DNS rebinding actually targets.
+      fetchFactory: this.fetchFactoryFor(policy),
+      ...(policy ? { policy } : {}),
     });
   }
 
@@ -53,5 +61,16 @@ export class SoveClientFactory {
     return this.configService.get("allowInsecureResultRoots", { infer: true })
       ? { allowedSchemes: ["https:", "http:"], blockPrivateRanges: false }
       : undefined;
+  }
+
+  /**
+   * `canPin` is the same question `createPinnedFetch` asks itself before it will run at all — asked here first
+   * so a policy it would refuse (the `allowInsecureResultRoots` relaxation above, admitting `http:`) falls back
+   * to a plain, unpinned fetch instead of throwing. That relaxation already accepts an unauthenticated local
+   * dev root, so the fallback costs it nothing it was not already giving up.
+   */
+  private fetchFactoryFor(policy: { allowedSchemes: string[] } | undefined): ResultFetchFactory {
+    if (policy !== undefined && !canPin(policy)) return () => globalThis.fetch;
+    return this.fetchFactory;
   }
 }

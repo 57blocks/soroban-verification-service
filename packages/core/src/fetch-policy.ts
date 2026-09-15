@@ -33,9 +33,15 @@ export class FetchPolicyError extends Error {
  * nothing.
  */
 export class UpstreamNotDeliveredError extends Error {
-  constructor(message: string) {
+  /** Set only when the failure is a real HTTP status the origin returned — absent for a timeout, a name with
+   *  no address, or any other failure that never reached that layer. `createPinnedFetch` reads this to answer
+   *  with the status itself (so a peer's 404 stays a 404, not a generic refusal) rather than throwing. */
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "UpstreamNotDeliveredError";
+    this.status = status;
   }
 }
 

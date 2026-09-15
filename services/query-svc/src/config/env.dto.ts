@@ -67,4 +67,11 @@ export class QuerySvcEnvDto extends SharedEnvDto {
     message: 'SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS must be exactly "true" or "false"',
   })
   SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS?: string;
+
+  // Defaults to on — see configuration.ts's `pinDnsResolution` for why a test double needs it off.
+  @IsOptional()
+  @IsIn(["true", "false"], {
+    message: 'SCVS_QUERY_PIN_DNS_RESOLUTION must be exactly "true" or "false"',
+  })
+  SCVS_QUERY_PIN_DNS_RESOLUTION?: string;
 }
