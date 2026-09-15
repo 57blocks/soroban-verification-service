@@ -103,8 +103,12 @@ jobs:
 
       # First step that can fail, and it holds no credentials: an environment may only run a commit a release
       # could be cut from. This repository cannot have branch protection, so this check is what stands in.
+      # `--sha` is not optional here: under `workflow_call` the ambient commit is the CALLER's, so the check
+      # would prove the operations repository's own HEAD is on this repository's main, which it never is.
       - name: Refuse a deploy from a commit that is not on main
-        run: node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}"
+        run: |
+          node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}" \
+            --sha "${{ inputs.source_sha }}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
