@@ -22,6 +22,14 @@ on:
           image already exists, pushed by publish-images.yml, and is addressed by this commit.
         type: string
         required: true
+      contract_bundle:
+        description: >-
+          Base64-encoded JSON, shaped `{ "<env>": { "builder": <contract> } }`, covering both dev and
+          staging (this workflow registers both from one run). Optional: when empty, falls back to
+          reading `config/deploy/<env>/builder.json` from this repository's own checkout.
+        type: string
+        required: false
+        default: ""
     secrets:
       AWS_ACCOUNT_ID:
         description: >-
@@ -60,6 +68,18 @@ jobs:
         with:
           repository: ${{ inputs.source_repository }}
           ref: ${{ inputs.source_sha }}
+
+      - name: Extract builder's deployment contracts (dev + staging)
+        if: inputs.contract_bundle != ''
+        env:
+          CONTRACT_BUNDLE_B64: ${{ inputs.contract_bundle }}
+        run: |
+          set -euo pipefail
+          echo "$CONTRACT_BUNDLE_B64" | base64 -d > /tmp/contract-bundle.json
+          for ENV in dev staging; do
+            jq -e --arg env "$ENV" '.[$env]["builder"] // error("no contract for " + $env + "/builder in bundle")' \
+              /tmp/contract-bundle.json > "/tmp/contract-${ENV}.json"
+          done
 
       # A Docker-managed volume, or a sourcePath that differs from its containerPath, mounts an empty directory
       # and the build fails with "could not find Cargo.toml in /source".
@@ -259,7 +279,9 @@ jobs:
               # around it.
               jq -n --argjson p "$ECS_PROPERTIES" \
                 '{jobDefinitionName: "x", type: "container", ecsProperties: $p}' > /tmp/builder-jobdef.json
-              node eng-tools/check-taskdef-boundary.mjs --env "$ENV" --service builder /tmp/builder-jobdef.json
+              CONTRACT_ARG=()
+              if [ -f "/tmp/contract-${ENV}.json" ]; then CONTRACT_ARG=(--contract "@/tmp/contract-${ENV}.json"); fi
+              node eng-tools/check-taskdef-boundary.mjs --env "$ENV" --service builder "${CONTRACT_ARG[@]}" /tmp/builder-jobdef.json
 
               JOB_DEF_ARN=$(aws batch register-job-definition \
                 --job-definition-name "$FAMILY" \
