@@ -45,23 +45,36 @@ const files = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsW
 
 if (!service || files.length !== 1) {
   console.error(
-    "usage: check-taskdef-boundary.mjs --env <env> --service <name> <rendered-taskdef.json>"
+    "usage: check-taskdef-boundary.mjs --env <env> --service <name> [--contract <json|@file>] <rendered-taskdef.json>"
   );
   process.exit(2);
 }
 
-const ROOT = process.cwd();
-const contractPath = join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
-if (!existsSync(contractPath)) {
-  // Fail closed: no contract means nothing to check against, which is not the same as nothing to find.
-  console.error(
-    `::error::no deployment contract at config/deploy/${targetEnv}/${service}.json — ` +
-      `cannot assert the trust boundary for a service it does not describe`
-  );
-  process.exit(1);
+function loadJson(raw, what) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw.startsWith("@") ? readFileSync(raw.slice(1), "utf8") : raw);
+  } catch (error) {
+    console.error(`::error::--${what} is not valid JSON: ${error.message}`);
+    process.exit(1);
+  }
 }
 
-const contract = JSON.parse(readFileSync(contractPath, "utf8"));
+function contractFromCwd() {
+  const ROOT = process.cwd();
+  const contractPath = join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
+  if (!existsSync(contractPath)) {
+    // Fail closed: no contract means nothing to check against, which is not the same as nothing to find.
+    console.error(
+      `::error::no deployment contract at config/deploy/${targetEnv}/${service}.json — ` +
+        `cannot assert the trust boundary for a service it does not describe`
+    );
+    process.exit(1);
+  }
+  return JSON.parse(readFileSync(contractPath, "utf8"));
+}
+
+const contract = loadJson(flag("contract"), "contract") ?? contractFromCwd();
 
 let rendered;
 try {
