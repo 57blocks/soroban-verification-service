@@ -31,6 +31,7 @@
     "generate:third-party-notices": "node eng-tools/generate-third-party-notices.mjs",
     "check:env": "node eng-tools/check-env-manifest.mjs",
     "check:workflows": "node eng-tools/check-workflow-syntax.mjs",
+    "check:workflow-pins": "node eng-tools/check-workflow-pins.mjs",
     "check:secrets": "node eng-tools/check-secrets.mjs",
     "check:deployment-data": "node eng-tools/check-deployment-data.mjs",
     "check:test-row-cleanup": "node eng-tools/check-test-row-cleanup.mjs",
