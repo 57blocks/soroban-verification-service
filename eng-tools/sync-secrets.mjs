@@ -44,18 +44,31 @@ const dryRun = has("dry-run");
 
 if (!service) {
   console.error(
-    "usage: sync-secrets.mjs --env <env> --service <name> [--descriptor <json|@file>] [--dry-run]"
+    "usage: sync-secrets.mjs --env <env> --service <name> [--descriptor <json|@file>] [--contract <json|@file>] [--dry-run]"
   );
   process.exit(2);
 }
 
-const ROOT = process.cwd();
-const contractPath = join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
-if (!existsSync(contractPath)) {
-  console.error(`::error::no contract at config/deploy/${targetEnv}/${service}.json`);
-  process.exit(1);
+function loadContract() {
+  const explicit = flag("contract");
+  if (explicit) {
+    const text = explicit.startsWith("@") ? readFileSync(explicit.slice(1), "utf8") : explicit;
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      console.error(`::error::--contract is not valid JSON: ${error.message}`);
+      process.exit(1);
+    }
+  }
+  const ROOT = process.cwd();
+  const contractPath = join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
+  if (!existsSync(contractPath)) {
+    console.error(`::error::no contract at config/deploy/${targetEnv}/${service}.json`);
+    process.exit(1);
+  }
+  return JSON.parse(readFileSync(contractPath, "utf8"));
 }
-const contract = JSON.parse(readFileSync(contractPath, "utf8"));
+const contract = loadContract();
 
 if (contract.kind === "batch-job-definition") {
   // Not an oversight and not a no-op worth being quiet about: a Batch job definition keeps its
