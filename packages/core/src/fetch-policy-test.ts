@@ -47,8 +47,6 @@ function main(): void {
   // That gap is what pinningLookup (services/orchestrator-svc) exists to close post-resolution.
   assert.equal(isBlockedIpLiteral("attacker-controlled.example.com"), false);
 
-  // originsFromVerifiers: every named URL contributes an origin, duplicates collapse, and a malformed
-  // reference is skipped rather than thrown (a relative reference resolves through baseUrl elsewhere).
   const origins = originsFromVerifiers([
     { url: "https://a.example.com/root", manifest_url: "https://a.example.com/m.json" },
     { url: "https://b.example.com", bulk_load_url: "https://api.b.example.com/wasms" },

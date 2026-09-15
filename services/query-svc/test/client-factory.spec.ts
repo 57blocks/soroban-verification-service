@@ -24,7 +24,6 @@ function configReturning(allowInsecureResultRoots: boolean) {
   };
 }
 
-/** Would throw if it were ever called — proof the strict path never reaches an http: fetch attempt. */
 const unreachableFetchFactory = () => {
   throw new Error("pinned fetchFactory must not be invoked when allowInsecureResultRoots relaxes the scheme");
 };

@@ -49,10 +49,7 @@ export class SoveClientFactory {
         updated_at: new Date().toISOString(),
       },
       timeoutMs: this.configService.get("queryTimeoutMs", { infer: true }),
-      // Pinned by default (RESULT_FETCH_FACTORY, aggregation.module.ts) so a TVL entry's host cannot rebind
-      // between this check and the request that follows it (packages/core's pinningLookup). The sync path is
-      // exactly the loop that repeats this request every SCVS_AGGREGATION_SYNC_INTERVAL_MS, so it is the path
-      // DNS rebinding actually targets.
+      // The sync path repeats this request on every tick, so it's the one DNS rebinding actually targets.
       fetchFactory: this.fetchFactoryFor(policy),
       ...(policy ? { policy } : {}),
     });

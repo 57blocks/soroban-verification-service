@@ -10,9 +10,6 @@ import { FetchPolicyError, UpstreamNotDeliveredError, type FetchPolicy } from ".
  * only from this subpath — for the same reason `rebuild-key.ts` is, and the same reason `clients/sdk` never
  * imports it directly: a caller that bundles for a browser must not pull it in by accident.
  *
- * `GET`-only. A caller needing another method or a body should not reach for this: every consumer of the
- * client `newClient` returns only ever GETs peer documents.
- *
  * Meant to sit behind `createGuardedFetch` as its `impl`, so it has to honor the same `redirect` contract that
  * wrapper passes down (`fetch-policy.ts`'s `redirect: policy.followRedirects ? "follow" : "error"`) — a caller
  * with `followRedirects: false` (the policy default) must get a refusal on the first 3xx, not this function
@@ -53,12 +50,10 @@ export function createPinnedFetch(
         maxRedirects: hops,
         ...(requestImpl ? { requestImpl } : {}),
       });
-      // A real Response, not a hand-rolled object: every field client.ts/hosted.ts/result-urls.ts and
-      // readBoundedBytes read (`ok`, `status`, `body`, `headers.get("content-length")`) behaves exactly as a
-      // global `fetch`'s would. `url` is the one field the constructor will not take — the spec makes it a
-      // read-only property of the internal response, set by the network layer — so it is defined afterward:
-      // `createGuardedFetch` re-checks `response.url` against the policy on the hop that actually answered,
-      // which matters after a redirect changed the origin from the one `url` (the request's) named.
+      // `url` is the one field the constructor will not take — the spec makes it a read-only property of the
+      // internal response, set by the network layer — so it is defined afterward: `createGuardedFetch`
+      // re-checks `response.url` against the policy on the hop that actually answered, which matters after a
+      // redirect changed the origin from the one `url` (the request's) named.
       const response = new Response(bytes as unknown as BodyInit, {
         status: 200,
         headers: { "content-length": String(bytes.byteLength) },
@@ -67,10 +62,8 @@ export function createPinnedFetch(
       return response;
     } catch (error) {
       // Only a real HTTP status the origin returned becomes a Response — the same case a real `fetch` would
-      // resolve rather than reject for. `status` is unset for every other UpstreamNotDeliveredError (timeout,
-      // a name resolving to no addresses, an unusable redirect) and every other error class (FetchPolicyError
-      // for a refused origin/private-range address, ResponseTooLargeError): those propagate as thrown errors,
-      // which is what classifyFetchError (clients/sdk/src/client.ts) and this method's other callers expect.
+      // resolve rather than reject for. Every other failure propagates as a thrown error, which is what
+      // classifyFetchError (clients/sdk/src/client.ts) and this method's other callers expect.
       if (error instanceof UpstreamNotDeliveredError && error.status !== undefined) {
         return new Response(null, { status: error.status, statusText: error.message });
       }

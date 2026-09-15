@@ -45,9 +45,7 @@ const DEFAULT_SOURCE = "config/trusted-verifiers.local.json";
 // script seeds them — same standard `SCVS_TRUSTED_VERIFIERS_SOURCE` above already holds itself to, applied
 // to what the source actually contains instead of just where it came from. Private-range/localhost hosts are
 // allowed only when the document itself came from a local file (`fromFile` below): that file is read off this
-// machine's own disk, so seeding it already assumes the same trust a URL fetched over the network cannot
-// assume — `config/trusted-verifiers.local.json`, the `DEFAULT_SOURCE`, names `localhost` for exactly this
-// reason.
+// machine's own disk, so seeding it already assumes the same trust a URL fetched over the network cannot.
 const ENTRY_URL_POLICY = normalizePolicy({ allowedSchemes: ["https:"] });
 const ENTRY_URL_POLICY_LOCAL = normalizePolicy({ allowedSchemes: ["https:", "http:"], blockPrivateRanges: false });
 

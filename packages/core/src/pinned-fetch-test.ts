@@ -99,7 +99,6 @@ async function main(): Promise<void> {
     assert.equal(calls, 1, "must not have followed the redirect before refusing");
   }
 
-  // redirect: "follow" (or omitted) walks hops exactly the way fetchThroughDestinationPolicy always has.
   {
     const hops = [redirectTo("https://mirror.example.com/manifest.json"), bodyOf("followed")];
     let calls = 0;
