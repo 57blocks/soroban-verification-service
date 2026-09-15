@@ -39,8 +39,9 @@ export type ResultStorage = {
   exists(path: string): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
   /**
-   * Whether this backend's conditional writes hold ACROSS processes. False for `filesystem`, which serialises
-   * writers only within one process — a limit callers must be able to test, not only read in a document.
+   * Whether this backend's conditional writes hold ACROSS processes. `filesystem` serialises writers within
+   * one process but cannot reach past it, so it reports false — a limit callers must be able to test, not
+   * only read in a document.
    */
   readonly crossProcessAtomicWrites: boolean;
   /**
@@ -158,16 +159,21 @@ class FilesystemResultStorage implements ResultStorage {
     _contentType: string,
     expected: StorageVersion | null,
   ): Promise<StorageWriteResult> {
-    const current = await this.readText(path);
-    const actual = current === undefined ? null : versionOf(current);
-    if (actual !== expected) return "conflict";
     const target = join(this.root, path);
-    await mkdir(dirname(target), { recursive: true });
-    // Write-then-rename so a concurrent reader never observes a half-written document.
-    const staging = `${target}.${randomUUID()}.tmp`;
-    await writeFile(staging, content, "utf8");
-    await rename(staging, target);
-    return "written";
+    // The compare and the rename below are several await points apart. Without this, two writers pinned to
+    // the same version both pass the compare and the loser's bytes replace the winner's — the very lost
+    // update a conditional write exists to prevent.
+    return withFilesystemWriteLock(target, async () => {
+      const current = await this.readText(path);
+      const actual = current === undefined ? null : versionOf(current);
+      if (actual !== expected) return "conflict";
+      await mkdir(dirname(target), { recursive: true });
+      // Write-then-rename so a concurrent reader never observes a half-written document.
+      const staging = `${target}.${randomUUID()}.tmp`;
+      await writeFile(staging, content, "utf8");
+      await rename(staging, target);
+      return "written";
+    });
   }
 
   async list(prefix: string): Promise<string[]> {
@@ -257,6 +263,27 @@ function normalizePrefix(value: string): string {
 function cacheControlForPath(path: string): string {
   if (path.startsWith("reports/")) return "public, max-age=31536000, immutable";
   return "public, max-age=60";
+}
+
+/**
+ * Serialises every conditional write this process makes to ONE absolute path. Keyed by the resolved target
+ * rather than held per instance: `buildResultStorage` hands out a fresh `ResultStorage` on several
+ * orchestrator paths, and two of them over the same root would otherwise race each other.
+ */
+const filesystemWriteLocks = new Map<string, Promise<unknown>>();
+
+function withFilesystemWriteLock<T>(target: string, fn: () => Promise<T>): Promise<T> {
+  const previous = filesystemWriteLocks.get(target) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  // Swallow so a failed attempt does not poison the chain for the next caller on this path — each caller
+  // still observes its own rejection via the returned `next`.
+  const tail = next.catch(() => undefined);
+  filesystemWriteLocks.set(target, tail);
+  // Evict once settled, but only if nobody chained onto this path in the meantime.
+  void tail.finally(() => {
+    if (filesystemWriteLocks.get(target) === tail) filesystemWriteLocks.delete(target);
+  });
+  return next;
 }
 
 /** The filesystem backend's version token: derived from the content, so it cannot drift from the bytes. */

@@ -40,20 +40,30 @@ async function main(): Promise<void> {
   assert.equal(await storage.writeTextIfUnchanged("wasms/b.json", "{}\n", JSON_TYPE, null), "conflict");
   assert.equal(await readFile(join(root, "wasms/b.json"), "utf8"), "{ not json");
 
-  // Interleaved read-modify-writes on one path: the loser is told to retry rather than silently winning.
+  // Two writers pinned to the SAME version, launched concurrently rather than one after the other: the
+  // compare and the rename are several await points apart, so without serialisation both would pass the
+  // compare and the loser's bytes would silently replace the winner's.
   await storage.writeTextIfUnchanged("wasms/c.json", "base\n", JSON_TYPE, null);
-  const [left, right] = await Promise.all([
-    storage.readTextVersioned("wasms/c.json"),
-    storage.readTextVersioned("wasms/c.json"),
+  const pinned = await storage.readTextVersioned("wasms/c.json");
+  assert.ok(pinned);
+  const raced = await Promise.all([
+    storage.writeTextIfUnchanged("wasms/c.json", "left\n", JSON_TYPE, pinned.version),
+    storage.writeTextIfUnchanged("wasms/c.json", "right\n", JSON_TYPE, pinned.version),
   ]);
-  assert.ok(left && right);
-  assert.equal(await storage.writeTextIfUnchanged("wasms/c.json", "left\n", JSON_TYPE, left.version), "written");
-  assert.equal(await storage.writeTextIfUnchanged("wasms/c.json", "right\n", JSON_TYPE, right.version), "conflict");
-  assert.equal(await readFile(join(root, "wasms/c.json"), "utf8"), "left\n");
+  assert.deepEqual([...raced].sort(), ["conflict", "written"], "exactly one racer may land");
+  const landed = await readFile(join(root, "wasms/c.json"), "utf8");
+  assert.ok(landed === "left\n" || landed === "right\n", "the winner's bytes, whole");
+
+  // Create-if-absent races the same way: two writers both seeing an absent object must not both land.
+  const created = await Promise.all([
+    storage.writeTextIfUnchanged("wasms/d.json", "first\n", JSON_TYPE, null),
+    storage.writeTextIfUnchanged("wasms/d.json", "second\n", JSON_TYPE, null),
+  ]);
+  assert.deepEqual([...created].sort(), ["conflict", "written"], "exactly one creator may land");
 
   console.log(
     "Conditional writes: version pinning, create-if-absent, stale refusal, corrupt-is-not-absent, " +
-      "and a lost read-modify-write reported as a conflict passed",
+      "and two concurrent racers resolving to exactly one winner passed",
   );
 }
 
