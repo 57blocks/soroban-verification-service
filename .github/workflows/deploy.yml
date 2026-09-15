@@ -57,6 +57,9 @@ on:
 permissions:
   id-token: write # OIDC -> AWS role assumption
   contents: read
+  # A called workflow's `permissions:` is the CEILING for its jobs, not an addition to what the caller
+  # granted: without this the image pull below is denied `403` however carefully the caller asked for it.
+  packages: read
 
 # No `concurrency:` here on purpose. A called workflow that repeats its caller's group deadlocks
 # against it — the caller holds the group, this waits for it, and GitHub cancels the run. The lock
