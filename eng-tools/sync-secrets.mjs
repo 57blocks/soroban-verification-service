@@ -49,6 +49,8 @@ if (!service) {
   process.exit(2);
 }
 
+const contractSource = flag("contract") ? "--contract" : `config/deploy/${targetEnv}/${service}.json`;
+
 function loadContract() {
   const explicit = flag("contract");
   if (explicit) {
@@ -82,7 +84,7 @@ if (contract.kind === "batch-job-definition") {
 const variables = contract.secrets?.variables ?? {};
 const secretName = contract.secrets?.config_secret;
 if (!secretName) {
-  console.error(`::error::${contractPath} declares no secrets.config_secret — nothing to write to`);
+  console.error(`::error::${contractSource} declares no secrets.config_secret — nothing to write to`);
   process.exit(1);
 }
 
