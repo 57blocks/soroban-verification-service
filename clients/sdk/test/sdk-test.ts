@@ -671,9 +671,8 @@ async function hostileInputs(): Promise<void> {
     FetchPolicyError,
   );
 
-  // verifyUrl must reach a `fetchFactory`-only client through the same transport `newClient` built for every
-  // other method — a caller supplying only `fetchFactory` (e.g. query-svc's DNS-pinned transport) must not have
-  // a peer-supplied results_urls entry silently fetched through the unpinned global `fetch` instead.
+  // ...and the same holds for a client built with only `fetchFactory` (query-svc's DNS-pinned transport), not
+  // just one built with `fetch`.
   let factoryCalls = 0;
   const factoryClient = newClient({
     tvl,
