@@ -27,7 +27,7 @@ describe.each(QUOTA_VARS)("%s", (variable) => {
 });
 
 /**
- * The ordering rule (docs/invariants.md rule 35). `@Throttle` REPLACES the global budget for the route it
+ * The ordering rule. `@Throttle` REPLACES the global budget for the route it
  * decorates rather than stacking under it, so an address tier at or above the global one widens that route
  * instead of narrowing it — and nothing looks wrong at runtime, which is why it is a boot error.
  */

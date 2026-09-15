@@ -184,12 +184,22 @@ export class VerificationsController {
 
   @Sse("api/verification/v1/verifications/:job_id/events")
   @Header("Cache-Control", "no-store")
+  // The fixed-window throttler counts requests, and waiting on an already-open stream is not a request, so
+  // @SkipThrottle applies. Opening a stream is a different action: it holds a socket/listener for the
+  // connection's life, so it is metered by AbuseGuard on its own (looser) tier — JobsService.streamJob's
+  // StreamConcurrencyLimiter bounds how many stay open at once; this bounds how fast new ones may be opened.
   @SkipThrottle()
+  @UseGuards(AbuseGuard)
   // Streaming (`text/event-stream`) endpoint, not a normal request/response route.
   @ApiExcludeEndpoint()
   @ApiParam({ name: "job_id", format: "uuid" })
   @ApiOkResponse({ type: JobStatusResponse, description: "One event per status change, `text/event-stream`." })
   @ApiBadRequestResponse({ description: "invalid_job_id" })
+  // A real 429 from AbuseGuard, thrown before the SSE response starts. The separate concurrency-ceiling
+  // rejection (JobsService.streamJob's StreamConcurrencyLimiter) is a different path: the connection has
+  // already opened at 200 by then, so that one answers in-band as an SSE `data` event carrying
+  // `stream_connection_limit_reached`, not as an HTTP status code.
+  @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   jobEvents(
     @Param(
       "job_id",

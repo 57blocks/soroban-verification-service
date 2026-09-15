@@ -64,6 +64,15 @@ on:
           The deploy-role fallback's account id. An identifier, not a credential — it is a secret
           only so it stays out of the tree, and the caller passes it explicitly.
         required: false
+      SOURCE_APP_ID:
+        description: >-
+          GitHub App that may read this repository, while it is still private. A caller's own token is
+          scoped to the caller, so without this the checkouts below cannot see this project's source.
+          Both are unnecessary — and should be deleted — once the repository is public.
+        required: false
+      SOURCE_APP_PRIVATE_KEY:
+        description: "That App's private key."
+        required: false
 
 permissions:
   id-token: write # OIDC -> AWS role assumption
@@ -92,9 +101,18 @@ jobs:
     steps:
       # The handshake runs a script from the repository, so this job needs the tree even though it makes no
       # other use of it.
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -211,9 +229,17 @@ jobs:
             if [ -z "$TAG" ]; then
               # Newest image in the repository, resolved by push time — a manual run should not have to know a
               # commit SHA to apply already-released migrations.
+              #
+              # Sorted here rather than in `--query`: the CLI paginates at 100 images and applies a query to
+              # each page, so `--output text` returns one answer PER PAGE. A repository that has crossed 100
+              # then yields a two-line value, which breaks $GITHUB_OUTPUT rather than picking the wrong image.
               TAG=$(aws ecr describe-images --repository-name "$SERVICE_ECR_REPOSITORY" \
-                --region "$AWS_REGION" \
-                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text)
+                --region "$AWS_REGION" --output json \
+                | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty')
+            fi
+            if [ -z "$TAG" ]; then
+              echo "::error::$SERVICE_ECR_REPOSITORY holds no tagged image to migrate from"
+              exit 1
             fi
             IMAGE="${REGISTRY}/${SERVICE_ECR_REPOSITORY}:${TAG}"
           fi

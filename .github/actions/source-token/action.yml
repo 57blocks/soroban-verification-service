@@ -1,0 +1,56 @@
+name: Mint a read token for the application repository
+description: >-
+  Hands back a token that can read this project's source and its published images. Exists only while
+  that repository is private: a caller's own `GITHUB_TOKEN` is scoped to the caller, so a deployment
+  driven from the operations repository cannot check this one out or pull its packages. Given no App
+  credentials it returns the caller's token unchanged, which is the right answer once the repository
+  is public — so the flip is two deleted secrets, not a workflow change.
+
+inputs:
+  app_id:
+    description: "GitHub App id. Empty falls back to the caller's own token."
+    required: false
+    default: ""
+  private_key:
+    description: "That App's private key. Empty falls back to the caller's own token."
+    required: false
+    default: ""
+  repository:
+    description: "owner/name the token must be able to read. The App has to be installed on it."
+    required: true
+
+outputs:
+  token:
+    description: "A token that can read `repository`, or the caller's token when no App was given."
+    value: ${{ steps.app.outputs.token || github.token }}
+
+runs:
+  using: composite
+  steps:
+    # An installation token is minted per job and expires in an hour. It cannot be passed between jobs:
+    # GitHub drops a job output whose value contains a registered secret, so each job that needs one
+    # mints its own.
+    - name: Split the repository into owner and name
+      if: inputs.app_id != '' && inputs.private_key != ''
+      id: split
+      shell: bash
+      env:
+        SOURCE_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        if [[ "$SOURCE_REPOSITORY" != */* ]]; then
+          echo "::error::repository must be owner/name, got '${SOURCE_REPOSITORY}'"
+          exit 1
+        fi
+        echo "owner=${SOURCE_REPOSITORY%%/*}" >> "$GITHUB_OUTPUT"
+        echo "name=${SOURCE_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
+
+    - name: Mint an installation token
+      if: inputs.app_id != '' && inputs.private_key != ''
+      id: app
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app_id }}
+        private-key: ${{ inputs.private_key }}
+        owner: ${{ steps.split.outputs.owner }}
+        repositories: ${{ steps.split.outputs.name }}

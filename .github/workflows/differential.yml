@@ -28,13 +28,22 @@ on:
         type: boolean
         required: false
         default: false
+    secrets:
+      SOURCE_APP_ID:
+        description: >-
+          GitHub App that may read this repository, while it is still private. A caller's own token is
+          scoped to the caller, so without this the checkouts below cannot see this project's source.
+          Both are unnecessary — and should be deleted — once the repository is public.
+        required: false
+      SOURCE_APP_PRIVATE_KEY:
+        description: "That App's private key."
+        required: false
 permissions:
   id-token: write # OIDC -> AWS role assumption, for the stellar-cli cache read
   contents: read
 
-concurrency:
-  group: differential-${{ github.ref }}
-  cancel-in-progress: false
+# No `concurrency:` here — see deploy.yml's note. `github.ref` under `workflow_call` is the caller's,
+# so a group built from it named one lock for every run whatever ref it was given.
 
 jobs:
   differential:
@@ -46,9 +55,18 @@ jobs:
     # and a sandbox build of the same source.
     timeout-minutes: 150
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       # Without this the harness dies before its first test: fetch-or-build-stellar-cli.sh's first act is

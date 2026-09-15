@@ -145,7 +145,7 @@ caseBlock(
               `window, so this is an observation of the service, not of the client.\n  · ${describeProbe(probe)}\n` +
               `  · This route is the only one that reaches an upstream RPC per request. If it is unbounded, ` +
               `check that SCVS_QUERY_ADDRESS_THROTTLE_LIMIT is set below SCVS_QUERY_THROTTLE_LIMIT — above ` +
-              `it, the @Throttle override widens the budget instead of narrowing it (docs/invariants.md rule 34).`,
+              `it, the @Throttle override widens the budget instead of narrowing it — boot refuses such a value.`,
           );
         }
 

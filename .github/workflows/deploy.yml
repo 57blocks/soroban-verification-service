@@ -44,15 +44,23 @@ on:
           The deploy-role fallback's account id. An identifier, not a credential — it is a secret
           only so it stays out of the tree, and the caller passes it explicitly.
         required: false
+      SOURCE_APP_ID:
+        description: >-
+          GitHub App that may read this repository, while it is still private. A caller's own token is
+          scoped to the caller, so without this the checkouts below cannot see this project's source.
+          Both are unnecessary — and should be deleted — once the repository is public.
+        required: false
+      SOURCE_APP_PRIVATE_KEY:
+        description: "That App's private key."
+        required: false
 
 permissions:
   id-token: write # OIDC -> AWS role assumption
   contents: read
 
-# Never cancel a deploy in flight — a half-rolled ECS service is worse than a queued one.
-concurrency:
-  group: deploy-${{ inputs.environment || 'dev' }}
-  cancel-in-progress: false
+# No `concurrency:` here on purpose. A called workflow that repeats its caller's group deadlocks
+# against it — the caller holds the group, this waits for it, and GitHub cancels the run. The lock
+# belongs to whatever owns the trigger; ours declares `deploy-<environment>`, never cancelling.
 
 env:
   AWS_REGION: ap-southeast-2
@@ -73,9 +81,18 @@ jobs:
     steps:
       # Full history: the composer-skew check below resolves an ECR image tag (a commit SHA) back to the tree at
       # that commit, which a shallow clone cannot do.
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
 
@@ -86,8 +103,12 @@ jobs:
 
       # First step that can fail, and it holds no credentials: an environment may only run a commit a release
       # could be cut from. This repository cannot have branch protection, so this check is what stands in.
+      # `--sha` is not optional here: under `workflow_call` the ambient commit is the CALLER's, so the check
+      # would prove the operations repository's own HEAD is on this repository's main, which it never is.
       - name: Refuse a deploy from a commit that is not on main
-        run: node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}"
+        run: |
+          node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}" \
+            --sha "${{ inputs.source_sha }}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
@@ -144,10 +165,11 @@ jobs:
             exit 1
           fi
 
+          # Sorted in jq, not in `--query`: see db-migrate.yml's note — a query runs per page, so past 100
+          # images `--output text` answers once per page and the newest is not the value that comes back.
           newest=$(aws ecr describe-images --repository-name "$COMPOSER_ECR_REPOSITORY" \
-            --region "${{ env.AWS_REGION }}" \
-            --query 'reverse(sort_by(imageDetails,&imagePushedAt))[0].imageTags[0]' \
-            --output text 2>/dev/null || true)
+            --region "${{ env.AWS_REGION }}" --output json 2>/dev/null \
+            | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty' || true)
 
           if [ -z "$newest" ] || [ "$newest" = "None" ]; then
             # Bootstrap: no composer image exists yet, so there is no skew to create.
@@ -257,9 +279,14 @@ jobs:
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
   # Schema first, code second.
+  #
+  # Addressed by owner/name rather than `./`: inside a workflow that is itself called, a `./` path resolves
+  # against the CALLER's repository — the operations repository, whose `db-migrate.yml` is a dispatch trigger
+  # with no `workflow_call` at all. `uses:` cannot be an expression, so the reference is pinned here in
+  # reviewable source, the same way the operations repository pins this workflow. A fork edits both lines.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: ./.github/workflows/db-migrate.yml
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
     permissions:
       id-token: write
       contents: read
@@ -271,11 +298,17 @@ jobs:
       # migrate dev's database during a staging deploy.
       environment: ${{ inputs.environment || 'dev' }}
       target: verification-svc
+      source_sha: ${{ inputs.source_sha }}
+      source_repository: ${{ inputs.source_repository }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SOURCE_APP_ID: ${{ secrets.SOURCE_APP_ID }}
+      SOURCE_APP_PRIVATE_KEY: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
 
   # ⚠ That last clause states the DESIGN, not dev as deployed.
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: ./.github/workflows/db-migrate.yml
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
     permissions:
       id-token: write
       contents: read
@@ -285,6 +318,12 @@ jobs:
       image_digest: ${{ needs.stage-service-image.outputs.image_digest }}
       environment: ${{ inputs.environment || 'dev' }}
       target: query-svc
+      source_sha: ${{ inputs.source_sha }}
+      source_repository: ${{ inputs.source_repository }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SOURCE_APP_ID: ${{ secrets.SOURCE_APP_ID }}
+      SOURCE_APP_PRIVATE_KEY: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
 
   # One job, not a step in each `deploy-service` matrix leg: all three legs share one image, so three legs would
   # move one tag three times.
@@ -306,9 +345,18 @@ jobs:
     outputs:
       previous_digest: ${{ steps.promote.outputs.previous }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -342,9 +390,18 @@ jobs:
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -385,9 +442,18 @@ jobs:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
       ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -484,9 +550,18 @@ jobs:
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -524,9 +599,18 @@ jobs:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
       ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -611,9 +695,18 @@ jobs:
       SOURCE_IMAGE: ghcr.io/${{ github.repository_owner }}/sv-web
       ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       - name: Configure AWS credentials (OIDC)
@@ -754,9 +847,18 @@ jobs:
     env:
       HOST_ORIGIN: ${{ vars.SCVS_HOST_ORIGIN }}
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       # Node 24 only: the tool imports the error-envelope constants from `packages/core` on type stripping,
@@ -817,9 +919,18 @@ jobs:
     steps:
       # Full history: proving the published build and the running one differ in nothing that ships means
       # diffing the SDK surface between two commits.
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
 

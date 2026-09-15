@@ -46,7 +46,7 @@ export function addressThrottleLimit(): number {
  * `@Throttle` REPLACES the global limit for the route it decorates rather than stacking a second window under
  * it, so an address tier at or above the global one widens that route's allowance instead of narrowing it —
  * the exact opposite of what it is there for, and invisible at runtime because nothing looks wrong.
- * docs/invariants.md rule 35. Checked at boot, where a misconfiguration is still cheap.
+ * Checked at boot, where a misconfiguration is still cheap — the manifest carries the derivation.
  */
 function assertTierOrdering(globalLimit: number, addressLimit: number): void {
   if (addressLimit < globalLimit) return;

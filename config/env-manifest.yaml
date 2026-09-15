@@ -1176,8 +1176,10 @@ services:
           caller in one flow, so one number — but the counter is keyed per route, so each gets its
           own budget and the submission-side ceiling is 2x this value. A client's total across all
           three guarded routes is SCVS_ABUSE_MAX_PER_WINDOW + 2x this, i.e. 30 at the defaults.
-          Job-status polling and its SSE stream stay exempt from this guard entirely; throttling a
-          submitter who is only reading their own accepted job shows up as console timeouts.
+          Job-status polling (`GET /v1/verifications/:id`) stays exempt from this guard entirely;
+          throttling a submitter who is only reading their own accepted job shows up as console
+          timeouts. The SSE stream (`GET /v1/verifications/:id/events`) is not part of this exemption
+          — see SCVS_STREAM_ABUSE_MAX_PER_WINDOW below for its own tier.
 
           ★ **This is the tier that binds a load test, and raising the two above it without raising
           this one changes nothing.** It is per fingerprint, the E2E suite and any load runner reach
@@ -1197,6 +1199,23 @@ services:
           60 for exactly that reason; it no longer does.
 
           Any environment that is not dev or staging keeps 6.
+      SCVS_STREAM_ABUSE_MAX_PER_WINDOW:
+        type: number
+        default: 12
+        note: >-
+          Per-window budget for opening `GET /v1/verifications/:id/events` (the SSE stream). Its own
+          tier, looser than SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW: a dropped stream is meant to reconnect
+          (stream_timeout, a network blip), so a reconnect must not spend the same budget a
+          submission would. This bounds connection *setup rate* only — how many streams may stay
+          open at once is SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB /
+          SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL below, a separate control.
+
+          Sized against that total: a fingerprint opening streams for distinct job ids (each under the
+          per-job cap, so never blocked by it) at this rate for a full SCVS_JOB_STREAM_WINDOW_MS (15
+          min default) reaches at most ~180 concurrently open streams — comfortably under the
+          process-wide default of 500 rather than approaching or exceeding it. Raising this without
+          also raising SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL lets one client's worst case eat a larger
+          share of that ceiling.
       SCVS_ABUSE_FAILOPEN_THRESHOLD:
         type: number
         default: 10
@@ -1209,6 +1228,21 @@ services:
           failure rather than landing everywhere at once. 10 is a starting point, not measured against
           production load.
       SCVS_JOB_STREAM_WINDOW_MS: { type: number, default: 900000 }
+      SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB:
+        type: number
+        default: 5
+        note: >-
+          How many `/events` SSE connections may be open at once for the same job id, enforced
+          in-process by JobsService's StreamConcurrencyLimiter. Per-instance: a multi-replica
+          deployment's effective per-job ceiling is this number times the replica count unless the
+          load balancer/reverse proxy also caps per-client concurrent connections — see §2.1 of
+          docs/self-hosted-deployment.md.
+      SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL:
+        type: number
+        default: 500
+        note: >-
+          Same mechanism as SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB, but process-wide across every
+          job id. Also per-instance, for the same reason.
       SCVS_JOB_MAX_WAIT_MS: { type: number, default: 3600000 }
       SCVS_ACTIVE_JOB_DEDUP_STALE_MS:
         type: number
