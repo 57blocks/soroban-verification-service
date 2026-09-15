@@ -6,11 +6,9 @@ import type { HttpResult } from "../../support/http.js";
 import { aggregatedByAddressUrl } from "../../support/routes.js";
 
 /**
- * **Deliberately malformed, and that is load-bearing.** A CRC-valid address would pass
- * `StrKey.isValidContract` and the route would resolve it over Soroban RPC — one outbound call per admitted
- * request, which at this burst size makes the case that guards against upstream amplification the largest
- * amplifier pointed at that endpoint. Malformed, the quota gate still counts the request and
- * `MalformedContractIdError` is thrown before any `fetch`, so the probe never leaves the deployment.
+ * Malformed, not merely undeployed: a CRC-valid address resolves over Soroban RPC once per admitted request,
+ * which at this burst size would point thousands of them at the upstream. This one is counted by the quota
+ * gate and refused before any `fetch`.
  */
 const MALFORMED_ADDRESS = "not-a-contract-address";
 
@@ -18,20 +16,10 @@ const WINDOW_MS = deploymentParameters.windowQueryMs ?? 60_000;
 const CONCURRENCY = Number(process.env.SCVS_E2E_PROBE_CONCURRENCY ?? 64);
 
 /**
- * How many times the declared ceiling this burst sends.
- *
- * ★ **This case does not measure the enforced ceiling, and must not be read as if it did.** query-svc's quota
- * is per process with no shared tier, so behind a balancer the ceiling a black-box caller meets is the
- * deployment's task count times the declared one — a number neither this suite nor either repository knows.
- * A burst of `quota + margin` would leave every task under its ceiling on a two-task deployment and refuse
- * nothing, which reads as "no quota" and is not. So the burst is sized to exceed the ceiling on any deployment
- * running fewer than this many tasks, and the case asserts only what holds whatever that count turns out to
- * be: that excess is refused, and refused cleanly.
- *
- * "The ceiling the deployment declares is the ceiling it enforces" is a different claim, and not one a caller
- * outside the balancer can make. It belongs to deploy-time verification of the rendered task definition
- * against the contract — see SCV-217, which is also what makes the declared value trustworthy in the first
- * place.
+ * How many times the declared ceiling this burst sends. The quota is per process with no shared tier, so the
+ * ceiling a caller meets behind the balancer is the task count times the declared one — unknown here, and the
+ * reason `quota + margin` refuses nothing on two tasks. Sized to exceed it below this many tasks; the case
+ * asserts refusal, never the ceiling.
  */
 const PROBE_MULTIPLIER = Number(process.env.SCVS_E2E_QUERY_PROBE_MULTIPLIER ?? 4);
 
@@ -80,18 +68,10 @@ async function sendBurst(
 }
 
 /**
- * Idle long enough that no window this caller opened is still standing anywhere.
- *
- * ★ This tier's window is anchored to a key's FIRST hit — `windowExpiresAt = now + ttl` in
- * `FixedWindowThrottlerStorage` — not to a wall-clock boundary. (verification-svc's DB-backed `AbuseGuard`
- * is the one that floors to a boundary, which is why SEC-11/SEC-12 wait for one; copying that helper here
- * would wait for something this counter does not observe.)
- *
- * The consequence the burst has to avoid: QRY-07 drives this same route earlier in the run, and `--runInBand`
- * means it has just finished, so some tasks are part-way through a window with an unknown remainder. A burst
- * beginning there would straddle that window's expiry and see the ceiling twice on those tasks. One full
- * window of silence retires every one of them, so the first request of the burst opens a fresh window on
- * whichever task it lands on.
+ * This tier anchors a window to its key's first hit, not to a wall-clock boundary — SEC-11 waits for a
+ * boundary because `AbuseGuard` floors to one, and that helper does nothing here. QRY-07 drives this route
+ * just before, leaving windows part-spent with an unknown remainder, so a burst starting there would straddle
+ * an expiry and meet the ceiling twice. One full window of silence retires them.
  */
 async function idleUntilEveryWindowHasLapsed(): Promise<void> {
   await sleep(WINDOW_MS + WINDOW_START_MARGIN_MS);
@@ -141,11 +121,7 @@ function describeProbe(probe: Probe): string {
   );
 }
 
-/**
- * The other half of the window condition: having started every task's window at the burst's own first
- * request, the burst must also finish before that window can lapse, or a task resets mid-burst and admits
- * its ceiling twice.
- */
+/** The other half: a burst outlasting the window it opened is counted twice from zero on that task. */
 function expectBurstInsideOneWindow(probe: Probe): void {
   const elapsed = probe.completedAt - probe.startedAt;
   if (elapsed < WINDOW_MS) return;
