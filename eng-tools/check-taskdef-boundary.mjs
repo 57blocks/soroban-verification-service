@@ -71,7 +71,12 @@ function contractFromCwd() {
     );
     process.exit(1);
   }
-  return JSON.parse(readFileSync(contractPath, "utf8"));
+  try {
+    return JSON.parse(readFileSync(contractPath, "utf8"));
+  } catch (error) {
+    console.error(`::error::config/deploy/${targetEnv}/${service}.json is not valid JSON: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 const contract = loadJson(flag("contract"), "contract") ?? contractFromCwd();
