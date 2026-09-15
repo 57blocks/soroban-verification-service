@@ -76,14 +76,14 @@ export async function fetchThroughDestinationPolicy(
       // Never read a redirect body: a 302 carrying 50 MiB would otherwise cost us the full transfer.
       response.destroy();
       if (!location) {
-        throw new UpstreamNotDeliveredError(`Status ${status} from ${current.origin} carried no Location header`);
+        throw new UpstreamNotDeliveredError(`Status ${status} from ${current.origin} carried no Location header`, status);
       }
       // Resolved against the current hop, because a relative `Location` is legal and common.
       let next: URL;
       try {
         next = new URL(location, current);
       } catch {
-        throw new UpstreamNotDeliveredError(`Status ${status} from ${current.origin} carried an unusable Location`);
+        throw new UpstreamNotDeliveredError(`Status ${status} from ${current.origin} carried an unusable Location`, status);
       }
       current = checkUrl(policy, next.toString());
       continue;

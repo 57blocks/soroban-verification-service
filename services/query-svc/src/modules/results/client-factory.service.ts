@@ -28,17 +28,19 @@ export class SoveClientFactory {
    */
   async forCurrentTvl(): Promise<{ client: SoveClient; verifiers: readonly ResolvedVerifier[] }> {
     const tvl = await loadTrustedVerifiersList(this.verifiers, { activeOnly: true });
+    const policy = this.policy();
     const client = newClient({
       tvl,
       timeoutMs: this.configService.get("queryTimeoutMs", { infer: true }),
-      fetchFactory: this.fetchFactory,
-      ...(this.policy() ? { policy: this.policy() } : {}),
+      fetchFactory: this.fetchFactoryFor(policy),
+      ...(policy ? { policy } : {}),
     });
     return { client, verifiers: client.verifiers };
   }
 
   /** One verifier's own client, for the sync path — which always knows whose entry it is reading. */
   async forVerifier(verifier: TrustedVerifier): Promise<SoveClient> {
+    const policy = this.policy();
     return newClient({
       tvl: {
         schema: TRUSTED_VERIFIERS_LIST_SCHEMA,
@@ -51,8 +53,8 @@ export class SoveClientFactory {
       // between this check and the request that follows it (packages/core's pinningLookup). The sync path is
       // exactly the loop that repeats this request every SCVS_AGGREGATION_SYNC_INTERVAL_MS, so it is the path
       // DNS rebinding actually targets.
-      fetchFactory: this.fetchFactory,
-      ...(this.policy() ? { policy: this.policy() } : {}),
+      fetchFactory: this.fetchFactoryFor(policy),
+      ...(policy ? { policy } : {}),
     });
   }
 
@@ -61,5 +63,17 @@ export class SoveClientFactory {
     return this.configService.get("allowInsecureResultRoots", { infer: true })
       ? { allowedSchemes: ["https:", "http:"], blockPrivateRanges: false }
       : undefined;
+  }
+
+  /**
+   * The pinned transport (`createPinnedFetch`) only ever issues `https.request`, so an `allowedSchemes`
+   * admitting `http:` — the `allowInsecureResultRoots` relaxation above — cannot use it: an `http:` request
+   * would be refused at construction (see `createPinnedFetch`'s own guard), not merely left unpinned. That
+   * relaxation already accepts an unauthenticated local dev root, so falling back to a plain, unpinned fetch
+   * here costs it nothing it was not already giving up.
+   */
+  private fetchFactoryFor(policy: { allowedSchemes: string[] } | undefined): ResultFetchFactory {
+    if (policy?.allowedSchemes.some((scheme) => scheme !== "https:")) return () => globalThis.fetch;
+    return this.fetchFactory;
   }
 }

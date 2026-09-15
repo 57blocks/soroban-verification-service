@@ -1,5 +1,5 @@
 import { fetchThroughDestinationPolicy, type HopResponse } from "./policy-bound-fetch.js";
-import { UpstreamNotDeliveredError, type FetchPolicy } from "./fetch-policy.js";
+import { FetchPolicyError, UpstreamNotDeliveredError, type FetchPolicy } from "./fetch-policy.js";
 
 /**
  * A `typeof fetch` whose every request is served by `fetchThroughDestinationPolicy` — `https.request` with a
@@ -24,6 +24,16 @@ export function createPinnedFetch(
   /** Injected for tests; production omits it and `fetchThroughDestinationPolicy` uses real sockets. */
   requestImpl?: (url: URL, policy: FetchPolicy, timeoutMs: number) => Promise<HopResponse>,
 ): typeof fetch {
+  // The transport underneath (`node:https`) cannot speak http: at all, so a policy admitting it — the
+  // `allowInsecureResultRoots` local-dev relaxation — must not reach this function: refused here, at
+  // construction, rather than surfacing as every http: request failing downstream with a confusing "only
+  // https: is requested by this fetcher" once traffic starts. A caller in that mode wants no DNS pinning
+  // anyway — the relaxation already accepts an unauthenticated result root, so pinning it buys nothing.
+  if (policy.allowedSchemes.some((scheme) => scheme !== "https:")) {
+    throw new FetchPolicyError(
+      `createPinnedFetch only supports an https:-only policy, got allowedSchemes: ${policy.allowedSchemes.join(", ")}`,
+    );
+  }
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (init?.method !== undefined && init.method.toUpperCase() !== "GET") {

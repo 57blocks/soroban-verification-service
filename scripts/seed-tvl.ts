@@ -43,13 +43,18 @@ const DEFAULT_SOURCE = "config/trusted-verifiers.local.json";
 
 // A TVL entry's URLs become query-svc's outbound fetch origins (`originsFromVerifiers`) the moment this
 // script seeds them — same standard `SCVS_TRUSTED_VERIFIERS_SOURCE` above already holds itself to, applied
-// to what the source actually contains instead of just where it came from.
+// to what the source actually contains instead of just where it came from. Private-range/localhost hosts are
+// allowed only when the document itself came from a local file (`fromFile` below): that file is read off this
+// machine's own disk, so seeding it already assumes the same trust a URL fetched over the network cannot
+// assume — `config/trusted-verifiers.local.json`, the `DEFAULT_SOURCE`, names `localhost` for exactly this
+// reason.
 const ENTRY_URL_POLICY = normalizePolicy({ allowedSchemes: ["https:"] });
+const ENTRY_URL_POLICY_LOCAL = normalizePolicy({ allowedSchemes: ["https:", "http:"], blockPrivateRanges: false });
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Returns the document text and a label for it. */
-async function loadSource(): Promise<{ label: string; raw: string }> {
+/** Returns the document text, a label for it, and whether it came from this machine's own filesystem. */
+async function loadSource(): Promise<{ label: string; raw: string; fromFile: boolean }> {
   const configured = process.env.SCVS_TRUSTED_VERIFIERS_SOURCE?.trim();
   const source = configured || DEFAULT_SOURCE;
 
@@ -70,7 +75,7 @@ async function loadSource(): Promise<{ label: string; raw: string }> {
         `Could not fetch trusted verifiers list from ${url}: HTTP ${response.status} ${response.statusText}`,
       );
     }
-    return { label: url.toString(), raw: await response.text() };
+    return { label: url.toString(), raw: await response.text(), fromFile: false };
   }
 
   // Relative to the repository root rather than `process.cwd()`: this runs both from a workspace checkout
@@ -80,12 +85,13 @@ async function loadSource(): Promise<{ label: string; raw: string }> {
   const raw = await readFile(path, "utf8").catch((error: Error) => {
     throw new Error(`Could not read trusted verifiers config at ${path}: ${error.message}`);
   });
-  return { label: path, raw };
+  return { label: path, raw, fromFile: true };
 }
 
 async function main(): Promise<void> {
-  const { label, raw } = await loadSource();
+  const { label, raw, fromFile } = await loadSource();
   console.log(`[seed-tvl] Source: ${label}`);
+  const entryUrlPolicy = fromFile ? ENTRY_URL_POLICY_LOCAL : ENTRY_URL_POLICY;
 
   const doc = JSON.parse(raw) as TrustedVerifiersListDocument;
   if (!ACCEPTED_SCHEMAS.includes(doc.schema as (typeof ACCEPTED_SCHEMAS)[number])) {
@@ -125,7 +131,7 @@ async function main(): Promise<void> {
     ] as const) {
       if (value === undefined) continue; // `manifest_url`/`bulk_load_url` are the only fields this document type requires
       try {
-        checkUrl(ENTRY_URL_POLICY, value);
+        checkUrl(entryUrlPolicy, value);
       } catch (error) {
         throw new Error(
           `Verifier "${verifier.id}" in ${label}: ${field} "${value}" is not an admissible URL — ` +
