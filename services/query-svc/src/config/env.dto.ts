@@ -39,4 +39,13 @@ export class QuerySvcEnvDto extends SharedEnvDto {
     message: 'SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS must be exactly "true" or "false"',
   })
   SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS?: string;
+
+  // Defaults to on (configuration.ts). A test double that replaces `globalThis.fetch` cannot intercept the
+  // pinned transport — it bypasses that global on purpose, which is what lets it see the DNS answer `checkUrl`
+  // alone cannot.
+  @IsOptional()
+  @IsIn(["true", "false"], {
+    message: 'SCVS_QUERY_PIN_DNS_RESOLUTION must be exactly "true" or "false"',
+  })
+  SCVS_QUERY_PIN_DNS_RESOLUTION?: string;
 }

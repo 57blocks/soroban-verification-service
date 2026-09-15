@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { TrustedVerifiersRepository } from "@scvs/db-query";
 import { newClient, type ResolvedVerifier, type SoveClient, type TrustedVerifier } from "soroban-verification-client";
+import { RESULT_FETCH_FACTORY, type ResultFetchFactory } from "./result-fetch-factory.js";
 import {
   loadTrustedVerifiersList,
   TRUSTED_VERIFIERS_LIST_SCHEMA,
@@ -18,6 +19,7 @@ export class SoveClientFactory {
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(TrustedVerifiersRepository) private readonly verifiers: TrustedVerifiersRepository,
+    @Inject(RESULT_FETCH_FACTORY) private readonly fetchFactory: ResultFetchFactory,
   ) {}
 
   /**
@@ -29,6 +31,7 @@ export class SoveClientFactory {
     const client = newClient({
       tvl,
       timeoutMs: this.configService.get("queryTimeoutMs", { infer: true }),
+      fetchFactory: this.fetchFactory,
       ...(this.policy() ? { policy: this.policy() } : {}),
     });
     return { client, verifiers: client.verifiers };
@@ -44,6 +47,11 @@ export class SoveClientFactory {
         updated_at: new Date().toISOString(),
       },
       timeoutMs: this.configService.get("queryTimeoutMs", { infer: true }),
+      // Pinned by default (RESULT_FETCH_FACTORY, aggregation.module.ts) so a TVL entry's host cannot rebind
+      // between this check and the request that follows it (packages/core's pinningLookup). The sync path is
+      // exactly the loop that repeats this request every SCVS_AGGREGATION_SYNC_INTERVAL_MS, so it is the path
+      // DNS rebinding actually targets.
+      fetchFactory: this.fetchFactory,
       ...(this.policy() ? { policy: this.policy() } : {}),
     });
   }

@@ -20,6 +20,7 @@ import {
   trustedVerifierStatuses,
   resultRootOf,
 } from "@scvs/storage-layout/shapes";
+import { checkUrl, normalizePolicy, FetchPolicyError } from "@scvs/core/fetch-policy";
 
 type TrustedVerifiersListDocument = {
   schema: string;
@@ -39,6 +40,11 @@ type TrustedVerifiersListDocument = {
 /** Both spellings are accepted. */
 const ACCEPTED_SCHEMAS = [TRUSTED_VERIFIERS_LIST_SCHEMA, TRUSTED_VERIFIERS_LIST_SCHEMA_LEGACY];
 const DEFAULT_SOURCE = "config/trusted-verifiers.local.json";
+
+// A TVL entry's URLs become query-svc's outbound fetch origins (`originsFromVerifiers`) the moment this
+// script seeds them — same standard `SCVS_TRUSTED_VERIFIERS_SOURCE` above already holds itself to, applied
+// to what the source actually contains instead of just where it came from.
+const ENTRY_URL_POLICY = normalizePolicy({ allowedSchemes: ["https:"] });
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -111,6 +117,21 @@ async function main(): Promise<void> {
         `Verifier "${verifier.id}" in ${label} has status "${verifier.status}", which is not one of ` +
           `${trustedVerifierStatuses.join(" | ")}.`,
       );
+    }
+    for (const [field, value] of [
+      ["url", verifier.url],
+      ["manifest_url", verifier.manifest_url],
+      ["bulk_load_url", verifier.bulk_load_url],
+    ] as const) {
+      if (value === undefined) continue; // `manifest_url`/`bulk_load_url` are the only fields this document type requires
+      try {
+        checkUrl(ENTRY_URL_POLICY, value);
+      } catch (error) {
+        throw new Error(
+          `Verifier "${verifier.id}" in ${label}: ${field} "${value}" is not an admissible URL — ` +
+            `${error instanceof FetchPolicyError ? error.message : String(error)}`,
+        );
+      }
     }
   }
 

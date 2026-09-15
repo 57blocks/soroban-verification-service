@@ -63,6 +63,9 @@ const configuration = () => ({
   stellarRpcUrlMainnet: process.env.STELLAR_RPC_URL_MAINNET || "",
   // `env.dto.ts` rejects anything but "true"/"false" at boot, so this comparison is the whole parse.
   allowInsecureResultRoots: process.env.SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS === "true",
+  // Defaults to on — off only where a test double stands in for the peer and needs to see requests through
+  // `globalThis.fetch`, which the pinned transport bypasses by design.
+  pinDnsResolution: process.env.SCVS_QUERY_PIN_DNS_RESOLUTION !== "false",
 });
 
 export default configuration;
