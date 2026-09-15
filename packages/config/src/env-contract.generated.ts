@@ -39,6 +39,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "POSTGRES_SSL", observable: "value", group: "postgres", digest: false },
     { name: "POSTGRES_USER", observable: "presence", group: "postgres", digest: false },
     { name: "SCVS_ABUSE_COUNTER_RETENTION_MS", observable: "presence", digest: false },
+    { name: "SCVS_ABUSE_FAILOPEN_THRESHOLD", observable: "presence", digest: false },
     { name: "SCVS_ABUSE_FINGERPRINT_KEY", observable: "presence", digest: false },
     { name: "SCVS_ABUSE_MAX_PER_WINDOW", observable: "presence", digest: false },
     { name: "SCVS_ABUSE_SWEEP_INTERVAL_MS", observable: "presence", digest: false },

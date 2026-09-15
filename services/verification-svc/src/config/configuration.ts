@@ -56,6 +56,9 @@ const configuration = () => ({
   // Raising one raises a client's total.
   abuseMaxPerWindow: numberEnv("SCVS_ABUSE_MAX_PER_WINDOW", 18),
   submitAbuseMaxPerWindow: numberEnv("SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW", 6),
+  // Consecutive DB-backed abuse-check failures (no intervening success) before AbuseGuardService stops failing
+  // open and starts failing closed instead. Not measured against production load — a starting point.
+  abuseFailOpenThreshold: numberEnv("SCVS_ABUSE_FAILOPEN_THRESHOLD", 10),
   // How long ONE `GET /api/verification/v1/verifications/:id/events` connection stays open before the server
   // ends it and lets the browser's EventSource reconnect (jobs.service.ts).
   jobStreamWindowMs: numberEnv("SCVS_JOB_STREAM_WINDOW_MS", 15 * 60_000),

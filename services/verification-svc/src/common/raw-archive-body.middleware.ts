@@ -2,7 +2,7 @@ import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { DrainState, ScvsLogger } from "@scvs/core";
 import type { NextFunction, Request, Response } from "express";
-import { AbuseGuardService } from "./abuse-guard.js";
+import { AbuseGuardService, FAIL_CLOSED_ERROR } from "./abuse-guard.js";
 import { UPLOAD_SOURCE_ROUTE } from "./abuse.guard.js";
 import { errorBody } from "./api-error.exception.js";
 import type { AppConfigService } from "../config/configuration.js";
@@ -66,15 +66,22 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       return;
     }
 
-    const allowed = await this.abuse.checkAbuseFailOpen(
+    const result = await this.abuse.checkAbuseFailOpen(
       req,
       UPLOAD_SOURCE_ROUTE,
       this.configService.get("submitAbuseMaxPerWindow", { infer: true }),
       this.configService.get("abuseWindowMs", { infer: true }),
       this.logger,
+      this.configService.get("abuseFailOpenThreshold", { infer: true }),
     );
-    if (!allowed) {
-      res.status(429).json(errorBody(429, { error: "rate_limited", message: "Too many requests, please try again later." }));
+    if (!result.allowed) {
+      if (result.reason === "fail_closed") {
+        res.status(503).json(errorBody(503, FAIL_CLOSED_ERROR));
+      } else {
+        res
+          .status(429)
+          .json(errorBody(429, { error: "rate_limited", message: "Too many requests, please try again later." }));
+      }
       this.discardAndClose(req, res);
       return;
     }

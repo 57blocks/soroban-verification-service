@@ -8,6 +8,7 @@ import {
 } from "@scvs/db";
 import { AbuseGuardService, fingerprintRequest } from "../src/common/abuse-guard.js";
 import { AbuseGuard } from "../src/common/abuse.guard.js";
+import type { ApiError } from "../src/common/api-error.exception.js";
 
 /**
  * The Postgres-backed sliding window's own behaviour — untested until now, which is how it came to break every
@@ -210,7 +211,44 @@ describe("AbuseGuardService", () => {
 
     await expect(
       broken.checkAbuseFailOpen(requestFromNewClient(), ROUTE, 3, WINDOW_MS, logger),
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ allowed: true });
+  });
+
+  it("fails closed once consecutive failures exceed the threshold, and resets on the next success", async () => {
+    let shouldFail = true;
+    const flaky = {
+      incrementAbuseCounter: () =>
+        shouldFail ? Promise.reject(new Error("connection refused")) : Promise.resolve(1),
+    } as unknown as AbuseControlRepository;
+    const guard = new AbuseGuardService(flaky, { get: () => FINGERPRINT_KEY } as never);
+    const logger = new ScvsLogger("test");
+    const req = requestFromNewClient();
+    const threshold = 2;
+
+    // Exactly `threshold` failures still fail open.
+    for (let i = 0; i < threshold; i++) {
+      await expect(
+        guard.checkAbuseFailOpen(req, ROUTE, 3, WINDOW_MS, logger, threshold),
+      ).resolves.toEqual({ allowed: true });
+    }
+
+    // The (threshold + 1)th consecutive failure fails closed.
+    await expect(
+      guard.checkAbuseFailOpen(req, ROUTE, 3, WINDOW_MS, logger, threshold),
+    ).resolves.toEqual({ allowed: false, reason: "fail_closed" });
+
+    // One success in between resets the counter, so the next failure run gets the full threshold again.
+    shouldFail = false;
+    await guard.checkAbuseFailOpen(req, ROUTE, 3, WINDOW_MS, logger, threshold);
+    shouldFail = true;
+    for (let i = 0; i < threshold; i++) {
+      await expect(
+        guard.checkAbuseFailOpen(req, ROUTE, 3, WINDOW_MS, logger, threshold),
+      ).resolves.toEqual({ allowed: true });
+    }
+    await expect(
+      guard.checkAbuseFailOpen(req, ROUTE, 3, WINDOW_MS, logger, threshold),
+    ).resolves.toEqual({ allowed: false, reason: "fail_closed" });
   });
 });
 
@@ -239,7 +277,7 @@ describe("AbuseGuard tier selection", () => {
           maxPerWindow: number,
         ) => {
           seen.push({ route, maxPerWindow });
-          return true;
+          return { allowed: true };
         },
       } as never,
     );
@@ -274,6 +312,30 @@ describe("AbuseGuard tier selection", () => {
     await upload.guard.canActivate(upload.context);
     expect(submit.seen[0].route).not.toBe(upload.seen[0].route);
   });
+
+  it("answers 503 rather than 429 when checkAbuseFailOpen reports fail_closed", async () => {
+    const budgets: Record<string, number> = {
+      abuseMaxPerWindow: 18,
+      submitAbuseMaxPerWindow: 6,
+      abuseWindowMs: WINDOW_MS,
+    };
+    const guard = new AbuseGuard(
+      { get: (key: string) => budgets[key] } as never,
+      { checkAbuseFailOpen: async () => ({ allowed: false, reason: "fail_closed" }) } as never,
+    );
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({ ip: "203.0.113.9", route: { path: "/api/verification/v1/verifications" } }),
+      }),
+    } as never;
+
+    const error = await guard.canActivate(context).then(
+      () => undefined,
+      (thrown: unknown) => thrown as ApiError,
+    );
+    expect(error?.getStatus()).toBe(503);
+    expect((error?.getResponse() as { error?: string })?.error).toBe("abuse_check_unavailable");
+  });
 });
 
 // The fallback's direction is the point: this guard only sits on routes that have a budget, so reaching it
@@ -295,7 +357,7 @@ describe("AbuseGuard fallback when the route pattern is unavailable", () => {
           maxPerWindow: number,
         ) => {
           seen.push({ route, maxPerWindow });
-          return true;
+          return { allowed: true };
         },
       } as never,
     );
