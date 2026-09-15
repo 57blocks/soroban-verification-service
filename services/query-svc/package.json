@@ -33,7 +33,7 @@
     "soroban-verification-client": "workspace:*"
   },
   "devDependencies": {
-    "@nestjs/testing": "^11.2.3",
+    "@nestjs/testing": "^12.0.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
