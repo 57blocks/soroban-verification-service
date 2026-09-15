@@ -6,7 +6,9 @@ import {
   ApiOperation,
   ApiParam,
   ApiServiceUnavailableResponse,
+  ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import {
   AggregatedWasmStatus,
   DEPRECATED_JSON_ROUTE_DESCRIPTION,
@@ -14,6 +16,7 @@ import {
   isNetwork,
   type Network,
 } from "@scvs/core";
+import { addressThrottleLimit } from "../../config/configuration.js";
 import { ApiErrorResponse } from "../../common/api-error.dto.js";
 import { ApiError } from "../../common/api-error.exception.js";
 import { AggregationReadService } from "../aggregation/aggregation-read.service.js";
@@ -54,12 +57,32 @@ export class ResultsController {
   }
 
   @Get("api/query/v1/contracts/:network/:contract_id")
+  /**
+   * The only route on this service that reaches a third party: resolving an address is one outbound Soroban RPC
+   * call per request, uncached by design (see `resolve` below), so one admitted request here costs an upstream
+   * request too. That is why this tier is an order of magnitude tighter than the global one — it is sized
+   * against what the upstream endpoint tolerates, not against what this service could serve.
+   *
+   * `@Throttle` REPLACES the global limit for this route rather than stacking a second window under it, so this
+   * number must stay BELOW `SCVS_QUERY_THROTTLE_LIMIT` or it widens the budget instead of narrowing it.
+   *
+   * `addressThrottleLimit()` reads `process.env` directly rather than going through `ConfigService`, the same
+   * documented exception verification-svc's upload route takes: a decorator argument is evaluated when the
+   * class is defined, before Nest's container exists. The value is therefore fixed at import time — changing
+   * it needs a restart. It is a shared function rather than a second literal so this number and the one
+   * `configuration.ts` checks the ordering against cannot disagree.
+   */
+  @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })
   @ApiOkResponse({ type: AggregatedWasmStatus })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_network | invalid_contract_id" })
   @ApiNotFoundResponse({
     type: ApiErrorResponse,
     description: "contract_not_found — the address holds no verifiable contract",
+  })
+  @ApiTooManyRequestsResponse({
+    type: ApiErrorResponse,
+    description: "rate_limited — this route carries a tighter budget than the rest of the read surface",
   })
   @ApiServiceUnavailableResponse({
     type: ApiErrorResponse,

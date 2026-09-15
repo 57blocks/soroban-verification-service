@@ -112,7 +112,10 @@ for exact mechanics — this list is not exhaustive):
   upload and a `source_uri` archive — are verified against the caller-provided SHA-256 before use, and
   re-hashed inside the sandbox against the bytes actually fetched.
 - **Abuse controls on the public API.** `services/verification-svc` combines an in-process rate limiter
-  (`@nestjs/throttler`) with a DB-backed `AbuseGuard` for stronger enforcement.
+  (`@nestjs/throttler`) with a DB-backed `AbuseGuard` for stronger enforcement. `services/query-svc`
+  carries a per-caller in-process quota on every read route, and a tighter one on the single route that
+  resolves a contract address, since each such request costs an outbound Soroban RPC call. Both services
+  key their counters on the forwarded caller address, not the balancer's.
 
 If you find a way around any of the above — or a gap these don't cover — that's exactly what this policy
 wants reported.

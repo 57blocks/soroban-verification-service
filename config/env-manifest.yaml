@@ -2088,6 +2088,88 @@ services:
           note: This service never touches the scratch bucket.,
         }
     tunables:
+      SCVS_QUERY_THROTTLE_LIMIT:
+        type: number
+        default: 600
+        envs: { dev: 6000, staging: 6000 }
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          The global read budget (`@nestjs/throttler`'s guard, registered globally in app.module.ts),
+          in requests per minute per caller PER ROUTE — ThrottlerGuard keys its counter on the route
+          handler as well as the caller, so a client working several routes is bounded by the sum,
+          not by this number.
+
+          Wide on purpose. Every route this covers is answered from query-svc's own database, so it
+          is a bound on abuse rather than a quota a reader should ever feel; the tight ceiling is
+          SCVS_QUERY_ADDRESS_THROTTLE_LIMIT, on the one route that reaches a third party.
+
+          ★ **Must stay above the submission tiers.** `docs/specs/submission.md` states that
+          submission routes are throttled more tightly than read routes, and E2E-SEC-12 measures
+          that relation by bursting `/api/query/v1/wasms` against the submission ceiling. The probe
+          sends QUOTA_SUBMIT + max(20, 5%) requests, so this value must exceed that or the case
+          fails on the query leg and reports it as a violation of S15. At the dev and staging
+          submission ceiling of 60 the probe is 80 requests; the 6000 set there leaves the
+          relation unambiguous under load testing.
+
+          Health and `/internal/config-contract` carry `@SkipThrottle()` — a probe refused with 429
+          is a probe that failed, and the quota would deregister a task for being polled. The OpenAPI
+          document and its Swagger UI are covered by express middleware on this same ceiling, under
+          their own counter: `SwaggerModule.setup()` registers on the HTTP adapter, where no Nest
+          guard runs.
+
+          ★ Counted by `FixedWindowThrottlerStorage`, not `@nestjs/throttler`'s bundled storage —
+          that one lets any caller clear every other caller's counter (see the class header). This
+          is a per-process, per-caller ceiling: it bounds one client, never the deployment's
+          aggregate outbound rate.
+      SCVS_QUERY_ADDRESS_THROTTLE_LIMIT:
+        type: number
+        default: 60
+        envs: { dev: 600, staging: 600 }
+        code: services/query-svc/src/modules/results/results.controller.ts::queryByContract
+        note: >-
+          A `@Throttle` override on `GET /api/query/v1/contracts/:network/:contract_id` only, so it
+          *replaces* SCVS_QUERY_THROTTLE_LIMIT for that route rather than stacking under it — which
+          is why it must stay BELOW that value, or it widens the budget instead of narrowing it.
+
+          This is the only route on the service that reaches a third party: resolving an address is
+          one outbound Soroban RPC `getLedgerEntries` per request, deliberately uncached (the
+          address→hash mapping changes on upgrade, and E2E-QRY-06 asserts it is re-read every time).
+          So one admitted request here costs one upstream request, and the ceiling is sized against
+          what the upstream endpoint tolerates rather than against what this service could serve.
+          The community mainnet endpoint this deployment points at publishes ~60 requests per 10
+          seconds; 60/min per caller leaves room for several concurrent readers under it.
+
+          ⚠️ **Per caller, per process — this does NOT bound the deployment's aggregate outbound
+          rate.** N tasks x M callers can still exceed what the upstream accepts. Bounding that
+          needs a limiter on the egress side, which this variable is not and cannot be.
+
+          ★ Read straight off `process.env` in the controller decorator, not through ConfigService,
+          because a `@Throttle()` argument is evaluated when the class is defined — before any Nest
+          container exists. Same documented exception as verification-svc's
+          SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE: the value is fixed at import time, so changing it needs
+          a restart, not a config reload.
+
+          **Boot refuses a value at or above SCVS_QUERY_THROTTLE_LIMIT** (`configuration.ts`), since
+          such a value widens this route instead of narrowing it and nothing looks wrong at runtime.
+          Both are validated as positive whole numbers: `0` would refuse every request, and a
+          negative one was previously discarded for the default with nothing said.
+      SCVS_READINESS_DB_TIMEOUT_MS:
+        type: number
+        default: 2000
+        code: services/query-svc/src/config/configuration.ts::configuration
+        note: >-
+          How long `/health/ready` waits for `SELECT 1` before reporting Postgres unreachable.
+
+          ★ **Must stay below the load balancer's own health-check timeout.** Past it the balancer
+          stops waiting and never reads the answer, which puts the probe back where it was before it
+          checked anything. `packages/db/src/client.ts`'s `connectionTimeoutMillis` bounds acquiring
+          a connection; this bounds a server that accepted the statement and then went quiet — a
+          failover mid-flight, a network black hole — which is the case the pool timeout does not
+          cover.
+
+          The race does not cancel the query (Prisma exposes no cancellation), so a timed-out probe
+          leaves its statement running until the driver gives up. Accepted: the alternative is a
+          readiness route that holds the request open for as long as the database stays silent.
       SCVS_QUERY_TIMEOUT_MS: { type: number, default: 5000 }
       SCVS_QUERY_CACHE_TTL_MS: { type: number, default: 30000 }
       SCVS_AGGREGATION_SYNC_INTERVAL_MS:

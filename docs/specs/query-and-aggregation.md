@@ -86,6 +86,59 @@ is `@Post`); `test/integration/cases/qry/qry-address-and-openness.spec.ts` ("rea
 hash forty times and creates nothing", "ignores a plausible enqueue parameter rather than
 honouring it").
 
+## Abuse control
+
+The read surface is public and unauthenticated, so a per-caller quota is what stands in for the
+account it does not have. Two tiers, and the relation between them is the point: a general budget
+wide enough that a reader never meets it, and a much tighter one on
+`GET /v1/contracts/{network}/{contract_id}` — the only route that reaches a third party, where one
+admitted request costs one outbound Soroban RPC call. Both are stricter than nothing and looser
+than the Verification API's submission tiers, which is the ordering `docs/specs/submission.md`
+states from the other side.
+
+A refused request returns `429` carrying `rate_limited` in the shared error envelope, never an
+opaque body and never a `5xx`: a quota that sheds load by falling over is not a quota. Health and
+configuration-contract routes are exempt — a probe refused with `429` is a probe that failed.
+
+The OpenAPI document and its Swagger UI are registered on the HTTP adapter rather than through the
+router, so no route-level guard is consulted for them; they are covered by middleware on the same
+counter instead, under a budget of their own. Reading the document to exhaustion therefore costs a
+caller nothing of its ability to query.
+
+The counter itself is this service's own. `@nestjs/throttler`'s bundled in-memory storage keys its
+decay timers by throttler name rather than by caller, so unblocking one caller cancels every
+caller's pending decrement and freezes their counts — a caller who cycles in and out of the blocked
+state ratchets everyone else's count up until they are refused inside their own budget.
+
+The quota bounds what one caller extracts. It is not a bound on this deployment's aggregate
+outbound rate to an upstream RPC endpoint, which many callers across many tasks can still exceed.
+
+Verified by: `services/query-svc/src/common/fixed-window-throttler.storage.ts` (FixedWindowThrottlerStorage),
+`services/query-svc/test/throttler-storage.spec.ts` (one caller's counter is its own),
+`services/query-svc/src/common/adapter-route-throttle.middleware.ts` (adapterRouteThrottle),
+`services/query-svc/test/quota-config.spec.ts` (the two tiers' ordering),
+`services/query-svc/src/common/rate-limit.guard.ts` (rate_limited),
+`services/query-svc/src/app.module.ts` (ThrottlerModule),
+`services/query-svc/src/modules/results/results.controller.ts` (queryByContract),
+`services/query-svc/test/rate-limit.spec.ts` (the global read quota,
+the address route's tighter tier, routes exempt from the quota),
+`services/query-svc/test/trust-proxy.spec.ts` (trust proxy),
+`test/integration/cases/qry/qry-13-read-quota.spec.ts` (E2E-QRY-13),
+`test/integration/cases/sec/sec-surface-and-quota.spec.ts` (E2E-SEC-12).
+
+## Readiness reports the dependency the reads need
+
+Every route but the health tree reads Postgres, so readiness is false while the database is
+unreachable — answering "ready" then keeps an instance that can serve nothing in the balancer's
+target group. The check is bounded by a timeout below the balancer's own, because a probe that hangs
+tells it less than one that answers "not ready". Liveness is the opposite and stays dependency-free:
+a liveness probe that fails on a dependency turns a database blip into a restart loop.
+
+Verified by: `services/query-svc/src/modules/health/health.controller.ts` (getReady),
+`packages/db-query/src/db-health.service.ts` (ping),
+`services/query-svc/test/readiness.spec.ts` (turns false when the database is unreachable,
+answers rather than hanging when the database stops responding).
+
 ## Availability: a failing verifier bounds only its own contribution
 
 A slow or unreachable verifier never blocks or degrades the response for the others — its absence
