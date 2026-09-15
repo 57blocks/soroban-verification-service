@@ -234,3 +234,66 @@ export function classifyConditionalWriteError(
       return "fatal";
   }
 }
+
+/** An opaque token identifying the exact stored bytes a later conditional write may be pinned to. */
+export type ObjectVersion = string;
+
+/** `conflict` and `vanished` both mean "re-read, recompute, retry"; they differ only for logging. */
+export type ConditionalWriteResult = "written" | "conflict" | "vanished";
+
+/**
+ * Reads an object together with the version token `putObjectTextConditional` pins against. The token comes
+ * from the raw response, never from anything parsed out of the body: a body we cannot parse still has a
+ * version, and must not be mistaken for an absent object.
+ */
+export async function getObjectTextVersioned(
+  client: S3Client,
+  bucket: string,
+  key: string,
+): Promise<{ text: string; version: ObjectVersion } | undefined> {
+  try {
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const text = await response.Body?.transformToString();
+    if (text === undefined) return undefined;
+    if (!response.ETag) {
+      throw new Error(`getObjectTextVersioned: ${bucket}/${key} returned no ETag — cannot pin a conditional write`);
+    }
+    return { text, version: response.ETag };
+  } catch (error) {
+    if (isNotFound(error)) return undefined;
+    throw error;
+  }
+}
+
+/**
+ * Writes only if the stored object is still at `expected` — `null` requires that it does not exist at all.
+ * Returns rather than throws for the two replayable outcomes; anything else is a real failure and propagates.
+ */
+export async function putObjectTextConditional(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  content: string,
+  contentType: string,
+  expected: ObjectVersion | null,
+  cacheControl?: string,
+): Promise<ConditionalWriteResult> {
+  const mode = expected === null ? "if-none-match" : "if-match";
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: content,
+        ContentType: contentType,
+        ...(cacheControl ? { CacheControl: cacheControl } : {}),
+        ...(expected === null ? { IfNoneMatch: "*" } : { IfMatch: expected }),
+      }),
+    );
+    return "written";
+  } catch (error) {
+    const failure = classifyConditionalWriteError(error, mode);
+    if (failure === "fatal") throw error;
+    return failure;
+  }
+}
