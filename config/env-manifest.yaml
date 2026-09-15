@@ -230,6 +230,42 @@ groups:
           MUST be "true" against RDS — rds.force_ssl=1 rejects a plain connection, and the rejection
           surfaces through Prisma as a misleading P1010 "User was denied access", not a TLS error.
           Leave unset for local docker-compose Postgres, which does not terminate TLS.
+      SCVS_DB_CONNECTION_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 5000
+        code: packages/db/src/client.ts::resolvePoolConfig
+        note: >-
+          `pg.Pool`'s own default is `0` — unbounded wait to acquire a connection. Under sustained pool
+          exhaustion that turns into unobservable queuing instead of a fast, alarmable failure. Read by
+          @scvs/db's readDbEnv; shared verbatim by @scvs/db-query (query-postgres group below), since
+          both packages call the same createPrismaClient default.
+      SCVS_DB_IDLE_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: packages/db/src/client.ts::resolvePoolConfig
+        note: Unset defers to pg's own default. Not overridden here; exists so it is tunable without a code change.
+      SCVS_DB_POOL_MAX:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: packages/db/src/client.ts::resolvePoolConfig
+        note: >-
+          Unset defers to pg's own default (10). Forced to 1 under NODE_ENV=test regardless of this
+          value — see createPrismaClient's test-mode branch.
       DATABASE_URL:
         type: url
         required: no
@@ -370,6 +406,34 @@ groups:
         envs: { dev: "true", staging: "true" }
         observable: value
         code: packages/db-query/src/index.ts (re-exports @scvs/db's toConnectionString)
+      SCVS_DB_CONNECTION_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 5000
+        code: packages/db-query/src/client.ts::resolvePoolConfig
+        note: Same variable NAME and default as the `postgres` group's own entry — see there for the rationale.
+      SCVS_DB_IDLE_TIMEOUT_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: packages/db-query/src/client.ts::resolvePoolConfig
+      SCVS_DB_POOL_MAX:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: packages/db-query/src/client.ts::resolvePoolConfig
       DATABASE_URL:
         type: url
         required: no
@@ -2165,6 +2229,9 @@ services:
       - POSTGRES_PASSWORD
       - POSTGRES_SSL
       - DATABASE_URL
+      - SCVS_DB_CONNECTION_TIMEOUT_MS
+      - SCVS_DB_IDLE_TIMEOUT_MS
+      - SCVS_DB_POOL_MAX
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
       - SCVS_PUBLISHER_STORAGE
@@ -2323,6 +2390,9 @@ services:
       - POSTGRES_PASSWORD
       - POSTGRES_SSL
       - DATABASE_URL
+      - SCVS_DB_CONNECTION_TIMEOUT_MS
+      - SCVS_DB_IDLE_TIMEOUT_MS
+      - SCVS_DB_POOL_MAX
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
       - SCVS_PUBLISHER_STORAGE

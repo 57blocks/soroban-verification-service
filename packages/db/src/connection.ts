@@ -6,17 +6,29 @@ export type PostgresConnectionConfig = {
   password: string;
 };
 
-/** Either a ready-made connection string or the discrete fields to build one from. */
+/**
+ * `pg.Pool` behavior, not connection identity — kept separate from `PostgresConnectionConfig` so
+ * `toConnectionString` can keep ignoring it. All optional: an absent field means "let `pg` use its own
+ * default", not zero, so a caller with no opinion gets `pg`'s behavior rather than this package's.
+ */
+export type PoolTuning = {
+  connectionTimeoutMillis?: number;
+  idleTimeoutMillis?: number;
+  max?: number;
+};
+
+/** Either a ready-made connection string or the discrete fields to build one from, plus optional pool tuning. */
 export type DbConnectionInput =
-  | { url: string }
-  | Partial<PostgresConnectionConfig>;
+  | ({ url: string } & PoolTuning)
+  | (Partial<PostgresConnectionConfig> & PoolTuning);
 
 /**
  * Reads the database environment **without validating it**, for a service's `config/configuration.ts` to expose
  * as its `postgres` key.
  */
 export function readDbEnv(): DbConnectionInput {
-  if (process.env.DATABASE_URL) return { url: process.env.DATABASE_URL };
+  const poolTuning = readPoolTuningEnv();
+  if (process.env.DATABASE_URL) return { url: process.env.DATABASE_URL, ...poolTuning };
   const port = Number(process.env.POSTGRES_PORT);
   return {
     host: process.env.POSTGRES_HOST || "localhost",
@@ -24,6 +36,19 @@ export function readDbEnv(): DbConnectionInput {
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
+    ...poolTuning,
+  };
+}
+
+/** A present-but-non-numeric override is dropped rather than passed through as `NaN` — see `client.ts` for the default. */
+function readPoolTuningEnv(): PoolTuning {
+  const connectionTimeoutMillis = Number(process.env.SCVS_DB_CONNECTION_TIMEOUT_MS);
+  const idleTimeoutMillis = Number(process.env.SCVS_DB_IDLE_TIMEOUT_MS);
+  const max = Number(process.env.SCVS_DB_POOL_MAX);
+  return {
+    ...(Number.isFinite(connectionTimeoutMillis) && connectionTimeoutMillis > 0 ? { connectionTimeoutMillis } : {}),
+    ...(Number.isFinite(idleTimeoutMillis) && idleTimeoutMillis > 0 ? { idleTimeoutMillis } : {}),
+    ...(Number.isFinite(max) && max > 0 ? { max } : {}),
   };
 }
 
