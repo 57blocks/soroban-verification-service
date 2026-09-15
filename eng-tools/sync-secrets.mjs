@@ -54,8 +54,8 @@ const contractSource = flag("contract") ? "--contract" : `config/deploy/${target
 function loadContract() {
   const explicit = flag("contract");
   if (explicit) {
-    const text = explicit.startsWith("@") ? readFileSync(explicit.slice(1), "utf8") : explicit;
     try {
+      const text = explicit.startsWith("@") ? readFileSync(explicit.slice(1), "utf8") : explicit;
       return JSON.parse(text);
     } catch (error) {
       console.error(`::error::--contract is not valid JSON: ${error.message}`);
