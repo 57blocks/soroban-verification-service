@@ -41,6 +41,7 @@ on:
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read
+  packages: read # the published builder images; see deploy.yml's note on the ceiling
 
 # Those jobs are gone, but a lock is still needed here and NOT for that reason: this workflow registers
 # revisions of one account-wide Batch job definition family, and dispatch now resolves the latest ACTIVE

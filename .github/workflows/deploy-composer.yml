@@ -42,6 +42,7 @@ on:
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read
+  packages: read # the published composer image; see deploy.yml's note on the ceiling
 
 # Same reasoning as deploy-builder.yml's: dispatch resolves the latest ACTIVE revision by family name, so two
 # overlapping runs finishing out of order would leave an older composer image live.
