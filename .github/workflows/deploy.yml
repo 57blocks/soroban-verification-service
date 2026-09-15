@@ -162,10 +162,11 @@ jobs:
             exit 1
           fi
 
+          # Sorted in jq, not in `--query`: see db-migrate.yml's note — a query runs per page, so past 100
+          # images `--output text` answers once per page and the newest is not the value that comes back.
           newest=$(aws ecr describe-images --repository-name "$COMPOSER_ECR_REPOSITORY" \
-            --region "${{ env.AWS_REGION }}" \
-            --query 'reverse(sort_by(imageDetails,&imagePushedAt))[0].imageTags[0]' \
-            --output text 2>/dev/null || true)
+            --region "${{ env.AWS_REGION }}" --output json 2>/dev/null \
+            | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty' || true)
 
           if [ -z "$newest" ] || [ "$newest" = "None" ]; then
             # Bootstrap: no composer image exists yet, so there is no skew to create.
