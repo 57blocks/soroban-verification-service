@@ -342,9 +342,27 @@ jobs:
         run: |
           set -o pipefail
           export SCVS_FIXTURE_STELLAR_BIN="$HOME/.cargo/bin/stellar"
+          # No `-t`: the file holds exactly one case, so the filter added nothing but a second place for the
+          # test's name to live. It had already gone stale — it read "normal upgrade lifecycle" while the case
+          # is `normal_upgrade_lifecycle`, matched nothing, and Jest reported "1 skipped" with exit code 0.
           pnpm --filter @scvs/e2e-tests run test -- \
-            cases/upg/upg-normal-lifecycle.spec.ts \
-            -t "normal upgrade lifecycle" 2>&1 | tee artifacts/e2e-upgrade-jest.log
+            cases/upg/upg-normal-lifecycle.spec.ts 2>&1 | tee artifacts/e2e-upgrade-jest.log
+          # A suite that selects nothing exits 0 and reads as a benign conditional skip. Only the harness's own
+          # gate may skip this case, and it says so in the test name; anything else is a filter that has gone
+          # stale again.
+          node -e '
+            const report = require(`${process.env.SCVS_E2E_REPORT_DIR}/upgrade-lifecycle-jest.json`);
+            const ran = report.numPassedTests + report.numFailedTests;
+            if (ran > 0) process.exit(0);
+            const gated = report.testResults.flatMap((r) => r.assertionResults)
+              .filter((a) => a.fullName.includes("SKIPPED:"));
+            if (gated.length > 0) {
+              console.log(`E2E-UPG-01 skipped by its own gate: ${gated[0].fullName}`);
+              process.exit(0);
+            }
+            console.error("E2E-UPG-01 selected no test and was not gate-skipped — the invocation is stale");
+            process.exit(1);
+          '
 
       # Rendered from the suites' own JSON reports rather than the logs, so a dispatch can be read without
       # opening four thousand lines of Jest output.
