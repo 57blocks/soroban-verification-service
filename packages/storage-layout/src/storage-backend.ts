@@ -1,14 +1,17 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
   createS3Client,
   getObjectBytes,
   getObjectText,
+  getObjectTextVersioned,
   listObjectKeys,
   objectExists,
   putObjectBytes,
   putObjectText,
+  putObjectTextConditional,
   type S3Client,
 } from "@scvs/aws";
 
@@ -16,6 +19,12 @@ import {
  * Storage-backend abstraction used by publish.ts/read.ts — same shape as the old
  * `apps/api/src/publisher-storage.ts` `PublisherStorage` type.
  */
+/** An opaque token identifying the exact stored bytes a conditional write may be pinned to. */
+export type StorageVersion = string;
+
+/** `conflict` means someone else wrote since the version was read — re-read, recompute, retry. */
+export type StorageWriteResult = "written" | "conflict";
+
 export type ResultStorage = {
   kind: "filesystem" | "s3" | "r2" | "gcs";
   publicRoot: string;
@@ -29,6 +38,24 @@ export type ResultStorage = {
   // published", not read it.
   exists(path: string): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
+  /**
+   * Whether this backend's conditional writes hold ACROSS processes. False for `filesystem`, which serialises
+   * writers only within one process — a limit callers must be able to test, not only read in a document.
+   */
+  readonly crossProcessAtomicWrites: boolean;
+  /**
+   * Reads text with the version token `writeTextIfUnchanged` pins against. The token identifies the stored
+   * bytes themselves, so a document that will not parse still has one and cannot be mistaken for an absent
+   * object.
+   */
+  readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined>;
+  /** Writes only if the stored bytes are still at `expected`; `null` requires the object to be absent. */
+  writeTextIfUnchanged(
+    path: string,
+    content: string,
+    contentType: string,
+    expected: StorageVersion | null,
+  ): Promise<StorageWriteResult>;
 };
 
 export type FilesystemResultStorageConfig = {
@@ -70,6 +97,12 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
 
 class FilesystemResultStorage implements ResultStorage {
   readonly kind = "filesystem" as const;
+
+  // The compare in `writeTextIfUnchanged` and the rename under it are not one atomic step, so a second
+  // process can land between them. Within one process the caller's own lock closes that window; across
+  // processes nothing here can — POSIX has no compare-and-swap-replace, and a lock file's staleness cannot
+  // distinguish a dead holder from a slow one.
+  readonly crossProcessAtomicWrites = false;
 
   constructor(
     private readonly root: string,
@@ -113,6 +146,30 @@ class FilesystemResultStorage implements ResultStorage {
     }
   }
 
+  async readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined> {
+    const text = await this.readText(path);
+    if (text === undefined) return undefined;
+    return { text, version: versionOf(text) };
+  }
+
+  async writeTextIfUnchanged(
+    path: string,
+    content: string,
+    _contentType: string,
+    expected: StorageVersion | null,
+  ): Promise<StorageWriteResult> {
+    const current = await this.readText(path);
+    const actual = current === undefined ? null : versionOf(current);
+    if (actual !== expected) return "conflict";
+    const target = join(this.root, path);
+    await mkdir(dirname(target), { recursive: true });
+    // Write-then-rename so a concurrent reader never observes a half-written document.
+    const staging = `${target}.${randomUUID()}.tmp`;
+    await writeFile(staging, content, "utf8");
+    await rename(staging, target);
+    return "written";
+  }
+
   async list(prefix: string): Promise<string[]> {
     try {
       return (await readdir(join(this.root, prefix))).map((name) => `${prefix.replace(/\/+$/, "")}/${name}`);
@@ -123,6 +180,8 @@ class FilesystemResultStorage implements ResultStorage {
 }
 
 class S3ResultStorage implements ResultStorage {
+  readonly crossProcessAtomicWrites = true;
+
   constructor(
     readonly kind: "s3" | "r2",
     private readonly client: S3Client,
@@ -151,6 +210,29 @@ class S3ResultStorage implements ResultStorage {
     return objectExists(this.client, this.bucket, this.key(path));
   }
 
+  async readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined> {
+    return getObjectTextVersioned(this.client, this.bucket, this.key(path));
+  }
+
+  async writeTextIfUnchanged(
+    path: string,
+    content: string,
+    contentType: string,
+    expected: StorageVersion | null,
+  ): Promise<StorageWriteResult> {
+    const result = await putObjectTextConditional(
+      this.client,
+      this.bucket,
+      this.key(path),
+      content,
+      contentType,
+      expected,
+      cacheControlForPath(path),
+    );
+    // A vanished object carries the same instruction for the caller as a conflict: re-read and recompute.
+    return result === "written" ? "written" : "conflict";
+  }
+
   async list(prefix: string): Promise<string[]> {
     const normalizedPrefix = normalizePrefix(this.key(prefix));
     const keys = await listObjectKeys(this.client, this.bucket, normalizedPrefix);
@@ -175,4 +257,9 @@ function normalizePrefix(value: string): string {
 function cacheControlForPath(path: string): string {
   if (path.startsWith("reports/")) return "public, max-age=31536000, immutable";
   return "public, max-age=60";
+}
+
+/** The filesystem backend's version token: derived from the content, so it cannot drift from the bytes. */
+function versionOf(content: string): StorageVersion {
+  return createHash("sha256").update(content).digest("hex");
 }
