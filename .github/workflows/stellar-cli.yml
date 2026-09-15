@@ -39,9 +39,8 @@ permissions:
 
 # Two runs on the same pin would race on the same S3 key. Harmless — identical bytes, and each is checked
 # against the pinned digest before upload — but pointless, so they queue instead.
-concurrency:
-  group: stellar-cli-${{ github.ref }}
-  cancel-in-progress: false
+# No `concurrency:` here — see deploy.yml's note. `github.ref` under `workflow_call` is the caller's,
+# so a group built from it named one lock for every run whatever ref it was given.
 
 jobs:
   build:
