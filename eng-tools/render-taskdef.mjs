@@ -69,15 +69,14 @@ const loadJson = (raw, what) => {
 
 // ── Inputs ──────────────────────────────────────────────────────────────────────────────────────
 
-const contract =
-  loadJson(flag("contract"), "contract") ??
-  (() => {
-    try {
-      return JSON.parse(readFileSync(`config/deploy/${targetEnv}/${service}.json`, "utf8"));
-    } catch {
-      return die(`no contract at config/deploy/${targetEnv}/${service}.json`);
-    }
-  })();
+const contractFromCwd = () => {
+  try {
+    return JSON.parse(readFileSync(`config/deploy/${targetEnv}/${service}.json`, "utf8"));
+  } catch {
+    return die(`no contract at config/deploy/${targetEnv}/${service}.json`);
+  }
+};
+const contract = loadJson(flag("contract"), "contract") ?? contractFromCwd();
 
 if (contract.kind !== "ecs-service" && contract.kind !== "ecs-task") {
   die(`${service} is kind: ${contract.kind} — this renders ECS task definitions only (ADR-025 keeps Batch on plaintext)`);
