@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { normalizePolicy, FetchPolicyError, UpstreamNotDeliveredError } from "./fetch-policy.js";
-import { createPinnedFetch } from "./pinned-fetch.js";
+import { canPin, createPinnedFetch } from "./pinned-fetch.js";
 import type { HopResponse } from "./policy-bound-fetch.js";
 
 // A standalone script rather than a Jest suite, following registry-test.ts's convention — no package under
@@ -35,6 +35,27 @@ function redirectTo(location: string | undefined, status = 302): HopResponse {
 }
 
 async function main(): Promise<void> {
+  // canPin: an https:-only policy is pinnable; a policy admitting any other scheme is not — irrespective of
+  // whether https: is also in the list.
+  assert.equal(canPin(normalizePolicy({ allowedSchemes: ["https:"] })), true);
+  assert.equal(canPin(normalizePolicy({ allowedSchemes: ["https:", "http:"] })), false);
+  assert.equal(canPin(normalizePolicy({ allowedSchemes: ["http:"] })), false);
+
+  // createPinnedFetch refuses a non-pinnable policy at construction — before any request, not once one fails —
+  // so requestImpl must never be reached.
+  {
+    let calls = 0;
+    assert.throws(
+      () =>
+        createPinnedFetch(normalizePolicy({ allowedSchemes: ["https:", "http:"] }), 5, async () => {
+          calls += 1;
+          return bodyOf("unreached");
+        }),
+      FetchPolicyError,
+    );
+    assert.equal(calls, 0);
+  }
+
   // A 2xx hop becomes a real Response: status, body and the content-length header all read back correctly,
   // and `url` — the field the constructor cannot take directly — carries the actually-answered hop.
   {
