@@ -79,6 +79,24 @@ provider and which are already locked to a specific vendor SDK in the applicatio
 [`docs/infrastructure-requirements.md`](infrastructure-requirements.md). Read it before you assume a
 piece is portable just because it's "just a database" or "just object storage."
 
+### 2.1 Your load balancer / reverse proxy and the SSE progress stream
+
+`verification-svc` serves `GET /api/verification/v1/verifications/:job_id/events` as a long-lived
+`text/event-stream` connection (§0), not an ordinary request/response route. Two settings on whatever
+sits in front of it need to account for that:
+
+- **Per-client concurrent-connection limit** — `verification-svc` itself caps how many of these
+  streams may be open at once, per job id and process-wide
+  (`SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB` / `SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL`), but that
+  ceiling is per process. A deployment running N instances behind one load balancer has an effective
+  ceiling N times larger unless the load balancer or reverse proxy also enforces a per-client limit
+  (for example Nginx's `limit_conn` keyed on the client address) in front of them.
+- **Idle timeout** — must exceed `SCVS_JOB_STREAM_WINDOW_MS` (default 15 minutes), or the proxy
+  closes the connection before the application does. This is the same class of mismatch
+  `SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS` exists to catch for ordinary HTTP keep-alive connections
+  (`services/verification-svc/src/config/configuration.ts`); the SSE stream is a second, independently
+  configured connection lifetime that needs the same check applied to whatever fronts this service.
+
 ## 3. The one invariant you must not relax: the builder holds no business credentials
 
 This is [rule 1 of `docs/invariants.md`](invariants.md)'s decision, and it is not

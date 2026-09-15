@@ -45,6 +45,9 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW must be a number" })
   SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW?: string;
 
+  @IsOptional() @IsNumberString({}, { message: "SCVS_STREAM_ABUSE_MAX_PER_WINDOW must be a number" })
+  SCVS_STREAM_ABUSE_MAX_PER_WINDOW?: string;
+
   @IsOptional() @IsNumberString({}, { message: "SCVS_ABUSE_FAILOPEN_THRESHOLD must be a number" })
   SCVS_ABUSE_FAILOPEN_THRESHOLD?: string;
 
@@ -53,6 +56,12 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
 
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_SAFETY_POLL_MS must be a number" })
   SCVS_JOB_STREAM_SAFETY_POLL_MS?: string;
+
+  @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB must be a number" })
+  SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB?: string;
+
+  @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL must be a number" })
+  SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL?: string;
 
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_MAX_WAIT_MS must be a number" })
   SCVS_JOB_MAX_WAIT_MS?: string;

@@ -265,6 +265,7 @@ describe("AbuseGuard tier selection", () => {
     const budgets: Record<string, number> = {
       abuseMaxPerWindow: 18,
       submitAbuseMaxPerWindow: 6,
+      streamAbuseMaxPerWindow: 60,
       abuseWindowMs: WINDOW_MS,
     };
     const seen: Array<{ route: string; maxPerWindow: number }> = [];
@@ -302,6 +303,12 @@ describe("AbuseGuard tier selection", () => {
     const { guard, context, seen } = guardFor("/api/verification/v1/uploads/source");
     await guard.canActivate(context);
     expect(seen).toEqual([{ route: "/api/verification/v1/uploads/source", maxPerWindow: 6 }]);
+  });
+
+  it("bills the SSE stream route against its own tier, not the submission or general-read budget", async () => {
+    const { guard, context, seen } = guardFor("/api/verification/v1/verifications/:job_id/events");
+    await guard.canActivate(context);
+    expect(seen).toEqual([{ route: "/api/verification/v1/verifications/:job_id/events", maxPerWindow: 60 }]);
   });
 
   // Same tier, independent budgets — a client's total is their sum, not the largest.
