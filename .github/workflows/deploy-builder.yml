@@ -74,6 +74,12 @@ jobs:
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
           repository: ${{ inputs.source_repository }}
 
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
@@ -278,7 +284,8 @@ jobs:
               # around it.
               jq -n --argjson p "$ECS_PROPERTIES" \
                 '{jobDefinitionName: "x", type: "container", ecsProperties: $p}' > /tmp/builder-jobdef.json
-              node eng-tools/check-taskdef-boundary.mjs --env "$ENV" --service builder /tmp/builder-jobdef.json
+              node eng-tools/check-taskdef-boundary.mjs --env "$ENV" --service builder \
+                --contract "/tmp/deploy-contracts/$ENV/builder.json" /tmp/builder-jobdef.json
 
               JOB_DEF_ARN=$(aws batch register-job-definition \
                 --job-definition-name "$FAMILY" \

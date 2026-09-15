@@ -481,6 +481,15 @@ jobs:
       # Through `env:`, never interpolated into the script: GitHub substitutes the raw text before bash
       # parses it, so a single quote anywhere in the descriptor would terminate the literal and run the
       # remainder as shell. deploy-builder.yml already uses this shape.
+      # The deployment's own contract, handed over by the caller rather than read from this tree: it states
+      # values for ONE deployment and this repository holds none. An absent artifact fails the job, which is
+      # the point — rendering a definition from a contract nobody supplied is the outcome worth avoiding.
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Write ${{ matrix.service }}'s configuration to Secrets Manager
         env:
           DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
@@ -490,6 +499,7 @@ jobs:
           node eng-tools/sync-secrets.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json" \
             --descriptor @/tmp/ci-descriptor.json
 
       # The registry hostname embeds the account id, which stage-service-image deliberately keeps out of its
@@ -510,6 +520,7 @@ jobs:
           node eng-tools/render-taskdef.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json" \
             --image "${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ needs.stage-service-image.outputs.image_repo }}@${{ needs.stage-service-image.outputs.image_digest }}" \
             --descriptor @/tmp/ci-descriptor.json \
             > /tmp/taskdef.json
@@ -523,6 +534,7 @@ jobs:
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json" \
             /tmp/taskdef.json
 
       - name: Register the task definition
@@ -784,6 +796,12 @@ jobs:
       #
       # No Node setup needed: sync-secrets and render-taskdef import only node: builtins, and the
       # runner ships Node.
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Write web's configuration to Secrets Manager
         env:
           DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
@@ -793,6 +811,7 @@ jobs:
           node eng-tools/sync-secrets.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/web.json" \
             --descriptor @/tmp/ci-descriptor.json
 
       # The registry hostname comes from the ECR login step, which already resolved it — unlike
@@ -803,6 +822,7 @@ jobs:
           node eng-tools/render-taskdef.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/web.json" \
             --image "${{ steps.ecr-login.outputs.registry }}/${WEB_ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
             --descriptor @/tmp/ci-descriptor.json \
             > /tmp/taskdef.json
@@ -812,6 +832,7 @@ jobs:
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/web.json" \
             /tmp/taskdef.json
 
       - name: Register the task definition

@@ -32,6 +32,7 @@
     "check:env": "node eng-tools/check-env-manifest.mjs",
     "check:workflows": "node eng-tools/check-workflow-syntax.mjs",
     "check:secrets": "node eng-tools/check-secrets.mjs",
+    "check:deployment-data": "node eng-tools/check-deployment-data.mjs",
     "check:test-row-cleanup": "node eng-tools/check-test-row-cleanup.mjs",
     "check:builder-isolation": "node eng-tools/check-builder-isolation.mjs",
     "check:http-timeouts": "node eng-tools/check-http-timeouts.mjs",

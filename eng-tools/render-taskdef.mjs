@@ -69,11 +69,13 @@ const loadJson = (raw, what) => {
 
 // ── Inputs ──────────────────────────────────────────────────────────────────────────────────────
 
+// See check-taskdef-boundary.mjs: the contract belongs to the deployment, not to this repository.
+const contractPath = flag("contract") ?? `config/deploy/${targetEnv}/${service}.json`;
 const contract = (() => {
   try {
-    return JSON.parse(readFileSync(`config/deploy/${targetEnv}/${service}.json`, "utf8"));
+    return JSON.parse(readFileSync(contractPath, "utf8"));
   } catch {
-    return die(`no contract at config/deploy/${targetEnv}/${service}.json`);
+    return die(`no contract at ${contractPath}`);
   }
 })();
 
