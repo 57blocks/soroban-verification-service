@@ -69,11 +69,9 @@ permissions:
   id-token: write
   contents: read
 
-# One dev service deployment and one Batch queue. Let an active run finish; a second runner would turn quota and
-# queue contention into failures that say nothing about either commit.
-concurrency:
-  group: e2e-${{ inputs.environment || 'dev' }}
-  cancel-in-progress: false
+# No `concurrency:` here — see deploy.yml's note. The caller must serialize per environment: one service
+# deployment and one Batch queue, so a second runner turns quota and queue contention into failures that
+# say nothing about either commit.
 
 jobs:
   e2e:

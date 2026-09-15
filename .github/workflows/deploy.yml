@@ -58,10 +58,9 @@ permissions:
   id-token: write # OIDC -> AWS role assumption
   contents: read
 
-# Never cancel a deploy in flight — a half-rolled ECS service is worse than a queued one.
-concurrency:
-  group: deploy-${{ inputs.environment || 'dev' }}
-  cancel-in-progress: false
+# No `concurrency:` here on purpose. A called workflow that repeats its caller's group deadlocks
+# against it — the caller holds the group, this waits for it, and GitHub cancels the run. The lock
+# belongs to whatever owns the trigger; ours declares `deploy-<environment>`, never cancelling.
 
 env:
   AWS_REGION: ap-southeast-2
