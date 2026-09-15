@@ -45,10 +45,10 @@ const DEFAULT_SOURCE = "config/trusted-verifiers.local.json";
 // script seeds them — same standard `SCVS_TRUSTED_VERIFIERS_SOURCE` above already holds itself to, applied
 // to what the source actually contains instead of just where it came from. Private-range/localhost hosts are
 // allowed only for the built-in `DEFAULT_SOURCE` fixture, never for anything `SCVS_TRUSTED_VERIFIERS_SOURCE`
-// names explicitly: a *file path* is not a trust signal on its own — `dev`/`staging` deployments point this
-// variable at a checked-in file too (config/trusted-verifiers.dev.json et al., in the ops repo), and that file
-// seeds a real, network-reachable environment. Only the fixture this script falls back to when nothing was
-// configured at all is actually local-developer-only.
+// names explicitly: a *file path* is not a trust signal on its own — a real deployment's own configuration is
+// free to point this variable at a checked-in file too, and that file seeds a real, network-reachable
+// environment. Only the fixture this script falls back to when nothing was configured at all is actually
+// local-developer-only.
 const ENTRY_URL_POLICY = normalizePolicy({ allowedSchemes: ["https:"] });
 const ENTRY_URL_POLICY_LOCAL = normalizePolicy({ allowedSchemes: ["https:", "http:"], blockPrivateRanges: false });
 
