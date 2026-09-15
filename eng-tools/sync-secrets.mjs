@@ -49,13 +49,19 @@ if (!service) {
   process.exit(2);
 }
 
-const contractSource = flag("contract") ? "--contract" : `config/deploy/${targetEnv}/${service}.json`;
+const explicitContract = flag("contract");
+const contractSource = explicitContract
+  ? explicitContract.startsWith("@")
+    ? explicitContract.slice(1)
+    : "inline --contract JSON"
+  : `config/deploy/${targetEnv}/${service}.json`;
 
 function loadContract() {
-  const explicit = flag("contract");
-  if (explicit) {
+  if (explicitContract) {
     try {
-      const text = explicit.startsWith("@") ? readFileSync(explicit.slice(1), "utf8") : explicit;
+      const text = explicitContract.startsWith("@")
+        ? readFileSync(explicitContract.slice(1), "utf8")
+        : explicitContract;
       return JSON.parse(text);
     } catch (error) {
       console.error(`::error::--contract is not valid JSON: ${error.message}`);
