@@ -72,12 +72,16 @@ function view(spec, field) {
 // Overridable so every verdict below can be exercised without a registry.
 let publishedVersion = flag("published-version", "");
 let publishedCommit = flag("published-commit", "");
+let packageExists = flag("package-exists", "") !== "false";
 if (publishedVersion) {
   rmSync(cache, { recursive: true, force: true });
 } else {
   try {
     publishedVersion = view(`${PKG}@${channel.dist_tag}`, "version");
     if (publishedVersion) publishedCommit = view(`${PKG}@${publishedVersion}`, "scvs.gitSha");
+    // Asked only when a dist-tag resolved to nothing, and it tells two different situations apart —
+    // see the verdict below.
+    else if (flag("package-exists", "") === "") packageExists = view(PKG, "name") !== "";
   } finally {
     rmSync(cache, { recursive: true, force: true });
   }
@@ -90,9 +94,13 @@ const fixCommand =
     : `gh workflow run release.yml -f version=vX.Y.Z-rc.N -f commit=${deployed}`;
 
 /** `warn` keeps a deploy green and says so; `error` fails it. Both print the same one-command fix. */
-function report(verdict, detail) {
+function report(verdict, detail, override) {
   const aligned = verdict === "aligned";
-  const severity = aligned ? "notice" : channel.severity;
+  const raised = override ?? channel.severity;
+  const severity = aligned ? "notice" : raised;
+  // Releasing is not the fix for a package that cannot be published yet, and printing it as one sends
+  // whoever reads this at a workflow that will skip its publish step.
+  const fix = verdict === "unpublished" && override === "warn" ? "" : fixCommand;
   const headline = `${PKG}@${channel.dist_tag} · ${targetEnv} · ${verdict}`;
 
   console.log(`── env        ${targetEnv}`);
@@ -101,15 +109,15 @@ function report(verdict, detail) {
   console.log(`── deployed   ${short(deployed)}`);
   console.log(`── verdict    ${verdict} — ${detail}`);
 
-  if (!aligned) console.log(`── fix        ${fixCommand}`);
+  if (fix) console.log(`── fix        ${fix}`);
 
-  if (inGha) console.log(`::${severity}::${headline} — ${detail}${aligned ? "" : `. Fix: ${fixCommand}`}`);
+  if (inGha) console.log(`::${severity}::${headline} — ${detail}${fix ? `. Fix: ${fix}` : ""}`);
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
       [
-        `### ${aligned ? "✅" : channel.severity === "error" ? "❌" : "⚠️"} SDK channel \`${channel.dist_tag}\` vs ${targetEnv}`,
+        `### ${aligned ? "✅" : raised === "error" ? "❌" : "⚠️"} SDK channel \`${channel.dist_tag}\` vs ${targetEnv}`,
         "",
         "| | |",
         "| --- | --- |",
@@ -118,12 +126,24 @@ function report(verdict, detail) {
         `| ${targetEnv} runs | \`${short(deployed)}\` |`,
         `| verdict | ${verdict} — ${detail} |`,
         "",
-        ...(aligned ? [] : ["```bash", fixCommand, "```", ""]),
+        ...(fix ? ["```bash", fix, "```", ""] : []),
       ].join("\n"),
     );
   }
 
-  process.exit(aligned || channel.severity === "warn" ? 0 : 1);
+  process.exit(aligned || raised === "warn" ? 0 : 1);
+}
+
+if (!publishedVersion && !packageExists) {
+  // A name the registry has never seen is a different thing from a dist-tag left behind. Nothing can be
+  // published while this repository is private — a trusted publish stamps provenance, and provenance is
+  // verifiable only against a source anyone can read — so this is a decided state, not drift, and it must
+  // not fail a staging deploy. It becomes an error again the moment the first version exists.
+  report(
+    "unpublished",
+    `${PKG} is not on the registry at all, so nothing serves ${targetEnv} yet. Expected until this repository is public`,
+    "warn",
+  );
 }
 
 if (!publishedVersion) {

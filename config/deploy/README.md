@@ -3,7 +3,8 @@
 **Generated. Do not edit.** Source is [`../env-manifest.yaml`](../env-manifest.yaml); regenerate with
 `pnpm run generate:deploy-env`. It writes one file per service per environment,
 `config/deploy/<env>/<service>.json`, for every environment named in the manifest's
-`meta.environments`.
+`meta.environments` — or, when your environment list is not this repository's to hold, for the ones
+you name: `pnpm run generate:deploy-env -- --env dev --env staging`.
 
 [`_EXAMPLE/verification-svc.json`](_EXAMPLE/verification-svc.json) is a snapshot of one such file, so
 you can see the shape before running anything. It is an illustration, not an input: nothing reads it.

@@ -99,6 +99,10 @@ jobs:
       # Every reader below uses this rather than GITHUB_SHA: a dispatch may release a commit that is not the
       # one this workflow was started from, and the stamp, the tag and the provenance check must agree on which.
       SDK_COMMIT: ${{ needs.channel.outputs.commit }}
+      # npm stamps provenance on a trusted publish, and provenance is verifiable only against a source
+      # anyone can read. So the registry half of a release waits for the flip; everything that proves the
+      # tarball is sound still runs on every merge.
+      PUBLISH_SDK: ${{ needs.channel.outputs.publish_sdk == 'true' && github.event.repository.visibility == 'public' }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,7 +122,7 @@ jobs:
       # After the install, before the build: every reader downstream — the tarball, the packaging gate, the
       # publish, the registry gate — must see one number, and no lockfile entry pins it (`workspace:*`).
       - name: Stamp the resolved version into the SDK manifest
-        if: needs.channel.outputs.publish_sdk == 'true'
+        if: env.PUBLISH_SDK == 'true'
         run: node eng-tools/stamp-sdk-version.mjs
 
       # packages/db's build reads these at prisma.config.ts's top level, so the build cannot start without them.
@@ -140,6 +144,11 @@ jobs:
       # are typechecked as a consumer sees them. This is the last reader before a version becomes immutable.
       - name: Check SDK packaging
         run: pnpm --filter soroban-verification-client run check:packaging
+
+      - name: Report a release that publishes no package
+        if: needs.channel.outputs.publish_sdk == 'true' && env.PUBLISH_SDK != 'true'
+        run: |
+          echo "::notice::soroban-verification-client@${SDK_VERSION} was built and checked but not published: this repository is still private, and a trusted publish stamps provenance that only a readable source can back. Publishing starts at the flip."
 
       # Skipped on the dev channel only: ci.yml already generates both specs on every push to main, and a
       # prerelease has no GitHub release to carry them.
@@ -202,7 +211,7 @@ jobs:
       # than a bonus. Configured once on the registry side, against this repository and this
       # workflow; until that exists, the publish step fails and says so.
       - name: Use an npm that can publish with OIDC
-        if: needs.channel.outputs.publish_sdk == 'true'
+        if: env.PUBLISH_SDK == 'true'
         run: |
           set -euo pipefail
           have=$(npm --version)
@@ -214,7 +223,7 @@ jobs:
           npm --version
 
       - name: Publish soroban-verification-client
-        if: needs.channel.outputs.publish_sdk == 'true'
+        if: env.PUBLISH_SDK == 'true'
         working-directory: clients/sdk
         run: |
           set -euo pipefail
@@ -250,12 +259,12 @@ jobs:
       # `npm publish --dry-run` leaves the PRE-publish packument in npm's cache, which made a single
       # immediate read a flaky gate — it passed on one run and reported an empty dist-tag on the next.
       - name: Verify the channel landed on its dist-tag
-        if: needs.channel.outputs.publish_sdk == 'true'
+        if: env.PUBLISH_SDK == 'true'
         run: node eng-tools/check-published-dist-tags.mjs
 
       # A registry read proves a version **exists**; only an installing consumer proves it is usable.
       - name: Verify the published SDK installs and runs
-        if: needs.channel.outputs.publish_sdk == 'true'
+        if: env.PUBLISH_SDK == 'true'
         env:
           SCVS_SDK_VERSION: ${{ needs.channel.outputs.version }}
         run: pnpm --filter soroban-verification-client run check:registry-install
