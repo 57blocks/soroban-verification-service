@@ -56,6 +56,11 @@ const configuration = () => ({
   // Raising one raises a client's total.
   abuseMaxPerWindow: numberEnv("SCVS_ABUSE_MAX_PER_WINDOW", 18),
   submitAbuseMaxPerWindow: numberEnv("SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW", 6),
+  // Looser than the general read-route budget on purpose: a dropped SSE connection is meant to reconnect
+  // (jobs.service.ts's stream_timeout / network hiccups), so legitimate reconnects must not exhaust the same
+  // budget a submission would. This bounds connection *setup rate*; StreamConcurrencyLimiter bounds how many
+  // stay open at once — the two are independent controls for independent attack shapes.
+  streamAbuseMaxPerWindow: numberEnv("SCVS_STREAM_ABUSE_MAX_PER_WINDOW", 60),
   // Consecutive DB-backed abuse-check failures (no intervening success) before AbuseGuardService stops failing
   // open and starts failing closed instead. Not measured against production load — a starting point.
   abuseFailOpenThreshold: numberEnv("SCVS_ABUSE_FAILOPEN_THRESHOLD", 10),
@@ -63,6 +68,11 @@ const configuration = () => ({
   // ends it and lets the browser's EventSource reconnect (jobs.service.ts).
   jobStreamWindowMs: numberEnv("SCVS_JOB_STREAM_WINDOW_MS", 15 * 60_000),
   jobStreamSafetyPollMs: numberEnv("SCVS_JOB_STREAM_SAFETY_POLL_MS", 10_000),
+  // An SSE connection holds a socket, a setInterval, and a subscribeToJobUpdates listener for up to
+  // jobStreamWindowMs, so unlike an ordinary request its cost is concurrent-count, not request-rate — a rate
+  // limit on connection setup cannot cap it (see jobs.service.ts's StreamConcurrencyLimiter).
+  jobStreamMaxConnectionsPerJob: numberEnv("SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB", 5),
+  jobStreamMaxConnectionsTotal: numberEnv("SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL", 500),
   // How long a job may stay non-terminal before the stream reports `job_timeout`.
   jobMaxWaitMs: numberEnv("SCVS_JOB_MAX_WAIT_MS", 60 * 60_000),
   // How long a non-terminal job keeps deduplicating new submissions for its target (submit.service.ts ->

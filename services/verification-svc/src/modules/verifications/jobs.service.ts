@@ -76,9 +76,43 @@ function buildLogAvailability(job: {
   };
 }
 
+/**
+ * Caps how many `/events` SSE connections may be open at once, per job id and across the process.
+ *
+ * A rate limit on connection *setup* cannot bound this: once open, a stream holds a socket, a setInterval, and
+ * a subscribeToJobUpdates listener for up to jobStreamWindowMs (15 minutes by default) without ever issuing
+ * another request, so it never touches a request-rate check again. This tracks the thing that actually needs a
+ * ceiling — how many are open right now, not how fast they were opened — and is process-local by design: each
+ * instance bounds its own resource usage independently of how many instances a deployment runs.
+ */
+export class StreamConcurrencyLimiter {
+  private readonly perJob = new Map<string, number>();
+  private total = 0;
+
+  tryAcquire(jobId: string, maxPerJob: number, maxTotal: number): boolean {
+    if (this.total >= maxTotal) return false;
+    if ((this.perJob.get(jobId) ?? 0) >= maxPerJob) return false;
+    this.perJob.set(jobId, (this.perJob.get(jobId) ?? 0) + 1);
+    this.total += 1;
+    return true;
+  }
+
+  release(jobId: string): void {
+    const current = this.perJob.get(jobId);
+    if (current === undefined) return;
+    if (current <= 1) {
+      this.perJob.delete(jobId);
+    } else {
+      this.perJob.set(jobId, current - 1);
+    }
+    this.total = Math.max(0, this.total - 1);
+  }
+}
+
 @Injectable()
 export class JobsService {
   private readonly logger = new ScvsLogger("job-status");
+  private readonly streamLimiter = new StreamConcurrencyLimiter();
 
   // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
   // metadata Nest's DI would otherwise infer this parameter's type from).
@@ -256,18 +290,43 @@ export class JobsService {
     const safetyPollMs = this.configService.get("jobStreamSafetyPollMs", { infer: true });
     const streamWindowMs = this.configService.get("jobStreamWindowMs", { infer: true });
     const maxWaitMs = this.configService.get("jobMaxWaitMs", { infer: true });
+    const maxConnectionsPerJob = this.configService.get("jobStreamMaxConnectionsPerJob", { infer: true });
+    const maxConnectionsTotal = this.configService.get("jobStreamMaxConnectionsTotal", { infer: true });
 
     return new Observable<MessageEvent>((subscriber) => {
+      // Checked before anything else is set up: a rejected connection must never register a listener, an
+      // interval, or a timeout — the ceiling exists specifically to bound those.
+      if (!this.streamLimiter.tryAcquire(jobId, maxConnectionsPerJob, maxConnectionsTotal)) {
+        this.logger.warn("stream connection rejected: concurrency ceiling reached", {
+          job_id: jobId,
+          max_connections_per_job: maxConnectionsPerJob,
+          max_connections_total: maxConnectionsTotal,
+        });
+        subscriber.next({
+          data: errorBody(429, {
+            error: "stream_connection_limit_reached",
+            message: "Too many open connections for this job. Reconnect after closing an existing stream.",
+          }),
+        });
+        subscriber.complete();
+        return () => {};
+      }
+
       let closed = false;
       let unsubscribeNotify: (() => void) | undefined;
       let safetyInterval: ReturnType<typeof setInterval> | undefined;
       let timeout: ReturnType<typeof setTimeout> | undefined;
+      let released = false;
 
       const cleanup = () => {
         closed = true;
         unsubscribeNotify?.();
         if (safetyInterval) clearInterval(safetyInterval);
         if (timeout) clearTimeout(timeout);
+        if (!released) {
+          released = true;
+          this.streamLimiter.release(jobId);
+        }
       };
 
       // Returns true once the stream has reached a terminal state (or the job vanished) and has already

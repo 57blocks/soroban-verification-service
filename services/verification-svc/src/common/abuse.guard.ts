@@ -20,6 +20,15 @@ export const UPLOAD_SOURCE_ROUTE = "/api/verification/v1/uploads/source";
 const SUBMISSION_ROUTES = new Set(["/api/verification/v1/verifications", UPLOAD_SOURCE_ROUTE]);
 
 /**
+ * The SSE progress route, on its own looser-than-submission tier: an open connection holds a socket/listener
+ * for the life of the stream, so *setup* is metered like a write-shaped route would be — but reconnects
+ * (stream_timeout, a dropped network) are routine, not abuse, so its budget is not as tight as a submission's.
+ * StreamConcurrencyLimiter (jobs.service.ts) bounds how many of these stay open at once; this only bounds how
+ * fast new ones may be opened.
+ */
+const STREAM_ROUTES = new Set(["/api/verification/v1/verifications/:job_id/events"]);
+
+/**
  * The Postgres-backed sliding-window guard, applied via `@UseGuards(AbuseGuard)` on
  * `/api/verification/v1/preflight`, `/api/verification/v1/verifications`, and the build-log routes.
  */
@@ -43,7 +52,9 @@ export class AbuseGuard implements CanActivate {
     const maxPerWindow =
       route === undefined || SUBMISSION_ROUTES.has(route)
         ? this.configService.get("submitAbuseMaxPerWindow", { infer: true })
-        : this.configService.get("abuseMaxPerWindow", { infer: true });
+        : STREAM_ROUTES.has(route)
+          ? this.configService.get("streamAbuseMaxPerWindow", { infer: true })
+          : this.configService.get("abuseMaxPerWindow", { infer: true });
     const windowMs = this.configService.get("abuseWindowMs", { infer: true });
     const result = await this.abuse.checkAbuseFailOpen(
       req,

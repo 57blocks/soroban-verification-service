@@ -100,7 +100,7 @@ describe("GET /api/verification/v1/health", () => {
 
 // The exemption is what makes the ceiling survivable: a submitter watching their own accepted job is reading,
 // not submitting, and throttling that shows up as console timeouts rather than as a quota message.
-describe("status routes stay exempt from the abuse guard", () => {
+describe("the status route stays exempt from the abuse guard", () => {
   it("answers the status route far past any submission budget", async () => {
     const jobId = randomUUID();
     for (let i = 0; i < 12; i++) {
@@ -110,9 +110,10 @@ describe("status routes stay exempt from the abuse guard", () => {
     }
   });
 
-  it("keeps @SkipThrottle on both status routes and every guard off them", async () => {
-    // ★ `getBuildLog` used to be on this list and is deliberately no longer: it now authenticates,
-    // and an unauthenticated caller guessing tokens against it must be metered (build-log-access BL-5).
+  it("keeps @SkipThrottle on getJob and every guard off it", async () => {
+    // ★ `getBuildLog` is deliberately not exempt: it authenticates, and an unauthenticated caller guessing
+    // tokens against it must be metered (build-log-access BL-5).
+    // ★ `jobEvents` is also not exempt — see the next `describe`.
     const { VerificationsController } = await import("../src/modules/verifications/verifications.controller.js");
     // `@SkipThrottle()` stores under the constant suffixed with the throttler's name, which is "default" for
     // the unnamed one wired in app.module.ts.
@@ -121,9 +122,7 @@ describe("status routes stay exempt from the abuse guard", () => {
     const guards = (name: string) => Reflect.getMetadata("__guards__", handler(name)) ?? [];
 
     expect(skipsThrottle("getJob")).toBe(true);
-    expect(skipsThrottle("jobEvents")).toBe(true);
     expect(guards("getJob")).toHaveLength(0);
-    expect(guards("jobEvents")).toHaveLength(0);
     // The log routes are the other side of that line, and stating it here is what keeps the exemption from
     // creeping back onto them.
     expect(skipsThrottle("getBuildLog")).toBeUndefined();
@@ -133,12 +132,26 @@ describe("status routes stay exempt from the abuse guard", () => {
     // this assertion would pass while the routes were in fact guarded.
     expect(Reflect.getMetadata("__guards__", VerificationsController)).toBeUndefined();
 
-    // The other half of the same fact: submit DOES carry the guard, so the assertions above are about these
-    // two routes rather than about the guard never being applied at all.
+    // The other half of the same fact: submit DOES carry the guard, so the assertions above are about getJob
+    // specifically rather than about the guard never being applied at all.
     expect(guards("submit").length).toBeGreaterThan(0);
     // uploadSource carries no controller guard at all — RawArchiveBodyMiddleware runs the equivalent drain and
     // abuse checks itself, before the body is buffered rather than after (raw-archive-body.middleware.ts).
     expect(guards("uploadSource")).toHaveLength(0);
+  });
+});
+
+// See verifications.controller.ts's jobEvents route for why it keeps @SkipThrottle and carries AbuseGuard.
+describe("the SSE stream route is guarded by AbuseGuard but keeps @SkipThrottle", () => {
+  it("keeps @SkipThrottle on jobEvents and guards it with AbuseGuard", async () => {
+    const { VerificationsController } = await import("../src/modules/verifications/verifications.controller.js");
+    const { AbuseGuard } = await import("../src/common/abuse.guard.js");
+    const handler = (name: string) => (VerificationsController.prototype as never)[name] as object;
+    const skipsThrottle = (name: string) => Reflect.getMetadata("THROTTLER:SKIPdefault", handler(name));
+    const guards = (name: string) => Reflect.getMetadata("__guards__", handler(name)) ?? [];
+
+    expect(skipsThrottle("jobEvents")).toBe(true);
+    expect(guards("jobEvents")).toContain(AbuseGuard);
   });
 });
 
