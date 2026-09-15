@@ -45,6 +45,9 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW must be a number" })
   SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW?: string;
 
+  @IsOptional() @IsNumberString({}, { message: "SCVS_ABUSE_FAILOPEN_THRESHOLD must be a number" })
+  SCVS_ABUSE_FAILOPEN_THRESHOLD?: string;
+
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_WINDOW_MS must be a number" })
   SCVS_JOB_STREAM_WINDOW_MS?: string;
 

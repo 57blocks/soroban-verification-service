@@ -1,5 +1,6 @@
 import {
   readDbEnv,
+  resolvePoolConfig,
   toConnectionString,
   type PostgresConnectionConfig,
 } from "@scvs/db";
@@ -16,6 +17,9 @@ const DB_KEYS = [
   "POSTGRES_DB",
   "POSTGRES_USER",
   "POSTGRES_PASSWORD",
+  "SCVS_DB_CONNECTION_TIMEOUT_MS",
+  "SCVS_DB_IDLE_TIMEOUT_MS",
+  "SCVS_DB_POOL_MAX",
 ] as const;
 
 let saved: Record<string, string | undefined>;
@@ -71,6 +75,56 @@ describe("readDbEnv", () => {
     expect(config.database).toBeUndefined();
     expect(config.host).toBe("localhost");
   });
+
+  it("merges the pool-tuning variables in alongside a discrete-field config", () => {
+    for (const key of DB_KEYS) delete process.env[key];
+    process.env.POSTGRES_HOST = "db.example.invalid";
+    process.env.SCVS_DB_CONNECTION_TIMEOUT_MS = "9000";
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "30000";
+    process.env.SCVS_DB_POOL_MAX = "20";
+
+    expect(readDbEnv()).toMatchObject({
+      host: "db.example.invalid",
+      connectionTimeoutMillis: 9000,
+      idleTimeoutMillis: 30000,
+      max: 20,
+    });
+  });
+
+  it("merges the pool-tuning variables in alongside a DATABASE_URL config", () => {
+    for (const key of DB_KEYS) delete process.env[key];
+    process.env.DATABASE_URL = "postgresql://u:p@example.invalid:5432/from_url";
+    process.env.SCVS_DB_CONNECTION_TIMEOUT_MS = "9000";
+
+    expect(readDbEnv()).toEqual({
+      url: "postgresql://u:p@example.invalid:5432/from_url",
+      connectionTimeoutMillis: 9000,
+    });
+  });
+
+  it("omits connectionTimeoutMillis and max rather than passing NaN or a non-positive value through", () => {
+    for (const key of DB_KEYS) delete process.env[key];
+    process.env.SCVS_DB_CONNECTION_TIMEOUT_MS = "not-a-number";
+    process.env.SCVS_DB_POOL_MAX = "0";
+
+    const config = readDbEnv();
+    expect(config).not.toHaveProperty("connectionTimeoutMillis");
+    expect(config).not.toHaveProperty("max");
+  });
+
+  it("omits idleTimeoutMillis for a non-numeric or negative value, but keeps an explicit 0", () => {
+    for (const key of DB_KEYS) delete process.env[key];
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "not-a-number";
+    expect(readDbEnv()).not.toHaveProperty("idleTimeoutMillis");
+
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "-1";
+    expect(readDbEnv()).not.toHaveProperty("idleTimeoutMillis");
+
+    // pg's own documented meaning for 0 is "never evict an idle client", not "unset" — dropping it would
+    // silently substitute pg's 10000ms default for an operator's explicit override.
+    process.env.SCVS_DB_IDLE_TIMEOUT_MS = "0";
+    expect(readDbEnv()).toMatchObject({ idleTimeoutMillis: 0 });
+  });
 });
 
 describe("toConnectionString", () => {
@@ -108,5 +162,46 @@ describe("toConnectionString", () => {
         password: "p@ss/" + "word",
       }),
     ).toBe("postgresql://user%40corp:p%40ss%2Fword@db.example.invalid:5432/scvs");
+  });
+});
+
+describe("resolvePoolConfig", () => {
+  // Asserts on the config createPrismaClient would hand `PrismaPg`, without constructing a real
+  // PrismaClient (which needs a real Prisma engine) or mocking @prisma/adapter-pg.
+  let originalNodeEnv: string | undefined;
+
+  beforeEach(() => {
+    originalNodeEnv = process.env.NODE_ENV;
+  });
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it("defaults connectionTimeoutMillis to 5000ms when the input supplies none", () => {
+    process.env.NODE_ENV = "production";
+    expect(resolvePoolConfig({ url: "postgresql://u:p@h:1/d" })).toMatchObject({
+      connectionTimeoutMillis: 5000,
+    });
+  });
+
+  it("passes an explicit connectionTimeoutMillis, idleTimeoutMillis, and max straight through", () => {
+    process.env.NODE_ENV = "production";
+    expect(
+      resolvePoolConfig({
+        url: "postgresql://u:p@h:1/d",
+        connectionTimeoutMillis: 9000,
+        idleTimeoutMillis: 30000,
+        max: 20,
+      }),
+    ).toMatchObject({ connectionTimeoutMillis: 9000, idleTimeoutMillis: 30000, max: 20 });
+  });
+
+  it("forces max to 1 under NODE_ENV=test regardless of what the input asked for", () => {
+    process.env.NODE_ENV = "test";
+    expect(resolvePoolConfig({ url: "postgresql://u:p@h:1/d", max: 20 })).toMatchObject({
+      max: 1,
+    });
   });
 });

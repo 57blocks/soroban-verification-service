@@ -1,5 +1,4 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common";
-import { AbuseGuardService } from "../../common/abuse-guard.js";
 import { RawArchiveBodyMiddleware } from "../../common/raw-archive-body.middleware.js";
 import { LegalModule } from "../legal/legal.module.js";
 import { JobsService } from "./jobs.service.js";
@@ -11,9 +10,8 @@ import { VerificationsController } from "./verifications.controller.js";
   // The submit path needs the loaded terms bundle to validate acceptance against (design.md TA-2).
   imports: [LegalModule],
   controllers: [VerificationsController],
-  // AbuseGuardService is here because `@UseGuards(AbuseGuard)` on this module's controller makes Nest resolve
-  // the guard's dependencies from this module.
-  providers: [SubmitService, JobsService, UploadsService, AbuseGuardService],
+  // AbuseGuardService comes from the global AbuseGuardModule (app.module.ts) — see its own header.
+  providers: [SubmitService, JobsService, UploadsService],
 })
 export class VerificationsModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import { EventEmitter } from "node:events";
 import type { Request, Response } from "express";
 import { RawArchiveBodyMiddleware } from "../src/common/raw-archive-body.middleware.js";
-import type { AbuseGuardService } from "../src/common/abuse-guard.js";
+import type { AbuseCheckResult, AbuseGuardService } from "../src/common/abuse-guard.js";
 import { UPLOAD_SOURCE_ROUTE } from "../src/common/abuse.guard.js";
 import type { DrainState } from "@scvs/core";
 
@@ -12,10 +12,10 @@ function configService() {
   return { get: () => MAX_BYTES } as unknown as ConstructorParameters<typeof RawArchiveBodyMiddleware>[0];
 }
 
-/** Allows every request by default; `allowed: false` exercises the rate-limit branch. */
-function abuseGuardService(allowed = true) {
+/** Allows every request by default. Pass `{ allowed: false, reason: ... }` to exercise a rejection branch. */
+function abuseGuardService(result: AbuseCheckResult = { allowed: true }) {
   return {
-    checkAbuseFailOpen: jest.fn().mockResolvedValue(allowed),
+    checkAbuseFailOpen: jest.fn().mockResolvedValue(result),
   } as unknown as AbuseGuardService;
 }
 
@@ -75,7 +75,11 @@ describe("RawArchiveBodyMiddleware", () => {
   });
 
   it("rejects over the abuse budget before reading any body, without buffering a chunk", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(false), drainState());
+    const middleware = new RawArchiveBodyMiddleware(
+      configService(),
+      abuseGuardService({ allowed: false, reason: "rate_limited" }),
+      drainState(),
+    );
     const req = new FakeRequest();
     const res = fakeResponse();
     const next = jest.fn();
@@ -94,6 +98,25 @@ describe("RawArchiveBodyMiddleware", () => {
     // the per-chunk accumulator.
     req.emit("data", Buffer.from("x"));
     expect(dataListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects with 503 rather than admitting the request once checkAbuseFailOpen reports fail_closed", async () => {
+    const middleware = new RawArchiveBodyMiddleware(
+      configService(),
+      abuseGuardService({ allowed: false, reason: "fail_closed" }),
+      drainState(),
+    );
+    const req = new FakeRequest();
+    const res = fakeResponse();
+    const next = jest.fn();
+
+    await middleware.use(req as unknown as Request, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: "abuse_check_unavailable" }));
+    res.emitFinish();
+    expect(req.destroy).toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("keys the abuse check on the exact route string AbuseGuard's SUBMISSION_ROUTES would have used", async () => {
@@ -116,14 +139,19 @@ describe("RawArchiveBodyMiddleware", () => {
       expect.anything(),
       expect.anything(),
       expect.anything(),
+      expect.anything(),
     );
   });
 
   // The fail-open behavior itself (a DB error must not block the request) lives in and is tested against
-  // AbuseGuardService.checkAbuseFailOpen directly — this only confirms the middleware trusts that boolean
+  // AbuseGuardService.checkAbuseFailOpen directly — this only confirms the middleware trusts that verdict
   // rather than re-implementing its own error handling around the call.
-  it("proceeds normally when checkAbuseFailOpen resolves true", async () => {
-    const middleware = new RawArchiveBodyMiddleware(configService(), abuseGuardService(true), drainState());
+  it("proceeds normally when checkAbuseFailOpen resolves allowed: true", async () => {
+    const middleware = new RawArchiveBodyMiddleware(
+      configService(),
+      abuseGuardService({ allowed: true }),
+      drainState(),
+    );
     const req = new FakeRequest();
     req.headers["content-length"] = "6";
     const res = fakeResponse();

@@ -5,6 +5,7 @@ import { DbModule } from "@scvs/db";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { AbuseGuardModule } from "./common/abuse-guard.module.js";
 import { LegacyHttpExceptionFilter } from "./common/legacy-http-exception.filter.js";
 import { NotFoundModule } from "./common/not-found.module.js";
 import { RequestIdMiddleware } from "./common/request-id.middleware.js";
@@ -45,6 +46,8 @@ import { VerificationSvcEnvDto } from "./config/env.dto.js";
       useFactory: (configService: AppConfigService) =>
         configService.get("drainGraceMs", { infer: true }),
     }),
+    // Global for the same reason as DrainModule above — see abuse-guard.module.ts.
+    AbuseGuardModule,
     // The cheap in-process tier in front of the Postgres-backed `AbuseGuard`.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

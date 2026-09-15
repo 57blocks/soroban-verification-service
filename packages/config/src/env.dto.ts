@@ -92,6 +92,15 @@ export class SharedEnvDto {
   @IsIn(["true", "false"], { message: 'POSTGRES_SSL must be "true" or "false"' })
   POSTGRES_SSL?: string;
 
+  @IsOptional() @IsNumberString({}, { message: "SCVS_DB_CONNECTION_TIMEOUT_MS must be a number" })
+  SCVS_DB_CONNECTION_TIMEOUT_MS?: string;
+
+  @IsOptional() @IsNumberString({}, { message: "SCVS_DB_IDLE_TIMEOUT_MS must be a number" })
+  SCVS_DB_IDLE_TIMEOUT_MS?: string;
+
+  @IsOptional() @IsNumberString({}, { message: "SCVS_DB_POOL_MAX must be a number" })
+  SCVS_DB_POOL_MAX?: string;
+
   @IsOptional() @IsString()
   STELLAR_CLI_PATH?: string;
 

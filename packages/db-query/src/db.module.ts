@@ -9,7 +9,7 @@ import {
 } from "@nestjs/common";
 import { createPrismaClient, type PrismaClient } from "./client.js";
 import { toConnectionString, type DbConnectionInput } from "@scvs/db";
-import { DB_CONNECTION_STRING, PRISMA_CLIENT } from "./db.tokens.js";
+import { DB_CONNECTION_INPUT, DB_CONNECTION_STRING, PRISMA_CLIENT } from "./db.tokens.js";
 import { DbHealthService } from "./db-health.service.js";
 import { TrustedVerifiersRepository } from "./trusted-verifiers.repo.js";
 import { AggregationRepository } from "./aggregation.repo.js";
@@ -44,17 +44,24 @@ class PrismaClientLifecycle implements OnModuleDestroy {
 @Module({})
 export class DbModule {
   static forRootAsync(options: DbModuleAsyncOptions): DynamicModule {
+    // Resolved once; `DB_CONNECTION_STRING` and `DB_CONNECTION_INPUT` both derive from this rather than each
+    // re-invoking `options.useFactory` — see @scvs/db's own DbModule for why.
+    const connectionInputProvider: Provider = {
+      provide: DB_CONNECTION_INPUT,
+      useFactory: options.useFactory,
+      inject: options.inject ?? [],
+    };
+
     const connectionStringProvider: Provider = {
       provide: DB_CONNECTION_STRING,
-      useFactory: async (...args: unknown[]) =>
-        toConnectionString(await options.useFactory(...args)),
-      inject: options.inject ?? [],
+      useFactory: (input: DbConnectionInput) => toConnectionString(input),
+      inject: [DB_CONNECTION_INPUT],
     };
 
     const clientProvider: Provider = {
       provide: PRISMA_CLIENT,
-      useFactory: (url: string) => createPrismaClient({ url }),
-      inject: [DB_CONNECTION_STRING],
+      useFactory: (input: DbConnectionInput) => createPrismaClient(input),
+      inject: [DB_CONNECTION_INPUT],
     };
 
     return {
@@ -63,6 +70,7 @@ export class DbModule {
       global: true,
       imports: options.imports ?? [],
       providers: [
+        connectionInputProvider,
         connectionStringProvider,
         clientProvider,
         PrismaClientLifecycle,

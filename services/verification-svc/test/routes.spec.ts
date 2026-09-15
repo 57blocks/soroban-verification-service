@@ -201,6 +201,28 @@ describe("GET /api/verification/v1/verifications/:job_id/log", () => {
   });
 });
 
+// A single-instance circuit breaker split across two instances is two independent circuit breakers — see
+// abuse-guard.module.ts's header for the failure this guards against.
+describe("AbuseGuardService DI wiring", () => {
+  it("is the same instance for the preflight route and the verifications route", async () => {
+    const { NestFactory } = await import("@nestjs/core");
+    const { AppModule } = await import("../src/app.module.js");
+    const { PreflightModule } = await import("../src/modules/preflight/preflight.module.js");
+    const { VerificationsModule } = await import("../src/modules/verifications/verifications.module.js");
+    const { AbuseGuardService } = await import("../src/common/abuse-guard.js");
+
+    const app = await NestFactory.create(AppModule, { logger: false });
+    await app.init();
+    try {
+      const fromPreflight = app.select(PreflightModule).get(AbuseGuardService);
+      const fromVerifications = app.select(VerificationsModule).get(AbuseGuardService);
+      expect(fromPreflight).toBe(fromVerifications);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 // A 401 or 403 here would mean a credentialled surface exists, which is the thing the rule forbids — so it
 // fails this test rather than passing it.
 describe("no runtime trust-mutation surface", () => {
