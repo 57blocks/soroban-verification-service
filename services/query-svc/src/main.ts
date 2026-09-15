@@ -7,9 +7,11 @@ import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { SwaggerModule } from "@nestjs/swagger";
+import { ThrottlerStorage } from "@nestjs/throttler";
 import cors from "cors";
 import helmet from "helmet";
 import { AppModule } from "./app.module.js";
+import { adapterRouteThrottle } from "./common/adapter-route-throttle.middleware.js";
 import { AggregationSyncService } from "./modules/aggregation/aggregation-sync.service.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import type { AppConfigService } from "./config/configuration.js";
@@ -35,6 +37,19 @@ async function bootstrap(): Promise<NestExpressApplication> {
   app.enableCors({ origin: configService.get("corsOrigin", { infer: true }) });
 
   const document = buildOpenApiDocument(app);
+
+  // Registered BEFORE SwaggerModule.setup, and it has to be: the setup call mounts its routes on the adapter
+  // itself, where no Nest guard runs. Middleware is the only layer that sees both. Same storage as the guard,
+  // so the two tiers cannot drift into different notions of a window.
+  app.use(
+    adapterRouteThrottle({
+      storage: app.get(ThrottlerStorage),
+      limit: configService.get("queryThrottleLimit", { infer: true }),
+      ttlMs: 60_000,
+      prefixes: ["/api/query/v1/docs", "/api/query/v1/openapi.json"],
+    }),
+  );
+
   // `customSiteTitle`: see verification-svc — the `<title>` is what a probe uses to tell this document apart
   // from the SPA, since both answer `200 text/html`.
   SwaggerModule.setup("api/query/v1/docs", app, document, {

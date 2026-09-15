@@ -28,8 +28,10 @@ process.env.SCVS_PUBLIC_RESULT_ROOT ||= "http://localhost:4999";
 // Every worker shares one caller address (127.0.0.1), so the suite rate-limits itself without this. Both tiers
 // need it: aggregation.spec.ts drives the address route too. `rate-limit.spec.ts` sets its own ceilings rather
 // than relying on these, which is why raising them here hides nothing.
+// The address tier must stay strictly below the global one or boot fails by design, so the two differ here
+// too — equal ceilings are exactly what configuration.ts refuses.
 const NO_QUOTA_IN_TESTS = 1_000_000;
-process.env.SCVS_QUERY_THROTTLE_LIMIT ||= String(NO_QUOTA_IN_TESTS);
+process.env.SCVS_QUERY_THROTTLE_LIMIT ||= String(NO_QUOTA_IN_TESTS * 2);
 process.env.SCVS_QUERY_ADDRESS_THROTTLE_LIMIT ||= String(NO_QUOTA_IN_TESTS);
 
 process.env.NODE_ENV = "test";

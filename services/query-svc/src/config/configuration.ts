@@ -25,6 +25,38 @@ function boundedBulkPageLimit(name: string, fallback: number, min: number, max: 
   return parsed;
 }
 
+/**
+ * The address tier's effective limit. Exported because `results.controller.ts` must read the same number from
+ * a `@Throttle()` decorator — evaluated at class-definition time, before any Nest container exists — and a
+ * second literal in that decorator is how the two would drift apart.
+ */
+export const DEFAULT_ADDRESS_THROTTLE_LIMIT = 60;
+
+function queryThrottleLimit(): number {
+  const globalLimit = numberEnv("SCVS_QUERY_THROTTLE_LIMIT", 600);
+  assertTierOrdering(globalLimit, addressThrottleLimit());
+  return globalLimit;
+}
+
+export function addressThrottleLimit(): number {
+  return numberEnv("SCVS_QUERY_ADDRESS_THROTTLE_LIMIT", DEFAULT_ADDRESS_THROTTLE_LIMIT);
+}
+
+/**
+ * `@Throttle` REPLACES the global limit for the route it decorates rather than stacking a second window under
+ * it, so an address tier at or above the global one widens that route's allowance instead of narrowing it —
+ * the exact opposite of what it is there for, and invisible at runtime because nothing looks wrong.
+ * docs/invariants.md rule 35. Checked at boot, where a misconfiguration is still cheap.
+ */
+function assertTierOrdering(globalLimit: number, addressLimit: number): void {
+  if (addressLimit < globalLimit) return;
+  throw new Error(
+    `SCVS_QUERY_ADDRESS_THROTTLE_LIMIT (${addressLimit}) must be below SCVS_QUERY_THROTTLE_LIMIT ` +
+      `(${globalLimit}): it replaces the global budget for the address route rather than stacking under it, ` +
+      "so this value widens that route instead of narrowing it.",
+  );
+}
+
 const configuration = () => ({
   // O9's drain window: how long we keep serving after SIGTERM so readiness can go false and the balancer can
   // deregister us before we leave.
@@ -53,7 +85,8 @@ const configuration = () => ({
   // The global read budget, per client address per minute. Wide on purpose: every route it covers is answered
   // from this service's own database, so it is a bound on abuse rather than a quota anyone should feel. The
   // one route that reaches a third party carries its own, much tighter ceiling — see results.controller.ts.
-  queryThrottleLimit: numberEnv("SCVS_QUERY_THROTTLE_LIMIT", 600),
+  queryThrottleLimit: queryThrottleLimit(),
+  addressThrottleLimit: addressThrottleLimit(),
   // How long the readiness probe waits for `SELECT 1` before reporting the database unreachable. Must stay
   // below the balancer's health-check timeout: past it the balancer stops waiting and the answer is moot.
   readinessDbTimeoutMs: numberEnv("SCVS_READINESS_DB_TIMEOUT_MS", 2_000),

@@ -16,6 +16,7 @@ import {
   isNetwork,
   type Network,
 } from "@scvs/core";
+import { addressThrottleLimit } from "../../config/configuration.js";
 import { ApiErrorResponse } from "../../common/api-error.dto.js";
 import { ApiError } from "../../common/api-error.exception.js";
 import { AggregationReadService } from "../aggregation/aggregation-read.service.js";
@@ -65,13 +66,13 @@ export class ResultsController {
    * `@Throttle` REPLACES the global limit for this route rather than stacking a second window under it, so this
    * number must stay BELOW `SCVS_QUERY_THROTTLE_LIMIT` or it widens the budget instead of narrowing it.
    *
-   * Reads `process.env` directly rather than through `ConfigService`, the same documented exception
-   * verification-svc's upload route takes: a decorator argument is evaluated when the class is defined, before
-   * Nest's container exists. The value is therefore fixed at import time — changing it needs a restart.
+   * `addressThrottleLimit()` reads `process.env` directly rather than going through `ConfigService`, the same
+   * documented exception verification-svc's upload route takes: a decorator argument is evaluated when the
+   * class is defined, before Nest's container exists. The value is therefore fixed at import time — changing
+   * it needs a restart. It is a shared function rather than a second literal so this number and the one
+   * `configuration.ts` checks the ordering against cannot disagree.
    */
-  @Throttle({
-    default: { limit: Number(process.env.SCVS_QUERY_ADDRESS_THROTTLE_LIMIT || 60), ttl: 60_000 },
-  })
+  @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })
   @ApiOkResponse({ type: AggregatedWasmStatus })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_network | invalid_contract_id" })

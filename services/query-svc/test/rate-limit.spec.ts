@@ -103,22 +103,38 @@ describe("the address route's tighter tier", () => {
 });
 
 /**
- * ★ Records current behaviour; this is NOT an assertion that it is right.
- *
- * `SwaggerModule.setup()` registers its routes straight on the HTTP adapter, so they never enter Nest's guard
- * chain and `APP_GUARD` cannot see them — `@SkipThrottle()` has nothing to do with it. verification-svc mounts
- * its own document the same way, so this is one cross-service gap, not a query-svc decision. Documented as an
- * exemption in `docs/specs/query-and-aggregation.md` rather than left as an unstated one; closing it needs a
- * limiter outside the guard chain, in both services at once.
+ * `SwaggerModule.setup()` registers its routes on the HTTP adapter, where no Nest guard runs — `APP_GUARD`
+ * never sees them and `@SkipThrottle()` has nothing to act on. They are covered by express middleware instead
+ * (`adapter-route-throttle.middleware.ts`), counting through the same storage as the guard, so an
+ * unauthenticated reader cannot pull the document in a loop for free.
  */
-describe("the documentation surface is outside the guard chain", () => {
+describe("the documentation surface, throttled outside the guard chain", () => {
   it.each(["/api/query/v1/openapi.json", "/api/query/v1/docs"])(
-    "%s is not throttled — a bandwidth surface the quota does not reach",
+    "%s is refused past the ceiling, in the same envelope as any other route",
     async (path) => {
-      const statuses = await burst(path, GLOBAL_LIMIT + 5, "198.51.100.7");
-      expect(statuses.filter((status) => status === 429)).toEqual([]);
+      const caller = `198.51.100.${path.includes("docs") ? 20 : 21}`;
+      const statuses = await burst(path, GLOBAL_LIMIT + 1, caller);
+
+      expect(statuses.at(-1)).toBe(429);
+
+      const refused = await request(app.getHttpServer()).get(path).set("x-forwarded-for", caller);
+      expect(refused.body).toMatchObject({
+        schema: "stellar-verification-error",
+        error: "rate_limited",
+        status_code: 429,
+      });
     },
   );
+
+  it("spends its own budget, not the API's", async () => {
+    const caller = "198.51.100.22";
+    const docs = await burst("/api/query/v1/openapi.json", GLOBAL_LIMIT + 1, caller);
+    expect(docs.at(-1)).toBe(429);
+
+    // Reading the document to exhaustion must not cost the same caller its ability to query.
+    const api = await burst(`/api/query/v1/wasms/${SOME_HASH}`, 1, caller);
+    expect(api[0]).not.toBe(429);
+  });
 });
 
 describe("routes exempt from the quota", () => {

@@ -11,6 +11,9 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
  */
 const LIMIT = 2;
 process.env.SCVS_QUERY_THROTTLE_LIMIT = String(LIMIT);
+// Lowering only the global one would leave the address tier above it, which boot refuses (rule 35). This
+// suite never drives the address route, so the value only has to be legal.
+process.env.SCVS_QUERY_ADDRESS_THROTTLE_LIMIT = "1";
 
 const SOME_HASH = "b".repeat(64);
 

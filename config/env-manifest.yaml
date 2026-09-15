@@ -2078,7 +2078,15 @@ services:
           relation unambiguous under load testing.
 
           Health and `/internal/config-contract` carry `@SkipThrottle()` — a probe refused with 429
-          is a probe that failed, and the quota would deregister a task for being polled.
+          is a probe that failed, and the quota would deregister a task for being polled. The OpenAPI
+          document and its Swagger UI are covered by express middleware on this same ceiling, under
+          their own counter: `SwaggerModule.setup()` registers on the HTTP adapter, where no Nest
+          guard runs.
+
+          ★ Counted by `FixedWindowThrottlerStorage`, not `@nestjs/throttler`'s bundled storage —
+          that one lets any caller clear every other caller's counter (see the class header). This
+          is a per-process, per-caller ceiling: it bounds one client, never the deployment's
+          aggregate outbound rate.
       SCVS_QUERY_ADDRESS_THROTTLE_LIMIT:
         type: number
         default: 60
@@ -2106,6 +2114,11 @@ services:
           container exists. Same documented exception as verification-svc's
           SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE: the value is fixed at import time, so changing it needs
           a restart, not a config reload.
+
+          **Boot refuses a value at or above SCVS_QUERY_THROTTLE_LIMIT** (`configuration.ts`), since
+          such a value widens this route instead of narrowing it and nothing looks wrong at runtime.
+          Both are validated as positive whole numbers: `0` would refuse every request, and a
+          negative one was previously discarded for the default with nothing said.
       SCVS_READINESS_DB_TIMEOUT_MS:
         type: number
         default: 2000

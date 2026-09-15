@@ -5,6 +5,7 @@ import { DbModule } from "@scvs/db-query";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { LegacyHttpExceptionFilter } from "./common/legacy-http-exception.filter.js";
+import { FixedWindowThrottlerStorage } from "./common/fixed-window-throttler.storage.js";
 import { RateLimitGuard } from "./common/rate-limit.guard.js";
 import { NotFoundModule } from "./common/not-found.module.js";
 import configuration, { type AppConfigService } from "./config/configuration.js";
@@ -48,9 +49,13 @@ import { QuerySvcEnvDto } from "./config/env.dto.js";
     // its budget cannot be spent, or widened, by traffic to any other route.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: AppConfigService) => [
-        { ttl: 60_000, limit: configService.get("queryThrottleLimit", { infer: true }) },
-      ],
+      useFactory: (configService: AppConfigService) => ({
+        throttlers: [{ ttl: 60_000, limit: configService.get("queryThrottleLimit", { infer: true }) }],
+        // Not the bundled storage — see fixed-window-throttler.storage.ts for the cross-caller defect that
+        // one carries. Constructed here rather than provided, so `main.ts` can hand the same instance to the
+        // middleware guarding the routes Swagger mounts outside the guard chain.
+        storage: new FixedWindowThrottlerStorage(),
+      }),
     }),
     HealthModule,
     ConfigContractModule,

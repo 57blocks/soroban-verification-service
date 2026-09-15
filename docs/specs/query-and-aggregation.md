@@ -100,15 +100,24 @@ A refused request returns `429` carrying `rate_limited` in the shared error enve
 opaque body and never a `5xx`: a quota that sheds load by falling over is not a quota. Health and
 configuration-contract routes are exempt — a probe refused with `429` is a probe that failed.
 
-The OpenAPI document and its Swagger UI are exempt too, but not by choice: they are registered on
-the HTTP adapter rather than through the router, so no route-level guard is consulted for them. Both
-public services mount their documents that way. It is a bandwidth surface the quota does not reach,
-and closing it needs a limiter outside the guard chain.
+The OpenAPI document and its Swagger UI are registered on the HTTP adapter rather than through the
+router, so no route-level guard is consulted for them; they are covered by middleware on the same
+counter instead, under a budget of their own. Reading the document to exhaustion therefore costs a
+caller nothing of its ability to query.
+
+The counter itself is this service's own. `@nestjs/throttler`'s bundled in-memory storage keys its
+decay timers by throttler name rather than by caller, so unblocking one caller cancels every
+caller's pending decrement and freezes their counts — a caller who cycles in and out of the blocked
+state ratchets everyone else's count up until they are refused inside their own budget.
 
 The quota bounds what one caller extracts. It is not a bound on this deployment's aggregate
 outbound rate to an upstream RPC endpoint, which many callers across many tasks can still exceed.
 
-Verified by: `services/query-svc/src/common/rate-limit.guard.ts` (rate_limited),
+Verified by: `services/query-svc/src/common/fixed-window-throttler.storage.ts` (FixedWindowThrottlerStorage),
+`services/query-svc/test/throttler-storage.spec.ts` (one caller's counter is its own),
+`services/query-svc/src/common/adapter-route-throttle.middleware.ts` (adapterRouteThrottle),
+`services/query-svc/test/quota-config.spec.ts` (the two tiers' ordering),
+`services/query-svc/src/common/rate-limit.guard.ts` (rate_limited),
 `services/query-svc/src/app.module.ts` (ThrottlerModule),
 `services/query-svc/src/modules/results/results.controller.ts` (queryByContract),
 `services/query-svc/test/rate-limit.spec.ts` (the global read quota,
