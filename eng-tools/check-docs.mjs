@@ -41,7 +41,9 @@ const BUDGETS = {
   "CLAUDE.md": 256,
   // Raised from 14 KiB on 2026-09-14: rule 32 left four bytes of headroom, so the old cap could no longer
   // admit ANY new rule. A cap that forces a real constraint to go unrecorded is not a size discipline.
-  "docs/invariants.md": 15 * 1024,
+  // Raised again on 2026-09-15, for the same reason at the same margin — rule 35 left three. The pattern is
+  // the cap, not the document: it admits roughly one rule per raise, so expect the next one.
+  "docs/invariants.md": 16 * 1024,
   "docs/specs/build-environments.md": 8 * 1024,
   "docs/specs/configuration.md": 12 * 1024,
   "docs/specs/data-and-lifecycle.md": 12 * 1024,

@@ -86,7 +86,7 @@ jobs:
       # that commit, which a shallow clone cannot do.
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -285,11 +285,11 @@ jobs:
   #
   # Addressed by owner/name rather than `./`: inside a workflow that is itself called, a `./` path resolves
   # against the CALLER's repository — the operations repository, whose `db-migrate.yml` is a dispatch trigger
-  # with no `workflow_call` at all. `uses:` cannot be an expression, so the reference is pinned here in
-  # reviewable source, the same way the operations repository pins this workflow. A fork edits both lines.
+  # with no `workflow_call` at all. `uses:` cannot be an expression, so the sha is written out here and held
+  # current by `check:workflow-pins` — without that, a caller's pin would stop at this line. A fork edits both.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@89f1e406f05ed94f685196ce19d8c961a091952f
     permissions:
       id-token: write
       contents: read
@@ -311,7 +311,7 @@ jobs:
   # ⚠ That last clause states the DESIGN, not dev as deployed.
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@89f1e406f05ed94f685196ce19d8c961a091952f
     permissions:
       id-token: write
       contents: read
@@ -350,7 +350,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -395,7 +395,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -447,7 +447,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -567,7 +567,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -616,7 +616,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -712,7 +712,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -873,7 +873,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -945,7 +945,7 @@ jobs:
       # diffing the SDK surface between two commits.
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}

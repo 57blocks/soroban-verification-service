@@ -46,7 +46,11 @@ jobs:
       POSTGRES_USER: scvs
       POSTGRES_PASSWORD: scvs_local_dev
     steps:
+      # Full history: `check:workflow-pins` reads the commits the workflows pin themselves to, and a shallow
+      # clone holds none of them. Every other gate here reads `git ls-files` only.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       # No `version:` — pnpm/action-setup reads the root package.json `packageManager` field, which is also the
       # field Turborepo requires to resolve the workspace.
@@ -73,6 +77,11 @@ jobs:
       # Duplicate keys and broken run blocks in a workflow file.
       - name: Check workflow files
         run: pnpm run check:workflows
+
+      # A caller pins the workflow it names, not what that workflow reaches: `uses:` cannot be an expression,
+      # so every reference back to this repository resolves again when the job starts.
+      - name: Check the pipeline is pinned below the caller's pin
+        run: pnpm run check:workflow-pins
 
       # Early, and before the build: a leaked credential is worth reporting in one minute rather than
       # eleven. Needs the Docker daemon the Postgres service above already requires.
