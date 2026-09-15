@@ -43,6 +43,7 @@ below whose violation is expensive enough to warrant one).
 | 31 | A trust input — the trusted image set, the Trusted Verifiers List, the published policy — changes by deploy only. No route mutates one in a running verifier, and `policy.json` stays byte-identical for the process's lifetime. | `config/verifier-policy.example.json`, `services/orchestrator-svc/src/modules/build-environments/` | — |
 | 32 | A route that buffers its entire request body into memory completes rate-limiting and size-ceiling checks before reading any byte of it — never as a controller guard, which only runs after the body is already buffered. | `services/verification-svc/src/common/raw-archive-body.middleware.ts` | — |
 | 33 | Every entrypoint that binds a port sets the three `http.Server` deadlines explicitly, keep-alive above the idle timeout of whatever fronts it. Node's 5 s default sits below a balancer's and answers 502 on a reused connection. | `packages/core/src/http-timeouts.ts`, `eng-tools/check-http-timeouts.mjs` | — |
+| 34 | The dependency-prefetch egress allowlist is checked against the fully resolved dependency graph, not only the submitter's own manifest — a transitive dependency's declared source is a fetch target exactly like a direct one, and it does not exist on disk to be checked until the resolver has already dereferenced it once. | `services/builder/src/modules/builder/egress-policy.ts` (`evaluateVendoredEgressPolicy`) | — |
 
 ## The 3 rules with a full reason
 

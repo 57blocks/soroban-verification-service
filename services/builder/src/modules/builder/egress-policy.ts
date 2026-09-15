@@ -67,6 +67,30 @@ export function evaluatePrefetchUrl(
   return { ok: true };
 }
 
+/**
+ * A transitive dependency's own `git`/`source` pointer exists on disk only after `cargo vendor` has
+ * fetched it, so this re-runs the same allowlist against the vendored output. Rejects the build result;
+ * the fetch itself has already happened by the time this runs.
+ */
+export async function evaluateVendoredEgressPolicy(
+  vendorDir: string,
+  allowedHosts: string[]
+): Promise<PrefetchEgressPolicy> {
+  const urls = await collectCargoPrefetchUrls(vendorDir);
+  for (const url of urls) {
+    const decision = evaluatePrefetchUrl(url, allowedHosts);
+    if (!decision.ok) {
+      return {
+        ok: false,
+        allowed_hosts: allowedHosts,
+        blocked_url: url,
+        detail: decision.reason,
+      };
+    }
+  }
+  return { ok: true, allowed_hosts: allowedHosts };
+}
+
 export async function collectCargoPrefetchUrls(
   sourceRoot: string
 ): Promise<string[]> {

