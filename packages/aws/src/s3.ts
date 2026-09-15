@@ -260,9 +260,24 @@ export async function getObjectTextVersioned(
     }
     return { text, version: response.ETag };
   } catch (error) {
-    if (isNotFound(error)) return undefined;
+    if (isMissingKey(error)) return undefined;
     throw error;
   }
+}
+
+/**
+ * A genuinely absent key, as opposed to `isNotFound`'s "any 404" — which a missing bucket also answers with.
+ * The distinction is load-bearing here: an absent object sends the caller down a create-if-absent write, so
+ * reporting a bucket or permission failure as absence would let it rebuild a document from nothing.
+ */
+function isMissingKey(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
+  const name = typeof value.name === "string" ? value.name : undefined;
+  // A named error is authoritative; only a response carrying no name at all falls back to the status, which
+  // is what a non-AWS S3-compatible endpoint may return.
+  if (name) return MISSING_ERROR_NAMES.has(name);
+  return value.$metadata?.httpStatusCode === 404;
 }
 
 /**
