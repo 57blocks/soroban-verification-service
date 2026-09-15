@@ -28,6 +28,15 @@ on:
           The deploy-role fallback's account id. An identifier, not a credential — it is a secret
           only so it stays out of the tree, and the caller passes it explicitly.
         required: false
+      SOURCE_APP_ID:
+        description: >-
+          GitHub App that may read this repository, while it is still private. A caller's own token is
+          scoped to the caller, so without this the checkouts below cannot see this project's source.
+          Both are unnecessary — and should be deleted — once the repository is public.
+        required: false
+      SOURCE_APP_PRIVATE_KEY:
+        description: "That App's private key."
+        required: false
 
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
@@ -56,9 +65,18 @@ jobs:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     # No `outputs:` any more.
     steps:
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@main
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
       # A Docker-managed volume, or a sourcePath that differs from its containerPath, mounts an empty directory

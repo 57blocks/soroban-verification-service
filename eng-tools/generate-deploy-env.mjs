@@ -90,9 +90,9 @@ function describe(entry, targetEnv, name) {
   return out;
 }
 
-export function buildArtifacts(manifest) {
+export function buildArtifacts(manifest, environments) {
   const resolved = resolveManifest(manifest);
-  const envs = manifest.meta?.environments ?? ["dev"];
+  const envs = environments?.length ? environments : (manifest.meta?.environments ?? ["dev"]);
   const artifacts = new Map(); // relative path -> JSON string
 
   // There is no cross-service parameter sharing to compute any more.
@@ -217,7 +217,17 @@ export function buildArtifacts(manifest) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = process.cwd();
-  const artifacts = buildArtifacts(loadManifest(root));
+  // `--env` so a deployment whose environment list is not this repository's business can still
+  // regenerate without editing a tracked file to do it.
+  const environments = process.argv.reduce(
+    (acc, arg, i) => (arg === "--env" ? [...acc, process.argv[i + 1]] : acc),
+    [],
+  );
+  if (environments.some((name) => !name || name.startsWith("--"))) {
+    console.error("--env takes an environment name, e.g. --env dev --env staging");
+    process.exit(1);
+  }
+  const artifacts = buildArtifacts(loadManifest(root), environments);
   const checkOnly = process.argv.includes("--check");
   const stale = [];
 
