@@ -276,9 +276,14 @@ jobs:
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
   # Schema first, code second.
+  #
+  # Addressed by owner/name rather than `./`: inside a workflow that is itself called, a `./` path resolves
+  # against the CALLER's repository — the operations repository, whose `db-migrate.yml` is a dispatch trigger
+  # with no `workflow_call` at all. `uses:` cannot be an expression, so the reference is pinned here in
+  # reviewable source, the same way the operations repository pins this workflow. A fork edits both lines.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: ./.github/workflows/db-migrate.yml
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
     permissions:
       id-token: write
       contents: read
@@ -290,11 +295,17 @@ jobs:
       # migrate dev's database during a staging deploy.
       environment: ${{ inputs.environment || 'dev' }}
       target: verification-svc
+      source_sha: ${{ inputs.source_sha }}
+      source_repository: ${{ inputs.source_repository }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SOURCE_APP_ID: ${{ secrets.SOURCE_APP_ID }}
+      SOURCE_APP_PRIVATE_KEY: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
 
   # ⚠ That last clause states the DESIGN, not dev as deployed.
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: ./.github/workflows/db-migrate.yml
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
     permissions:
       id-token: write
       contents: read
@@ -304,6 +315,12 @@ jobs:
       image_digest: ${{ needs.stage-service-image.outputs.image_digest }}
       environment: ${{ inputs.environment || 'dev' }}
       target: query-svc
+      source_sha: ${{ inputs.source_sha }}
+      source_repository: ${{ inputs.source_repository }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SOURCE_APP_ID: ${{ secrets.SOURCE_APP_ID }}
+      SOURCE_APP_PRIVATE_KEY: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
 
   # One job, not a step in each `deploy-service` matrix leg: all three legs share one image, so three legs would
   # move one tag three times.
