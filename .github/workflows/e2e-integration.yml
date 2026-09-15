@@ -51,6 +51,26 @@ on:
         type: string
         required: false
         default: "100"
+      submit_quota:
+        description: >-
+          The deployment's SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW. Supplied by the caller, which is the side that
+          holds this deployment's resolved configuration — this repository's checkout has none of it, which is
+          why the quota cannot be read from a file here. Absent, E2E-SEC-11/SEC-12 skip and say so.
+        type: string
+        required: false
+        default: ""
+      submit_window_ms:
+        description: "The deployment's SCVS_ABUSE_WINDOW_MS. Absent, the cases fall back to 60000."
+        type: string
+        required: false
+        default: ""
+      query_quota:
+        description: >-
+          The deployment's SCVS_QUERY_ADDRESS_THROTTLE_LIMIT — the tier on the one query route that reaches an
+          upstream RPC, and the ceiling worth measuring. Absent, E2E-QRY-13 skips and says so.
+        type: string
+        required: false
+        default: ""
     secrets:
       SCVS_FIXTURE_TESTNET_SECRET_KEY:
         description: "Testnet account the fixture builder deploys from. A signing key; scoped to the caller's environment."
@@ -69,11 +89,9 @@ permissions:
   id-token: write
   contents: read
 
-# One dev service deployment and one Batch queue. Let an active run finish; a second runner would turn quota and
-# queue contention into failures that say nothing about either commit.
-concurrency:
-  group: e2e-${{ inputs.environment || 'dev' }}
-  cancel-in-progress: false
+# No `concurrency:` here — see deploy.yml's note. The caller must serialize per environment: one service
+# deployment and one Batch queue, so a second runner turns quota and queue contention into failures that
+# say nothing about either commit.
 
 jobs:
   e2e:
@@ -253,28 +271,39 @@ jobs:
       - name: Typecheck E2E harness
         run: pnpm --filter @scvs/e2e-tests run typecheck
 
-      # The source is this environment's deploy contract, not a copy of the number: `config/env-manifest.yaml`
-      # marks the four load-testing overrides `required_in: [dev, staging]`, so `assert-config-contract` is what
-      # keeps this file honest.
-      - name: Export the deployment's published submission quota
+      # ★ These numbers arrive as inputs and cannot be read from a file here. The deploy contracts that hold
+      # them live in the operations repository; this workflow's only checkout is the APPLICATION repository
+      # (`repository: ${{ inputs.source_repository }}` above), so `config/deploy/<env>/` is never on the
+      # runner. Reading it was silent: the step found no file, logged "will skip", and exited 0 — which is how
+      # SEC-11/SEC-12 came to skip every run without anyone noticing.
+      #
+      # The caller reads its own contract and passes the value, so there is still exactly one source of truth
+      # and it is still the deployment's own configuration, not a copy kept here.
+      - name: Export the deployment's published quotas
         shell: bash
+        env:
+          SUBMIT_QUOTA: ${{ inputs.submit_quota }}
+          SUBMIT_WINDOW_MS: ${{ inputs.submit_window_ms }}
+          QUERY_QUOTA: ${{ inputs.query_quota }}
         run: |
-          contract="config/deploy/${SCVS_E2E_ENV}/verification-svc.json"
-          if [[ ! -f "$contract" ]]; then
-            echo "no deploy contract at $contract — SEC-11/SEC-12 will skip" >&2
-            exit 0
-          fi
-          quota=$(jq -r '.secrets.variables.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW | (.value // .default // empty)' "$contract")
-          window=$(jq -r '.secrets.variables.SCVS_ABUSE_WINDOW_MS | (.value // .default // empty)' "$contract")
-          if [[ -n "$quota" ]]; then
-            echo "SCVS_E2E_QUOTA_SUBMIT=$quota" >> "$GITHUB_ENV"
-            echo "submission quota for $SCVS_E2E_ENV: $quota per window"
+          if [[ -n "$SUBMIT_QUOTA" ]]; then
+            echo "SCVS_E2E_QUOTA_SUBMIT=$SUBMIT_QUOTA" >> "$GITHUB_ENV"
+            echo "submission quota for $SCVS_E2E_ENV: $SUBMIT_QUOTA per window"
           else
-            echo "$contract declares no SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW — SEC-11/SEC-12 will skip" >&2
+            echo "caller passed no submit_quota — E2E-SEC-11/SEC-12 will skip" >&2
           fi
-          if [[ -n "$window" ]]; then
-            echo "SCVS_E2E_WINDOW_SUBMIT_MS=$window" >> "$GITHUB_ENV"
+          if [[ -n "$SUBMIT_WINDOW_MS" ]]; then
+            echo "SCVS_E2E_WINDOW_SUBMIT_MS=$SUBMIT_WINDOW_MS" >> "$GITHUB_ENV"
           fi
+          if [[ -n "$QUERY_QUOTA" ]]; then
+            echo "SCVS_E2E_QUOTA_QUERY=$QUERY_QUOTA" >> "$GITHUB_ENV"
+            echo "address-route quota for $SCVS_E2E_ENV: $QUERY_QUOTA per window"
+          else
+            echo "caller passed no query_quota — E2E-QRY-13 will skip" >&2
+          fi
+          # No variable carries this one: the query throttler's window is the `ttl` hardcoded beside the limit
+          # in results.controller.ts, so it is fixed rather than configured.
+          echo "SCVS_E2E_WINDOW_QUERY_MS=60000" >> "$GITHUB_ENV"
 
       - name: Run smoke cases
         if: ${{ inputs.test_suite == 'smoke' || inputs.test_suite == 'both' }}

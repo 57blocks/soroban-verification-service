@@ -6,7 +6,9 @@ import {
   ApiOperation,
   ApiParam,
   ApiServiceUnavailableResponse,
+  ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import {
   AggregatedWasmStatus,
   DEPRECATED_JSON_ROUTE_DESCRIPTION,
@@ -14,6 +16,7 @@ import {
   isNetwork,
   type Network,
 } from "@scvs/core";
+import { addressThrottleLimit } from "../../config/configuration.js";
 import { ApiErrorResponse } from "../../common/api-error.dto.js";
 import { ApiError } from "../../common/api-error.exception.js";
 import { AggregationReadService } from "../aggregation/aggregation-read.service.js";
@@ -54,12 +57,23 @@ export class ResultsController {
   }
 
   @Get("api/query/v1/contracts/:network/:contract_id")
+  /**
+   * The only route that reaches a third party — one outbound RPC per admitted request, uncached (see
+   * `resolve`) — so this tier is sized against what the upstream tolerates, and `@Throttle` replacing the
+   * global limit rather than stacking under it is why boot refuses a value at or above it. The limit comes
+   * from `process.env`, a decorator argument being evaluated before any container exists.
+   */
+  @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })
   @ApiOkResponse({ type: AggregatedWasmStatus })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_network | invalid_contract_id" })
   @ApiNotFoundResponse({
     type: ApiErrorResponse,
     description: "contract_not_found — the address holds no verifiable contract",
+  })
+  @ApiTooManyRequestsResponse({
+    type: ApiErrorResponse,
+    description: "rate_limited — this route carries a tighter budget than the rest of the read surface",
   })
   @ApiServiceUnavailableResponse({
     type: ApiErrorResponse,

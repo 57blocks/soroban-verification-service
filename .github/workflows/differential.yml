@@ -42,9 +42,8 @@ permissions:
   id-token: write # OIDC -> AWS role assumption, for the stellar-cli cache read
   contents: read
 
-concurrency:
-  group: differential-${{ github.ref }}
-  cancel-in-progress: false
+# No `concurrency:` here — see deploy.yml's note. `github.ref` under `workflow_call` is the caller's,
+# so a group built from it named one lock for every run whatever ref it was given.
 
 jobs:
   differential:

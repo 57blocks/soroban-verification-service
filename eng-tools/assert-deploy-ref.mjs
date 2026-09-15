@@ -5,7 +5,15 @@
  *
  *   node eng-tools/assert-deploy-ref.mjs --env staging [--sha <commit>] [--main <ref>]
  */
-import { git, inGha, requireOnMain } from "./release-channels.mjs";
+import { fail, git, inGha, requireOnMain } from "./release-channels.mjs";
+
+const tryGit = (...args) => {
+  try {
+    return git(...args);
+  } catch {
+    return null;
+  }
+};
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -14,7 +22,10 @@ const flag = (name, fallback) => {
 };
 
 const targetEnv = flag("env", process.env.SCVS_ENV ?? "dev");
-const sha = flag("sha", process.env.GITHUB_SHA) ?? git("rev-parse", "HEAD");
+// The checked-out commit before the ambient one: under `workflow_call` GITHUB_SHA names the caller, and a
+// caller's commit is never on this repository's main. GITHUB_SHA remains the fallback for a run without one.
+const sha = flag("sha") ?? tryGit("rev-parse", "HEAD") ?? process.env.GITHUB_SHA;
+if (!sha) fail("no commit to check: pass --sha, or run this where a checkout or GITHUB_SHA exists");
 
 const comparedAgainst = requireOnMain({
   sha,

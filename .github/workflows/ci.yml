@@ -66,6 +66,10 @@ jobs:
       - name: Check environment variable contract
         run: pnpm run check:env
 
+      # Nothing here may name one deployment's data: the shape lives here, the values do not.
+      - name: Check no deployment's data is named
+        run: pnpm run check:deployment-data
+
       # Duplicate keys and broken run blocks in a workflow file.
       - name: Check workflow files
         run: pnpm run check:workflows

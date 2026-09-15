@@ -229,9 +229,17 @@ jobs:
             if [ -z "$TAG" ]; then
               # Newest image in the repository, resolved by push time — a manual run should not have to know a
               # commit SHA to apply already-released migrations.
+              #
+              # Sorted here rather than in `--query`: the CLI paginates at 100 images and applies a query to
+              # each page, so `--output text` returns one answer PER PAGE. A repository that has crossed 100
+              # then yields a two-line value, which breaks $GITHUB_OUTPUT rather than picking the wrong image.
               TAG=$(aws ecr describe-images --repository-name "$SERVICE_ECR_REPOSITORY" \
-                --region "$AWS_REGION" \
-                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text)
+                --region "$AWS_REGION" --output json \
+                | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty')
+            fi
+            if [ -z "$TAG" ]; then
+              echo "::error::$SERVICE_ECR_REPOSITORY holds no tagged image to migrate from"
+              exit 1
             fi
             IMAGE="${REGISTRY}/${SERVICE_ECR_REPOSITORY}:${TAG}"
           fi
@@ -264,18 +272,30 @@ jobs:
           esac
 
           COMMAND="cd /app/$MIGRATE_PACKAGE && ./node_modules/.bin/$PRISMA_CMD"
-          SEED_ENV='[]'
 
+          # The list of verifiers a deployment trusts is that deployment's own value, and it reaches the
+          # container the way every other one does — its configuration. This step used to compose an
+          # in-image path instead, which made the image a function of WHOSE deployment it was; nothing
+          # is composed here now.
+          #
+          # Never fall through to the built-in default: `config/trusted-verifiers.local.json` ships in the
+          # image and exists, so an unset variable would seed a development list into a real environment
+          # and say nothing. A deployment that declares no source gets no seed, loudly.
+          #
           # `tsx` (not `node`) because scripts/ is TypeScript that is never compiled into dist/.
           if [ "$ACTION" = "deploy" ] && [ "$TARGET" = "query-svc" ]; then
-            # The file must exist in the IMAGE, so a new environment adds it in the same PR that adds the
-            # environment.
-            TVL_SOURCE="config/trusted-verifiers.${ENVIRONMENT}.json"
-            COMMAND="$COMMAND && echo '--- seeding the Trusted Verifiers List (SCVS_TRUSTED_VERIFIERS_SOURCE=$TVL_SOURCE) ---'"
-            COMMAND="$COMMAND && cd /app && ./node_modules/.bin/tsx scripts/seed-tvl.ts"
-            SEED_ENV=$(jq -nc --arg v "$TVL_SOURCE" \
-              '[{name:"SCVS_TRUSTED_VERIFIERS_SOURCE", value:$v}]')
-            echo "Will seed the TVL from $TVL_SOURCE after the migration"
+            DECLARED=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
+              --region "$AWS_REGION" --output json \
+              | jq -r '[.taskDefinition.containerDefinitions[]
+                        | ((.environment // []) + (.secrets // []))[]
+                        | select(.name == "SCVS_TRUSTED_VERIFIERS_SOURCE")] | length')
+            if [ "$DECLARED" = "0" ]; then
+              echo "::warning::$TASK_DEFINITION declares no SCVS_TRUSTED_VERIFIERS_SOURCE, so the Trusted Verifiers List is NOT seeded. Set it in this environment's deployment contract; it is not this repository's to supply."
+            else
+              COMMAND="$COMMAND && echo '--- seeding the Trusted Verifiers List ---'"
+              COMMAND="$COMMAND && cd /app && ./node_modules/.bin/tsx scripts/seed-tvl.ts"
+              echo "Will seed the TVL from the source this environment's configuration declares"
+            fi
           fi
 
           # Invokes the Prisma binary directly rather than through `pnpm exec`: docker/ service.Dockerfile's
@@ -295,12 +315,12 @@ jobs:
           # point run-task at the root sibling family; the same container name is preserved
           MIGRATE_TD="$REGISTER_ARNS"
 
-          # It is `[]` for every run that does not seed.
+          # Only the command is overridden. Every variable the task reads comes from the task definition,
+          # which is where this environment's configuration put it.
           OVERRIDES=$(jq -nc \
             --arg name "$CONTAINER_NAME" \
             --arg cmd "$COMMAND" \
-            --argjson env "$SEED_ENV" \
-            '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd], environment:$env}]}')
+            '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd]}]}')
 
           # The service's own `awsvpcConfiguration` is by definition the network that reaches this environment's
           # RDS instance, so this is both correct per environment and self-healing when Terraform moves a

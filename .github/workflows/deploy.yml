@@ -57,11 +57,13 @@ on:
 permissions:
   id-token: write # OIDC -> AWS role assumption
   contents: read
+  # A called workflow's `permissions:` is the CEILING for its jobs, not an addition to what the caller
+  # granted: without this the image pull below is denied `403` however carefully the caller asked for it.
+  packages: read
 
-# Never cancel a deploy in flight — a half-rolled ECS service is worse than a queued one.
-concurrency:
-  group: deploy-${{ inputs.environment || 'dev' }}
-  cancel-in-progress: false
+# No `concurrency:` here on purpose. A called workflow that repeats its caller's group deadlocks
+# against it — the caller holds the group, this waits for it, and GitHub cancels the run. The lock
+# belongs to whatever owns the trigger; ours declares `deploy-<environment>`, never cancelling.
 
 env:
   AWS_REGION: ap-southeast-2
@@ -104,8 +106,12 @@ jobs:
 
       # First step that can fail, and it holds no credentials: an environment may only run a commit a release
       # could be cut from. This repository cannot have branch protection, so this check is what stands in.
+      # `--sha` is not optional here: under `workflow_call` the ambient commit is the CALLER's, so the check
+      # would prove the operations repository's own HEAD is on this repository's main, which it never is.
       - name: Refuse a deploy from a commit that is not on main
-        run: node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}"
+        run: |
+          node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}" \
+            --sha "${{ inputs.source_sha }}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
@@ -162,10 +168,11 @@ jobs:
             exit 1
           fi
 
+          # Sorted in jq, not in `--query`: see db-migrate.yml's note — a query runs per page, so past 100
+          # images `--output text` answers once per page and the newest is not the value that comes back.
           newest=$(aws ecr describe-images --repository-name "$COMPOSER_ECR_REPOSITORY" \
-            --region "${{ env.AWS_REGION }}" \
-            --query 'reverse(sort_by(imageDetails,&imagePushedAt))[0].imageTags[0]' \
-            --output text 2>/dev/null || true)
+            --region "${{ env.AWS_REGION }}" --output json 2>/dev/null \
+            | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty' || true)
 
           if [ -z "$newest" ] || [ "$newest" = "None" ]; then
             # Bootstrap: no composer image exists yet, so there is no skew to create.
@@ -275,9 +282,14 @@ jobs:
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
   # Schema first, code second.
+  #
+  # Addressed by owner/name rather than `./`: inside a workflow that is itself called, a `./` path resolves
+  # against the CALLER's repository — the operations repository, whose `db-migrate.yml` is a dispatch trigger
+  # with no `workflow_call` at all. `uses:` cannot be an expression, so the reference is pinned here in
+  # reviewable source, the same way the operations repository pins this workflow. A fork edits both lines.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: ./.github/workflows/db-migrate.yml
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
     permissions:
       id-token: write
       contents: read
@@ -289,11 +301,17 @@ jobs:
       # migrate dev's database during a staging deploy.
       environment: ${{ inputs.environment || 'dev' }}
       target: verification-svc
+      source_sha: ${{ inputs.source_sha }}
+      source_repository: ${{ inputs.source_repository }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SOURCE_APP_ID: ${{ secrets.SOURCE_APP_ID }}
+      SOURCE_APP_PRIVATE_KEY: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
 
   # ⚠ That last clause states the DESIGN, not dev as deployed.
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: ./.github/workflows/db-migrate.yml
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@main
     permissions:
       id-token: write
       contents: read
@@ -303,6 +321,12 @@ jobs:
       image_digest: ${{ needs.stage-service-image.outputs.image_digest }}
       environment: ${{ inputs.environment || 'dev' }}
       target: query-svc
+      source_sha: ${{ inputs.source_sha }}
+      source_repository: ${{ inputs.source_repository }}
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SOURCE_APP_ID: ${{ secrets.SOURCE_APP_ID }}
+      SOURCE_APP_PRIVATE_KEY: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
 
   # One job, not a step in each `deploy-service` matrix leg: all three legs share one image, so three legs would
   # move one tag three times.
@@ -457,6 +481,15 @@ jobs:
       # Through `env:`, never interpolated into the script: GitHub substitutes the raw text before bash
       # parses it, so a single quote anywhere in the descriptor would terminate the literal and run the
       # remainder as shell. deploy-builder.yml already uses this shape.
+      # The deployment's own contract, handed over by the caller rather than read from this tree: it states
+      # values for ONE deployment and this repository holds none. An absent artifact fails the job, which is
+      # the point — rendering a definition from a contract nobody supplied is the outcome worth avoiding.
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Write ${{ matrix.service }}'s configuration to Secrets Manager
         env:
           DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
@@ -466,6 +499,7 @@ jobs:
           node eng-tools/sync-secrets.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json" \
             --descriptor @/tmp/ci-descriptor.json
 
       # The registry hostname embeds the account id, which stage-service-image deliberately keeps out of its
@@ -486,6 +520,7 @@ jobs:
           node eng-tools/render-taskdef.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json" \
             --image "${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ needs.stage-service-image.outputs.image_repo }}@${{ needs.stage-service-image.outputs.image_digest }}" \
             --descriptor @/tmp/ci-descriptor.json \
             > /tmp/taskdef.json
@@ -499,6 +534,7 @@ jobs:
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json" \
             /tmp/taskdef.json
 
       - name: Register the task definition
@@ -760,6 +796,12 @@ jobs:
       #
       # No Node setup needed: sync-secrets and render-taskdef import only node: builtins, and the
       # runner ships Node.
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Write web's configuration to Secrets Manager
         env:
           DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
@@ -769,6 +811,7 @@ jobs:
           node eng-tools/sync-secrets.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/web.json" \
             --descriptor @/tmp/ci-descriptor.json
 
       # The registry hostname comes from the ECR login step, which already resolved it — unlike
@@ -779,6 +822,7 @@ jobs:
           node eng-tools/render-taskdef.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/web.json" \
             --image "${{ steps.ecr-login.outputs.registry }}/${WEB_ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
             --descriptor @/tmp/ci-descriptor.json \
             > /tmp/taskdef.json
@@ -788,6 +832,7 @@ jobs:
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            --contract "/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/web.json" \
             /tmp/taskdef.json
 
       - name: Register the task definition

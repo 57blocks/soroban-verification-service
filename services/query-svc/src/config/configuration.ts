@@ -25,6 +25,32 @@ function boundedBulkPageLimit(name: string, fallback: number, min: number, max: 
   return parsed;
 }
 
+/** Exported so the `@Throttle()` decorator and the ordering check below read one number, not two literals. */
+export const DEFAULT_ADDRESS_THROTTLE_LIMIT = 60;
+
+function queryThrottleLimit(): number {
+  const globalLimit = numberEnv("SCVS_QUERY_THROTTLE_LIMIT", 600);
+  assertTierOrdering(globalLimit, addressThrottleLimit());
+  return globalLimit;
+}
+
+export function addressThrottleLimit(): number {
+  return numberEnv("SCVS_QUERY_ADDRESS_THROTTLE_LIMIT", DEFAULT_ADDRESS_THROTTLE_LIMIT);
+}
+
+/**
+ * An address tier at or above the global one widens that route instead of narrowing it, and nothing looks
+ * wrong at runtime. Checked at boot, where it is still cheap.
+ */
+function assertTierOrdering(globalLimit: number, addressLimit: number): void {
+  if (addressLimit < globalLimit) return;
+  throw new Error(
+    `SCVS_QUERY_ADDRESS_THROTTLE_LIMIT (${addressLimit}) must be below SCVS_QUERY_THROTTLE_LIMIT ` +
+      `(${globalLimit}): it replaces the global budget for the address route rather than stacking under it, ` +
+      "so this value widens that route instead of narrowing it.",
+  );
+}
+
 const configuration = () => ({
   // O9's drain window: how long we keep serving after SIGTERM so readiness can go false and the balancer can
   // deregister us before we leave.
@@ -50,6 +76,14 @@ const configuration = () => ({
   // every other setting instead of a package reading POSTGRES_* off process.env itself.
   postgres: readDbEnv(),
   corsOrigin: process.env.CORS_ORIGIN || "*",
+  // The global read budget, per client address per minute. Wide on purpose: every route it covers is answered
+  // from this service's own database, so it is a bound on abuse rather than a quota anyone should feel. The
+  // one route that reaches a third party carries its own, much tighter ceiling — see results.controller.ts.
+  queryThrottleLimit: queryThrottleLimit(),
+  addressThrottleLimit: addressThrottleLimit(),
+  // How long the readiness probe waits for `SELECT 1` before reporting the database unreachable. Must stay
+  // below the balancer's health-check timeout: past it the balancer stops waiting and the answer is moot.
+  readinessDbTimeoutMs: numberEnv("SCVS_READINESS_DB_TIMEOUT_MS", 2_000),
   queryTimeoutMs: numberEnv("SCVS_QUERY_TIMEOUT_MS", 5_000),
   queryCacheTtlMs: numberEnv("SCVS_QUERY_CACHE_TTL_MS", 30_000),
   // How often the retained aggregation is refreshed. Zero disables the timer entirely, for a deployment driving

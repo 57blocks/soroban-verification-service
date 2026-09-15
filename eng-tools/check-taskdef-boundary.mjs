@@ -32,7 +32,7 @@
  * orchestrator-svc's config secret into query-svc's task would start cleanly and serve wrong data.
  */
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -50,8 +50,13 @@ if (!service || files.length !== 1) {
   process.exit(2);
 }
 
+// `--contract` because the document is a fact about ONE deployment and this repository holds none:
+// under `workflow_call` it arrives from the caller, which is the deployment. The default keeps a local
+// run working in a tree that does carry its own.
 const ROOT = process.cwd();
-const contractPath = join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
+const contractPath = flag("contract")
+  ? resolve(flag("contract"))
+  : join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
 if (!existsSync(contractPath)) {
   // Fail closed: no contract means nothing to check against, which is not the same as nothing to find.
   console.error(

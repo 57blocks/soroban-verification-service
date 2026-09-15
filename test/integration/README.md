@@ -688,7 +688,7 @@ dev/staging topology; controlled peer failures and policy-dispute aggregation st
 | SUB | 01 (×2 networks), **02/compose_cache_miss**, **02/compose_cache_hit**, **02/compose_unofficial_pair (×3 pairs)**, **03**, 04, 05 (×3), 06, 07/mismatch_no_retry, 08 (×3), **09/unsupported_toolchain**, 10, 13 (×2), 14 (×2), **18/dry_run** | 09's infrastructure suffix; 11, 12 (AUTO-INFRA); 15 (BROWSER); 16 (needs the CLI helper) |
 | DEDUP | 01, 02 (×4), 03, 03/cross_network, 04/verified_is_terminal, **04/force_reverify_not_user_facing (public negative half)**, 05 (×2), **06/build_timeout_requeued**, **06/non_retryable_returned_for_correction** | 04 operator force-reverify + audit evidence (blocked on undefined/unimplemented P11); **06/internal_error_requeued** (AUTO-INFRA) |
 | PUB | 02, 04 (×5), 07, 08, 09, 10, 11 (×3), 14, 15, 17 (×2) | 01, 05, 12, 13, 16 (AUTO-INFRA); 03 (needs the draft Registry schema) |
-| QRY | 01, 06, 07, **08**, 11, 12 | 02–05, 09, 10 are component-only because normal dev/staging cannot create policy disagreement, controlled peer failure, or three TVL states |
+| QRY | 01, 06, 07, **08**, 11, 12, **13** | 02–05, 09, 10 are component-only because normal dev/staging cannot create policy disagreement, controlled peer failure, or three TVL states |
 | VERIFY | **HEALTH** | — |
 | WEB | **01/public_console_preflight**; SDK-04/browser | Result explorer remains feature-flagged |
 | SDK | **01, 02, 04/node + browser, 07** | 03 has no public E2E; 06 is **RELEASE** and lives outside this harness (`eng-tools/check-sdk-registry-install.mjs`, run by `release.yml` after the publish step) — it needs a published version, not a deployment. Peer failure and `results_urls` safety are SDK component tests |

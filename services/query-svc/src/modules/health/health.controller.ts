@@ -1,12 +1,26 @@
 import { Controller, Get, Inject, Res } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse } from "@nestjs/swagger";
+import { SkipThrottle } from "@nestjs/throttler";
 import { DrainState, readiness, type ReadinessReport } from "@scvs/core";
+import { DbHealthService } from "@scvs/db-query";
 import type { Response } from "express";
 import { healthPayload } from "./health.util.js";
+import type { AppConfigService } from "../../config/configuration.js";
 
+// Never throttled: the container HEALTHCHECK and the ALB target group are the heaviest callers of these
+// routes, and a probe refused with 429 is a probe that failed — the quota would take the task out of
+// service for being healthy enough to be polled.
+@SkipThrottle()
 @Controller("health")
 export class HealthController {
-  constructor(@Inject(DrainState) private readonly drain: DrainState) {}
+  // Explicit `@Inject()` — tsx/esbuild does not emit the decorator metadata Nest would otherwise infer
+  // these parameter types from.
+  constructor(
+    @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(DrainState) private readonly drain: DrainState,
+    @Inject(DbHealthService) private readonly dbHealth: DbHealthService,
+  ) {}
 
   /** Unchanged: the container `HEALTHCHECK`, the ALB target group, and an existing spec read this. */
   @Get()
@@ -22,15 +36,20 @@ export class HealthController {
     return { status: "alive" };
   }
 
-  /** Readiness for the read layer, and **it probes no dependency**. */
+  /**
+   * Every route but this tree reads Postgres, so answering 200 with the database gone keeps a useless instance
+   * in the target group. The probe's bound must stay below the balancer's health-check timeout, or the
+   * balancer gives up before the answer arrives.
+   */
   @Get("ready")
-  @ApiOperation({
-    summary: "Readiness — false only while draining. Probes no dependency; the source says why.",
-  })
+  @ApiOperation({ summary: "Readiness — false while draining, or while Postgres is unreachable." })
   @ApiOkResponse({ description: "ready to serve reads" })
-  @ApiServiceUnavailableResponse({ description: "draining" })
-  getReady(@Res({ passthrough: true }) response: Response): ReadinessReport {
-    const report = readiness(this.drain, {});
+  @ApiServiceUnavailableResponse({ description: "draining, or a dependency is unavailable" })
+  async getReady(@Res({ passthrough: true }) response: Response): Promise<ReadinessReport> {
+    const database = await this.dbHealth.ping(
+      this.configService.get("readinessDbTimeoutMs", { infer: true }),
+    );
+    const report = readiness(this.drain, { database });
     if (!report.ready) response.status(503);
     return report;
   }

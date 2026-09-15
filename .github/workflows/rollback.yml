@@ -42,11 +42,8 @@ permissions:
   id-token: write
   contents: read
 
-# Shares deploy.yml's lock name so a rollback and a deploy of the same environment cannot interleave: both end
-# in `update-service`, and the loser would silently win.
-concurrency:
-  group: deploy-${{ inputs.environment }}
-  cancel-in-progress: false
+# No `concurrency:` here — see deploy.yml's note. The caller must give a rollback the SAME group as a
+# deploy of that environment: both end in `update-service`, and the loser would silently win.
 
 env:
   AWS_REGION: ap-southeast-2
