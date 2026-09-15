@@ -10,9 +10,17 @@ async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "conditional-write-test-"));
   const storage = createResultStorage({ kind: "filesystem", root, publicRoot: "https://example.test" });
 
-  // The filesystem backend serialises writers only within one process, and says so rather than leaving the
-  // limit to a document nothing can check.
+  // The filesystem backend reaches only as far as this process, and says so rather than leaving the limit to
+  // a document nothing can check.
   assert.equal(storage.crossProcessAtomicWrites, false);
+
+  // Of the object backends only S3 has been run against this code; R2 must not inherit the claim on the
+  // strength of sharing an API. (A field initialiser here would read `kind` before the constructor assigns
+  // it and report false for both, so the flag is worth asserting on a real instance.)
+  const objectStorage = (kind: "s3" | "r2") =>
+    createResultStorage({ kind, bucket: "b", publicRoot: "https://example.test", client: {} as never });
+  assert.equal(objectStorage("s3").crossProcessAtomicWrites, true);
+  assert.equal(objectStorage("r2").crossProcessAtomicWrites, false);
 
   // Absent object: no version to read, and only a create-if-absent write may land.
   assert.equal(await storage.readTextVersioned("wasms/a.json"), undefined);

@@ -186,7 +186,7 @@ class FilesystemResultStorage implements ResultStorage {
 }
 
 class S3ResultStorage implements ResultStorage {
-  readonly crossProcessAtomicWrites = true;
+  readonly crossProcessAtomicWrites: boolean;
 
   constructor(
     readonly kind: "s3" | "r2",
@@ -194,7 +194,14 @@ class S3ResultStorage implements ResultStorage {
     private readonly bucket: string,
     private readonly prefix: string,
     readonly publicRoot: string,
-  ) {}
+  ) {
+    // R2 serves the same API but has never been run against this code, and a conditional write it ignores
+    // or reports differently would look identical to one it honoured. The claim stays with the backend
+    // whose behaviour is known until a compatibility check against a real bucket says otherwise.
+    // Assigned here rather than as a field initialiser: those run before parameter properties, so
+    // `= this.kind === "s3"` would silently be false for both.
+    this.crossProcessAtomicWrites = kind === "s3";
+  }
 
   async readText(path: string): Promise<string | undefined> {
     return getObjectText(this.client, this.bucket, this.key(path));
