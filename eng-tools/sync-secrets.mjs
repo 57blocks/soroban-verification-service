@@ -27,7 +27,7 @@
  * which is also what makes this safe to run against a live environment while developing.
  */
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
@@ -49,8 +49,11 @@ if (!service) {
   process.exit(2);
 }
 
+// See check-taskdef-boundary.mjs: the contract belongs to the deployment, not to this repository.
 const ROOT = process.cwd();
-const contractPath = join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
+const contractPath = flag("contract")
+  ? resolve(flag("contract"))
+  : join(ROOT, `config/deploy/${targetEnv}/${service}.json`);
 if (!existsSync(contractPath)) {
   console.error(`::error::no contract at config/deploy/${targetEnv}/${service}.json`);
   process.exit(1);

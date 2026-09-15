@@ -31,6 +31,7 @@ not its scratch directory.
 | file | command | run by | what it asserts |
 | :---- | :---- | :---- | :---- |
 | [`check-env-manifest.mjs`](check-env-manifest.mjs) | `check:env` | `ci.yml` | `config/env-manifest.yaml`, the code that reads each variable, and each service's `env.dto.ts` name the same set — including the `forbidden:` lists themselves |
+| [`check-deployment-data.mjs`](check-deployment-data.mjs) | `check:deployment-data` | `ci.yml` | no tracked file names one deployment's data — `config/deploy/<env>/…` resolved from this tree, or a `config/trusted-verifiers.<env>.json` composed for a container to read. The shape lives here; the values belong to whoever runs a deployment |
 | [`check-workflow-syntax.mjs`](check-workflow-syntax.mjs) | `check:workflows` | `ci.yml` | duplicate YAML keys, `env`-context reads at job level, invalid `run` blocks, and descriptor calls in jobs that never checked out |
 | `check-vocabulary.mjs` | `check:vocabulary` | `ci.yml` | no instructing document uses a superseded term |
 | [`check-test-row-cleanup.mjs`](check-test-row-cleanup.mjs) | `check:test-row-cleanup` | `ci.yml` | a suite deletes only rows it created, scoped by an `in:` on a column it owns |

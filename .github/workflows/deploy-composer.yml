@@ -176,6 +176,14 @@ jobs:
           token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
+      # The deployment's own contract, handed over by the caller: it states values for ONE deployment and
+      # this repository holds none. An absent artifact fails the job, which is the point.
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
@@ -239,7 +247,8 @@ jobs:
           jq -n --argjson p "$CONTAINER_PROPERTIES" \
             '{jobDefinitionName: "x", type: "container", containerProperties: $p}' > /tmp/composer-jobdef.json
           node eng-tools/check-taskdef-boundary.mjs \
-            --env "${{ matrix.environment }}" --service composer /tmp/composer-jobdef.json
+            --env "${{ matrix.environment }}" --service composer \
+            --contract "/tmp/deploy-contracts/${{ matrix.environment }}/composer.json" /tmp/composer-jobdef.json
 
           JOB_DEF_ARN=$(aws batch register-job-definition \
             --job-definition-name "$JOB_DEFINITION_NAME" \
