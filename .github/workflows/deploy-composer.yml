@@ -23,6 +23,14 @@ on:
           image already exists, pushed by publish-images.yml, and is addressed by this commit.
         type: string
         required: true
+      contract_bundle:
+        description: >-
+          Base64-encoded JSON, shaped `{ "<env>": { "composer": <contract> } }`, covering both dev and
+          staging (this workflow's matrix runs both from one dispatch). Optional: when empty, falls
+          back to reading `config/deploy/<env>/composer.json` from this repository's own checkout.
+        type: string
+        required: false
+        default: ""
     secrets:
       AWS_ACCOUNT_ID:
         description: >-
@@ -148,6 +156,17 @@ jobs:
           repository: ${{ inputs.source_repository }}
           ref: ${{ inputs.source_sha }}
 
+      - name: Extract composer's deployment contract from the bundle
+        if: inputs.contract_bundle != ''
+        env:
+          CONTRACT_BUNDLE_B64: ${{ inputs.contract_bundle }}
+        run: |
+          set -euo pipefail
+          echo "$CONTRACT_BUNDLE_B64" | base64 -d > /tmp/contract-bundle.json
+          jq -e --arg env "${{ matrix.environment }}" \
+            '.[$env]["composer"] // error("no contract for " + $env + "/composer in bundle")' \
+            /tmp/contract-bundle.json > /tmp/contract.json
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
@@ -210,8 +229,10 @@ jobs:
           # `ecr:PutImage` — so the check exempts it there while still enforcing it for the builder.
           jq -n --argjson p "$CONTAINER_PROPERTIES" \
             '{jobDefinitionName: "x", type: "container", containerProperties: $p}' > /tmp/composer-jobdef.json
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           node eng-tools/check-taskdef-boundary.mjs \
-            --env "${{ matrix.environment }}" --service composer /tmp/composer-jobdef.json
+            --env "${{ matrix.environment }}" --service composer "${CONTRACT_ARG[@]}" /tmp/composer-jobdef.json
 
           JOB_DEF_ARN=$(aws batch register-job-definition \
             --job-definition-name "$JOB_DEFINITION_NAME" \
