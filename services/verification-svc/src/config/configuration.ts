@@ -59,8 +59,11 @@ const configuration = () => ({
   // Looser than the general read-route budget on purpose: a dropped SSE connection is meant to reconnect
   // (jobs.service.ts's stream_timeout / network hiccups), so legitimate reconnects must not exhaust the same
   // budget a submission would. This bounds connection *setup rate*; StreamConcurrencyLimiter bounds how many
-  // stay open at once — the two are independent controls for independent attack shapes.
-  streamAbuseMaxPerWindow: numberEnv("SCVS_STREAM_ABUSE_MAX_PER_WINDOW", 60),
+  // stay open at once — the two are independent controls for independent attack shapes, and this one is sized
+  // against that one: a fingerprint opening streams for distinct job ids (never blocked by the per-job cap) at
+  // this rate for a full jobStreamWindowMs (15 min default) reaches at most ~180 concurrently open streams,
+  // comfortably under jobStreamMaxConnectionsTotal's default of 500 rather than approaching or exceeding it.
+  streamAbuseMaxPerWindow: numberEnv("SCVS_STREAM_ABUSE_MAX_PER_WINDOW", 12),
   // Consecutive DB-backed abuse-check failures (no intervening success) before AbuseGuardService stops failing
   // open and starts failing closed instead. Not measured against production load — a starting point.
   abuseFailOpenThreshold: numberEnv("SCVS_ABUSE_FAILOPEN_THRESHOLD", 10),

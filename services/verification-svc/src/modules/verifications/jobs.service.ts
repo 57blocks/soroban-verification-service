@@ -412,7 +412,15 @@ export class JobsService {
         this.logger.log("stream open, waiting for status changes", { job_id: jobId });
         safetyInterval = setInterval(() => void emitCurrent(), safetyPollMs);
         timeout = setTimeout(() => void onWindowExpired(), streamWindowMs);
-      })();
+      })().catch((error) => {
+        if (closed) return;
+        this.logger.error("stream setup failed", { job_id: jobId, error: error instanceof Error ? error : String(error) });
+        subscriber.next({
+          data: errorBody(500, { error: "internal_error", message: "The verification stream could not be started." }),
+        });
+        subscriber.complete();
+        cleanup();
+      });
 
       return cleanup;
     });

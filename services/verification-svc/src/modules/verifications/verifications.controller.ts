@@ -195,6 +195,10 @@ export class VerificationsController {
   @ApiParam({ name: "job_id", format: "uuid" })
   @ApiOkResponse({ type: JobStatusResponse, description: "One event per status change, `text/event-stream`." })
   @ApiBadRequestResponse({ description: "invalid_job_id" })
+  // A real 429 from AbuseGuard, thrown before the SSE response starts. The separate concurrency-ceiling
+  // rejection (JobsService.streamJob's StreamConcurrencyLimiter) is a different path: the connection has
+  // already opened at 200 by then, so that one answers in-band as an SSE `data` event carrying
+  // `stream_connection_limit_reached`, not as an HTTP status code.
   @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   jobEvents(
     @Param(

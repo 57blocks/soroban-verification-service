@@ -173,4 +173,28 @@ describe("JobsService.streamJob concurrency ceiling", () => {
     streamA.close();
     streamB.close();
   });
+
+  it("releases the slot when subscribeToJobUpdates rejects", async () => {
+    const jobId = randomUUID();
+    let attempt = 0;
+    const jobEvents = {
+      subscribeToJobUpdates: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error("connection refused");
+        return () => {};
+      },
+    } as never;
+    const service = new JobsService(fakeConfig({ jobStreamMaxConnectionsPerJob: 1 }), fakeJobsRepository(jobId), jobEvents);
+
+    const first = openStream(service, jobId);
+    await flushMicrotasks();
+    expect(first.isCompleted()).toBe(true);
+    expect(first.events[0]?.data).toMatchObject({ error: "internal_error" });
+
+    const second = openStream(service, jobId);
+    await flushMicrotasks();
+    expect(second.isCompleted()).toBe(false);
+
+    second.close();
+  });
 });
