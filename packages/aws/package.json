@@ -13,7 +13,8 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsx src/conditional-write-test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-batch": "^3.1128.0",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3"
   }
 }

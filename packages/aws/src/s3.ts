@@ -192,3 +192,45 @@ export function isNotFound(error: unknown): boolean {
   const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
   return value.name === "NoSuchKey" || value.name === "NotFound" || value.$metadata?.httpStatusCode === 404;
 }
+
+/** A conditional write's outcome that is not success: `fatal` is thrown, the other two are retried. */
+export type ConditionalWriteFailure = "conflict" | "vanished" | "fatal";
+
+const CONFLICT_ERROR_NAMES = new Set(["PreconditionFailed", "ConditionalRequestConflict"]);
+const MISSING_ERROR_NAMES = new Set(["NoSuchKey", "NotFound"]);
+// A bucket-level or credential error can surface as 404 exactly like a missing key, so the NAME is the
+// authority here and the status code is only the fallback for a response that carries none.
+const FATAL_ERROR_NAMES = new Set([
+  "NoSuchBucket",
+  "AccessDenied",
+  "InvalidAccessKeyId",
+  "SignatureDoesNotMatch",
+  "AllAccessDisabled",
+]);
+
+/** Whether a failed conditional write may be replayed against a freshly read version, or must propagate. */
+export function classifyConditionalWriteError(
+  error: unknown,
+  mode: "if-match" | "if-none-match",
+): ConditionalWriteFailure {
+  if (!error || typeof error !== "object") return "fatal";
+  const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
+  const name = typeof value.name === "string" ? value.name : undefined;
+  if (name) {
+    if (FATAL_ERROR_NAMES.has(name)) return "fatal";
+    if (CONFLICT_ERROR_NAMES.has(name)) return "conflict";
+    // Only If-Match can race a delete. If-None-Match treats an absent object as its success condition, so a
+    // "missing" error from it is something else entirely and must not be retried.
+    if (MISSING_ERROR_NAMES.has(name)) return mode === "if-match" ? "vanished" : "fatal";
+    return "fatal";
+  }
+  switch (value.$metadata?.httpStatusCode) {
+    case 412:
+    case 409:
+      return "conflict";
+    case 404:
+      return mode === "if-match" ? "vanished" : "fatal";
+    default:
+      return "fatal";
+  }
+}
