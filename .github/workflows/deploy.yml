@@ -38,6 +38,16 @@ on:
         type: boolean
         required: false
         default: true
+      contract_bundle:
+        description: >-
+          Base64-encoded JSON, shaped `{ "<env>": { "<service>": <contract> } }`, holding the deployment
+          contracts the caller's repository owns for this run. Optional: when empty, each tool falls
+          back to reading `config/deploy/<env>/<service>.json` from this repository's own checkout
+          (the pre-SCV-217 behavior, kept for backward compatibility with callers that have not
+          upgraded).
+        type: string
+        required: false
+        default: ""
     secrets:
       AWS_ACCOUNT_ID:
         description: >-
@@ -390,6 +400,17 @@ jobs:
           repository: ${{ inputs.source_repository }}
           ref: ${{ inputs.source_sha }}
 
+      - name: Extract ${{ matrix.service }}'s deployment contract from the bundle
+        if: inputs.contract_bundle != ''
+        env:
+          CONTRACT_BUNDLE_B64: ${{ inputs.contract_bundle }}
+        run: |
+          set -euo pipefail
+          echo "$CONTRACT_BUNDLE_B64" | base64 -d > /tmp/contract-bundle.json
+          jq -e --arg env "${{ inputs.environment }}" --arg svc "${{ matrix.service }}" \
+            '.[$env][$svc] // error("no contract for " + $env + "/" + $svc + " in bundle")' \
+            /tmp/contract-bundle.json > /tmp/contract.json
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
@@ -418,10 +439,13 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$DESCRIPTOR" > /tmp/ci-descriptor.json
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           node eng-tools/sync-secrets.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
-            --descriptor @/tmp/ci-descriptor.json
+            --descriptor @/tmp/ci-descriptor.json \
+            "${CONTRACT_ARG[@]}"
 
       # The registry hostname embeds the account id, which stage-service-image deliberately keeps out of its
       # outputs ("never a full image reference"). It is NOT available from the descriptor either:
@@ -433,6 +457,8 @@ jobs:
       - name: Render ${{ matrix.service }}'s task definition
         run: |
           set -euo pipefail
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           case "$ACCOUNT" in
             [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
@@ -443,6 +469,7 @@ jobs:
             --service "${{ matrix.service }}" \
             --image "${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ needs.stage-service-image.outputs.image_repo }}@${{ needs.stage-service-image.outputs.image_digest }}" \
             --descriptor @/tmp/ci-descriptor.json \
+            "${CONTRACT_ARG[@]}" \
             > /tmp/taskdef.json
 
       # The gate invariants.md rule 23 makes a condition of the whole change, not a follow-up. Before it
@@ -451,9 +478,12 @@ jobs:
       # be worked around: it means the rendered document crosses invariants.md rule 1's trust boundary.
       - name: Assert the rendered definition respects the trust boundary
         run: |
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service "${{ matrix.service }}" \
+            "${CONTRACT_ARG[@]}" \
             /tmp/taskdef.json
 
       - name: Register the task definition
@@ -616,6 +646,17 @@ jobs:
           repository: ${{ inputs.source_repository }}
           ref: ${{ inputs.source_sha }}
 
+      - name: Extract web's deployment contract from the bundle
+        if: inputs.contract_bundle != ''
+        env:
+          CONTRACT_BUNDLE_B64: ${{ inputs.contract_bundle }}
+        run: |
+          set -euo pipefail
+          echo "$CONTRACT_BUNDLE_B64" | base64 -d > /tmp/contract-bundle.json
+          jq -e --arg env "${{ inputs.environment }}" \
+            '.[$env]["web"] // error("no contract for " + $env + "/web in bundle")' \
+            /tmp/contract-bundle.json > /tmp/contract.json
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
@@ -694,28 +735,37 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$DESCRIPTOR" > /tmp/ci-descriptor.json
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           node eng-tools/sync-secrets.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
-            --descriptor @/tmp/ci-descriptor.json
+            --descriptor @/tmp/ci-descriptor.json \
+            "${CONTRACT_ARG[@]}"
 
       # The registry hostname comes from the ECR login step, which already resolved it — unlike
       # deploy-service, this job has it without a second sts call.
       - name: Render web's task definition
         run: |
           set -euo pipefail
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           node eng-tools/render-taskdef.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
             --image "${{ steps.ecr-login.outputs.registry }}/${WEB_ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
             --descriptor @/tmp/ci-descriptor.json \
+            "${CONTRACT_ARG[@]}" \
             > /tmp/taskdef.json
 
       - name: Assert the rendered definition respects the trust boundary
         run: |
+          CONTRACT_ARG=()
+          if [ -f /tmp/contract.json ]; then CONTRACT_ARG=(--contract "@/tmp/contract.json"); fi
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
             --service web \
+            "${CONTRACT_ARG[@]}" \
             /tmp/taskdef.json
 
       - name: Register the task definition
