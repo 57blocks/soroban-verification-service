@@ -35,7 +35,7 @@ const CONCURRENCY = Number(process.env.SCVS_E2E_PROBE_CONCURRENCY ?? 64);
  */
 const PROBE_MULTIPLIER = Number(process.env.SCVS_E2E_QUERY_PROBE_MULTIPLIER ?? 4);
 
-/** Keep clear of a boundary even when the runner's and the deployment's clocks differ. */
+/** Slack on top of the idle below. Not clock skew — no clock but the deployment's own is involved. */
 const WINDOW_START_MARGIN_MS = 5_000;
 
 const PROBE_TIMEOUT_MS = 2 * WINDOW_MS + 2 * env.requestTimeoutMs + 30_000;
@@ -79,9 +79,22 @@ async function sendBurst(
   return { results, transportFailures };
 }
 
-/** The counter's window is fixed to wall-clock boundaries, not to the first request. */
-async function waitForFreshWindow(): Promise<void> {
-  await sleep(WINDOW_MS - (Date.now() % WINDOW_MS) + WINDOW_START_MARGIN_MS);
+/**
+ * Idle long enough that no window this caller opened is still standing anywhere.
+ *
+ * ★ This tier's window is anchored to a key's FIRST hit — `windowExpiresAt = now + ttl` in
+ * `FixedWindowThrottlerStorage` — not to a wall-clock boundary. (verification-svc's DB-backed `AbuseGuard`
+ * is the one that floors to a boundary, which is why SEC-11/SEC-12 wait for one; copying that helper here
+ * would wait for something this counter does not observe.)
+ *
+ * The consequence the burst has to avoid: QRY-07 drives this same route earlier in the run, and `--runInBand`
+ * means it has just finished, so some tasks are part-way through a window with an unknown remainder. A burst
+ * beginning there would straddle that window's expiry and see the ceiling twice on those tasks. One full
+ * window of silence retires every one of them, so the first request of the burst opens a fresh window on
+ * whichever task it lands on.
+ */
+async function idleUntilEveryWindowHasLapsed(): Promise<void> {
+  await sleep(WINDOW_MS + WINDOW_START_MARGIN_MS);
 }
 
 async function probeCeiling(attempts: number): Promise<Probe> {
@@ -128,12 +141,19 @@ function describeProbe(probe: Probe): string {
   );
 }
 
-function expectOneWindow(probe: Probe): void {
-  if (Math.floor(probe.startedAt / WINDOW_MS) === Math.floor((probe.completedAt - 1) / WINDOW_MS)) return;
+/**
+ * The other half of the window condition: having started every task's window at the burst's own first
+ * request, the burst must also finish before that window can lapse, or a task resets mid-burst and admits
+ * its ceiling twice.
+ */
+function expectBurstInsideOneWindow(probe: Probe): void {
+  const elapsed = probe.completedAt - probe.startedAt;
+  if (elapsed < WINDOW_MS) return;
   throw new Error(
-    `The burst crossed a fixed ${WINDOW_MS} ms window (${probe.completedAt - probe.startedAt} ms). ` +
-      "Requests were split across counters, so nothing about the quota follows. Raise " +
-      `SCVS_E2E_PROBE_CONCURRENCY (currently ${CONCURRENCY}) so ${probe.attempts} requests fit one window.`,
+    `The burst took ${elapsed} ms, which is not less than the ${WINDOW_MS} ms window. A window opened by ` +
+      "its own first request lapses before its last, so a task counts part of this burst twice from zero " +
+      "and nothing about the quota follows. Raise SCVS_E2E_PROBE_CONCURRENCY (currently " +
+      `${CONCURRENCY}) so ${probe.attempts} requests complete well inside one window.`,
   );
 }
 
@@ -158,17 +178,16 @@ caseBlock(
         const declared = deploymentParameters.quotaQuery!;
         const attempts = declared * PROBE_MULTIPLIER + Math.max(20, Math.ceil(declared * 0.05));
 
-        // The counter resets on a wall-clock boundary, so a burst that straddles one is counted twice from
-        // zero and can admit more than the ceiling without the ceiling being wrong.
-        await waitForFreshWindow();
+        // Both halves of the window condition — see each helper for what it rules out.
+        await idleUntilEveryWindowHasLapsed();
         const probe = await probeCeiling(attempts);
-        expectOneWindow(probe);
+        expectBurstInsideOneWindow(probe);
 
         if (probe.limited === 0) {
           throw new Error(
             `The address route refused none of ${probe.attempts} requests, though the deployment declares an ` +
-              `address-route ceiling of ${declared}. Every request arrived and the burst stayed inside one ` +
-              `${WINDOW_MS} ms window, so this is an observation of the service and not of the client.\n` +
+              `address-route ceiling of ${declared}. Every request arrived, the burst opened its own window ` +
+              "and finished inside it, so this is an observation of the service and not of the client.\n" +
               `  · ${describeProbe(probe)}\n` +
               "  · Two causes are indistinguishable from here, and this case cannot tell them apart: the " +
               "route enforces no quota at all, or this deployment runs more than " +
