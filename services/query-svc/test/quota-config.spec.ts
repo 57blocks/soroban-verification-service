@@ -2,11 +2,7 @@ import { validateSync } from "class-validator";
 import { plainToInstance } from "class-transformer";
 import { QuerySvcEnvDto } from "../src/config/env.dto.js";
 
-/**
- * Both quotas were `IsNumberString` until this suite existed, which accepts "0", "-5" and "1.5" — and each of
- * those reaches the guard as a different kind of wrong. `0` is the dangerous one: it refuses every request, so
- * a single typo takes the public read surface down for everyone, at boot, silently.
- */
+/** `IsNumberString` accepted "0", "-5" and "1.5"; `0` alone would refuse every request on the read surface. */
 const QUOTA_VARS = ["SCVS_QUERY_THROTTLE_LIMIT", "SCVS_QUERY_ADDRESS_THROTTLE_LIMIT"] as const;
 
 function errorsFor(variable: string, value: string): string[] {
@@ -26,11 +22,7 @@ describe.each(QUOTA_VARS)("%s", (variable) => {
   });
 });
 
-/**
- * The ordering rule. `@Throttle` REPLACES the global budget for the route it
- * decorates rather than stacking under it, so an address tier at or above the global one widens that route
- * instead of narrowing it — and nothing looks wrong at runtime, which is why it is a boot error.
- */
+/** `@Throttle` replaces the global budget rather than stacking under it, so the ordering is a boot error. */
 describe("the two tiers' ordering", () => {
   const load = async (env: Record<string, string | undefined>) => {
     const previous = { ...process.env };

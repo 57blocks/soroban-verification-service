@@ -3,15 +3,9 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { errorBody } from "./api-error.exception.js";
 
 /**
- * The quota for routes Nest's guard chain cannot reach.
- *
- * `SwaggerModule.setup()` registers its document and its UI straight on the HTTP adapter, so no route-level
- * guard is ever consulted for them — `APP_GUARD` does not see them and `@SkipThrottle()` has nothing to act
- * on. Left alone they are an unauthenticated public entry with no ceiling at all: cheap to ask for, and the
- * document is not small. This is express middleware because that is the only layer both it and Swagger share.
- *
- * It counts through the SAME storage the guard uses, under its own throttler name, so the documentation
- * surface gets its own budget rather than spending a reader's API quota.
+ * The quota for routes Nest's guard chain cannot reach. `SwaggerModule.setup()` registers on the HTTP adapter,
+ * where no route-level guard is consulted, so middleware is the only layer both it and Swagger share. Counts
+ * through the guard's own storage under a separate name, so the document has its own budget.
  */
 const THROTTLER_NAME = "adapter-routes";
 
