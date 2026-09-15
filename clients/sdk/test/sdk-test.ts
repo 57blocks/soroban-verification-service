@@ -670,6 +670,26 @@ async function hostileInputs(): Promise<void> {
     () => client.results.verifyUrl({ type: "report", url: "https://attacker.example/collect", sha256: "00" }),
     FetchPolicyError,
   );
+
+  // verifyUrl must reach a `fetchFactory`-only client through the same transport `newClient` built for every
+  // other method — a caller supplying only `fetchFactory` (e.g. query-svc's DNS-pinned transport) must not have
+  // a peer-supplied results_urls entry silently fetched through the unpinned global `fetch` instead.
+  let factoryCalls = 0;
+  const factoryClient = newClient({
+    tvl,
+    baseUrl: trustedListUrl,
+    fetchFactory: () => {
+      factoryCalls += 1;
+      return fileFetch;
+    },
+    // `allowedOrigins: []`: a `file:` URL has no identifiable origin, so origin pinning is opted out here too.
+    policy: { allowedSchemes: ["file:"], allowedOrigins: [] },
+  });
+  await factoryClient.results.verifyUrl(
+    { type: "report", url: trustedListUrl },
+    { allowUnverified: true },
+  );
+  assert.equal(factoryCalls, 1, "verifyUrl must have used the client's fetchFactory, not a fallback global fetch");
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {

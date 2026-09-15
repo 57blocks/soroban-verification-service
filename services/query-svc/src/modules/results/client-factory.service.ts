@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { TrustedVerifiersRepository } from "@scvs/db-query";
 import { newClient, type ResolvedVerifier, type SoveClient, type TrustedVerifier } from "soroban-verification-client";
+import { canPin } from "@scvs/core/pinned-fetch";
 import { RESULT_FETCH_FACTORY, type ResultFetchFactory } from "./result-fetch-factory.js";
 import {
   loadTrustedVerifiersList,
@@ -63,14 +64,13 @@ export class SoveClientFactory {
   }
 
   /**
-   * The pinned transport (`createPinnedFetch`) only ever issues `https.request`, so an `allowedSchemes`
-   * admitting `http:` — the `allowInsecureResultRoots` relaxation above — cannot use it: an `http:` request
-   * would be refused at construction (see `createPinnedFetch`'s own guard), not merely left unpinned. That
-   * relaxation already accepts an unauthenticated local dev root, so falling back to a plain, unpinned fetch
-   * here costs it nothing it was not already giving up.
+   * `canPin` is the same question `createPinnedFetch` asks itself before it will run at all — asked here first
+   * so a policy it would refuse (the `allowInsecureResultRoots` relaxation above, admitting `http:`) falls back
+   * to a plain, unpinned fetch instead of throwing. That relaxation already accepts an unauthenticated local
+   * dev root, so the fallback costs it nothing it was not already giving up.
    */
   private fetchFactoryFor(policy: { allowedSchemes: string[] } | undefined): ResultFetchFactory {
-    if (policy?.allowedSchemes.some((scheme) => scheme !== "https:")) return () => globalThis.fetch;
+    if (policy !== undefined && !canPin(policy)) return () => globalThis.fetch;
     return this.fetchFactory;
   }
 }

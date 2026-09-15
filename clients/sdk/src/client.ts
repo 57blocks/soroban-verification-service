@@ -192,10 +192,13 @@ export function newClient(options: SoveClientOptions): SoveClient {
     },
     results: {
       verifyUrl(entry, verifyOptions) {
+        // `impl`, not `options.fetch`: a caller that supplied only `fetchFactory` (the pinned-DNS transport,
+        // for instance) must not have a peer-supplied results_urls entry silently fetched through the
+        // unpinned global `fetch` instead — `impl` is the one transport every other method here already uses.
         return fetchAndVerifyResultUrl(entry, {
           ...verifyOptions,
           policy,
-          ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+          fetch: impl,
         });
       },
     },
