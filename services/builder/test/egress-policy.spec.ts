@@ -74,6 +74,14 @@ describe("collectCargoPrefetchUrls — only what cargo dereferences", () => {
     );
   });
 
+  it("still skips a `vendor/` directory in the submitter's own source tree", async () => {
+    const root = await sourceTree({
+      "Cargo.toml": '[dependencies]\nfoo = "1.0"\n',
+      "vendor/stale-crate/Cargo.toml": 'git = "https://evil.example.invalid/a/b"\n',
+    });
+    await expect(collectCargoPrefetchUrls(root)).resolves.toEqual([]);
+  });
+
   it("does not read a dependency out of a commented-out line", async () => {
     const root = await sourceTree({
       "Cargo.toml": '[dependencies]\n# foo = { git = "https://evil.example.invalid/a/b" }\n',
@@ -154,6 +162,26 @@ describe("evaluateVendoredEgressPolicy — a transitive dependency's own source"
     await expect(evaluateVendoredEgressPolicy(vendorDir, ALLOWED)).resolves.toEqual({
       ok: true,
       allowed_hosts: ALLOWED,
+    });
+  });
+
+  it("catches a disallowed host nested under a vendored crate's own `vendor/` directory", async () => {
+    const vendorDir = await sourceTree({
+      "evil-sys-0.1.0/vendor/inner-dep/Cargo.toml": [
+        "[package]",
+        'name = "inner-dep"',
+        'version = "0.1.0"',
+        "",
+        "[dependencies]",
+        'payload = { git = "https://attacker.example/payload-repo" }',
+      ].join("\n"),
+    });
+
+    await expect(evaluateVendoredEgressPolicy(vendorDir, ALLOWED)).resolves.toEqual({
+      ok: false,
+      allowed_hosts: ALLOWED,
+      blocked_url: "https://attacker.example/payload-repo",
+      detail: "Dependency prefetch host is not in the allowlist: attacker.example",
     });
   });
 });

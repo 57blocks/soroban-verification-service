@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -225,7 +225,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   }
   const vendoredEgressPolicy = await evaluateVendoredEgressPolicy(vendorDir, egressPolicy.allowed_hosts);
   if (!vendoredEgressPolicy.ok) {
-    await rm(vendorDir, { recursive: true, force: true });
     return cliFailure(
       "dependency_prefetch_policy_rejected",
       "docker_build_image_rebuild",
