@@ -36,3 +36,7 @@ test/integration/fixtures/e2e-fixtures.json
 
 # Python bytecode from eng-tools/check-feature-ownership.py
 __pycache__/
+
+# superpowers specs/plans are local working drafts, not versioned deliverables — same convention
+# as soroban-verification-ops.
+docs/superpowers/
