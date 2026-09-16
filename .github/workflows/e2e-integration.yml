@@ -114,7 +114,8 @@ jobs:
       SCVS_E2E_WEB_URL: ${{ vars.SCVS_E2E_WEB_URL }}
       SCVS_E2E_RESULT_ROOT: ${{ vars.SCVS_E2E_RESULT_ROOT }}
       SCVS_E2E_VERIFIER_NAME: ${{ vars.SCVS_E2E_VERIFIER_NAME }}
-      SCVS_E2E_ENV: ${{ inputs.environment || 'dev' }}
+      # Do not set SCVS_E2E_ENV here. It binds the harness to `config/deploy/<env>/` in the checkout,
+      # which the quota step below explains is never on the runner, and the miss throws at import.
       SCVS_E2E_NETWORK: testnet
       SCVS_E2E_FIXTURES: ${{ github.workspace }}/artifacts/e2e-fixtures/e2e-fixtures.ci.json
       SCVS_E2E_PRIVATE_UPLOAD_PATH: ${{ github.workspace }}/artifacts/e2e-fixtures/archives/canonical-source.tar.gz
@@ -282,13 +283,14 @@ jobs:
       - name: Export the deployment's published quotas
         shell: bash
         env:
+          TARGET_ENV: ${{ inputs.environment || 'dev' }}
           SUBMIT_QUOTA: ${{ inputs.submit_quota }}
           SUBMIT_WINDOW_MS: ${{ inputs.submit_window_ms }}
           QUERY_QUOTA: ${{ inputs.query_quota }}
         run: |
           if [[ -n "$SUBMIT_QUOTA" ]]; then
             echo "SCVS_E2E_QUOTA_SUBMIT=$SUBMIT_QUOTA" >> "$GITHUB_ENV"
-            echo "submission quota for $SCVS_E2E_ENV: $SUBMIT_QUOTA per window"
+            echo "submission quota for $TARGET_ENV: $SUBMIT_QUOTA per window"
           else
             echo "caller passed no submit_quota — E2E-SEC-11/SEC-12 will skip" >&2
           fi
@@ -297,7 +299,7 @@ jobs:
           fi
           if [[ -n "$QUERY_QUOTA" ]]; then
             echo "SCVS_E2E_QUOTA_QUERY=$QUERY_QUOTA" >> "$GITHUB_ENV"
-            echo "address-route quota for $SCVS_E2E_ENV: $QUERY_QUOTA per window"
+            echo "address-route quota for $TARGET_ENV: $QUERY_QUOTA per window"
           else
             echo "caller passed no query_quota — E2E-QRY-13 will skip" >&2
           fi
