@@ -96,6 +96,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The console's build stamp. A COMMIT date, not a build date: an image is a function of its source, so
+      # rebuilding a commit has to produce the same stamp. `.dockerignore` excludes `.git` from the build
+      # context, which is why it is read here and passed in. Skipped for every other component, whose
+      # Dockerfiles declare no such argument.
+      - name: Read the console's build stamp
+        if: matrix.component == 'web'
+        id: stamp
+        env:
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DATE=$(TZ=UTC git show -s --date=format-local:%Y-%m-%d --format=%cd HEAD)
+          {
+            echo "args<<STAMP"
+            echo "SCVS_BUILD_COMMIT=${COMMIT}"
+            echo "SCVS_BUILD_DATE=${DATE}"
+            echo "STAMP"
+          } >> "$GITHUB_OUTPUT"
+          echo "── the console will carry build ${DATE}.${COMMIT:0:7}"
+
       - name: Build and push
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -104,6 +124,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           push: true
+          # Empty for every component but web, whose step above is the only one that runs.
+          build-args: ${{ steps.stamp.outputs.args }}
           # Both default to true, which makes `outputs.digest` name an OCI index (image plus
           # attestation manifests) rather than the image. The deployment side copies by digest and
           # must get the image; provenance is attached below instead.

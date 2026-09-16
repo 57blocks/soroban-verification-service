@@ -19,6 +19,14 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "test", "dev-proxy.ts", "spa-routes.ts", "vite.config.ts", "vitest.config.ts"],
+  "include": [
+    "src",
+    "test",
+    "build-stamp.ts",
+    "dev-proxy.ts",
+    "spa-routes.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["node_modules"]
 }

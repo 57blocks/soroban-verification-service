@@ -24,6 +24,14 @@ ENV POSTGRES_HOST=localhost \
 ARG VITE_VERIFY_API_URL=""
 ENV VITE_VERIFY_API_URL=${VITE_VERIFY_API_URL}
 
+# The build stamp behind `<meta name="build">`. Baked in here rather than substituted at container start
+# like the feature flag below: the image IS the build, so a stamp it carries can never name a different one.
+# `.dockerignore` excludes `.git`, so the build cannot derive these; unset renders "dev".
+ARG SCVS_BUILD_COMMIT=""
+ARG SCVS_BUILD_DATE=""
+ENV SCVS_BUILD_COMMIT=${SCVS_BUILD_COMMIT} \
+    SCVS_BUILD_DATE=${SCVS_BUILD_DATE}
+
 # Through Turborepo, not raw pnpm filters: the OpenAPI-generation step is an edge in turbo.json's task graph
 # (`generate` dependsOn `@scvs/verification-svc#generate:openapi`), and a plain `pnpm --filter ... run generate`
 # does not know about it.
