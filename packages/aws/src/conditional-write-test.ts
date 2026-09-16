@@ -17,6 +17,8 @@ function main(): void {
   // Raced by a delete: only If-Match can see it, and it is replayable. If-None-Match cannot produce it.
   assert.equal(classifyConditionalWriteError(named("NoSuchKey", 404), "if-match"), "vanished");
   assert.equal(classifyConditionalWriteError(named("NoSuchKey", 404), "if-none-match"), "fatal");
+  // HeadObject's name, which a conditional write has no business returning.
+  assert.equal(classifyConditionalWriteError(named("NotFound", 404), "if-match"), "fatal");
 
   // A missing bucket or a permission problem — including one disguised as a 404 — is never retried.
   assert.equal(classifyConditionalWriteError(named("NoSuchBucket", 404), "if-match"), "fatal");
@@ -87,6 +89,12 @@ async function reads(): Promise<void> {
   {
     const { client } = fakeClient(() => awsError("AccessDenied", 403));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /AccessDenied/);
+  }
+
+  // HeadObject's "NotFound" is not GetObject's absence, so it propagates rather than being read as missing.
+  {
+    const { client } = fakeClient(() => awsError("NotFound", 404));
+    await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /NotFound/);
   }
 
   // Only a rejection carrying no name at all falls back to the status code.

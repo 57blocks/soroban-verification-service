@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createResultStorage } from "./storage-backend.js";
@@ -74,9 +74,32 @@ async function main(): Promise<void> {
   ]);
   assert.deepEqual([...created].sort(), ["conflict", "written"], "exactly one creator may land");
 
+  // One root spelled two ways is one lock: the key is resolved, so a relative root cannot open a second
+  // lane onto the same file. The absolute spelling is realpath'd first because macOS puts the temp dir
+  // behind a symlink and `chdir` resolves it — which would make this the symlink case the lock does NOT
+  // cover, rather than the spelling case it does.
+  {
+    const previous = process.cwd();
+    const realRoot = await realpath(root);
+    process.chdir(realRoot);
+    try {
+      const absolute = createResultStorage({ kind: "filesystem", root: realRoot, publicRoot: "https://example.test" });
+      const relative = createResultStorage({ kind: "filesystem", root: ".", publicRoot: "https://example.test" });
+      await absolute.writeTextIfUnchanged("wasms/e.json", "base\n", JSON_TYPE, null);
+      const pin = (await absolute.readTextVersioned("wasms/e.json"))!.version;
+      const spelled = await Promise.all([
+        absolute.writeTextIfUnchanged("wasms/e.json", "abs\n", JSON_TYPE, pin),
+        relative.writeTextIfUnchanged("wasms/e.json", "rel\n", JSON_TYPE, pin),
+      ]);
+      assert.deepEqual([...spelled].sort(), ["conflict", "written"], "one root spelled two ways is one lock");
+    } finally {
+      process.chdir(previous);
+    }
+  }
+
   console.log(
     "Conditional writes: version pinning, create-if-absent, stale refusal, corrupt-is-not-absent, " +
-      "and two concurrent racers resolving to exactly one winner passed",
+      "two concurrent racers resolving to exactly one winner, and one lock per resolved root passed",
   );
 }
 

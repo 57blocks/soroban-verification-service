@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   createS3Client,
   getObjectBytes,
@@ -175,7 +175,7 @@ class FilesystemResultStorage implements ResultStorage {
     // The compare and the rename below are several await points apart. Without this, two writers pinned to
     // the same version both pass the compare and the loser's bytes replace the winner's — the very lost
     // update a conditional write exists to prevent.
-    return withFilesystemWriteLock(target, async () => {
+    return withFilesystemWriteLock(resolve(target), async () => {
       const current = await this.readText(path);
       const actual = current === undefined ? null : versionOf(current);
       if (actual !== expected) return "conflict";
@@ -282,9 +282,13 @@ function cacheControlForPath(path: string): string {
 }
 
 /**
- * Serialises every conditional write this process makes to ONE absolute path. Keyed by the resolved target
- * rather than held per instance: `buildResultStorage` hands out a fresh `ResultStorage` on several
- * orchestrator paths, and two of them over the same root would otherwise race each other.
+ * Serialises every conditional write this process makes to ONE target path. Keyed at module scope rather
+ * than held per instance: `buildResultStorage` hands out a fresh `ResultStorage` on several orchestrator
+ * paths, and two of them over the same root would otherwise race each other.
+ *
+ * The key is `resolve`d, so a relative and an absolute spelling of one root share a lock. It is NOT
+ * realpath'd: two roots reaching the same directory through a symlink are two keys, and the guarantee does
+ * not span them.
  */
 const filesystemWriteLocks = new Map<string, Promise<unknown>>();
 

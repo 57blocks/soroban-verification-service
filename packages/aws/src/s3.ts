@@ -197,7 +197,11 @@ export function isNotFound(error: unknown): boolean {
 export type ConditionalWriteFailure = "conflict" | "vanished" | "fatal";
 
 const CONFLICT_ERROR_NAMES = new Set(["PreconditionFailed", "ConditionalRequestConflict"]);
-const MISSING_ERROR_NAMES = new Set(["NoSuchKey", "NotFound"]);
+// `NoSuchKey` alone: that is what GetObject and a conditional PutObject answer for an absent key. `NotFound`
+// is HeadObject's shape (a HEAD carries no body to name the code), so seeing it here means something other
+// than the case being decided — and for a decision this load-bearing, unrecognised must fail rather than
+// read as absence. `isNotFound` keeps accepting it for `objectExists`, which really is a HEAD.
+const MISSING_ERROR_NAMES = new Set(["NoSuchKey"]);
 // A bucket-level or credential error can surface as 404 exactly like a missing key, so the NAME is the
 // authority here and the status code is only the fallback for a response that carries none.
 const FATAL_ERROR_NAMES = new Set([
