@@ -305,8 +305,14 @@ jobs:
             if [ "$DECLARED" = "0" ]; then
               echo "::warning::$TASK_DEFINITION declares no SCVS_TRUSTED_VERIFIERS_SOURCE, so the Trusted Verifiers List is NOT seeded. Set it in this environment's deployment contract; it is not this repository's to supply."
             else
-              COMMAND="$COMMAND && echo '--- seeding the Trusted Verifiers List ---'"
+              # These two markers are the only way the "Fail if..." step below can tell a DDL
+              # failure from a seed failure: both stages run inside one shell command in one ECS
+              # task, so there is no separate GitHub Actions step to attach that distinction to.
+              # MIGRATE_OK only appears if the `prisma migrate deploy` above it already exited 0
+              # (it is joined by `&&`); SEED_OK only appears if seed-tvl.ts also exited 0.
+              COMMAND="$COMMAND && echo '--- MIGRATE_OK: DDL applied, seeding TVL ---'"
               COMMAND="$COMMAND && cd /app && ./node_modules/.bin/tsx scripts/seed-tvl.ts"
+              COMMAND="$COMMAND && echo '--- SEED_OK: TVL seed complete ---'"
               echo "Will seed the TVL from the source this environment's configuration declares"
             fi
           fi
@@ -412,5 +418,20 @@ jobs:
       - name: Fail if the migration task did not succeed
         if: always() && steps.run.outputs.exit_code != '0'
         run: |
-          echo "::error::migration task exited ${{ steps.run.outputs.exit_code }} — see the logs above"
+          EXIT_CODE="${{ steps.run.outputs.exit_code }}"
+          # migration.log only exists if the "Print migration task logs" step ran and the task
+          # actually launched (steps.run.outputs.task != ''). If run-task itself was never
+          # accepted (e.g. no subnets, ECS rejected it), that earlier step already reported the
+          # real error and this file was never written — fall back to the generic message.
+          if [ ! -f migration.log ]; then
+            echo "::error::migration task exited ${EXIT_CODE} — see the logs above"
+            exit 1
+          fi
+          if grep -q 'SEED_OK' migration.log; then
+            echo "::error::migration task exited ${EXIT_CODE} after both DDL and TVL seed reported success — unexpected, see logs above"
+          elif grep -q 'MIGRATE_OK' migration.log; then
+            echo "::error::DDL migration succeeded but the Trusted Verifiers List seed FAILED — schema is now on the new version but TVL data is stale/missing (schema/code skew). See logs above for the seed error, then re-run this workflow with action=deploy, target=query-svc to retry the seed (the DDL step is idempotent and will no-op)."
+          else
+            echo "::error::DDL migration failed — see logs above. The Trusted Verifiers List seed was not attempted."
+          fi
           exit 1
