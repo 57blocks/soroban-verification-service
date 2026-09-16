@@ -8,6 +8,7 @@ import {
   resolveDevProxy,
 } from "./dev-proxy";
 import { spaRoutesPlugin } from "./spa-routes";
+import { buildStampPlugin } from "./build-stamp";
 
 // The repository has exactly one `.env`, at the root, read by every service (AGENTS.md).
 const envDir = fileURLToPath(new URL("../..", import.meta.url));
@@ -26,7 +27,7 @@ export default defineConfig(({ mode }) => {
   if (ignored) console.warn(ignored);
 
   return {
-    plugins: [react(), spaRoutesPlugin()],
+    plugins: [react(), spaRoutesPlugin(), buildStampPlugin()],
     envDir,
     resolve: {
       alias: {

@@ -10,6 +10,11 @@ import { router } from "./app/router";
 import "./fonts";
 import "./index.css";
 
+// Read back from the document rather than from a build-time constant, so what is logged cannot disagree with
+// the stamp the page carries. Injected by `clients/web/build-stamp.ts`.
+const build = document.querySelector<HTMLMetaElement>('meta[name="build"]')?.content;
+if (build) console.info(`soroban-verify console, build ${build}`);
+
 // Configures the generated API client's axios instance once at startup.
 AXIOS_INSTANCE.defaults.baseURL = getApiBase();
 
