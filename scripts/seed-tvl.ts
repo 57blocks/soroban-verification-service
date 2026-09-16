@@ -83,6 +83,17 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
           `content and this script would seed it without detecting anything wrong.`,
       );
     }
+    // Caught here, before any network request, so a malformed pin (a typo, a base64 digest pasted
+    // where hex was expected, wrong length) is reported as its own distinct, diagnosable problem —
+    // not as a confusing "expected <garbage>, got <realhex>" digest mismatch further down, which
+    // would leave an operator unsure whether the PIN or the CONTENT is what's actually wrong.
+    if (!/^[0-9a-f]{64}$/i.test(expectedDigest)) {
+      throw new Error(
+        `SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 is not a valid sha256 hex digest (expected 64 hex ` +
+          `characters, got "${expectedDigest}"). Check for a typo or a digest in the wrong format ` +
+          `(e.g. base64 instead of hex).`,
+      );
+    }
     const response = await fetch(url).catch((error: Error) => {
       throw new Error(`Could not fetch trusted verifiers list from ${url}: ${error.message}`);
     });
