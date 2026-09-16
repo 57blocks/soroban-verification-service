@@ -148,36 +148,46 @@ jobs:
           DIGEST: ${{ steps.digest.outputs.value }}
         run: |
           set -euo pipefail
+          # Every lookup must succeed before anything is written to $GITHUB_OUTPUT: writing a
+          # multi-line value opens a heredoc block in that file, and exiting mid-write (as the old
+          # version of this step did on a lookup failure) leaves it unterminated — GitHub Actions then
+          # fails the step with "Matching delimiter not found", masking the real error below. So the
+          # search and the write are two separate phases: nothing is written until every service has
+          # resolved.
+          RESULTS=""
+          for SERVICE in $SERVICES; do
+            FAMILY_KEY=$(echo "$SERVICE" | tr '-' '_')
+            FAMILY=$(jq -r --arg k "$FAMILY_KEY" '.task_definition_families[$k] // empty' <<<"$CI_DESCRIPTOR_JSON")
+            if [ -z "$FAMILY" ]; then
+              echo "::error::this environment's descriptor names no task_definition_families entry for $SERVICE"
+              exit 1
+            fi
+
+            MATCH=""
+            for ARN in $(aws ecs list-task-definitions --family-prefix "$FAMILY" --status ACTIVE \
+              --query 'taskDefinitionArns' --output text); do
+              IMAGE=$(aws ecs describe-task-definition --task-definition "$ARN" \
+                --query "taskDefinition.containerDefinitions[?name=='${SERVICE}'].image | [0]" --output text)
+              case "$IMAGE" in
+                *"@${DIGEST}")
+                  MATCH="$ARN"
+                  break
+                  ;;
+              esac
+            done
+
+            if [ -z "$MATCH" ]; then
+              echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${{ inputs.commit_sha }} was never deployed to ${{ inputs.environment }}, or its revision is no longer ACTIVE"
+              exit 1
+            fi
+
+            RESULTS="${RESULTS}${SERVICE} ${MATCH}
+          "
+          done
+
           {
             echo "arns<<ARNS"
-            for SERVICE in $SERVICES; do
-              FAMILY_KEY=$(echo "$SERVICE" | tr '-' '_')
-              FAMILY=$(jq -r --arg k "$FAMILY_KEY" '.task_definition_families[$k] // empty' <<<"$CI_DESCRIPTOR_JSON")
-              if [ -z "$FAMILY" ]; then
-                echo "::error::this environment's descriptor names no task_definition_families entry for $SERVICE" >&2
-                exit 1
-              fi
-
-              MATCH=""
-              for ARN in $(aws ecs list-task-definitions --family-prefix "$FAMILY" --status ACTIVE \
-                --query 'taskDefinitionArns' --output text); do
-                IMAGE=$(aws ecs describe-task-definition --task-definition "$ARN" \
-                  --query "taskDefinition.containerDefinitions[?name=='${SERVICE}'].image | [0]" --output text)
-                case "$IMAGE" in
-                  *"@${DIGEST}")
-                    MATCH="$ARN"
-                    break
-                    ;;
-                esac
-              done
-
-              if [ -z "$MATCH" ]; then
-                echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${{ inputs.commit_sha }} was never deployed to ${{ inputs.environment }}, or its revision is no longer ACTIVE" >&2
-                exit 1
-              fi
-
-              echo "$SERVICE $MATCH"
-            done
+            printf '%s' "$RESULTS"
             echo "ARNS"
           } >> "$GITHUB_OUTPUT"
 
