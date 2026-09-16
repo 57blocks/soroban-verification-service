@@ -14,10 +14,11 @@ POLL_SECONDS="${ROLLOUT_POLL_SECONDS:-15}"
 SETTLE_ATTEMPTS="${ROLLOUT_SETTLE_ATTEMPTS:-12}"
 SETTLE_SECONDS="${ROLLOUT_SETTLE_SECONDS:-10}"
 
-# invariants.md rule 29: when CI renders the task definition it also has to point the service at the revision it
-# just registered, so deploy.yml passes TASK_DEFINITION_ARN. rollback.yml does not — it restores an
-# image by moving the alias and forcing a new deployment onto whatever definition is current, which
-# stays correct.
+# invariants.md rule 29: CI owns the task definition, and every revision pins an exact commit's digest.
+# deploy.yml passes TASK_DEFINITION_ARN to point a service at the revision it just registered.
+# rollback.yml passes it too now, pointing at the ACTIVE revision that pins the commit being rolled
+# back to — found by scanning the family, not by an alias. Neither caller relies on the alias tag to
+# determine what a service is running; it is deploy-time bookkeeping only.
 #
 # An env var rather than a positional argument, deliberately: rollback.yml passes N service names
 # positionally ("$CLUSTER" "$DIGEST" $SERVICES), so a fourth positional would be read as a service.
