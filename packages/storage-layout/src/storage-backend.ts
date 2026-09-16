@@ -97,7 +97,10 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
   // from the R2 variables for every non-filesystem kind, so an "s3" config can be pointed at R2 or any other
   // S3-compatible store. Only an endpoint-less "s3" is known to be AWS, which is the one backend whose
   // conditional-write behaviour this code has been run against.
-  const conditionalWritesVerified = config.kind === "s3" && !config.endpoint;
+  //
+  // An injected `client` is opaque — whatever endpoint it was built against is not readable from here — so
+  // it claims nothing either. This is the same rule the two lines above apply: assert only what is known.
+  const conditionalWritesVerified = config.kind === "s3" && !config.endpoint && !config.client;
   return new S3ResultStorage(
     config.kind,
     client,

@@ -14,17 +14,22 @@ async function main(): Promise<void> {
   // a document nothing can check.
   assert.equal(storage.crossProcessAtomicWrites, false);
 
-  // Only AWS S3 has been run against this code. `kind` alone cannot carry the claim: an "s3" config reaches
-  // whatever `endpoint` names, and getResultStorageConfig fills that from the R2 variables for every
-  // non-filesystem kind.
-  const objectStorage = (kind: "s3" | "r2", endpoint?: string) =>
-    createResultStorage({ kind, bucket: "b", publicRoot: "https://example.test", client: {} as never, endpoint });
-  assert.equal(objectStorage("s3").crossProcessAtomicWrites, true);
-  assert.equal(objectStorage("r2").crossProcessAtomicWrites, false);
+  // Only AWS S3 has been run against this code, and `kind` alone cannot carry the claim: an "s3" config
+  // reaches whatever `endpoint` names, and getResultStorageConfig fills that from the R2 variables for every
+  // non-filesystem kind. No client is injected below, so these exercise the same path a service takes.
+  const objectStorage = (config: Partial<Parameters<typeof createResultStorage>[0]>) =>
+    createResultStorage({ kind: "s3", bucket: "b", publicRoot: "https://example.test", ...config } as never);
+  assert.equal(objectStorage({}).crossProcessAtomicWrites, true);
+  assert.equal(objectStorage({ kind: "r2" }).crossProcessAtomicWrites, false);
   assert.equal(
-    objectStorage("s3", "https://account.r2.cloudflarestorage.com").crossProcessAtomicWrites,
+    objectStorage({ endpoint: "https://account.r2.cloudflarestorage.com" }).crossProcessAtomicWrites,
     false,
     "an s3-shaped config aimed at another endpoint claims nothing",
+  );
+  assert.equal(
+    objectStorage({ client: {} as never }).crossProcessAtomicWrites,
+    false,
+    "an injected client is opaque — its endpoint cannot be read back from here",
   );
 
   // Absent object: no version to read, and only a create-if-absent write may land.
