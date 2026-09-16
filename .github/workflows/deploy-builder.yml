@@ -167,6 +167,7 @@ jobs:
               --format '{{ .Manifest.Digest }}')
             [ -n "$digest" ] || { echo "::error::no published image at ${SOURCE_IMAGE}:${SOURCE_SHA}-${arch}"; exit 1; }
             echo "${arch}: ${SOURCE_IMAGE}@${digest}"
+            echo "${arch}_digest=${digest}" >> "$GITHUB_OUTPUT"
             while IFS= read -r tag; do
               [ -n "$tag" ] || continue
               docker buildx imagetools create --tag "$tag" "${SOURCE_IMAGE}@${digest}"
@@ -189,8 +190,8 @@ jobs:
           REGISTRY="${{ steps.ecr-login.outputs.registry }}"
           # arch -> the digest built for it above.
           declare -A DIGEST_FOR_ARCH=(
-            [arm64]="${{ steps.build_arm64.outputs.digest }}"
-            [amd64]="${{ steps.build_amd64.outputs.digest }}"
+            [arm64]="${{ steps.stage.outputs.arm64_digest }}"
+            [amd64]="${{ steps.stage.outputs.amd64_digest }}"
           )
           # What this image writes into `recipe.json`, against what each environment's orchestrator recorded
           # that it can read on its last rollout.
