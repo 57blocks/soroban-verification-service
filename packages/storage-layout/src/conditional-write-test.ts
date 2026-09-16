@@ -14,13 +14,18 @@ async function main(): Promise<void> {
   // a document nothing can check.
   assert.equal(storage.crossProcessAtomicWrites, false);
 
-  // Of the object backends only S3 has been run against this code; R2 must not inherit the claim on the
-  // strength of sharing an API. (A field initialiser here would read `kind` before the constructor assigns
-  // it and report false for both, so the flag is worth asserting on a real instance.)
-  const objectStorage = (kind: "s3" | "r2") =>
-    createResultStorage({ kind, bucket: "b", publicRoot: "https://example.test", client: {} as never });
+  // Only AWS S3 has been run against this code. `kind` alone cannot carry the claim: an "s3" config reaches
+  // whatever `endpoint` names, and getResultStorageConfig fills that from the R2 variables for every
+  // non-filesystem kind.
+  const objectStorage = (kind: "s3" | "r2", endpoint?: string) =>
+    createResultStorage({ kind, bucket: "b", publicRoot: "https://example.test", client: {} as never, endpoint });
   assert.equal(objectStorage("s3").crossProcessAtomicWrites, true);
   assert.equal(objectStorage("r2").crossProcessAtomicWrites, false);
+  assert.equal(
+    objectStorage("s3", "https://account.r2.cloudflarestorage.com").crossProcessAtomicWrites,
+    false,
+    "an s3-shaped config aimed at another endpoint claims nothing",
+  );
 
   // Absent object: no version to read, and only a create-if-absent write may land.
   assert.equal(await storage.readTextVersioned("wasms/a.json"), undefined);

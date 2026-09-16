@@ -93,7 +93,19 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
     secretAccessKey: config.secretAccessKey,
     forcePathStyle: config.forcePathStyle,
   });
-  return new S3ResultStorage(config.kind, client, config.bucket, config.prefix || "", config.publicRoot);
+  // `kind` names the config shape, not the service on the other end: getResultStorageConfig fills `endpoint`
+  // from the R2 variables for every non-filesystem kind, so an "s3" config can be pointed at R2 or any other
+  // S3-compatible store. Only an endpoint-less "s3" is known to be AWS, which is the one backend whose
+  // conditional-write behaviour this code has been run against.
+  const conditionalWritesVerified = config.kind === "s3" && !config.endpoint;
+  return new S3ResultStorage(
+    config.kind,
+    client,
+    config.bucket,
+    config.prefix || "",
+    config.publicRoot,
+    conditionalWritesVerified,
+  );
 }
 
 class FilesystemResultStorage implements ResultStorage {
@@ -186,22 +198,19 @@ class FilesystemResultStorage implements ResultStorage {
 }
 
 class S3ResultStorage implements ResultStorage {
-  readonly crossProcessAtomicWrites: boolean;
-
   constructor(
     readonly kind: "s3" | "r2",
     private readonly client: S3Client,
     private readonly bucket: string,
     private readonly prefix: string,
     readonly publicRoot: string,
-  ) {
-    // R2 serves the same API but has never been run against this code, and a conditional write it ignores
-    // or reports differently would look identical to one it honoured. The claim stays with the backend
-    // whose behaviour is known until a compatibility check against a real bucket says otherwise.
-    // Assigned here rather than as a field initialiser: those run before parameter properties, so
-    // `= this.kind === "s3"` would silently be false for both.
-    this.crossProcessAtomicWrites = kind === "s3";
-  }
+    /**
+     * Decided by `createResultStorage`, which is the only place that sees the whole config. A store that
+     * ignores a conditional write, or reports the refusal differently, is indistinguishable from one that
+     * honoured it — so this stays false until a compatibility check against that endpoint has passed.
+     */
+    readonly crossProcessAtomicWrites: boolean,
+  ) {}
 
   async readText(path: string): Promise<string | undefined> {
     return getObjectText(this.client, this.bucket, this.key(path));
