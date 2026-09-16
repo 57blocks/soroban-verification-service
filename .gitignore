@@ -36,3 +36,7 @@ test/integration/fixtures/e2e-fixtures.json
 
 # Python bytecode from eng-tools/check-feature-ownership.py
 __pycache__/
+
+# Local working docs for superpowers-driven development (specs/plans) — never pushed to the
+# shared remote; these are scratch planning artifacts for whoever is doing the work right now.
+**/superpowers/
