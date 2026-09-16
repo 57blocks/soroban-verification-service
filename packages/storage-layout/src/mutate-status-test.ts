@@ -97,10 +97,22 @@ function otherWriterAppends(storage: RacingStorage, url: string): void {
   storage.objects.set(KEY, { text: `${JSON.stringify(document, null, 2)}\n`, version: held.version + 1 });
 }
 
-function seed(): RacingStorage {
+/** Flips our stored entry to `verified` — the other replica winning the race rule 20 is about. */
+function otherWriterVerifies(storage: RacingStorage): void {
+  const held = storage.objects.get(KEY)!;
+  const document = JSON.parse(held.text);
+  const entry = document.source_code_verifications[0];
+  entry.status = "verified";
+  delete entry.rebuilt_hash;
+  storage.objects.set(KEY, { text: `${JSON.stringify(document, null, 2)}\n`, version: held.version + 1 });
+}
+
+function seed(params: BuildWasmStatusParams = baseParams()): RacingStorage {
+  const built = buildWasmStatus(params);
+  assert.equal(built.outcome, "write");
   const storage = new RacingStorage();
   storage.objects.set(KEY, {
-    text: `${JSON.stringify(buildWasmStatus(baseParams()), null, 2)}\n`,
+    text: `${JSON.stringify((built as { document: unknown }).document, null, 2)}\n`,
     version: 1,
   });
   return storage;
@@ -183,7 +195,31 @@ async function main(): Promise<void> {
     assert.equal(storage.objects.get(KEY)!.text, before, "nothing was written");
   }
 
-  console.log("mutateWasmStatus: a lost swap re-reads and re-decides, and exhausting the retries is `conflict`");
+  // Rule 20 under the race it exists for. A mismatched publish loses the swap to a replica that installed a
+  // `verified` entry; the retry re-decides against those bytes and declines. Deciding this before the swap —
+  // which is what publish.service.ts used to do — reads a snapshot that the winner has already invalidated,
+  // and the mismatched lands on top of the verified.
+  {
+    const mismatched = baseParams({ verdict: "mismatched", rebuiltHash: "1".repeat(64) });
+    const storage = seed(mismatched);
+    storage.conflictsLeft = 1;
+    storage.onConflict = () => otherWriterVerifies(storage);
+
+    const result = await mutateWasmStatus(storage, WASM_HASH, (existing) => {
+      const build = buildWasmStatus({ ...mismatched, existing });
+      return build.outcome === "write" ? { write: build.document } : { skip: "superseded" };
+    });
+
+    assert.equal(result, "superseded", "the verdict the winner published stands");
+    const final = JSON.parse(storage.objects.get(KEY)!.text);
+    assert.equal(final.source_code_verifications[0].status, "verified", "rule 20 held across the race");
+    assert.equal(final.source_code_verifications[0].rebuilt_hash, undefined);
+  }
+
+  console.log(
+    "mutateWasmStatus: a lost swap re-reads and re-decides, exhausting the retries is `conflict`, " +
+      "and rule 20 is decided against the bytes the swap writes",
+  );
 }
 
 main().catch((error) => {

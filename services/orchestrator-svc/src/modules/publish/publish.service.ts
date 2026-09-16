@@ -17,16 +17,14 @@ import {
 import {
   appendVerifiedSourceCodeUri,
   buildWasmStatus,
-  findOwnEntry,
+  mutateWasmStatus,
   publishReport,
   publishSource,
   readLegacyCustody,
-  readWasmStatus,
   reportKey,
   sourceFileExtension,
   sourceKeyFromFileName,
   sourceSha256FromFileName,
-  wasmStatusKey,
   type ResultStorage,
 } from "@scvs/storage-layout";
 import type {
@@ -207,16 +205,16 @@ export class PublishService {
     const sourceArchiveEligible = this.isSourceArchiveEligible(job, sourceDurable, sourceFileName);
 
     // wasms/<hash>.json — the Registry API status object (report-artifact plan.md phase 3).
-    const existingStatus = await readWasmStatus(storage, finalResult.wasm_hash);
     const thisVerdict = matched ? "verified" : "mismatched";
     // Our entry by verifier identity (the result root is the key, AU2) — never by array position, so a document
     // carrying another verifier's entry is left intact.
     const ownIdentity = { name: verifier.displayName, url: storage.publicRoot };
-    const isNoOpOverwrite = findOwnEntry(existingStatus, ownIdentity)?.status === "verified" && thisVerdict === "mismatched";
-    let wasmStatusChanged = false;
-    if (!isNoOpOverwrite) {
-      const status = buildWasmStatus({
-        existing: existingStatus,
+    // Rule 20 is decided inside the mutation, against bytes read in the same compare-and-swap that writes
+    // them. Deciding it out here — as this did — reads a snapshot another replica can invalidate before the
+    // write lands, which is how a `mismatched` displaces a `verified`.
+    const statusOutcome = await mutateWasmStatus(storage, finalResult.wasm_hash, (existing) => {
+      const build = buildWasmStatus({
+        existing,
         wasmHash: finalResult.wasm_hash,
         verifier: ownIdentity,
         verdict: thisVerdict,
@@ -236,13 +234,17 @@ export class PublishService {
         resultsUrls: [{ type: "report", location: "verifier_self_storage", url: reportUrl, sha256: reportSha256 }],
         ...(verifiedSourceCodeUri ? { verifiedSourceCodeUris: [verifiedSourceCodeUri] } : {}),
       });
-      await storage.writeText(
-        wasmStatusKey(finalResult.wasm_hash),
-        `${JSON.stringify(status, null, 2)}\n`,
-        "application/json; charset=utf-8",
+      return build.outcome === "write" ? { write: build.document } : { skip: "superseded" };
+    });
+    // This job has not published yet, so an unlanded write is not a link obligation — it is a failed
+    // publication. Throwing leaves the row in `publishing` for `releaseStalePublishing` to return to
+    // `publish_pending`, and `recordPublishFailure` counts the attempt.
+    if (statusOutcome !== "written" && statusOutcome !== "superseded") {
+      throw new Error(
+        `publishJobResult: job ${jobId} could not write wasms/${finalResult.wasm_hash}.json (${statusOutcome})`,
       );
-      wasmStatusChanged = true;
     }
+    const wasmStatusChanged = statusOutcome === "written";
 
     // policy.json is no longer written here: it is this verifier's own identity/policy information, unrelated
     // to any one job's outcome, so it is written once at process startup by VerifierIdentityPublisher

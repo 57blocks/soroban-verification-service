@@ -36,6 +36,13 @@ const REPORT_URL = `${OURS.url}/reports/${REPORT_SHA}.json`;
  */
 const plain = (items: readonly unknown[] | undefined): unknown[] => JSON.parse(JSON.stringify(items ?? []));
 
+/** The built document, for the cases that are not about rule 20's decline. */
+function built(params: BuildWasmStatusParams) {
+  const result = buildWasmStatus(params);
+  assert.equal(result.outcome, "write", "expected a document, not a declined write");
+  return (result as { outcome: "write"; document: ReturnType<typeof validateWasmStatus> }).document;
+}
+
 function baseParams(overrides: Partial<BuildWasmStatusParams> = {}): BuildWasmStatusParams {
   return {
     existing: undefined,
@@ -93,7 +100,7 @@ async function main(): Promise<void> {
 
   // ---- assembly -----------------------------------------------------------------------------------
   {
-    const status = buildWasmStatus(baseParams({ bldarg: ["contract", "build"], bldopt: ["--package=foo"] }));
+    const status = built(baseParams({ bldarg: ["contract", "build"], bldopt: ["--package=foo"] }));
     assert.equal(status.schema, "stellar-verification-status");
     assert.equal(status.schema_version, "1.0");
     assert.equal(status.wasm_hash, WASM_HASH);
@@ -114,18 +121,18 @@ async function main(): Promise<void> {
 
   // A `mismatched` verdict carries rebuilt_hash; without one, assembly throws before any write.
   {
-    const status = buildWasmStatus(baseParams({ verdict: "mismatched", rebuiltHash: "f".repeat(64) }));
+    const status = built(baseParams({ verdict: "mismatched", rebuiltHash: "f".repeat(64) }));
     assert.equal(status.source_code_verifications[0].rebuilt_hash, "f".repeat(64));
   }
-  assert.throws(() => buildWasmStatus(baseParams({ verdict: "mismatched", rebuiltHash: undefined })));
+  assert.throws(() => built(baseParams({ verdict: "mismatched", rebuiltHash: undefined })));
 
   // AU1 — a link we publish without a sha256 is refused at assembly.
-  assert.throws(() => buildWasmStatus(baseParams({ resultsUrls: [{ type: "report", url: REPORT_URL }] })), /AU1/);
+  assert.throws(() => built(baseParams({ resultsUrls: [{ type: "report", url: REPORT_URL }] })), /AU1/);
 
   // bldopt order is preserved, never sorted; bldarg likewise.
   {
-    const a = buildWasmStatus(baseParams({ bldopt: ["--locked=true", "--verbose=true"] }));
-    const b = buildWasmStatus(baseParams({ bldopt: ["--verbose=true", "--locked=true"] }));
+    const a = built(baseParams({ bldopt: ["--locked=true", "--verbose=true"] }));
+    const b = built(baseParams({ bldopt: ["--verbose=true", "--locked=true"] }));
     assert.deepEqual(a.source_code_verifications[0].bldopt, ["--locked=true", "--verbose=true"]);
     assert.deepEqual(b.source_code_verifications[0].bldopt, ["--verbose=true", "--locked=true"]);
   }
@@ -139,8 +146,8 @@ async function main(): Promise<void> {
 
   // Row 4: verified → verified from a different source: the newer verified wins.
   {
-    const verified = buildWasmStatus(baseParams());
-    const reVerified = buildWasmStatus(
+    const verified = built(baseParams());
+    const reVerified = built(
       baseParams({ existing: asPeerDoc(verified), sourceSha256: "c".repeat(64), processedAt: "2026-09-03T00:00:00Z" }),
     );
     assert.equal(reVerified.source_code_verifications[0].source_sha256, "c".repeat(64));
@@ -148,22 +155,22 @@ async function main(): Promise<void> {
   }
   // Row 3: verified → mismatched: the existing verified stands, same reference.
   {
-    const verified = buildWasmStatus(baseParams());
+    const verified = built(baseParams());
     const existing = asPeerDoc(verified);
     const attempt = buildWasmStatus(baseParams({ existing, verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
-    assert.equal(attempt, existing as unknown, "row 3 returns the existing document untouched");
+    assert.deepEqual(attempt, { outcome: "superseded" }, "row 3 declines to write rather than handing back a peer document");
   }
   // Row 2: mismatched → verified.
   {
-    const mismatched = buildWasmStatus(baseParams({ verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
-    const reVerified = buildWasmStatus(baseParams({ existing: asPeerDoc(mismatched), verdict: "verified" }));
+    const mismatched = built(baseParams({ verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
+    const reVerified = built(baseParams({ existing: asPeerDoc(mismatched), verdict: "verified" }));
     assert.equal(reVerified.source_code_verifications[0].status, "verified");
     assert.equal(reVerified.source_code_verifications[0].rebuilt_hash, undefined);
   }
   // Row 5: mismatched → mismatched from a different source: the newer one.
   {
-    const mismatched = buildWasmStatus(baseParams({ verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
-    const again = buildWasmStatus(
+    const mismatched = built(baseParams({ verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
+    const again = built(
       baseParams({ existing: asPeerDoc(mismatched), verdict: "mismatched", rebuiltHash: "2".repeat(64), sourceSha256: "c".repeat(64) }),
     );
     assert.equal(again.source_code_verifications[0].rebuilt_hash, "2".repeat(64));
@@ -175,13 +182,13 @@ async function main(): Promise<void> {
     const withPeerFirst = asPeerDoc({
       ...legacyDocument,
       schema: "stellar-verification-status",
-      source_code_verifications: [peerEntry, buildWasmStatus(baseParams()).source_code_verifications[0]],
+      source_code_verifications: [peerEntry, built(baseParams()).source_code_verifications[0]],
     });
     assert.equal(findOwnEntry(withPeerFirst, OURS)?.verifier.url, OURS.url);
 
     // Row 3 still holds for our entry at index 1…
     const blocked = buildWasmStatus(baseParams({ existing: withPeerFirst, verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
-    assert.equal(blocked, withPeerFirst as unknown);
+    assert.deepEqual(blocked, { outcome: "superseded" });
 
     // …and a re-verification refuses rather than publishing the two-entry document it would have to.
     // Until 2026-09-10 this asserted the merge: the peer's entry untouched at index 0, ours rewritten at
@@ -190,7 +197,7 @@ async function main(): Promise<void> {
     // that is not ours to drop.
     assert.throws(
       () =>
-        buildWasmStatus(
+        built(
           baseParams({ existing: withPeerFirst, sourceSha256: "c".repeat(64), processedAt: "2026-09-04T00:00:00Z" }),
         ),
       "a document carrying another verifier's entry cannot be republished under a one-entry schema",
@@ -198,8 +205,8 @@ async function main(): Promise<void> {
   }
   // The identity is the url, not the display name.
   {
-    const renamed = buildWasmStatus(baseParams({ verifier: { name: "57Blocks (renamed)", url: OURS.url } }));
-    const merged = buildWasmStatus(baseParams({ existing: asPeerDoc(renamed), sourceSha256: "c".repeat(64) }));
+    const renamed = built(baseParams({ verifier: { name: "57Blocks (renamed)", url: OURS.url } }));
+    const merged = built(baseParams({ existing: asPeerDoc(renamed), sourceSha256: "c".repeat(64) }));
     assert.equal(merged.source_code_verifications.length, 1, "same url ⇒ same verifier ⇒ one entry");
     // Same name, different url ⇒ a different verifier, so its entry is not merged into ours. What used to
     // be asserted here is that the result was a two-entry document; since 2026-09-10 a result root holds one
@@ -207,7 +214,7 @@ async function main(): Promise<void> {
     // SEP's own schema rejects. The identity rule is what is under test either way.
     assert.throws(
       () =>
-        buildWasmStatus(
+        built(
           baseParams({
             existing: asPeerDoc(renamed),
             verifier: { name: "57Blocks (renamed)", url: "https://elsewhere.example/public" },
@@ -223,7 +230,7 @@ async function main(): Promise<void> {
     const existing = asPeerDoc(legacyDocument);
     assert.equal(findOwnEntry(existing, OURS)?.status, "verified", "a legacy entry with no url is matched by name");
     const blocked = buildWasmStatus(baseParams({ existing, verdict: "mismatched", rebuiltHash: "1".repeat(64) }));
-    assert.equal(blocked, existing as unknown, "row 3 protects a legacy verified entry too");
+    assert.deepEqual(blocked, { outcome: "superseded" }, "row 3 protects a legacy verified entry too");
 
     // `display_name` is an operator-facing label. The links still sit under our root, and that is enough.
     assert.equal(
@@ -232,7 +239,7 @@ async function main(): Promise<void> {
       "a renamed verifier still owns the entry whose links are under its own root",
     );
 
-    const reVerified = buildWasmStatus(baseParams({ existing, sourceSha256: "c".repeat(64) }));
+    const reVerified = built(baseParams({ existing, sourceSha256: "c".repeat(64) }));
     assert.equal(reVerified.schema, "stellar-verification-status");
     assert.equal(reVerified.source_code_verifications.length, 1);
     assert.deepEqual(reVerified.source_code_verifications[0].verifier, OURS);
@@ -264,7 +271,7 @@ async function main(): Promise<void> {
   assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("x") }), "absent");
 
   // SEP-shape document: the archive link is appended with the report's sha256 and updated_at advances.
-  await writeDoc(buildWasmStatus(baseParams()));
+  await writeDoc(built(baseParams()));
   {
     const before = await readWasmStatus(storage, WASM_HASH);
     assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-1") }), "written");
@@ -325,7 +332,7 @@ async function main(): Promise<void> {
   }
 
   // appendVerifiedSourceCodeUri: same anchoring and append semantics.
-  await writeDoc(buildWasmStatus(baseParams()));
+  await writeDoc(built(baseParams()));
   {
     const sourceUrl = `${OURS.url}/sources/${"b".repeat(64)}.tar.gz`;
     const sourceCodeUri = { location: "verifier_self_storage" as const, url: sourceUrl };
@@ -346,7 +353,7 @@ async function main(): Promise<void> {
     const reportUrl = `${OURS.url}/reports/${REPORT_SHA}.json`;
     await storage.writeText(
       wasmStatusKey(concurrentHash),
-      `${JSON.stringify(buildWasmStatus(baseParams({ wasmHash: concurrentHash })), null, 2)}\n`,
+      `${JSON.stringify(built(baseParams({ wasmHash: concurrentHash })), null, 2)}\n`,
       "application/json; charset=utf-8",
     );
     const sourceUrl = `${OURS.url}/sources/${"b".repeat(64)}.tar.gz`;
@@ -391,10 +398,10 @@ async function main(): Promise<void> {
   // document it writes is the published shape.
   {
     const freshHash = "e".repeat(64);
-    const built = buildWasmStatus(baseParams({ wasmHash: freshHash }));
+    const fresh = built(baseParams({ wasmHash: freshHash }));
     assert.equal(await mutateWasmStatus(storage, freshHash, (existing) => {
       assert.equal(existing, undefined, "an absent object reaches the mutation as undefined");
-      return { write: built };
+      return { write: fresh };
     }), "written");
     validateWasmStatus(JSON.parse((await storage.readText(wasmStatusKey(freshHash)))!));
 
