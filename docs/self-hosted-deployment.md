@@ -263,3 +263,22 @@ existing tag fails, which is a feature, not friction.
   against a specific account, so they are not a drop-in playbook for yours — but the failure modes
   they document (a misconfigured publisher variable, a stuck build, an image-trust change) are the
   kind worth planning for once you're operating for real, even without the specific document.
+
+## Result storage and concurrent writers
+
+`wasms/{hash}.json` is amended by more than one writer — the publish itself, the archive backfill, and the
+recovery scan — so every update to it is a conditional write pinned to the version just read
+([rule 38](invariants.md)).
+
+That guarantee is only as wide as the backend:
+
+| `SCVS_PUBLISHER_STORAGE` | Safe across processes |
+| :---- | :---- |
+| `s3`, no `SCVS_R2_ENDPOINT` set | yes |
+| `r2`, or any `s3` pointed at a custom endpoint | **not yet** — the conditional-write behaviour has not been measured against a real bucket |
+| `filesystem` | **no** — writers are serialised within one process only |
+
+`filesystem` is therefore a single-writer-process backend: run one orchestrator against a given result root,
+on one host. POSIX offers no atomic compare-and-swap replace, and a lock file's staleness cannot distinguish a
+crashed holder from a slow one, so this is a limit rather than an omission. A deployment that needs more than
+one orchestrator needs `s3`.

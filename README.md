@@ -210,7 +210,7 @@ the vendored directory, and no container network.
 On a terminal job the API publishes this verifier's static result root — by default
 `${SCVS_ARTIFACT_DIR}/public`. `SCVS_RESULT_ROOT` chooses the output directory and
 `SCVS_PUBLIC_RESULT_ROOT` the URL consumers should use. Storage adapters:
-`SCVS_PUBLISHER_STORAGE=filesystem` (local) or `r2` (Cloudflare R2, over its S3-compatible API);
+`SCVS_PUBLISHER_STORAGE=filesystem` (local), `s3`, or `r2` (Cloudflare R2, over its S3-compatible API);
 `s3` and `gcs` are reserved.
 
 `services/query-svc` reads that storage back through `packages/storage-layout`'s key conventions and

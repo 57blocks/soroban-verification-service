@@ -14,6 +14,7 @@ what a red run means.** That is the whole convention.
 | `release:` | your release pipeline | a registry token | the release is refused |
 | `e2e:` | the E2E harness | a live environment | the fixture set is inconsistent |
 | `report:` | `ci.yml`, on every pull request | none | — **it has no red**. The step publishes what it found and exits 0 |
+| `ops:` | an operator, by hand, against one live environment | that environment's database and result bucket | the environment needs attention; nothing about the pull request |
 | `dev:` `db:` `test:` | an author, locally | local Postgres | — |
 
 Two rules follow from the table and are enforced:
@@ -105,6 +106,19 @@ Each needs a live environment and a run's artifacts, which is why none of them i
 | [`generate-e2e-upgrade-inventory.mjs`](generate-e2e-upgrade-inventory.mjs) | `e2e:generate-upgrade-inventory` | `run-upgrade-normal-lifecycle.sh` |
 | [`check-e2e-upgrade-inventory.mjs`](check-e2e-upgrade-inventory.mjs) | `e2e:check-upgrade-fixtures` | `run-upgrade-normal-lifecycle.sh` |
 | [`write-e2e-summary.mjs`](write-e2e-summary.mjs) | `e2e:summary` | `run-e2e-test.mjs`, `run-smoke.ts` |
+
+## Operations — `ops:`
+
+Run by hand against one live environment, with that environment's credentials. Never in CI: a red run says
+the environment needs attention, not that the pull request is wrong.
+
+| file | command | run by |
+| :---- | :---- | :---- |
+| [`reconcile-published-status-links.mjs`](reconcile-published-status-links.mjs) | `ops:reconcile-published-status-links` | an operator |
+
+Reports by default. `--apply` marks jobs whose links are genuinely missing as pending, and does nothing else
+— a published verdict that disagrees with its job row is reported for a human, because rewriting one from a
+script is a decision rather than a repair.
 
 ## Libraries
 

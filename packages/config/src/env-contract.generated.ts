@@ -161,6 +161,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "SCVS_SOURCE_ARCHIVE_CLAIM_TIMEOUT_MS", observable: "presence", digest: false },
     { name: "SCVS_SOURCE_ARCHIVE_ENABLED", observable: "presence", digest: false },
     { name: "SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS", observable: "presence", digest: false },
+    { name: "SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS", observable: "presence", digest: false },
     { name: "SCVS_STORAGE_BUCKET", observable: "presence", digest: false },
     { name: "SCVS_VERIFIER_DISPLAY_NAME", observable: "presence", group: "verifier-identity", digest: false },
     { name: "SCVS_VERIFIER_ID", observable: "presence", group: "verifier-identity", digest: false },
