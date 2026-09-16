@@ -158,6 +158,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "SCVS_REPORT_ARCHIVE_CLAIM_TIMEOUT_MS", observable: "presence", digest: false },
     { name: "SCVS_REQUEST_TIMEOUT_MS", observable: "presence", group: "base", digest: false },
     { name: "SCVS_RESULT_ROOT", observable: "presence", group: "result-storage", digest: false },
+    { name: "SCVS_SINGLE_WRITER", observable: "presence", digest: false },
     { name: "SCVS_SOURCE_ARCHIVE_CLAIM_TIMEOUT_MS", observable: "presence", digest: false },
     { name: "SCVS_SOURCE_ARCHIVE_ENABLED", observable: "presence", digest: false },
     { name: "SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS", observable: "presence", digest: false },

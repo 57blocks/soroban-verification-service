@@ -113,6 +113,53 @@ describe("a finished upload that still owes a link", () => {
   });
 });
 
+describe("one flag, several links", () => {
+  it("a second link landing does not discharge the first link's obligation", async () => {
+    const jobId = await publishedJob();
+
+    // The report archive's link lost its compare-and-swap, so the job owes it.
+    await jobs.recordArchiveOutcome(jobId, { archived: true, txId: "tx-report", statusLink: { state: "pending" } });
+    expect((await read(jobId)).statusLinkPendingSince).not.toBeNull();
+
+    // The source archive runs concurrently for the same job and its link lands. That says nothing about the
+    // report link, which is still missing.
+    await jobs.recordSourceArchiveOutcome(jobId, {
+      archived: true,
+      txId: "tx-source",
+      statusLink: { state: "complete", advancePublished: true },
+    });
+
+    const row = await read(jobId);
+    expect(row.sourceArchivedTxId).toBe("tx-source");
+    expect(row.statusLinkPendingSince).not.toBeNull();
+    expect((await jobs.listJobsPendingStatusLink()).map((j) => j.jobId)).toContain(jobId);
+  });
+
+  it("only a pass that recomputed every link may clear the flag", async () => {
+    const jobId = await publishedJob();
+    await jobs.recordArchiveOutcome(jobId, { archived: true, txId: "tx-report", statusLink: { state: "pending" } });
+
+    await jobs.recordStatusLinkOutcome(jobId, { state: "complete", advancePublished: true });
+
+    expect((await read(jobId)).statusLinkPendingSince).toBeNull();
+  });
+});
+
+describe("publishing a source", () => {
+  it("creates the link obligation in the write that discharges the source-publish one", async () => {
+    const jobId = await publishedJob();
+    await prisma.job.update({ where: { id: jobId }, data: { sourcePublishPendingSince: OLD } });
+
+    await jobs.recordSourcePublishOutcome(jobId, { published: true, sourceFileName: `${"b".repeat(64)}.tar.gz` });
+
+    const row = await read(jobId);
+    expect(row.sourcePublishPendingSince).toBeNull();
+    expect(row.sourceFileName).toBe(`${"b".repeat(64)}.tar.gz`);
+    // Both in one statement: a crash between them would leave the link owed by nobody.
+    expect(row.statusLinkPendingSince).not.toBeNull();
+  });
+});
+
 describe("a job held for a human", () => {
   it("still owes the link, and the scan skips it", async () => {
     const jobId = await publishedJob();
@@ -173,6 +220,18 @@ describe("retention", () => {
 
     const prunable = await jobs.listPrunableJobs({ before: new Date(), limit: 100 });
     expect(prunable.map((row) => row.jobId)).not.toContain(jobId);
+  });
+});
+
+describe("a raw update that matched nothing", () => {
+  it("is an error, not a success", async () => {
+    await expect(
+      jobs.recordArchiveOutcome("00000000-0000-4000-8000-0000000000ff", {
+        archived: true,
+        txId: "tx-1",
+        statusLink: { state: "pending" },
+      }),
+    ).rejects.toThrow(/updated 0 row/);
   });
 });
 

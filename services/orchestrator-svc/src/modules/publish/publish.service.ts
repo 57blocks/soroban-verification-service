@@ -468,7 +468,10 @@ export class PublishService {
     if (durable) {
       await this.sourceResolution.deleteStagedUpload(job.sourceRef);
       if (sourceFileName) {
-        await this.appendVerifiedSourceCodeUriIfPublished(job, storage, sourceFileName);
+        // The full recompute, not a lone append: `recordSourcePublishOutcome` above wrote the link
+        // obligation in the same statement that discharged the source-publish one, and only a pass that
+        // rebuilds every link this row owes may discharge it in turn.
+        await this.arweaveArchive.retryPendingStatusLinks({ ...job, sourceFileName });
         // wasms/<hash>.json already exists by construction on this retry path (this job already published
         // once), so.
         if (sourceArchiveEligible) {
@@ -476,48 +479,6 @@ export class PublishService {
         }
       }
     }
-  }
-
-  /**
-   * `sourcePublishPendingSince` is already cleared and `deleteStagedUpload` has run by the time this runs, so
-   * nothing revisits the job for THAT obligation. An unlanded link now leaves its own.
-   */
-  private async appendVerifiedSourceCodeUriIfPublished(
-    job: JobRecord,
-    storage: ResultStorage,
-    sourceFileName: string,
-  ): Promise<void> {
-    if (!job.result?.wasm_hash || !job.result.artifact_url) {
-      this.logger.error(
-        `job ${job.jobId}: source-publish retry succeeded but the job carries no published result — cannot locate its wasms/<hash>.json entry`,
-      );
-      return;
-    }
-    const wasmHash = job.result.wasm_hash;
-    const artifactUrl = job.result.artifact_url;
-    const sourceCodeUri: RegistrySourceCodeUri = {
-      location: "verifier_self_storage",
-      url: verifiedSourceCodeUrl(storage, sourceFileName),
-    };
-    const legacyCustody = job.result.artifact_sha256
-      ? await readLegacyCustody(storage, job.result.artifact_sha256)
-      : undefined;
-
-    const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
-      reportUrl: artifactUrl,
-      sourceCodeUri,
-      legacyCustody,
-    });
-    await this.jobs.recordStatusLinkOutcome(
-      job.jobId,
-      toStatusLinkOutcome(wrote, {
-        jobId: job.jobId,
-        wasmHash,
-        link: "source uri",
-        logger: this.logger,
-        metrics: this.metrics,
-      }),
-    );
   }
 
   /**

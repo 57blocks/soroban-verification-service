@@ -278,6 +278,10 @@ That guarantee is only as wide as the backend:
 | `r2`, or any `s3` pointed at a custom endpoint | **not yet** — the conditional-write behaviour has not been measured against a real bucket |
 | `filesystem` | **no** — writers are serialised within one process only |
 
+orchestrator-svc **refuses to start** on a backend from the bottom two rows unless `SCVS_SINGLE_WRITER=true`
+says the deployment runs exactly one writer. Nothing in the process can count its own replicas, so the choice
+is stated rather than detected — and stating it wrongly is the one way back to the lost update.
+
 `filesystem` is therefore a single-writer-process backend: run one orchestrator against a given result root,
 on one host. POSIX offers no atomic compare-and-swap replace, and a lock file's staleness cannot distinguish a
 crashed holder from a slow one, so this is a limit rather than an omission. A deployment that needs more than

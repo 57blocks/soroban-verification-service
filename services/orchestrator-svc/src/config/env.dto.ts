@@ -151,6 +151,9 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_ARCHIVE_RECOVERY_INTERVAL_MS must be a number" })
   SCVS_ARCHIVE_RECOVERY_INTERVAL_MS?: string;
 
+  @IsOptional() @IsIn(["true", "false"], { message: "SCVS_SINGLE_WRITER must be true or false" })
+  SCVS_SINGLE_WRITER?: string;
+
   @IsOptional() @IsNumberString({}, { message: "SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS must be a number" })
   SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS?: string;
 

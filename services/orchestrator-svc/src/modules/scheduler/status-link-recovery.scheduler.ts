@@ -40,6 +40,15 @@ export class StatusLinkRecoveryScheduler implements OnModuleInit {
         oldest ? Math.max(0, (Date.now() - Date.parse(oldest)) / 1000) : 0,
       );
 
+      // Held rows are excluded from `pending` by construction, so without this the one state that needs a
+      // human is the one nothing reports.
+      const blocked = await this.jobs.countJobsBlockedStatusLink();
+      for (const reason of ["invalid_document", "unrepresentable", "manual_hold"] as const) {
+        this.metrics.gauge("status_link_blocked", blocked.find((row) => row.reason === reason)?.count ?? 0, {
+          reason,
+        });
+      }
+
       for (const job of pending) {
         if (this.retryingJobIds.has(job.jobId)) continue;
         this.retryingJobIds.add(job.jobId);

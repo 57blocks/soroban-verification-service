@@ -14,6 +14,9 @@ process.env.SCVS_RESULT_ROOT ||= mkdtempSync(
   path.join(os.tmpdir(), "scvs-orchestrator-results-")
 );
 process.env.SCVS_PUBLIC_RESULT_ROOT ||= "http://localhost:4999";
+// The filesystem backend cannot make a conditional write hold across processes (rule 37), so it refuses to
+// boot without this. A test process is a single writer by construction, and each worker has its own tree.
+process.env.SCVS_SINGLE_WRITER ||= "true";
 // In this test, only the config object's shape matters (nothing here calls S3), so a placeholder value
 // satisfies the presence check without needing real AWS credentials.
 process.env.SCVS_STORAGE_BUCKET ||= "test-fixture-bucket";

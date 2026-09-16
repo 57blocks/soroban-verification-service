@@ -484,14 +484,19 @@ export class JobsRepository {
       | { published: false },
   ): Promise<void> {
     if (outcome.published) {
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          sourcePublishPendingSince: null,
-          sourceFileName: outcome.sourceFileName,
-          ...(outcome.sourceArchivePendingSince ? { sourceArchivePendingSince: outcome.sourceArchivePendingSince } : {}),
-        },
-      });
+      // The link obligation is created in the same write that discharges the source-publish one. Setting it
+      // afterwards leaves a window where the old obligation is gone and the new one is not yet written down,
+      // and a crash there loses the link for good — the pattern this whole change exists to remove.
+      const now = new Date();
+      const sourceArchive = outcome.sourceArchivePendingSince;
+      await this.expectOneRow(this.prisma.$executeRaw`
+        UPDATE "jobs" SET
+          "source_publish_pending_since" = NULL,
+          "source_file_name" = ${outcome.sourceFileName},
+          "source_archive_pending_since" = ${sourceArchive ?? Prisma.raw('"source_archive_pending_since"')},
+          "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
+          "updated_at" = ${now}
+        WHERE "id" = ${jobId}::uuid`, jobId);
     } else {
       await this.prisma.job.update({
         where: { id: jobId },
@@ -550,31 +555,30 @@ export class JobsRepository {
     const txIdSql = Prisma.raw(`"${txIdColumn}"`);
     const pendingSql = Prisma.raw(`"${pendingColumn}"`);
     if (statusLink.state === "complete") {
-      await this.prisma.$executeRaw`
+      // Deliberately leaves the status-link columns alone. One flag covers every link this job owes, and a
+      // job's report archive and source archive run concurrently — clearing it here because THIS link landed
+      // would discharge an obligation another link is still holding, and the scan would never look again.
+      // Only `recordStatusLinkOutcome`, which recomputes every link from the row, may clear it.
+      await this.expectOneRow(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
           ${pendingSql} = NULL,
-          "status_link_pending_since" = NULL,
-          "status_link_blocked_since" = NULL,
-          "status_link_blocked_reason" = NULL,
           "published_updated_at" = ${statusLink.advancePublished ? now : Prisma.raw('"published_updated_at"')},
           "updated_at" = ${now}
-        WHERE "id" = ${jobId}::uuid`;
+        WHERE "id" = ${jobId}::uuid`, jobId);
       return;
     }
     if (statusLink.state === "pending") {
-      await this.prisma.$executeRaw`
+      await this.expectOneRow(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
           ${pendingSql} = NULL,
           "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
-          "status_link_blocked_since" = NULL,
-          "status_link_blocked_reason" = NULL,
           "updated_at" = ${now}
-        WHERE "id" = ${jobId}::uuid`;
+        WHERE "id" = ${jobId}::uuid`, jobId);
       return;
     }
-    await this.prisma.$executeRaw`
+    await this.expectOneRow(this.prisma.$executeRaw`
       UPDATE "jobs" SET
         ${txIdSql} = ${txId},
         ${pendingSql} = NULL,
@@ -582,7 +586,16 @@ export class JobsRepository {
         "status_link_blocked_since" = COALESCE("status_link_blocked_since", ${now}),
         "status_link_blocked_reason" = ${statusLink.reason},
         "updated_at" = ${now}
-      WHERE "id" = ${jobId}::uuid`;
+      WHERE "id" = ${jobId}::uuid`, jobId);
+  }
+
+  /**
+   * A raw UPDATE reports rows touched instead of throwing on a `WHERE` that matched nothing, so a job deleted
+   * mid-flight would read as a successful write. These statements each address one row by id.
+   */
+  private async expectOneRow(update: Promise<number>, jobId: string): Promise<void> {
+    const rows = await update;
+    if (rows !== 1) throw new Error(`jobs repository: expected to update job ${jobId}, updated ${rows} row(s)`);
   }
 
   /**
@@ -595,6 +608,19 @@ export class JobsRepository {
       orderBy: { statusLinkPendingSince: "asc" },
     });
     return rows.map(rowToJob);
+  }
+
+  /** Jobs held for a human, by reason — the gauge the recovery scan cannot see from its own query. */
+  async countJobsBlockedStatusLink(): Promise<{ reason: StatusLinkBlockedReason; count: number }[]> {
+    const grouped = await this.prisma.job.groupBy({
+      by: ["statusLinkBlockedReason"],
+      where: { statusLinkBlockedReason: { not: null } },
+      _count: { _all: true },
+    });
+    return grouped.map((row) => ({
+      reason: row.statusLinkBlockedReason as StatusLinkBlockedReason,
+      count: row._count._all,
+    }));
   }
 
   /**
@@ -621,13 +647,13 @@ export class JobsRepository {
       // long it has been owed.
       return;
     }
-    await this.prisma.$executeRaw`
+    await this.expectOneRow(this.prisma.$executeRaw`
       UPDATE "jobs" SET
         "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
         "status_link_blocked_since" = COALESCE("status_link_blocked_since", ${now}),
         "status_link_blocked_reason" = ${outcome.reason},
         "updated_at" = ${now}
-      WHERE "id" = ${jobId}::uuid`;
+      WHERE "id" = ${jobId}::uuid`, jobId);
   }
 
   /** Puts a blocked job back in the recovery scan, keeping the clock that says how long the link has been owed. */
