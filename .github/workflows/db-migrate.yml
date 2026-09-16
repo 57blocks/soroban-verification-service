@@ -114,6 +114,19 @@ jobs:
           repository: ${{ inputs.source_repository }}
           token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      # Pure git, no credentials, and placed before the first step that takes any: this environment may
+      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
+      # the ambient commit is the CALLER's, which is never on this repository's main.
+      - name: Fetch main to prove the ref against
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Refuse a ref that is not on main
+        env:
+          TARGET_ENV: "${{ inputs.environment }}"
+          TARGET_SHA: ${{ inputs.source_sha }}
+        run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4

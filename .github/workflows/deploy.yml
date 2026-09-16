@@ -109,9 +109,10 @@ jobs:
       # `--sha` is not optional here: under `workflow_call` the ambient commit is the CALLER's, so the check
       # would prove the operations repository's own HEAD is on this repository's main, which it never is.
       - name: Refuse a deploy from a commit that is not on main
-        run: |
-          node eng-tools/assert-deploy-ref.mjs --env "${{ inputs.environment || 'dev' }}" \
-            --sha "${{ inputs.source_sha }}"
+        env:
+          TARGET_ENV: ${{ inputs.environment || 'dev' }}
+          TARGET_SHA: ${{ inputs.source_sha }}
+        run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
@@ -289,7 +290,7 @@ jobs:
   # current by `check:workflow-pins` — without that, a caller's pin would stop at this line. A fork edits both.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@89f1e406f05ed94f685196ce19d8c961a091952f
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@98e29760562e189ed4626a86539484c05aa1b6fa
     permissions:
       id-token: write
       contents: read
@@ -311,7 +312,7 @@ jobs:
   # ⚠ That last clause states the DESIGN, not dev as deployed.
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@89f1e406f05ed94f685196ce19d8c961a091952f
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@98e29760562e189ed4626a86539484c05aa1b6fa
     permissions:
       id-token: write
       contents: read

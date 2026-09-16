@@ -83,6 +83,11 @@ jobs:
       - name: Check the pipeline is pinned below the caller's pin
         run: pnpm run check:workflow-pins
 
+      # The other half of the same trust boundary: the pin says WHICH pipeline runs, this says a job may not
+      # take AWS credentials before proving the ref it is running is on main.
+      - name: Check every credentialed job proves its ref first
+        run: pnpm run check:credentialed-jobs
+
       # Early, and before the build: a leaked credential is worth reporting in one minute rather than
       # eleven. Needs the Docker daemon the Postgres service above already requires.
       - name: Check the publication snapshot for secrets and deployment identifiers

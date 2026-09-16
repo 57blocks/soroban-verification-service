@@ -46,6 +46,7 @@ below whose violation is expensive enough to warrant one).
 | 34 | The dependency-prefetch egress allowlist is checked against the fully resolved dependency graph, not only the submitter's own manifest — a transitive dependency's declared source is a fetch target exactly like a direct one, and it does not exist on disk to be checked until the resolver has already dereferenced it once. | `services/builder/src/modules/builder/egress-policy.ts` (`evaluateVendoredEgressPolicy`) | — |
 | 35 | A readiness probe reports on the dependencies whose loss leaves the service unable to answer, each bounded by a timeout below the balancer's own. One that cannot fail, or that hangs, tells it nothing. | `services/query-svc/src/modules/health/health.controller.ts` | — |
 | 36 | A workflow here that references this repository names a commit, never a moving ref, and that commit's copy of the referenced path is the tree's. `uses:` cannot be an expression, so a caller's pin reaches the file it names and nothing below it. The bump is a follow-up commit: a commit cannot contain its own sha. | `eng-tools/check-workflow-pins.mjs` | — |
+| 37 | A job that assumes an AWS role first proves the ref it is running is an ancestor of `main` — at a step below the credentials, because after them the untrusted tree has already had them. A job may inherit that proof from one it `needs`. The alternative is to take no credentials at all: an off-main ref may still run what needs none. | `eng-tools/check-credentialed-jobs.mjs` | — |
 
 ## The 3 rules with a full reason
 

@@ -84,6 +84,19 @@ jobs:
           repository: ${{ inputs.source_repository }}
           token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      # Pure git, no credentials, and placed before the first step that takes any: this environment may
+      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
+      # the ambient commit is the CALLER's, which is never on this repository's main.
+      - name: Fetch main to prove the ref against
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Refuse a ref that is not on main
+        env:
+          TARGET_ENV: "composer"
+          TARGET_SHA: ${{ inputs.source_sha }}
+        run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
       # This workflow registers its own job definition independently and is not triggered by an edit to
       # deploy-builder.yml, so the check is repeated here rather than assumed covered.
@@ -175,6 +188,19 @@ jobs:
           repository: ${{ inputs.source_repository }}
           token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      # Pure git, no credentials, and placed before the first step that takes any: this environment may
+      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
+      # the ambient commit is the CALLER's, which is never on this repository's main.
+      - name: Fetch main to prove the ref against
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Refuse a ref that is not on main
+        env:
+          TARGET_ENV: "composer"
+          TARGET_SHA: ${{ inputs.source_sha }}
+        run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
       # The deployment's own contract, handed over by the caller: it states values for ONE deployment and
       # this repository holds none. An absent artifact fails the job, which is the point.

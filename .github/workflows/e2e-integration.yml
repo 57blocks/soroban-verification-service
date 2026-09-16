@@ -64,6 +64,14 @@ on:
         type: string
         required: false
         default: ""
+      on_main:
+        description: >-
+          Whether `source_sha` is an ancestor of this repository's main. False runs the suite with no AWS
+          credentials at all: the CLI comes straight from the pinned official release, whose digest
+          assertions are the same either way. Defaults to true so a caller that does not know must say so.
+        type: boolean
+        required: false
+        default: true
       query_quota:
         description: >-
           The deployment's SCVS_QUERY_ADDRESS_THROTTLE_LIMIT — the tier on the one query route that reaches an
@@ -106,6 +114,9 @@ jobs:
       # GitHub Environment by the caller; there is no fallback, because a deployment identifier
       # is never a literal in this repository.
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      # An off-main run has no bucket to read, and the script treats `off` as the normal case rather
+      # than a fault — the same path the public build takes.
+      SCVS_CI_CACHE: ${{ inputs.on_main && 's3' || 'off' }}
       SCVS_E2E: "1"
       # Where this deployment answers. Supplied per GitHub Environment; the guard step below
       # fails loudly rather than letting an unset variable read as an empty URL.
@@ -186,15 +197,17 @@ jobs:
           SCVS_E2E_FIXTURES: test/integration/fixtures/e2e-fixtures.dev.json
         run: bash test/fixtures/e2e/prepare-ci-sources.sh
 
+      # The only thing this suite uses AWS for. An off-main ref therefore runs the whole suite against the
+      # deployed environment without ever assuming the deploy role.
       - name: Configure AWS credentials for CLI cache
-        if: ${{ inputs.test_suite != 'perf' }}
+        if: ${{ inputs.test_suite != 'perf' && inputs.on_main }}
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ap-southeast-2
 
       - name: Read the CI descriptor for the CLI cache
-        if: ${{ inputs.test_suite != 'perf' }}
+        if: ${{ inputs.test_suite != 'perf' && inputs.on_main }}
         run: |
           DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment || 'dev' }}" 2,3)
           echo "SCVS_CI_CACHE_BUCKET=$(jq -r '.artifacts_bucket' <<<"$DESC")" >> "$GITHUB_ENV"
