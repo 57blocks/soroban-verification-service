@@ -17,7 +17,7 @@ export class VerifierIdentityPublisher implements OnModuleInit {
     const verifierPolicy = this.configService.get("verifierPolicy", { infer: true });
     const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
 
-    // Rule 37. A backend that cannot make a conditional write hold across processes is safe for exactly one
+    // Rule 38. A backend that cannot make a conditional write hold across processes is safe for exactly one
     // writer, and nothing here can count the replicas — so the operator states it and this refuses to start
     // otherwise. Failing at boot is the point: the alternative is a second replica quietly reproducing the
     // lost update this whole change exists to remove.
@@ -25,7 +25,7 @@ export class VerifierIdentityPublisher implements OnModuleInit {
       throw new ConfigurationError(
         "SCVS_SINGLE_WRITER",
         `SCVS_PUBLISHER_STORAGE=${storage.kind} cannot guarantee a conditional write across processes ` +
-          "(see docs/invariants.md rule 37), so it is safe only with ONE orchestrator writing this result " +
+          "(see docs/invariants.md rule 38), so it is safe only with ONE orchestrator writing this result " +
           "root. Set SCVS_SINGLE_WRITER=true to state that this deployment runs one, or use an AWS S3 " +
           "bucket with no custom endpoint.",
       );
