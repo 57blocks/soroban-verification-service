@@ -13,6 +13,7 @@ import { JobRetryScheduler } from "./job-retry.scheduler.js";
 import { PublishRecoveryScheduler } from "./publish-recovery.scheduler.js";
 import { RebuildReconcilerScheduler } from "./rebuild-reconciler.scheduler.js";
 import { SourceArchiveRecoveryScheduler } from "./source-archive-recovery.scheduler.js";
+import { StatusLinkRecoveryScheduler } from "./status-link-recovery.scheduler.js";
 import { SourcePublishRecoveryScheduler } from "./source-publish-recovery.scheduler.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
 
@@ -42,6 +43,7 @@ import { StartupRecoveryService } from "./startup-recovery.service.js";
     // Same rung as ArchiveRecoveryScheduler, for a mainnet+public job's source-archive obligation instead of
     // its report-archive one (mainnet-source-archive design.md MSA-2).
     SourceArchiveRecoveryScheduler,
+    StatusLinkRecoveryScheduler,
     SourcePublishRecoveryScheduler,
     // Injects RebuildsRepository (global DbModule) plus BatchDispatchService and RebuildOutcomeService from the
     // two modules imported above.

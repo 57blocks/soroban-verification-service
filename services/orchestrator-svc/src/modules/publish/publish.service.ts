@@ -47,6 +47,7 @@ import {
   type CanonicalSource,
 } from "./fetch-source-bytes.util.js";
 import { buildResultStorage as buildResultStorageFromConfig } from "./result-storage.util.js";
+import { toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import { SourceResolutionService } from "../source-resolution/source-resolution.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { ConfigurationError } from "../../config/configuration-error.js";
@@ -478,9 +479,8 @@ export class PublishService {
   }
 
   /**
-   * Retries a bounded number of times rather than once: by the time this runs `sourcePublishPendingSince` is
-   * already cleared and `deleteStagedUpload` has run, so no scheduler will ever revisit this job for this
-   * bookkeeping.
+   * `sourcePublishPendingSince` is already cleared and `deleteStagedUpload` has run by the time this runs, so
+   * nothing revisits the job for THAT obligation. An unlanded link now leaves its own.
    */
   private async appendVerifiedSourceCodeUriIfPublished(
     job: JobRecord,
@@ -503,22 +503,21 @@ export class PublishService {
       ? await readLegacyCustody(storage, job.result.artifact_sha256)
       : undefined;
 
-    const attempts = 3;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      try {
-        await appendVerifiedSourceCodeUri(storage, wasmHash, { reportUrl: artifactUrl, sourceCodeUri, legacyCustody });
-        return;
-      } catch (error) {
-        if (attempt === attempts) {
-          this.logger.warn(
-            "failed to append verified_source_code_uris after a successful source-publish retry; giving up — no scheduler will revisit this job for it",
-            { job_id: job.jobId, attempts, error: error instanceof Error ? error : String(error) },
-          );
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
-      }
-    }
+    const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
+      reportUrl: artifactUrl,
+      sourceCodeUri,
+      legacyCustody,
+    });
+    await this.jobs.recordStatusLinkOutcome(
+      job.jobId,
+      toStatusLinkOutcome(wrote, {
+        jobId: job.jobId,
+        wasmHash,
+        link: "source uri",
+        logger: this.logger,
+        metrics: this.metrics,
+      }),
+    );
   }
 
   /**

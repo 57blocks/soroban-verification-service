@@ -22,6 +22,7 @@ import {
 import type { ResultStorage } from "@scvs/storage-layout";
 import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
 import { buildResultStorage } from "./result-storage.util.js";
+import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
@@ -402,7 +403,7 @@ export class ArweaveArchiveService {
     await this.jobs.recordArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      statusLink: this.toStatusLink(wrote, { jobId: input.jobId, link: "report archive", wasmHash: input.wasmHash }),
+      statusLink: toStatusLinkOutcome(wrote, { jobId: input.jobId, wasmHash: input.wasmHash, link: "report archive", logger: this.logger, metrics: this.metrics }),
     });
   }
 
@@ -467,48 +468,6 @@ export class ArweaveArchiveService {
   }
 
   /**
-   * The one place a status-document outcome becomes a durable obligation. Only `conflict` and `absent` are
-   * worth retrying; the two that cannot be fixed by trying again hold the job for a human instead of
-   * spinning the scan forever.
-   */
-  private toStatusLink(
-    result: WasmStatusWriteResult,
-    context: { jobId: string; link: string; wasmHash: string },
-  ): StatusLinkOutcome {
-    switch (result) {
-      case "written":
-        return { state: "complete", advancePublished: true };
-      case "already-present":
-        // The document already carries it, which on a retry means the previous attempt wrote the object and
-        // died before recording it. A consumer that synced in between has not seen the link.
-        return { state: "complete", advancePublished: true };
-      case "superseded":
-        this.metrics.counter("status_link_unwritten_total", 1, { link: context.link, result });
-        return { state: "complete", advancePublished: false };
-      case "absent":
-      case "conflict":
-        this.metrics.counter("status_link_unwritten_total", 1, { link: context.link, result });
-        this.logger.warn("status-document link not written; the job still owes it", {
-          job_id: context.jobId,
-          wasm_hash: context.wasmHash,
-          link: context.link,
-          result,
-        });
-        return { state: "pending" };
-      case "invalid-document":
-      case "unrepresentable":
-        this.metrics.counter("status_link_unwritten_total", 1, { link: context.link, result });
-        this.logger.error("status-document link cannot be written; holding the job for a human", {
-          job_id: context.jobId,
-          wasm_hash: context.wasmHash,
-          link: context.link,
-          result,
-        });
-        return { state: "blocked", reason: result === "invalid-document" ? "invalid_document" : "unrepresentable" };
-    }
-  }
-
-  /**
    * `gatewayUrlFor` mirrors `uploadToIrys`/`findExistingUpload`'s own `${gatewayUrl}/${txId}` construction —
    * the one other place this table's `txId` needs to become a fetchable URL.
    */
@@ -537,8 +496,64 @@ export class ArweaveArchiveService {
     await this.jobs.recordSourceArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      statusLink: this.toStatusLink(wrote, { jobId: input.jobId, link: "source archive", wasmHash: input.wasmHash }),
+      statusLink: toStatusLinkOutcome(wrote, { jobId: input.jobId, wasmHash: input.wasmHash, link: "source archive", logger: this.logger, metrics: this.metrics }),
     });
+  }
+
+  /**
+   * Replays every link this job's row says the document should carry. Derived from the row rather than
+   * remembered per attempt: one flag means "something is missing", and which links are owed follows from
+   * `archivedTxId`, `sourceArchivedTxId` and `sourceFileName`.
+   *
+   * Replaying is safe — each append is idempotent on the URL it adds, and no upload is repeated, since the
+   * tx ids are already on the row.
+   */
+  async retryPendingStatusLinks(job: JobRecord): Promise<void> {
+    const wasmHash = job.result?.wasm_hash;
+    const reportUrl = job.result?.artifact_url;
+    if (!wasmHash || !reportUrl) {
+      // A link obligation without a published report is a bug elsewhere, not something to paper over: there
+      // is no entry to anchor to and no attempt that could ever succeed.
+      this.logger.error(`job ${job.jobId}: owes a status-document link but carries no published report — holding it`);
+      await this.jobs.recordStatusLinkOutcome(job.jobId, { state: "blocked", reason: "manual_hold" });
+      return;
+    }
+    const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
+    const reportSha256 = reportSha256FromUrl(reportUrl);
+    const legacyCustody = reportSha256 ? await readLegacyCustody(storage, reportSha256) : undefined;
+    const context = (link: string) => ({ jobId: job.jobId, wasmHash, link, logger: this.logger, metrics: this.metrics });
+
+    const outcomes: StatusLinkOutcome[] = [];
+    if (job.archivedTxId && reportSha256) {
+      const wrote = await appendArchiveReference(storage, wasmHash, {
+        reportUrl,
+        reportSha256,
+        archiveUrl: this.gatewayUrlFor(job.archivedTxId),
+        legacyCustody,
+      });
+      outcomes.push(toStatusLinkOutcome(wrote, context("report archive")));
+    }
+    if (job.sourceArchivedTxId) {
+      const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
+        reportUrl,
+        sourceCodeUri: { location: "arweave", url: this.gatewayUrlFor(job.sourceArchivedTxId) },
+        legacyCustody,
+      });
+      outcomes.push(toStatusLinkOutcome(wrote, context("source archive")));
+    }
+    if (job.sourceFileName) {
+      const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
+        reportUrl,
+        sourceCodeUri: {
+          location: "verifier_self_storage",
+          url: `${storage.publicRoot}/${sourceKeyFromFileName(job.sourceFileName)}`,
+        },
+        legacyCustody,
+      });
+      outcomes.push(toStatusLinkOutcome(wrote, context("source uri")));
+    }
+
+    await this.jobs.recordStatusLinkOutcome(job.jobId, combineStatusLinkOutcomes(outcomes));
   }
 
   /** `findOrCreate` on `sourceSha256` — not `findExistingUpload`. */
