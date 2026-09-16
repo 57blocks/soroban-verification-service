@@ -2661,6 +2661,31 @@ services:
           `environment` list. The generated `config/deploy/<env>/db-migrate.json` is therefore the
           contract for what the override must set, not a description of a task definition DevOps
           maintains.
+      SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256:
+        type: string
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: scripts/seed-tvl.ts::loadSource
+        note: >-
+          Required sha256 (hex) content pin for SCVS_TRUSTED_VERIFIERS_SOURCE when that variable is
+          an `https:` URL — not enforced by this manifest's own required/optional mechanism (which
+          is per-variable, not conditional on a sibling), but by `loadSource()` itself: an `https:`
+          source with no pin declared is refused outright, before any fetch happens. Not read at all
+          when SCVS_TRUSTED_VERIFIERS_SOURCE is a file path — a path is already reviewable repository
+          content, and pinning it defends against nothing a content hash would.
+
+          `fail: silent` (like its sibling): unset is only silently fine when the sibling isn't an
+          `https:` URL. Neither dev nor staging use an `https:` source today (both are file paths —
+          see SCVS_TRUSTED_VERIFIERS_SOURCE's `envs`), so this variable has no `envs` override yet;
+          an environment that switches its source to `https:` must set this at the same time.
+
+          Computed over the exact response bytes fetched, before any decoding — the same
+          `createHash("sha256").update(bytes).digest("hex")` shape `packages/storage-layout/src/publish.ts`
+          already uses for byte-content hashing elsewhere in this repo.
     note: >-
       Same image and same secrets as the services, with a command override running
       `prisma migrate deploy`. Requires the migration user to hold DDL rights. Runs in the services
