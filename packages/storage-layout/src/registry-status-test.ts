@@ -11,7 +11,7 @@ import {
   validateWasmStatus,
   type BuildWasmStatusParams,
 } from "./registry-status.js";
-import { appendArchiveReference, appendVerifiedSourceCodeUri } from "./publish.js";
+import { appendArchiveReference, appendVerifiedSourceCodeUri, mutateWasmStatus } from "./publish.js";
 import { readWasmStatus } from "./read.js";
 import { createResultStorage } from "./storage-backend.js";
 import { wasmStatusKey } from "./keys.js";
@@ -261,13 +261,13 @@ async function main(): Promise<void> {
     storage.writeText(wasmStatusKey(WASM_HASH), `${JSON.stringify(doc, null, 2)}\n`, "application/json; charset=utf-8");
 
   // Absent document: no-op.
-  assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("x") }), false);
+  assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("x") }), "absent");
 
   // SEP-shape document: the archive link is appended with the report's sha256 and updated_at advances.
   await writeDoc(buildWasmStatus(baseParams()));
   {
     const before = await readWasmStatus(storage, WASM_HASH);
-    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-1") }), true);
+    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-1") }), "written");
     const after = await readWasmStatus(storage, WASM_HASH);
     assert.ok(after && before);
     assert.deepEqual(plain(after.source_code_verifications[0].results_urls), [
@@ -279,14 +279,14 @@ async function main(): Promise<void> {
     validateWasmStatus(JSON.parse((await storage.readText(wasmStatusKey(WASM_HASH)))!)); // the bytes on disk, not a parsed instance
 
     // Idempotent: the same link again is a no-op; a different archive URL appends rather than resets.
-    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-1") }), false);
-    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-2") }), true);
+    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-1") }), "already-present");
+    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-2") }), "written");
     const afterSecond = await readWasmStatus(storage, WASM_HASH);
     assert.equal(afterSecond?.source_code_verifications[0].results_urls?.length, 3);
 
     // Stale report URL (a newer verification replaced the entry): no-op.
     const staleReport = `${OURS.url}/reports/${"7".repeat(64)}.json`;
-    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: staleReport, reportSha256: "7".repeat(64), archiveUrl: gatewayUrl("stale") }), false);
+    assert.equal(await appendArchiveReference(storage, WASM_HASH, { reportUrl: staleReport, reportSha256: "7".repeat(64), archiveUrl: gatewayUrl("stale") }), "superseded");
   }
 
   // Legacy document: upgraded on write when the caller supplies the trust level, left alone otherwise.
@@ -294,7 +294,7 @@ async function main(): Promise<void> {
   {
     assert.equal(
       await appendArchiveReference(storage, WASM_HASH, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-1") }),
-      false,
+      "unrepresentable",
       "a legacy verdict cannot be rewritten conformantly without its trust level",
     );
     assert.equal(
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
         archiveUrl: gatewayUrl("tx-1"),
         legacyCustody: { imageTrustLevel: "sdf_trusted" },
       }),
-      true,
+      "written",
     );
     const upgraded = await readWasmStatus(storage, WASM_HASH);
     assert.ok(upgraded);
@@ -329,17 +329,18 @@ async function main(): Promise<void> {
   {
     const sourceUrl = `${OURS.url}/sources/${"b".repeat(64)}.tar.gz`;
     const sourceCodeUri = { location: "verifier_self_storage" as const, url: sourceUrl };
-    assert.equal(await appendVerifiedSourceCodeUri(storage, WASM_HASH, { reportUrl: REPORT_URL, sourceCodeUri }), true);
-    assert.equal(await appendVerifiedSourceCodeUri(storage, WASM_HASH, { reportUrl: REPORT_URL, sourceCodeUri }), false);
+    assert.equal(await appendVerifiedSourceCodeUri(storage, WASM_HASH, { reportUrl: REPORT_URL, sourceCodeUri }), "written");
+    assert.equal(await appendVerifiedSourceCodeUri(storage, WASM_HASH, { reportUrl: REPORT_URL, sourceCodeUri }), "already-present");
     const after = await readWasmStatus(storage, WASM_HASH);
     assert.deepEqual(plain(after?.source_code_verifications[0].verified_source_code_uris), [sourceCodeUri]);
     assert.equal(
       await appendVerifiedSourceCodeUri(storage, WASM_HASH, { reportUrl: `${OURS.url}/reports/${"7".repeat(64)}.json`, sourceCodeUri }),
-      false,
+      "superseded",
     );
   }
 
-  // Concurrent append-style writers on the SAME hash serialise; neither write is lost.
+  // Two append-style writers on one hash, in ONE process: neither write is lost. Cross-process safety is a
+  // property of the backend's conditional write, exercised in conditional-write-test.ts — this cannot see it.
   {
     const concurrentHash = "c".repeat(64);
     const reportUrl = `${OURS.url}/reports/${REPORT_SHA}.json`;
@@ -354,16 +355,57 @@ async function main(): Promise<void> {
       appendArchiveReference(storage, concurrentHash, { reportUrl, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-c") }),
       appendVerifiedSourceCodeUri(storage, concurrentHash, { reportUrl, sourceCodeUri: concurrentSourceCodeUri }),
     ]);
-    assert.equal(wroteArchive, true);
-    assert.equal(wroteSource, true);
+    assert.equal(wroteArchive, "written");
+    assert.equal(wroteSource, "written");
     const final = await readWasmStatus(storage, concurrentHash);
     assert.equal(final?.source_code_verifications[0].results_urls?.length, 2);
     assert.deepEqual(plain(final?.source_code_verifications[0].verified_source_code_uris), [concurrentSourceCodeUri]);
   }
 
+  // Bytes that exist but will not read as a document are never replaced: the create-if-absent path is
+  // reachable only from a genuinely absent object.
+  {
+    const corruptHash = "d".repeat(64);
+    const corrupt = "{ this is not a document\n";
+    await storage.writeText(wasmStatusKey(corruptHash), corrupt, "application/json; charset=utf-8");
+    assert.equal(
+      await appendArchiveReference(storage, corruptHash, { reportUrl: REPORT_URL, reportSha256: REPORT_SHA, archiveUrl: gatewayUrl("tx-x") }),
+      "invalid-document",
+    );
+    assert.equal(await storage.readText(wasmStatusKey(corruptHash)), corrupt, "the stored bytes are untouched");
+
+    // Well-formed JSON that is not a status object lands in the same place, not in "absent".
+    const wrongShape = `${JSON.stringify({ schema: "something-else" }, null, 2)}\n`;
+    await storage.writeText(wasmStatusKey(corruptHash), wrongShape, "application/json; charset=utf-8");
+    assert.equal(
+      await appendVerifiedSourceCodeUri(storage, corruptHash, {
+        reportUrl: REPORT_URL,
+        sourceCodeUri: { location: "verifier_self_storage", url: `${OURS.url}/sources/${"e".repeat(64)}.tar.gz` },
+      }),
+      "invalid-document",
+    );
+    assert.equal(await storage.readText(wasmStatusKey(corruptHash)), wrongShape);
+  }
+
+  // mutateWasmStatus itself: an absent object is the one case a mutation may create from nothing, and the
+  // document it writes is the published shape.
+  {
+    const freshHash = "e".repeat(64);
+    const built = buildWasmStatus(baseParams({ wasmHash: freshHash }));
+    assert.equal(await mutateWasmStatus(storage, freshHash, (existing) => {
+      assert.equal(existing, undefined, "an absent object reaches the mutation as undefined");
+      return { write: built };
+    }), "written");
+    validateWasmStatus(JSON.parse((await storage.readText(wasmStatusKey(freshHash)))!));
+
+    // A mutation that declines writes nothing and reports its own reason.
+    assert.equal(await mutateWasmStatus(storage, freshHash, () => ({ skip: "superseded" })), "superseded");
+  }
+
   console.log(
     "Registry status object: SEP-shape assembly, the verifier-keyed merge table, legacy upgrade on write, " +
-      "and the two append-style writers (append, updated_at, stale-report no-op, concurrency) passed",
+      "and the two append-style writers (append, updated_at, superseded, unrepresentable, invalid-document, " +
+      "same-process concurrency) passed",
   );
 }
 

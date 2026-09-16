@@ -8,11 +8,11 @@ import {
   type LegacyCustody,
   type PeerRegistryStatusObject,
   type RegistrySourceCodeUri,
+  type RegistryStatusObject,
 } from "@scvs/core";
 import { VerificationArtifact, VerifierManifest, VerifierPolicy } from "./shapes.js";
 import { reportKey, sourceKey, verifierManifestKey, verifierPolicyKey, wasmStatusKey } from "./keys.js";
-import { readWasmStatus } from "./read.js";
-import { rewriteWasmStatus } from "./registry-status.js";
+import { parsePeerWasmStatus, rewriteWasmStatus } from "./registry-status.js";
 import type { ResultStorage } from "./storage-backend.js";
 
 /**
@@ -126,6 +126,84 @@ export async function writeVerifierManifest(
   return manifest;
 }
 
+/**
+ * What became of one attempted update to `wasms/{hash}.json`. The caller needs the distinction to decide
+ * whether the update is still owed: only `conflict` is worth retrying, only `invalid-document` and
+ * `unrepresentable` need a human, and the rest are settled.
+ */
+export type WasmStatusWriteResult =
+  /** The document now carries the update. */
+  | "written"
+  /** No document to amend yet — the publish it belongs to has not landed, or the object is gone. */
+  | "absent"
+  /** A newer verification replaced the entry this update was anchored to; nothing is owed. */
+  | "superseded"
+  /** The update is already in the document. */
+  | "already-present"
+  /** The stored entry cannot be re-emitted in the published shape — e.g. a legacy entry with no trust level. */
+  | "unrepresentable"
+  /** The stored bytes are not a document we can read. Never overwritten: see `mutateWasmStatus`. */
+  | "invalid-document"
+  /** Lost the compare-and-swap every attempt. */
+  | "conflict";
+
+/** A settled outcome a mutation can return without writing anything. */
+type WasmStatusNoWrite = Extract<WasmStatusWriteResult, "absent" | "superseded" | "already-present" | "unrepresentable">;
+
+type WasmStatusMutation = { write: RegistryStatusObject } | { skip: WasmStatusNoWrite };
+
+const MUTATE_ATTEMPTS = 5;
+
+/**
+ * The one way this package amends `wasms/{hash}.json`: read the current bytes with their version, let
+ * `mutate` decide, and write back only if nothing moved underneath. A lost compare-and-swap re-reads and
+ * re-decides rather than retrying a stale document.
+ *
+ * `mutate` sees `undefined` only when the object is genuinely absent. Bytes that exist but will not parse
+ * end the attempt as `invalid-document`: a create-if-absent write would replace a document this verifier is
+ * publicly serving, which is the failure the versioning exists to prevent.
+ */
+export async function mutateWasmStatus(
+  storage: ResultStorage,
+  wasmHash: string,
+  mutate: (existing: PeerRegistryStatusObject | undefined) => WasmStatusMutation,
+): Promise<WasmStatusWriteResult> {
+  const key = wasmStatusKey(wasmHash);
+  return withWasmStatusLock(wasmHash, async () => {
+    for (let attempt = 1; attempt <= MUTATE_ATTEMPTS; attempt += 1) {
+      const current = await storage.readTextVersioned(key);
+      let existing: PeerRegistryStatusObject | undefined;
+      if (current) {
+        const parsed = parseDocument(current.text);
+        if (!parsed) return "invalid-document";
+        existing = parsed;
+      }
+
+      const decision = mutate(existing);
+      if ("skip" in decision) return decision.skip;
+
+      const outcome = await storage.writeTextIfUnchanged(
+        key,
+        serializeDocument(decision.write),
+        "application/json; charset=utf-8",
+        current?.version ?? null,
+      );
+      if (outcome === "written") return "written";
+    }
+    return "conflict";
+  });
+}
+
+function parseDocument(text: string): PeerRegistryStatusObject | undefined {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  return parsePeerWasmStatus(raw);
+}
+
 export type AppendArchiveReferenceParams = {
   /** The HTTPS report URL this verification published — the key that finds our entry. */
   reportUrl: string;
@@ -145,23 +223,22 @@ export async function appendArchiveReference(
   storage: ResultStorage,
   wasmHash: string,
   params: AppendArchiveReferenceParams,
-): Promise<boolean> {
-  return withWasmStatusLock(wasmHash, async () => {
-    const existing = await readWasmStatus(storage, wasmHash);
-    if (!existing) return false;
+): Promise<WasmStatusWriteResult> {
+  return mutateWasmStatus(storage, wasmHash, (existing) => {
+    if (!existing) return { skip: "absent" };
 
     const index = entryIndexByReport(existing, params.reportUrl);
-    if (index < 0) return false; // a newer verification already replaced this entry
+    if (index < 0) return { skip: "superseded" };
 
     const entry = existing.source_code_verifications[index];
     const links = (entry.results_urls ?? []).map(toResultUrl);
-    if (links.some((link) => link.url === params.archiveUrl)) return false; // already linked
+    if (links.some((link) => link.url === params.archiveUrl)) return { skip: "already-present" };
 
     // The entry was located by *our own* report URL, so custody is about this entry and no other: the trust
     // level read from that report, and the result root we published under, which the draft shape had no field
     // for.
     const upgraded = upgradeLegacyEntry(entry, { ...params.legacyCustody, verifierUrl: storage.publicRoot });
-    if (!upgraded) return false;
+    if (!upgraded) return { skip: "unrepresentable" };
     // `upgraded.results_urls`, not `links`: the upgrade is what narrows a peer's open link vocabulary to the
     // producer's closed one, and the replacement is a producer entry. `links` above is only a dedupe read.
     const replacement = {
@@ -172,9 +249,7 @@ export async function appendArchiveReference(
       ],
     };
     const updated = rewriteWasmStatus(existing, index, replacement, new Date().toISOString());
-    if (!updated) return false;
-    await writeJson(storage, wasmStatusKey(wasmHash), updated);
-    return true;
+    return updated ? { write: updated } : { skip: "unrepresentable" };
   });
 }
 
@@ -192,29 +267,26 @@ export async function appendVerifiedSourceCodeUri(
   storage: ResultStorage,
   wasmHash: string,
   params: AppendVerifiedSourceCodeUriParams,
-): Promise<boolean> {
-  return withWasmStatusLock(wasmHash, async () => {
-    const existing = await readWasmStatus(storage, wasmHash);
-    if (!existing) return false;
+): Promise<WasmStatusWriteResult> {
+  return mutateWasmStatus(storage, wasmHash, (existing) => {
+    if (!existing) return { skip: "absent" };
 
     const index = entryIndexByReport(existing, params.reportUrl);
-    if (index < 0) return false; // a newer verification already replaced this entry
+    if (index < 0) return { skip: "superseded" };
 
     const entry = existing.source_code_verifications[index];
     const singular = legacySingularSourceUri(entry);
     const before = (entry.verified_source_code_uris ?? (singular ? [singular] : [])).map(toSourceCodeUri);
-    if (before.some((uri) => uri.url === params.sourceCodeUri.url)) return false; // already present
+    if (before.some((uri) => uri.url === params.sourceCodeUri.url)) return { skip: "already-present" };
 
     // The entry was located by *our own* report URL, so custody is about this entry and no other: the trust
     // level read from that report, and the result root we published under, which the draft shape had no field
     // for.
     const upgraded = upgradeLegacyEntry(entry, { ...params.legacyCustody, verifierUrl: storage.publicRoot });
-    if (!upgraded) return false;
+    if (!upgraded) return { skip: "unrepresentable" };
     const replacement = { ...upgraded, verified_source_code_uris: [...before, params.sourceCodeUri] };
     const updated = rewriteWasmStatus(existing, index, replacement, new Date().toISOString());
-    if (!updated) return false;
-    await writeJson(storage, wasmStatusKey(wasmHash), updated);
-    return true;
+    return updated ? { write: updated } : { skip: "unrepresentable" };
   });
 }
 
@@ -225,7 +297,11 @@ function entryIndexByReport(document: PeerRegistryStatusObject, reportUrl: strin
   );
 }
 
-/** Serializes every read-modify-write this module performs against ONE `wasms/{wasmHash}.json`. */
+/**
+ * An in-process fast path, not the guarantee: `mutateWasmStatus`'s compare-and-swap is what makes a
+ * concurrent write safe. Same-hash contention is the common case — a publish schedules its own archive
+ * backfill — and serialising it here costs one local await instead of a lost round trip to the store.
+ */
 const wasmStatusLocks = new Map<string, Promise<unknown>>();
 
 function withWasmStatusLock<T>(wasmHash: string, fn: () => Promise<T>): Promise<T> {
@@ -243,5 +319,10 @@ function withWasmStatusLock<T>(wasmHash: string, fn: () => Promise<T>): Promise<
 }
 
 async function writeJson(storage: ResultStorage, path: string, value: unknown): Promise<void> {
-  await storage.writeText(path, `${JSON.stringify(value, null, 2)}\n`, "application/json; charset=utf-8");
+  await storage.writeText(path, serializeDocument(value), "application/json; charset=utf-8");
+}
+
+/** The one byte serialization every document this package writes uses — pretty-printed, trailing newline. */
+function serializeDocument(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
 }

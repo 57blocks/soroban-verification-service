@@ -399,7 +399,7 @@ export class ArweaveArchiveService {
     await this.jobs.recordArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      ...(wrote ? { publishedUpdatedAt: new Date() } : {}),
+      ...(wrote === "written" ? { publishedUpdatedAt: new Date() } : {}),
     });
   }
 
@@ -492,7 +492,7 @@ export class ArweaveArchiveService {
     await this.jobs.recordSourceArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      ...(wrote ? { publishedUpdatedAt: new Date() } : {}),
+      ...(wrote === "written" ? { publishedUpdatedAt: new Date() } : {}),
     });
   }
 
