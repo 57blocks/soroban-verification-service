@@ -2664,7 +2664,7 @@ services:
       SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256:
         type: string
         required: no
-        fail: silent
+        fail: boot
         source: literal
         tier: knob
         inject: ecs-secrets
@@ -2678,14 +2678,19 @@ services:
           when SCVS_TRUSTED_VERIFIERS_SOURCE is a file path — a path is already reviewable repository
           content, and pinning it defends against nothing a content hash would.
 
-          `fail: silent` (like its sibling): unset is only silently fine when the sibling isn't an
-          `https:` URL. Neither dev nor staging use an `https:` source today (both are file paths —
-          see SCVS_TRUSTED_VERIFIERS_SOURCE's `envs`), so this variable has no `envs` override yet;
-          an environment that switches its source to `https:` must set this at the same time.
+          `fail: boot`, not `silent` like its sibling: there is nothing safe to fall back to for a
+          missing pin on an https: source — silently proceeding would defeat the entire point of
+          this variable. loadSource() refuses outright instead, the moment it discovers an https:
+          source with no pin declared. Neither dev nor staging use an https: source today (both are
+          file paths — see SCVS_TRUSTED_VERIFIERS_SOURCE's `envs`), so this has no effect on any
+          current deployment; an environment that switches its source to `https:` must set this pin
+          at the same time or its first seed run will refuse to proceed.
 
-          Computed over the exact response bytes fetched, before any decoding — the same
-          `createHash("sha256").update(bytes).digest("hex")` shape `packages/storage-layout/src/publish.ts`
-          already uses for byte-content hashing elsewhere in this repo.
+          Computed over the exact response bytes fetched, before any decoding — `node:crypto`'s
+          `createHash("sha256")...digest("hex")` is this repository's established idiom for sha256
+          hashing (e.g. `packages/storage-layout/src/publish.ts`'s content-addressing of generated
+          report bytes), though this variable's purpose is different: verifying fetched content
+          against tampering, not addressing self-generated output.
     note: >-
       Same image and same secrets as the services, with a command override running
       `prisma migrate deploy`. Requires the migration user to hold DDL rights. Runs in the services
