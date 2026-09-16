@@ -35,6 +35,11 @@
       "dependsOn": ["^build", "generate"],
       "outputs": ["dist/**"]
     },
+    "soroban-verify-web#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "env": ["SCVS_BUILD_COMMIT", "SCVS_BUILD_DATE"]
+    },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
