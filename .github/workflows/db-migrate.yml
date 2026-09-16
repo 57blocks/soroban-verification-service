@@ -393,6 +393,7 @@ jobs:
         env:
           TASK_ARN: ${{ steps.run.outputs.task }}
         run: |
+          set -o pipefail
           CONFIG=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
             --region "$AWS_REGION" \
             --query "taskDefinition.containerDefinitions[?name=='${CONTAINER_NAME}'].logConfiguration.options | [0]")
@@ -403,9 +404,17 @@ jobs:
             exit 0
           fi
           STREAM="${PREFIX}/${CONTAINER_NAME}/${TASK_ARN##*/}"
-          aws logs get-log-events --log-group-name "$GROUP" --log-stream-name "$STREAM" \
+          # `set -o pipefail` (above) makes this assignment's exit status reflect `aws logs
+          # get-log-events`, not `tee` — without it, a CloudWatch fetch failure (propagation
+          # delay right after tasks-stopped, a throttled/transient AWS API error, a wrong stream
+          # name) would leave migration.log empty but still "successfully" written, and the next
+          # step's marker-based diagnosis would misreport a log-fetch failure as "DDL failed".
+          if ! aws logs get-log-events --log-group-name "$GROUP" --log-stream-name "$STREAM" \
             --region "$AWS_REGION" --limit 200 --query 'events[].message' --output text \
-            | tee migration.log
+            | tee migration.log; then
+            echo "::warning::could not fetch CloudWatch logs for $STREAM — the migration task's own success or failure is still authoritative (see exit_code above), but the next step's stage diagnosis (DDL vs TVL seed) will be unreliable since it reads from this log"
+            echo "LOG_FETCH_FAILED" > migration.log
+          fi
           {
             # The backslashes before every backtick are load-bearing: this is a DOUBLE-quoted shell string, so
             # an unescaped pair runs what it wraps.
@@ -425,6 +434,14 @@ jobs:
           # real error and this file was never written — fall back to the generic message.
           if [ ! -f migration.log ]; then
             echo "::error::migration task exited ${EXIT_CODE} — see the logs above"
+            exit 1
+          fi
+          # The previous step writes this exact sentinel when it could not fetch CloudWatch logs
+          # at all (see its own ::warning::) — in that case an empty/absent log is not evidence
+          # the DDL failed, only that we can't see what happened. Report that honestly instead of
+          # confidently blaming DDL.
+          if grep -q 'LOG_FETCH_FAILED' migration.log; then
+            echo "::error::migration task exited ${EXIT_CODE}, but its CloudWatch logs could not be fetched — cannot determine whether DDL or the TVL seed failed. Check the task directly: aws ecs describe-tasks --cluster <cluster> --tasks <task arn>, and retry fetching its logs once CloudWatch has caught up."
             exit 1
           fi
           if grep -q 'SEED_OK' migration.log; then
