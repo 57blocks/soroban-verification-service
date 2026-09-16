@@ -192,3 +192,120 @@ export function isNotFound(error: unknown): boolean {
   const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
   return value.name === "NoSuchKey" || value.name === "NotFound" || value.$metadata?.httpStatusCode === 404;
 }
+
+/** A conditional write's outcome that is not success: `fatal` is thrown, the other two are retried. */
+export type ConditionalWriteFailure = "conflict" | "vanished" | "fatal";
+
+const CONFLICT_ERROR_NAMES = new Set(["PreconditionFailed", "ConditionalRequestConflict"]);
+// `NoSuchKey` alone. `NotFound` is HeadObject's shape — a HEAD carries no body to name the code — so it is
+// not this case; `isNotFound` still accepts it for `objectExists`, which is a HEAD.
+const MISSING_ERROR_NAMES = new Set(["NoSuchKey"]);
+// A bucket or credential failure can surface as 404 exactly like a missing key, so the NAME decides and the
+// status code is only the fallback for a response carrying none.
+const FATAL_ERROR_NAMES = new Set([
+  "NoSuchBucket",
+  "AccessDenied",
+  "InvalidAccessKeyId",
+  "SignatureDoesNotMatch",
+  "AllAccessDisabled",
+]);
+
+/** Whether a failed conditional write may be replayed against a freshly read version, or must propagate. */
+export function classifyConditionalWriteError(
+  error: unknown,
+  mode: "if-match" | "if-none-match",
+): ConditionalWriteFailure {
+  if (!error || typeof error !== "object") return "fatal";
+  const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
+  const name = typeof value.name === "string" ? value.name : undefined;
+  if (name) {
+    if (FATAL_ERROR_NAMES.has(name)) return "fatal";
+    if (CONFLICT_ERROR_NAMES.has(name)) return "conflict";
+    // Only If-Match can race a delete; If-None-Match treats an absent object as its success condition, so a
+    // "missing" error from it is something else.
+    if (MISSING_ERROR_NAMES.has(name)) return mode === "if-match" ? "vanished" : "fatal";
+    return "fatal";
+  }
+  switch (value.$metadata?.httpStatusCode) {
+    case 412:
+    case 409:
+      return "conflict";
+    case 404:
+      return mode === "if-match" ? "vanished" : "fatal";
+    default:
+      return "fatal";
+  }
+}
+
+/** An opaque token identifying the exact stored bytes a later conditional write may be pinned to. */
+export type ObjectVersion = string;
+
+/** `conflict` and `vanished` both mean "re-read, recompute, retry"; they differ only for logging. */
+export type ConditionalWriteResult = "written" | "conflict" | "vanished";
+
+/**
+ * Reads an object with the version token `putObjectTextConditional` pins against. The token comes from the
+ * raw response, never from the parsed body: bytes that will not parse still have a version, and treating
+ * them as an absent object is what lets a create-if-absent write replace a document that is really there.
+ */
+export async function getObjectTextVersioned(
+  client: S3Client,
+  bucket: string,
+  key: string,
+): Promise<{ text: string; version: ObjectVersion } | undefined> {
+  try {
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const text = await response.Body?.transformToString();
+    if (text === undefined) return undefined;
+    if (!response.ETag) {
+      throw new Error(`getObjectTextVersioned: ${bucket}/${key} returned no ETag — cannot pin a conditional write`);
+    }
+    return { text, version: response.ETag };
+  } catch (error) {
+    if (isMissingKey(error)) return undefined;
+    throw error;
+  }
+}
+
+/** A genuinely absent key, unlike `isNotFound`'s "any 404" — which a missing bucket also answers with. */
+function isMissingKey(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
+  const name = typeof value.name === "string" ? value.name : undefined;
+  // Only a response carrying no name at all falls back to the status code.
+  if (name) return MISSING_ERROR_NAMES.has(name);
+  return value.$metadata?.httpStatusCode === 404;
+}
+
+/**
+ * Writes only if the stored object is still at `expected`; `null` requires that it not exist at all. The two
+ * replayable outcomes come back as values, anything else propagates.
+ */
+export async function putObjectTextConditional(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  content: string,
+  contentType: string,
+  expected: ObjectVersion | null,
+  cacheControl?: string,
+): Promise<ConditionalWriteResult> {
+  const mode = expected === null ? "if-none-match" : "if-match";
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: content,
+        ContentType: contentType,
+        ...(cacheControl ? { CacheControl: cacheControl } : {}),
+        ...(expected === null ? { IfNoneMatch: "*" } : { IfMatch: expected }),
+      }),
+    );
+    return "written";
+  } catch (error) {
+    const failure = classifyConditionalWriteError(error, mode);
+    if (failure === "fatal") throw error;
+    return failure;
+  }
+}

@@ -1,14 +1,17 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
 import {
   createS3Client,
   getObjectBytes,
   getObjectText,
+  getObjectTextVersioned,
   listObjectKeys,
   objectExists,
   putObjectBytes,
   putObjectText,
+  putObjectTextConditional,
   type S3Client,
 } from "@scvs/aws";
 
@@ -16,6 +19,12 @@ import {
  * Storage-backend abstraction used by publish.ts/read.ts — same shape as the old
  * `apps/api/src/publisher-storage.ts` `PublisherStorage` type.
  */
+/** An opaque token identifying the exact stored bytes a conditional write may be pinned to. */
+export type StorageVersion = string;
+
+/** `conflict` means someone else wrote since the version was read — re-read, recompute, retry. */
+export type StorageWriteResult = "written" | "conflict";
+
 export type ResultStorage = {
   kind: "filesystem" | "s3" | "r2" | "gcs";
   publicRoot: string;
@@ -29,6 +38,18 @@ export type ResultStorage = {
   // published", not read it.
   exists(path: string): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
+  // Whether this backend's conditional writes hold ACROSS processes. `filesystem` serialises writers within
+  // one process but cannot reach past it.
+  readonly crossProcessAtomicWrites: boolean;
+  /** Reads text with the version token `writeTextIfUnchanged` pins against. */
+  readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined>;
+  /** Writes only if the stored bytes are still at `expected`; `null` requires the object to be absent. */
+  writeTextIfUnchanged(
+    path: string,
+    content: string,
+    contentType: string,
+    expected: StorageVersion | null,
+  ): Promise<StorageWriteResult>;
 };
 
 export type FilesystemResultStorageConfig = {
@@ -65,11 +86,26 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
     secretAccessKey: config.secretAccessKey,
     forcePathStyle: config.forcePathStyle,
   });
-  return new S3ResultStorage(config.kind, client, config.bucket, config.prefix || "", config.publicRoot);
+  // `kind` names the config shape, not the service answering: `getResultStorageConfig` fills `endpoint` from
+  // the R2 variables for every non-filesystem kind, and an injected `client`'s endpoint cannot be read back
+  // from here. Only AWS S3's conditional writes have been measured.
+  const conditionalWritesVerified = config.kind === "s3" && !config.endpoint && !config.client;
+  return new S3ResultStorage(
+    config.kind,
+    client,
+    config.bucket,
+    config.prefix || "",
+    config.publicRoot,
+    conditionalWritesVerified,
+  );
 }
 
 class FilesystemResultStorage implements ResultStorage {
   readonly kind = "filesystem" as const;
+
+  // POSIX has no compare-and-swap-replace, and a lock file's staleness cannot distinguish a dead holder
+  // from a slow one, so the serialisation below reaches no further than this process.
+  readonly crossProcessAtomicWrites = false;
 
   constructor(
     private readonly root: string,
@@ -113,6 +149,34 @@ class FilesystemResultStorage implements ResultStorage {
     }
   }
 
+  async readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined> {
+    const text = await this.readText(path);
+    if (text === undefined) return undefined;
+    return { text, version: versionOf(text) };
+  }
+
+  async writeTextIfUnchanged(
+    path: string,
+    content: string,
+    _contentType: string,
+    expected: StorageVersion | null,
+  ): Promise<StorageWriteResult> {
+    const target = join(this.root, path);
+    // The compare and the rename below are several await points apart: unserialised, two writers pinned to
+    // one version both pass the compare and the loser's bytes replace the winner's.
+    return withFilesystemWriteLock(resolve(target), async () => {
+      const current = await this.readText(path);
+      const actual = current === undefined ? null : versionOf(current);
+      if (actual !== expected) return "conflict";
+      await mkdir(dirname(target), { recursive: true });
+      // Write-then-rename so a concurrent reader never observes a half-written document.
+      const staging = `${target}.${randomUUID()}.tmp`;
+      await writeFile(staging, content, "utf8");
+      await rename(staging, target);
+      return "written";
+    });
+  }
+
   async list(prefix: string): Promise<string[]> {
     try {
       return (await readdir(join(this.root, prefix))).map((name) => `${prefix.replace(/\/+$/, "")}/${name}`);
@@ -129,6 +193,8 @@ class S3ResultStorage implements ResultStorage {
     private readonly bucket: string,
     private readonly prefix: string,
     readonly publicRoot: string,
+    /** Decided by `createResultStorage`, the only place that sees the whole config. */
+    readonly crossProcessAtomicWrites: boolean,
   ) {}
 
   async readText(path: string): Promise<string | undefined> {
@@ -149,6 +215,29 @@ class S3ResultStorage implements ResultStorage {
 
   async exists(path: string): Promise<boolean> {
     return objectExists(this.client, this.bucket, this.key(path));
+  }
+
+  async readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined> {
+    return getObjectTextVersioned(this.client, this.bucket, this.key(path));
+  }
+
+  async writeTextIfUnchanged(
+    path: string,
+    content: string,
+    contentType: string,
+    expected: StorageVersion | null,
+  ): Promise<StorageWriteResult> {
+    const result = await putObjectTextConditional(
+      this.client,
+      this.bucket,
+      this.key(path),
+      content,
+      contentType,
+      expected,
+      cacheControlForPath(path),
+    );
+    // A vanished object carries the same instruction for the caller as a conflict: re-read and recompute.
+    return result === "written" ? "written" : "conflict";
   }
 
   async list(prefix: string): Promise<string[]> {
@@ -175,4 +264,30 @@ function normalizePrefix(value: string): string {
 function cacheControlForPath(path: string): string {
   if (path.startsWith("reports/")) return "public, max-age=31536000, immutable";
   return "public, max-age=60";
+}
+
+/**
+ * Serialises this process's conditional writes to one target path. Module scope, not per instance:
+ * `buildResultStorage` hands out a fresh `ResultStorage` on several orchestrator paths. The key is
+ * `resolve`d but not realpath'd, so two roots reaching one directory through a symlink are two keys.
+ */
+const filesystemWriteLocks = new Map<string, Promise<unknown>>();
+
+function withFilesystemWriteLock<T>(target: string, fn: () => Promise<T>): Promise<T> {
+  const previous = filesystemWriteLocks.get(target) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  // Swallow so a failed attempt does not poison the chain for the next caller on this path — each caller
+  // still observes its own rejection via the returned `next`.
+  const tail = next.catch(() => undefined);
+  filesystemWriteLocks.set(target, tail);
+  // Evict once settled, but only if nobody chained onto this path in the meantime.
+  void tail.finally(() => {
+    if (filesystemWriteLocks.get(target) === tail) filesystemWriteLocks.delete(target);
+  });
+  return next;
+}
+
+/** The filesystem backend's version token: derived from the content, so it cannot drift from the bytes. */
+function versionOf(content: string): StorageVersion {
+  return createHash("sha256").update(content).digest("hex");
 }
