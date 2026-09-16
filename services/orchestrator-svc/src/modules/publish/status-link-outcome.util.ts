@@ -12,9 +12,8 @@ export type StatusLinkContext = {
 };
 
 /**
- * The one place a status-document result becomes a durable obligation. Only `conflict` and `absent` are
- * worth another pass; the two that another pass cannot fix hold the job for a human rather than spinning
- * the scan against a document that will never read.
+ * Only `conflict` and `absent` are worth another pass. The two another pass cannot fix hold the job for a
+ * human rather than spinning the scan against a document that will never read.
  */
 export function toStatusLinkOutcome(
   result: WasmStatusWriteResult,
@@ -55,11 +54,9 @@ export function toStatusLinkOutcome(
 }
 
 /**
- * One row carries one obligation, so several links collapse to a single outcome. Blocked wins over pending
- * and pending over complete: the row may only say "nothing is owed" when nothing is.
- *
- * No links at all is `complete` — the obligation was recorded for a job whose row no longer names any link,
- * and leaving it pending would spin the scan against nothing to do.
+ * Several links, one row, so the worst outcome wins: blocked over pending, pending over complete. The row
+ * may only say "nothing is owed" when nothing is — and no links at all means nothing is, or the scan spins
+ * against a job with nothing left to write.
  */
 export function combineStatusLinkOutcomes(outcomes: readonly StatusLinkOutcome[]): StatusLinkOutcome {
   const blocked = outcomes.find((outcome) => outcome.state === "blocked");

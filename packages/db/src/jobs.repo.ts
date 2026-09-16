@@ -29,18 +29,15 @@ import type { JobModel as PrismaJob } from "../generated/prisma/models.js";
 export type StatusLinkBlockedReason = "invalid_document" | "unrepresentable" | "manual_hold";
 
 /**
- * What one attempt to put a link into `wasms/<hash>.json` left behind.
- *
- * `complete` is both "we wrote it" and "it was already there": a process that dies between the object write
- * and this row update replays into the second, and a consumer syncing on `published_updated_at` would never
- * learn about the link if that replay were treated as a no-op.
+ * What one attempt to put a link into `wasms/<hash>.json` left behind. `complete` covers "already there"
+ * too: a process dying between the object write and this row update replays into that, and a consumer
+ * syncing on `published_updated_at` would never learn about the link if it counted as a no-op.
  */
 export type StatusLinkOutcome =
   /**
-   * The link is in the document. `advancePublished` is false only when nothing about the document changed
-   * for a consumer — a `superseded` entry. Where it is ambiguous the caller says true: re-reading a
-   * document that did not change costs one sync, and not re-reading one that did loses the link from every
-   * consumer's view permanently.
+   * `advancePublished` is false only for a `superseded` entry, where nothing changed for a consumer.
+   * Anywhere ambiguous the caller says true: a needless re-sync costs one read, a missed one loses the link
+   * from every consumer's view.
    */
   | { state: "complete"; advancePublished: boolean }
   | { state: "pending" }
@@ -550,13 +547,11 @@ export class JobsRepository {
   }
 
   /**
-   * The upload's own columns and the link obligation in ONE statement. Two statements would leave a window in
-   * which the upload is recorded done and the link it still owes is not yet written down — a crash there
-   * loses the obligation permanently, since nothing would scan the row again.
+   * ONE statement: a crash between recording the upload and recording the link it owes loses the obligation
+   * for good, since nothing would scan the row again.
    *
-   * Raw because `status_link_pending_since` needs COALESCE: a retry must not restart the clock, or the "how
-   * long has this link been missing" alarm can never fire. Prisma's typed update cannot express that, and
-   * splitting it into a conditional pair costs the atomicity this method exists for.
+   * Raw because `status_link_pending_since` needs COALESCE — a retry must not restart the clock — which
+   * Prisma's typed update cannot express.
    */
   private async writeArchiveAndLink(
     jobId: string,

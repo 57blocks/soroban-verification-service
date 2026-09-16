@@ -501,12 +501,10 @@ export class ArweaveArchiveService {
   }
 
   /**
-   * Replays every link this job's row says the document should carry. Derived from the row rather than
-   * remembered per attempt: one flag means "something is missing", and which links are owed follows from
-   * `archivedTxId`, `sourceArchivedTxId` and `sourceFileName`.
-   *
-   * Replaying is safe — each append is idempotent on the URL it adds, and no upload is repeated, since the
-   * tx ids are already on the row.
+   * Replays every link the row says the document should carry, derived from `archivedTxId`,
+   * `sourceArchivedTxId` and `sourceFileName` — the one flag says only that something is missing. Safe to
+   * repeat: each append is idempotent on its URL, and the tx ids are already on the row, so nothing uploads
+   * twice.
    */
   async retryPendingStatusLinks(job: JobRecord): Promise<void> {
     const wasmHash = job.result?.wasm_hash;

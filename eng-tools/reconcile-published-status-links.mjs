@@ -1,17 +1,7 @@
 #!/usr/bin/env node
 /**
- * Compares what the job rows say this verifier published against what `wasms/{hash}.json` actually carries.
- *
- * Two kinds of damage, and only one of them is repairable here:
- *
- *   missing_links        a link the row is owed is absent from the document. Marking the job pending hands it
- *                        to StatusLinkRecoveryScheduler, whose replay is idempotent and re-uploads nothing —
- *                        the tx ids are already on the row.
- *   verdict_inconsistent the document's verdict for our entry disagrees with the row's. The link scan cannot
- *                        see this and must not try to fix it: rewriting a published verdict from a script is
- *                        a decision, not a repair. Reported for a human.
- *
- * Reports by default. `--apply` marks the first kind pending and nothing else.
+ * Diffs what the job rows say this verifier published against what `wasms/{hash}.json` carries. Reports by
+ * default; `--apply` marks missing links pending and touches nothing else. See eng-tools/README.md.
  */
 import { readFile } from "node:fs/promises";
 import { argv, env, exit } from "node:process";

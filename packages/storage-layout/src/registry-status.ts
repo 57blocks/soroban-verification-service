@@ -61,13 +61,9 @@ export function findOwnEntry(
 }
 
 /**
- * What one verification does to the status object. `superseded` is a real outcome, not an error: rule 20
- * forbids a `mismatched` from displacing an existing `verified` entry of ours.
- *
- * A union rather than "return the old document unchanged" because `existing` is a PEER document — it may
- * carry unknown fields (CV8) that our own strict shape forbids, so there is no honest way to hand it back
- * as one. Making the no-write case its own value is what removes that cast, and what stops a caller from
- * reaching the rule-20 branch without noticing it (SCV-234).
+ * `superseded` is an outcome, not an error: rule 20 forbids a `mismatched` from displacing a `verified`
+ * entry of ours. It cannot be expressed by handing `existing` back, which is a PEER document and may carry
+ * unknown fields (CV8) our own strict shape forbids.
  */
 export type WasmStatusBuild =
   | { outcome: "write"; document: RegistryStatusObject }

@@ -155,13 +155,11 @@ type WasmStatusMutation = { write: RegistryStatusObject } | { skip: WasmStatusNo
 const MUTATE_ATTEMPTS = 5;
 
 /**
- * The one way this package amends `wasms/{hash}.json`: read the current bytes with their version, let
- * `mutate` decide, and write back only if nothing moved underneath. A lost compare-and-swap re-reads and
- * re-decides rather than retrying a stale document.
+ * The one way this package amends `wasms/{hash}.json`. A lost compare-and-swap re-reads and re-decides
+ * rather than retrying a stale document.
  *
- * `mutate` sees `undefined` only when the object is genuinely absent. Bytes that exist but will not parse
- * end the attempt as `invalid-document`: a create-if-absent write would replace a document this verifier is
- * publicly serving, which is the failure the versioning exists to prevent.
+ * `mutate` sees `undefined` only when the object is genuinely absent: bytes that exist but will not parse
+ * end the attempt as `invalid-document`, never as an absent object a create-if-absent write may replace.
  */
 export async function mutateWasmStatus(
   storage: ResultStorage,
