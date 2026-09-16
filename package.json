@@ -70,7 +70,7 @@
     "@scvs/storage-layout": "workspace:*",
     "tsx": "^4.23.13",
     "turbo": "^2.10.12",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "yaml": "^2.9.0"
   },
   "pnpm": {
