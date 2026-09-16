@@ -41,11 +41,11 @@ RUN pnpm run generate:api-client \
 # The stamp reaches Vite through turbo, which strips every variable `turbo.json` does not declare — and the
 # "dev" a stripped variable falls back to is indistinguishable from a legitimate local build, which is how
 # the first version of this shipped unstamped. Asserted rather than trusted.
-RUN STAMP=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/web/dist/index.html); \
-    echo "console build stamp: ${STAMP:-<absent>}"; \
+RUN stamp=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/web/dist/index.html); \
+    echo "console build stamp: ${stamp:-<absent>}"; \
     if [ -n "$SCVS_BUILD_COMMIT" ] \
-      && [ "$STAMP" != "${SCVS_BUILD_DATE}.$(echo "$SCVS_BUILD_COMMIT" | cut -c1-7)" ]; then \
-      echo "web.Dockerfile: the build stamp did not reach the bundle, got '${STAMP:-absent}'" >&2; \
+      && [ "$stamp" != "${SCVS_BUILD_DATE}.$(echo "$SCVS_BUILD_COMMIT" | cut -c1-7)" ]; then \
+      echo "web.Dockerfile: the build stamp did not reach the bundle, got '${stamp:-absent}'" >&2; \
       exit 1; \
     fi
 
