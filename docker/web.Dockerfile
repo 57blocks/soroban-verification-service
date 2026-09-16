@@ -38,6 +38,17 @@ ENV SCVS_BUILD_COMMIT=${SCVS_BUILD_COMMIT} \
 RUN pnpm run generate:api-client \
     && pnpm exec turbo run build --filter=soroban-verify-web
 
+# The stamp reaches Vite through turbo, which strips every variable `turbo.json` does not declare — and the
+# "dev" a stripped variable falls back to is indistinguishable from a legitimate local build, which is how
+# the first version of this shipped unstamped. Asserted rather than trusted.
+RUN STAMP=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/web/dist/index.html); \
+    echo "console build stamp: ${STAMP:-<absent>}"; \
+    if [ -n "$SCVS_BUILD_COMMIT" ] \
+      && [ "$STAMP" != "${SCVS_BUILD_DATE}.$(echo "$SCVS_BUILD_COMMIT" | cut -c1-7)" ]; then \
+      echo "web.Dockerfile: the build stamp did not reach the bundle, got '${STAMP:-absent}'" >&2; \
+      exit 1; \
+    fi
+
 FROM nginx:1.27-alpine
 COPY docker/web-nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/clients/web/dist /usr/share/nginx/html
