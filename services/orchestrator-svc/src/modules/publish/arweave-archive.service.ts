@@ -7,10 +7,12 @@ import {
   ReportArchiveUploadsRepository,
   SourceArchiveUploadsRepository,
   type JobRecord,
+  type StatusLinkOutcome,
 } from "@scvs/db";
 import {
   appendArchiveReference,
   appendVerifiedSourceCodeUri,
+  type WasmStatusWriteResult,
   readLegacyCustody,
   reportKey,
   sourceFileExtension,
@@ -18,7 +20,7 @@ import {
   sourceSha256FromFileName,
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
-import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, type LegacyCustody } from "@scvs/core";
+import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
 import { buildResultStorage } from "./result-storage.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -73,6 +75,7 @@ const SOURCE_CONTENT_TYPES: Record<string, string> = {
 @Injectable()
 export class ArweaveArchiveService {
   private readonly logger = new ScvsLogger("arweave-archive");
+  private readonly metrics = new ScvsMetrics("arweave-archive", { logger: this.logger });
   private uploaderPromise: Promise<IrysUploader> | undefined;
 
   constructor(
@@ -399,7 +402,7 @@ export class ArweaveArchiveService {
     await this.jobs.recordArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      ...(wrote === "written" ? { publishedUpdatedAt: new Date() } : {}),
+      statusLink: this.toStatusLink(wrote, { jobId: input.jobId, link: "report archive", wasmHash: input.wasmHash }),
     });
   }
 
@@ -464,6 +467,48 @@ export class ArweaveArchiveService {
   }
 
   /**
+   * The one place a status-document outcome becomes a durable obligation. Only `conflict` and `absent` are
+   * worth retrying; the two that cannot be fixed by trying again hold the job for a human instead of
+   * spinning the scan forever.
+   */
+  private toStatusLink(
+    result: WasmStatusWriteResult,
+    context: { jobId: string; link: string; wasmHash: string },
+  ): StatusLinkOutcome {
+    switch (result) {
+      case "written":
+        return { state: "complete", advancePublished: true };
+      case "already-present":
+        // The document already carries it, which on a retry means the previous attempt wrote the object and
+        // died before recording it. A consumer that synced in between has not seen the link.
+        return { state: "complete", advancePublished: true };
+      case "superseded":
+        this.metrics.counter("status_link_unwritten_total", 1, { link: context.link, result });
+        return { state: "complete", advancePublished: false };
+      case "absent":
+      case "conflict":
+        this.metrics.counter("status_link_unwritten_total", 1, { link: context.link, result });
+        this.logger.warn("status-document link not written; the job still owes it", {
+          job_id: context.jobId,
+          wasm_hash: context.wasmHash,
+          link: context.link,
+          result,
+        });
+        return { state: "pending" };
+      case "invalid-document":
+      case "unrepresentable":
+        this.metrics.counter("status_link_unwritten_total", 1, { link: context.link, result });
+        this.logger.error("status-document link cannot be written; holding the job for a human", {
+          job_id: context.jobId,
+          wasm_hash: context.wasmHash,
+          link: context.link,
+          result,
+        });
+        return { state: "blocked", reason: result === "invalid-document" ? "invalid_document" : "unrepresentable" };
+    }
+  }
+
+  /**
    * `gatewayUrlFor` mirrors `uploadToIrys`/`findExistingUpload`'s own `${gatewayUrl}/${txId}` construction —
    * the one other place this table's `txId` needs to become a fetchable URL.
    */
@@ -492,7 +537,7 @@ export class ArweaveArchiveService {
     await this.jobs.recordSourceArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      ...(wrote === "written" ? { publishedUpdatedAt: new Date() } : {}),
+      statusLink: this.toStatusLink(wrote, { jobId: input.jobId, link: "source archive", wasmHash: input.wasmHash }),
     });
   }
 

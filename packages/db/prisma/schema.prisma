@@ -150,6 +150,23 @@ model Job {
   // ceiling.
   sourceArchiveAttempts     Int       @default(0) @map("source_archive_attempts")
 
+  // At least one link this job owes wasms/<hash>.json is not in the document yet — a report archive URL, a
+  // source archive URI, or the verifier-storage source URI. One flag for all three: the recovery scan derives
+  // which links are owed from the columns above and replays them idempotently.
+  //
+  // Distinct from archivePendingSince and its siblings, which track the UPLOAD. An upload that happened and
+  // was paid for is recorded as such even when its link has not landed; conflating the two is how a valid
+  // tx_id gets discarded, or a missing link gets reported as done.
+  statusLinkPendingSince    DateTime? @map("status_link_pending_since")
+  // Automatic recovery has stopped for this job's links and a human has to look. Blocked REFINES pending
+  // rather than replacing it: a blocked job still owes the link, so `status_link_pending_since` stays set and
+  // keeps aging, and clearing the reason alone puts the row back in the scan with its original clock. A
+  // database CHECK holds the shape.
+  statusLinkBlockedSince    DateTime? @map("status_link_blocked_since")
+  // A closed set (`StatusLinkBlockedReason`), never raw error text: the text would be derived from stored
+  // bytes we could not read, and a column that is queryable is worth more than one that is narrated.
+  statusLinkBlockedReason   String?   @map("status_link_blocked_reason")
+
   // Whether the submitter asked for a verdict without publishing one.
   dryRun           Boolean   @default(false) @map("dry_run")
 

@@ -46,6 +46,20 @@ export const METRIC_UNITS = {
   environment_composition_total: "count",
   /** Wall-clock for one composition, dispatch to terminal, dimensioned the same way. */
   environment_composition_seconds: "seconds",
+  /**
+   * Attempts to put a link into `wasms/<hash>.json` that did not land, dimensioned by `link` and `result`.
+   * An upload that is paid for and never referenced is invisible without this.
+   */
+  status_link_unwritten_total: "count",
+  /** Jobs still owing a status-document link, from `listJobsPendingStatusLink`. */
+  status_link_backlog: "count",
+  /** Jobs held for a human because their link cannot be written, dimensioned by `reason`. */
+  status_link_blocked: "count",
+  /**
+   * Age of the oldest outstanding link obligation. The backlog level alone cannot distinguish a queue that
+   * is moving from one job that has been stuck since the day it published.
+   */
+  status_link_oldest_pending_seconds: "seconds",
 } as const satisfies Record<string, "count" | "seconds">;
 
 export type MetricName = keyof typeof METRIC_UNITS;
