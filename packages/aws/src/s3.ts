@@ -197,13 +197,11 @@ export function isNotFound(error: unknown): boolean {
 export type ConditionalWriteFailure = "conflict" | "vanished" | "fatal";
 
 const CONFLICT_ERROR_NAMES = new Set(["PreconditionFailed", "ConditionalRequestConflict"]);
-// `NoSuchKey` alone: that is what GetObject and a conditional PutObject answer for an absent key. `NotFound`
-// is HeadObject's shape (a HEAD carries no body to name the code), so seeing it here means something other
-// than the case being decided — and for a decision this load-bearing, unrecognised must fail rather than
-// read as absence. `isNotFound` keeps accepting it for `objectExists`, which really is a HEAD.
+// `NoSuchKey` alone. `NotFound` is HeadObject's shape — a HEAD carries no body to name the code — so it is
+// not this case; `isNotFound` still accepts it for `objectExists`, which is a HEAD.
 const MISSING_ERROR_NAMES = new Set(["NoSuchKey"]);
-// A bucket-level or credential error can surface as 404 exactly like a missing key, so the NAME is the
-// authority here and the status code is only the fallback for a response that carries none.
+// A bucket or credential failure can surface as 404 exactly like a missing key, so the NAME decides and the
+// status code is only the fallback for a response carrying none.
 const FATAL_ERROR_NAMES = new Set([
   "NoSuchBucket",
   "AccessDenied",
@@ -223,8 +221,8 @@ export function classifyConditionalWriteError(
   if (name) {
     if (FATAL_ERROR_NAMES.has(name)) return "fatal";
     if (CONFLICT_ERROR_NAMES.has(name)) return "conflict";
-    // Only If-Match can race a delete. If-None-Match treats an absent object as its success condition, so a
-    // "missing" error from it is something else entirely and must not be retried.
+    // Only If-Match can race a delete; If-None-Match treats an absent object as its success condition, so a
+    // "missing" error from it is something else.
     if (MISSING_ERROR_NAMES.has(name)) return mode === "if-match" ? "vanished" : "fatal";
     return "fatal";
   }
@@ -246,9 +244,9 @@ export type ObjectVersion = string;
 export type ConditionalWriteResult = "written" | "conflict" | "vanished";
 
 /**
- * Reads an object together with the version token `putObjectTextConditional` pins against. The token comes
- * from the raw response, never from anything parsed out of the body: a body we cannot parse still has a
- * version, and must not be mistaken for an absent object.
+ * Reads an object with the version token `putObjectTextConditional` pins against. The token comes from the
+ * raw response, never from the parsed body: bytes that will not parse still have a version, and treating
+ * them as an absent object is what lets a create-if-absent write replace a document that is really there.
  */
 export async function getObjectTextVersioned(
   client: S3Client,
@@ -269,24 +267,19 @@ export async function getObjectTextVersioned(
   }
 }
 
-/**
- * A genuinely absent key, as opposed to `isNotFound`'s "any 404" — which a missing bucket also answers with.
- * The distinction is load-bearing here: an absent object sends the caller down a create-if-absent write, so
- * reporting a bucket or permission failure as absence would let it rebuild a document from nothing.
- */
+/** A genuinely absent key, unlike `isNotFound`'s "any 404" — which a missing bucket also answers with. */
 function isMissingKey(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const value = error as { name?: unknown; $metadata?: { httpStatusCode?: number } };
   const name = typeof value.name === "string" ? value.name : undefined;
-  // A named error is authoritative; only a response carrying no name at all falls back to the status, which
-  // is what a non-AWS S3-compatible endpoint may return.
+  // Only a response carrying no name at all falls back to the status code.
   if (name) return MISSING_ERROR_NAMES.has(name);
   return value.$metadata?.httpStatusCode === 404;
 }
 
 /**
- * Writes only if the stored object is still at `expected` — `null` requires that it does not exist at all.
- * Returns rather than throws for the two replayable outcomes; anything else is a real failure and propagates.
+ * Writes only if the stored object is still at `expected`; `null` requires that it not exist at all. The two
+ * replayable outcomes come back as values, anything else propagates.
  */
 export async function putObjectTextConditional(
   client: S3Client,

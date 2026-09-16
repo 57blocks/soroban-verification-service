@@ -9,12 +9,12 @@ import {
 const named = (name: string, httpStatusCode?: number) => ({ name, $metadata: { httpStatusCode } });
 
 function main(): void {
-  // Condition failed: a conflict under either mode — re-read and recompute.
+  // Condition failed: a conflict under either mode.
   assert.equal(classifyConditionalWriteError(named("PreconditionFailed", 412), "if-match"), "conflict");
   assert.equal(classifyConditionalWriteError(named("PreconditionFailed", 412), "if-none-match"), "conflict");
   assert.equal(classifyConditionalWriteError(named("ConditionalRequestConflict", 409), "if-match"), "conflict");
 
-  // Raced by a delete: only If-Match can see it, and it is replayable. If-None-Match cannot produce it.
+  // Raced by a delete: only If-Match can see it, and only there is it replayable.
   assert.equal(classifyConditionalWriteError(named("NoSuchKey", 404), "if-match"), "vanished");
   assert.equal(classifyConditionalWriteError(named("NoSuchKey", 404), "if-none-match"), "fatal");
   // HeadObject's name, which a conditional write has no business returning.
@@ -25,7 +25,7 @@ function main(): void {
   assert.equal(classifyConditionalWriteError(named("AccessDenied", 404), "if-match"), "fatal");
   assert.equal(classifyConditionalWriteError(named("AccessDenied", 403), "if-match"), "fatal");
 
-  // The status code is consulted only when the response carries no error name, and still splits by mode.
+  // The status code is consulted only when the response carries no error name.
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 412 } }, "if-match"), "conflict");
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 409 } }, "if-match"), "conflict");
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 404 } }, "if-match"), "vanished");
@@ -46,10 +46,7 @@ function awsError(name: string, httpStatusCode: number): Error {
   return Object.assign(new Error(name), { name, $metadata: { httpStatusCode } });
 }
 
-/**
- * The only member of S3Client these functions touch is `send`, so a structural stand-in exercises the real
- * request-building path without a network or a live bucket.
- */
+/** `send` is the only S3Client member these functions touch, so a structural stand-in needs no bucket. */
 function fakeClient(handler: (input: SentInput) => unknown): { client: S3Client; sent: SentInput[] } {
   const sent: SentInput[] = [];
   const client = {
@@ -80,8 +77,7 @@ async function reads(): Promise<void> {
     assert.equal(await getObjectTextVersioned(client, "bucket", "wasms/x.json"), undefined);
   }
 
-  // A missing bucket answers 404 too, and must NOT read as absence — the caller would rebuild the document
-  // from nothing.
+  // A missing bucket answers 404 too, and must not read as absence.
   {
     const { client } = fakeClient(() => awsError("NoSuchBucket", 404));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /NoSuchBucket/);
@@ -104,9 +100,7 @@ async function reads(): Promise<void> {
     assert.equal(await getObjectTextVersioned(client, "bucket", "wasms/x.json"), undefined);
   }
 
-  // A bare Error carries the name "Error", which names nothing we recognise — so it propagates rather than
-  // being read as absence. Deciding "this object does not exist" on an unrecognised failure is how a
-  // create-if-absent write gets pointed at a document that is really there.
+  // A bare Error carries the name "Error", which names nothing we recognise, so it propagates.
   {
     const { client } = fakeClient(() => Object.assign(new Error("gone"), { $metadata: { httpStatusCode: 404 } }));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /gone/);

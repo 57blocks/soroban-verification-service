@@ -38,17 +38,10 @@ export type ResultStorage = {
   // published", not read it.
   exists(path: string): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
-  /**
-   * Whether this backend's conditional writes hold ACROSS processes. `filesystem` serialises writers within
-   * one process but cannot reach past it, so it reports false — a limit callers must be able to test, not
-   * only read in a document.
-   */
+  // Whether this backend's conditional writes hold ACROSS processes. `filesystem` serialises writers within
+  // one process but cannot reach past it.
   readonly crossProcessAtomicWrites: boolean;
-  /**
-   * Reads text with the version token `writeTextIfUnchanged` pins against. The token identifies the stored
-   * bytes themselves, so a document that will not parse still has one and cannot be mistaken for an absent
-   * object.
-   */
+  /** Reads text with the version token `writeTextIfUnchanged` pins against. */
   readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined>;
   /** Writes only if the stored bytes are still at `expected`; `null` requires the object to be absent. */
   writeTextIfUnchanged(
@@ -93,13 +86,9 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
     secretAccessKey: config.secretAccessKey,
     forcePathStyle: config.forcePathStyle,
   });
-  // `kind` names the config shape, not the service on the other end: getResultStorageConfig fills `endpoint`
-  // from the R2 variables for every non-filesystem kind, so an "s3" config can be pointed at R2 or any other
-  // S3-compatible store. Only an endpoint-less "s3" is known to be AWS, which is the one backend whose
-  // conditional-write behaviour this code has been run against.
-  //
-  // An injected `client` is opaque — whatever endpoint it was built against is not readable from here — so
-  // it claims nothing either. This is the same rule the two lines above apply: assert only what is known.
+  // `kind` names the config shape, not the service answering: `getResultStorageConfig` fills `endpoint` from
+  // the R2 variables for every non-filesystem kind, and an injected `client`'s endpoint cannot be read back
+  // from here. Only AWS S3's conditional writes have been measured.
   const conditionalWritesVerified = config.kind === "s3" && !config.endpoint && !config.client;
   return new S3ResultStorage(
     config.kind,
@@ -114,10 +103,8 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
 class FilesystemResultStorage implements ResultStorage {
   readonly kind = "filesystem" as const;
 
-  // The compare in `writeTextIfUnchanged` and the rename under it are not one atomic step, so a second
-  // process can land between them. Within one process the caller's own lock closes that window; across
-  // processes nothing here can — POSIX has no compare-and-swap-replace, and a lock file's staleness cannot
-  // distinguish a dead holder from a slow one.
+  // POSIX has no compare-and-swap-replace, and a lock file's staleness cannot distinguish a dead holder
+  // from a slow one, so the serialisation below reaches no further than this process.
   readonly crossProcessAtomicWrites = false;
 
   constructor(
@@ -175,9 +162,8 @@ class FilesystemResultStorage implements ResultStorage {
     expected: StorageVersion | null,
   ): Promise<StorageWriteResult> {
     const target = join(this.root, path);
-    // The compare and the rename below are several await points apart. Without this, two writers pinned to
-    // the same version both pass the compare and the loser's bytes replace the winner's — the very lost
-    // update a conditional write exists to prevent.
+    // The compare and the rename below are several await points apart: unserialised, two writers pinned to
+    // one version both pass the compare and the loser's bytes replace the winner's.
     return withFilesystemWriteLock(resolve(target), async () => {
       const current = await this.readText(path);
       const actual = current === undefined ? null : versionOf(current);
@@ -207,11 +193,7 @@ class S3ResultStorage implements ResultStorage {
     private readonly bucket: string,
     private readonly prefix: string,
     readonly publicRoot: string,
-    /**
-     * Decided by `createResultStorage`, which is the only place that sees the whole config. A store that
-     * ignores a conditional write, or reports the refusal differently, is indistinguishable from one that
-     * honoured it — so this stays false until a compatibility check against that endpoint has passed.
-     */
+    /** Decided by `createResultStorage`, the only place that sees the whole config. */
     readonly crossProcessAtomicWrites: boolean,
   ) {}
 
@@ -285,13 +267,9 @@ function cacheControlForPath(path: string): string {
 }
 
 /**
- * Serialises every conditional write this process makes to ONE target path. Keyed at module scope rather
- * than held per instance: `buildResultStorage` hands out a fresh `ResultStorage` on several orchestrator
- * paths, and two of them over the same root would otherwise race each other.
- *
- * The key is `resolve`d, so a relative and an absolute spelling of one root share a lock. It is NOT
- * realpath'd: two roots reaching the same directory through a symlink are two keys, and the guarantee does
- * not span them.
+ * Serialises this process's conditional writes to one target path. Module scope, not per instance:
+ * `buildResultStorage` hands out a fresh `ResultStorage` on several orchestrator paths. The key is
+ * `resolve`d but not realpath'd, so two roots reaching one directory through a symlink are two keys.
  */
 const filesystemWriteLocks = new Map<string, Promise<unknown>>();
 

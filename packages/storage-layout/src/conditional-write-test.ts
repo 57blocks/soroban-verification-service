@@ -10,13 +10,9 @@ async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "conditional-write-test-"));
   const storage = createResultStorage({ kind: "filesystem", root, publicRoot: "https://example.test" });
 
-  // The filesystem backend reaches only as far as this process, and says so rather than leaving the limit to
-  // a document nothing can check.
   assert.equal(storage.crossProcessAtomicWrites, false);
 
-  // Only AWS S3 has been run against this code, and `kind` alone cannot carry the claim: an "s3" config
-  // reaches whatever `endpoint` names, and getResultStorageConfig fills that from the R2 variables for every
-  // non-filesystem kind. No client is injected below, so these exercise the same path a service takes.
+  // No client is injected below, so these run the path a service takes.
   const objectStorage = (config: Partial<Parameters<typeof createResultStorage>[0]>) =>
     createResultStorage({ kind: "s3", bucket: "b", publicRoot: "https://example.test", ...config } as never);
   assert.equal(objectStorage({}).crossProcessAtomicWrites, true);
@@ -50,17 +46,15 @@ async function main(): Promise<void> {
   assert.equal(await storage.writeTextIfUnchanged("wasms/a.json", "third\n", JSON_TYPE, read.version), "conflict");
   assert.equal(await readFile(join(root, "wasms/a.json"), "utf8"), "second\n");
 
-  // Unparseable bytes still carry a version: a body we cannot read is NOT an absent object, and a
-  // create-if-absent write must not be able to replace it.
+  // Unparseable bytes still carry a version, so a create-if-absent write cannot replace them.
   await storage.writeText("wasms/b.json", "{ not json", JSON_TYPE);
   const corrupt = await storage.readTextVersioned("wasms/b.json");
   assert.ok(corrupt, "a corrupt document must still report a version");
   assert.equal(await storage.writeTextIfUnchanged("wasms/b.json", "{}\n", JSON_TYPE, null), "conflict");
   assert.equal(await readFile(join(root, "wasms/b.json"), "utf8"), "{ not json");
 
-  // Two writers pinned to the SAME version, launched concurrently rather than one after the other: the
-  // compare and the rename are several await points apart, so without serialisation both would pass the
-  // compare and the loser's bytes would silently replace the winner's.
+  // Launched concurrently rather than one after the other — sequential writes cannot reach the interleaving
+  // this is about.
   await storage.writeTextIfUnchanged("wasms/c.json", "base\n", JSON_TYPE, null);
   const pinned = await storage.readTextVersioned("wasms/c.json");
   assert.ok(pinned);
@@ -72,17 +66,16 @@ async function main(): Promise<void> {
   const landed = await readFile(join(root, "wasms/c.json"), "utf8");
   assert.ok(landed === "left\n" || landed === "right\n", "the winner's bytes, whole");
 
-  // Create-if-absent races the same way: two writers both seeing an absent object must not both land.
+  // Create-if-absent races the same way.
   const created = await Promise.all([
     storage.writeTextIfUnchanged("wasms/d.json", "first\n", JSON_TYPE, null),
     storage.writeTextIfUnchanged("wasms/d.json", "second\n", JSON_TYPE, null),
   ]);
   assert.deepEqual([...created].sort(), ["conflict", "written"], "exactly one creator may land");
 
-  // One root spelled two ways is one lock: the key is resolved, so a relative root cannot open a second
-  // lane onto the same file. The absolute spelling is realpath'd first because macOS puts the temp dir
-  // behind a symlink and `chdir` resolves it — which would make this the symlink case the lock does NOT
-  // cover, rather than the spelling case it does.
+  // One root spelled two ways is one lock. The absolute spelling is realpath'd first because macOS reaches
+  // its temp dir through a symlink and `chdir` resolves what `resolve()` does not — without it this would
+  // exercise the symlink case the lock does NOT cover.
   {
     const previous = process.cwd();
     const realRoot = await realpath(root);
