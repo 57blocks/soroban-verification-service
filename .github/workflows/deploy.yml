@@ -290,7 +290,7 @@ jobs:
   # current by `check:workflow-pins` — without that, a caller's pin would stop at this line. A fork edits both.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@98e29760562e189ed4626a86539484c05aa1b6fa
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@7a24fcd164bede3278dc18cae578ec7958c52c07
     permissions:
       id-token: write
       contents: read
@@ -312,7 +312,7 @@ jobs:
   # ⚠ That last clause states the DESIGN, not dev as deployed.
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@98e29760562e189ed4626a86539484c05aa1b6fa
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@7a24fcd164bede3278dc18cae578ec7958c52c07
     permissions:
       id-token: write
       contents: read

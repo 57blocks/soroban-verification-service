@@ -6,6 +6,7 @@
 // Loads the workspace root .env: this script runs from the repository root via `pnpm run db:seed-tvl`, so it
 // never picked up a `.env` and failed on a missing POSTGRES_DB regardless of configuration.
 import "@scvs/config/load-env";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, resolve } from "node:path";
@@ -69,6 +70,30 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
           `that decision on the network. Use a local path for development.`,
       );
     }
+    // An https: source is fetched over the network, so — unlike a file path, which is already
+    // reviewable repository content — nothing here proves the response is what was intended.
+    // SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 pins the exact content expected, the same way this
+    // repository pins a GitHub Actions `uses:` to a commit SHA rather than trusting a mutable ref.
+    const expectedDigest = process.env.SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256?.trim();
+    if (!expectedDigest) {
+      throw new Error(
+        `SCVS_TRUSTED_VERIFIERS_SOURCE is an https: URL (${url}) but SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 ` +
+          `is not set. An https: source must declare the sha256 (hex) of the exact content it is expected ` +
+          `to return — without it, a compromised host or a poisoned cache could substitute different ` +
+          `content and this script would seed it without detecting anything wrong.`,
+      );
+    }
+    // Caught here, before any network request, so a malformed pin (a typo, a base64 digest pasted
+    // where hex was expected, wrong length) is reported as its own distinct, diagnosable problem —
+    // not as a confusing "expected <garbage>, got <realhex>" digest mismatch further down, which
+    // would leave an operator unsure whether the PIN or the CONTENT is what's actually wrong.
+    if (!/^[0-9a-f]{64}$/i.test(expectedDigest)) {
+      throw new Error(
+        `SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 is not a valid sha256 hex digest (expected 64 hex ` +
+          `characters, got "${expectedDigest}"). Check for a typo or a digest in the wrong format ` +
+          `(e.g. base64 instead of hex).`,
+      );
+    }
     const response = await fetch(url).catch((error: Error) => {
       throw new Error(`Could not fetch trusted verifiers list from ${url}: ${error.message}`);
     });
@@ -77,7 +102,20 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
         `Could not fetch trusted verifiers list from ${url}: HTTP ${response.status} ${response.statusText}`,
       );
     }
-    return { label: url.toString(), raw: await response.text(), isDefaultFixture };
+    // Hashed over the exact bytes on the wire, before any text decoding — a pin must cover what was
+    // actually transmitted, not a re-encoded or re-parsed form of it.
+    const bytes = await response.arrayBuffer();
+    const actualDigest = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
+    if (actualDigest.toLowerCase() !== expectedDigest.toLowerCase()) {
+      throw new Error(
+        `Trusted verifiers list fetched from ${url} does not match the pinned content: ` +
+          `expected sha256 ${expectedDigest}, got ${actualDigest}. This means the source's content no ` +
+          `longer matches SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 — either the document was legitimately ` +
+          `updated and the pin needs to change, or the response was tampered with. Refusing to seed ` +
+          `either way; verify the content before updating the pin.`,
+      );
+    }
+    return { label: url.toString(), raw: new TextDecoder().decode(bytes), isDefaultFixture };
   }
 
   // Relative to the repository root rather than `process.cwd()`: this runs both from a workspace checkout
