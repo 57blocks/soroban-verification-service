@@ -28,6 +28,14 @@ on:
         type: boolean
         required: false
         default: false
+      on_main:
+        description: >-
+          Whether `source_sha` is an ancestor of this repository's main. False runs the harness with no
+          AWS credentials at all: the CLI comes straight from the pinned official release, whose digest
+          assertions are the same either way. Defaults to true so a caller that does not know must say so.
+        type: boolean
+        required: false
+        default: true
     secrets:
       SOURCE_APP_ID:
         description: >-
@@ -51,6 +59,10 @@ jobs:
     # resolves empty. Account-wide work, so it pins dev's, exactly as stellar-cli.yml does for the same cache.
     environment: dev
     runs-on: ubuntu-24.04-arm
+    env:
+      # An off-main run has no bucket to read, and the script treats `off` as the normal case rather
+      # than a fault — the same path the public build takes.
+      SCVS_CI_CACHE: ${{ inputs.on_main && 's3' || 'off' }}
     # The run is now 8 base fixtures (`fixtures.ts`) plus 7 cross-oracle legs, and each leg is a reference build
     # and a sandbox build of the same source.
     timeout-minutes: 150
@@ -73,6 +85,7 @@ jobs:
       # `s3api head-bucket`, and it exits 1 rather than confuse an unreachable cache with a miss. This
       # workflow was the only one of that script's five callers with no credentials, so it had never run.
       - name: Configure AWS credentials (OIDC)
+        if: inputs.on_main
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}

@@ -56,6 +56,19 @@ jobs:
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     steps:
+      # `commit_sha` arrives as a free-text dispatch input and ends up as a git ref, an ECR image tag and
+      # an argument inside steps that hold AWS credentials. The caller is expected to have resolved it,
+      # but a reusable workflow cannot assume its caller did anything.
+      - name: Check the commit SHA is a commit SHA
+        env:
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit_sha must be a full 40-character commit SHA, got '${COMMIT_SHA}'"
+            exit 1
+          fi
+
       - name: Mint a read token for the application repository
         id: source_token
         uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
@@ -69,6 +82,19 @@ jobs:
           repository: ${{ inputs.source_repository }}
           token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      # Pure git, no credentials, and placed before the first step that takes any: this environment may
+      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
+      # the ambient commit is the CALLER's, which is never on this repository's main.
+      - name: Fetch main to prove the ref against
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Refuse a ref that is not on main
+        env:
+          TARGET_ENV: "${{ inputs.environment }}"
+          TARGET_SHA: ${{ inputs.commit_sha }}
+        run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
@@ -122,13 +148,16 @@ jobs:
         id: digest
         env:
           REPOSITORY: ${{ steps.descriptor.outputs.repository }}
+          # Through `env:`, never `${{ }}` inside the script — this step holds AWS credentials, and an
+          # expression is substituted into the shell's source text before the shell ever sees it.
+          COMMIT_SHA: ${{ inputs.commit_sha }}
         run: |
           set -euo pipefail
           DIGEST=$(aws ecr describe-images --repository-name "$REPOSITORY" \
-            --image-ids "imageTag=${{ inputs.commit_sha }}" \
+            --image-ids "imageTag=${COMMIT_SHA}" \
             --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
           if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
-            echo "::error::$REPOSITORY has no image tagged ${{ inputs.commit_sha }} — that commit was never deployed to this environment"
+            echo "::error::$REPOSITORY has no image tagged ${COMMIT_SHA} — that commit was never deployed to this environment"
             exit 1
           fi
           echo "value=$DIGEST" >> "$GITHUB_OUTPUT"
