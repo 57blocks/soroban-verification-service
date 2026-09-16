@@ -549,7 +549,10 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     try {
       await scheduler.recoverPendingArchives(); // first tick: dispatches retryPendingArchive, not awaited
       await scheduler.recoverPendingArchives(); // second tick, "next @Interval fires" — same job still pending
-      await new Promise((resolve) => setTimeout(resolve, 20)); // let both ticks' dispatch loops run
+      // Wait for the condition, not a guessed duration: first tick's dispatch crosses real DB round-trips
+      // (findOrCreate) before reaching the mocked uploadToIrys, and a fixed sleep races that under CI load.
+      await waitUntil(() => Promise.resolve(uploadCalls >= 1), "the first tick's dispatch to reach uploadToIrys");
+      await new Promise((resolve) => setTimeout(resolve, 20)); // let the second tick's dispatch loop run too
       expect(uploadCalls).toBe(1); // the guard, not a race, is what keeps this at 1
 
       releaseUpload?.();
