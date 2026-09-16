@@ -150,13 +150,48 @@ describe("publishing a source", () => {
     const jobId = await publishedJob();
     await prisma.job.update({ where: { id: jobId }, data: { sourcePublishPendingSince: OLD } });
 
-    await jobs.recordSourcePublishOutcome(jobId, { published: true, sourceFileName: `${"b".repeat(64)}.tar.gz` });
+    await jobs.recordSourcePublishOutcome(jobId, {
+      published: true,
+      sourceFileName: `${"b".repeat(64)}.tar.gz`,
+      owesStatusLink: true,
+    });
 
     const row = await read(jobId);
     expect(row.sourcePublishPendingSince).toBeNull();
     expect(row.sourceFileName).toBe(`${"b".repeat(64)}.tar.gz`);
     // Both in one statement: a crash between them would leave the link owed by nobody.
     expect(row.statusLinkPendingSince).not.toBeNull();
+  });
+
+  it("owes nothing when the document already carries the URI", async () => {
+    const jobId = await publishedJob();
+
+    // A first publish writes the source URI into the entry it is building, so raising the flag here would
+    // put every public job through a recovery pass that has nothing to do — and bury the backlog gauge that
+    // is supposed to show the ones that do.
+    await jobs.recordSourcePublishOutcome(jobId, {
+      published: true,
+      sourceFileName: `${"b".repeat(64)}.tar.gz`,
+      owesStatusLink: false,
+    });
+
+    const row = await read(jobId);
+    expect(row.sourceFileName).toBe(`${"b".repeat(64)}.tar.gz`);
+    expect(row.statusLinkPendingSince).toBeNull();
+  });
+
+  it("never lowers a flag another link raised", async () => {
+    const jobId = await publishedJob();
+    await jobs.recordArchiveOutcome(jobId, { archived: true, txId: "tx-report", statusLink: { state: "pending" } });
+    await prisma.job.update({ where: { id: jobId }, data: { statusLinkPendingSince: OLD } });
+
+    await jobs.recordSourcePublishOutcome(jobId, {
+      published: true,
+      sourceFileName: `${"b".repeat(64)}.tar.gz`,
+      owesStatusLink: false,
+    });
+
+    expect((await read(jobId)).statusLinkPendingSince).toEqual(OLD);
   });
 });
 

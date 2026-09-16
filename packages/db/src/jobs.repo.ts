@@ -480,7 +480,17 @@ export class JobsRepository {
   async recordSourcePublishOutcome(
     jobId: string,
     outcome:
-      | { published: true; sourceFileName: string; sourceArchivePendingSince?: Date }
+      | {
+          published: true;
+          sourceFileName: string;
+          sourceArchivePendingSince?: Date;
+          /**
+           * Whether the document still has to be told about this source. False on a first publish, which
+           * wrote the URI into the entry it was building; true on a retry, which is amending a document that
+           * was written without it.
+           */
+          owesStatusLink: boolean;
+        }
       | { published: false },
   ): Promise<void> {
     if (outcome.published) {
@@ -489,12 +499,16 @@ export class JobsRepository {
       // and a crash there loses the link for good — the pattern this whole change exists to remove.
       const now = new Date();
       const sourceArchive = outcome.sourceArchivePendingSince;
+      // Never clears the link flag, only raises it — clearing belongs to the pass that recomputed every link.
+      const statusLink = outcome.owesStatusLink
+        ? Prisma.sql`COALESCE("status_link_pending_since", ${now})`
+        : Prisma.sql`"status_link_pending_since"`;
       await this.expectOneRow(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           "source_publish_pending_since" = NULL,
           "source_file_name" = ${outcome.sourceFileName},
           "source_archive_pending_since" = ${sourceArchive ?? Prisma.raw('"source_archive_pending_since"')},
-          "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
+          "status_link_pending_since" = ${statusLink},
           "updated_at" = ${now}
         WHERE "id" = ${jobId}::uuid`, jobId);
     } else {

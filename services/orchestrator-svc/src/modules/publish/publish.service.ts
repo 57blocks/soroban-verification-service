@@ -292,7 +292,11 @@ export class PublishService {
       try {
         await this.jobs.recordSourcePublishOutcome(
           jobId,
-          sourceDurable && sourceFileName ? { published: true, sourceFileName } : { published: false },
+          sourceDurable && sourceFileName
+            // The status object written moments ago already carries this URI (`verifiedSourceCodeUri` went
+            // into `buildWasmStatus`), so there is nothing for the link scan to do.
+            ? { published: true, sourceFileName, owesStatusLink: false }
+            : { published: false },
         );
       } catch (error) {
         this.logger.warn("failed to record source-publish outcome; the retry scheduler will catch up", {
@@ -461,6 +465,8 @@ export class PublishService {
         ? {
             published: true,
             sourceFileName,
+            // This job's document was written before the source landed, so its URI is not in it yet.
+            owesStatusLink: true,
             ...(sourceArchiveEligible ? { sourceArchivePendingSince: new Date() } : {}),
           }
         : { published: false },
