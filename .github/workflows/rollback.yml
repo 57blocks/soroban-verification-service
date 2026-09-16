@@ -93,31 +93,6 @@ jobs:
             echo "names=verification-svc orchestrator-svc query-svc" >> "$GITHUB_OUTPUT"
           fi
 
-      # Refuses on a still-digest-pinned task definition. Moving the alias would look like a rollback and change
-      # nothing, which is the failure mode this whole ADR is about.
-      - name: Check the task definitions read the alias
-        env:
-          CLUSTER: ${{ steps.descriptor.outputs.cluster }}
-          SERVICES: ${{ steps.services.outputs.names }}
-        run: |
-          set -euo pipefail
-          for SERVICE in $SERVICES; do
-            TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-              --query 'services[0].taskDefinition' --output text)
-            IMAGE=$(aws ecs describe-task-definition --task-definition "$TD" \
-              --query "taskDefinition.containerDefinitions[?name=='${SERVICE}'].image | [0]" --output text)
-            case "$IMAGE" in
-              *:deployed)
-                echo "$SERVICE reads the alias ($IMAGE)"
-                ;;
-              *)
-                echo "::error::$SERVICE's task definition pins $IMAGE, so moving the alias would change nothing."
-                echo "::error::Alias rollback needs the alias-tag infrastructure (invariants.md rule 29) applied to ${{ inputs.environment }} first."
-                exit 1
-                ;;
-            esac
-          done
-
       - name: Resolve the digest for ${{ inputs.commit_sha }}
         id: digest
         env:
@@ -133,15 +108,60 @@ jobs:
           fi
           echo "value=$DIGEST" >> "$GITHUB_OUTPUT"
 
-      - name: Move the :deployed alias to that digest
+      # invariants.md rule 29: CI owns the task definition, and every revision it has ever registered pins an
+      # exact commit's digest. Rolling back means finding the ACTIVE revision that pins the target commit's
+      # digest and pointing the service at it directly — no alias involved, and none of the running definitions
+      # were ever expected to read one.
+      - name: Find each service's task definition revision for ${{ inputs.commit_sha }}
+        id: revisions
+        env:
+          SERVICES: ${{ steps.services.outputs.names }}
+          DIGEST: ${{ steps.digest.outputs.value }}
         run: |
-          bash scripts/ci/promote-image-alias.sh \
-            "${{ steps.descriptor.outputs.repository }}" "${{ steps.digest.outputs.value }}"
+          set -euo pipefail
+          {
+            echo "arns<<ARNS"
+            for SERVICE in $SERVICES; do
+              FAMILY_KEY=$(echo "$SERVICE" | tr '-' '_')
+              FAMILY=$(jq -r --arg k "$FAMILY_KEY" '.task_definition_families[$k] // empty' <<<"$CI_DESCRIPTOR_JSON")
+              if [ -z "$FAMILY" ]; then
+                echo "::error::this environment's descriptor names no task_definition_families entry for $SERVICE" >&2
+                exit 1
+              fi
 
-      - name: Roll the services onto it
+              MATCH=""
+              for ARN in $(aws ecs list-task-definitions --family-prefix "$FAMILY" --status ACTIVE \
+                --query 'taskDefinitionArns' --output text); do
+                IMAGE=$(aws ecs describe-task-definition --task-definition "$ARN" \
+                  --query "taskDefinition.containerDefinitions[?name=='${SERVICE}'].image | [0]" --output text)
+                case "$IMAGE" in
+                  *"@${DIGEST}")
+                    MATCH="$ARN"
+                    break
+                    ;;
+                esac
+              done
+
+              if [ -z "$MATCH" ]; then
+                echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${{ inputs.commit_sha }} was never deployed to ${{ inputs.environment }}, or its revision is no longer ACTIVE" >&2
+                exit 1
+              fi
+
+              echo "$SERVICE $MATCH"
+            done
+            echo "ARNS"
+          } >> "$GITHUB_OUTPUT"
+
+      # One call per service: TASK_DEFINITION_ARN in roll-service-to-alias.sh is single-service by
+      # construction (one revision ARN cannot serve several services), and each service here resolved to
+      # its own family's revision above.
+      - name: Roll each service onto its resolved revision
         env:
           CLUSTER: ${{ steps.descriptor.outputs.cluster }}
-          SERVICES: ${{ steps.services.outputs.names }}
         run: |
-          # shellcheck disable=SC2086
-          bash scripts/ci/roll-service-to-alias.sh "$CLUSTER" "${{ steps.digest.outputs.value }}" $SERVICES
+          set -euo pipefail
+          while read -r SERVICE ARN; do
+            [ -n "$SERVICE" ] || continue
+            echo "── $SERVICE -> $ARN"
+            TASK_DEFINITION_ARN="$ARN" bash scripts/ci/roll-service-to-alias.sh "$CLUSTER" "${{ steps.digest.outputs.value }}" "$SERVICE"
+          done <<< "${{ steps.revisions.outputs.arns }}"
