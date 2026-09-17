@@ -42,13 +42,16 @@ function cli58PrivateUploadWasSelected(args) {
   );
 }
 
+// This decides whether F-UPG-V1/F-UPG-V2 are built, not just which tests run, so it must not turn on
+// `-t`: a Jest filter edited in the workflow would stop provisioning them, and the case would gate-skip
+// itself green. The spec holds one case, so naming it is the selection.
 function upgradeLifecycleWasSelected(args) {
   const upgradeSpec = args.some((arg) => arg.includes("cases/upg/upg-normal-lifecycle.spec.ts"));
+  if (!upgradeSpec) return false;
+  const patterns = requestedTestPatterns(args);
   return (
-    upgradeSpec &&
-    requestedTestPatterns(args).some(
-      (pattern) => pattern.includes(upgradeLifecycleTestName) || pattern.includes("E2E-UPG-01")
-    )
+    patterns.length === 0 ||
+    patterns.some((pattern) => pattern.includes(upgradeLifecycleTestName) || pattern.includes("E2E-UPG-01"))
   );
 }
 
