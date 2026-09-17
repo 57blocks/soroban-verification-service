@@ -464,12 +464,12 @@ pnpm --filter @scvs/e2e-tests run test -- \
   -t 'E2E-SRC-(05/cli_58_source_tree_zip_upload|02/cli_58_source_tree_zip_public_upload)'
 ```
 
-`E2E-UPG-01/normal_upgrade_lifecycle` uses the same selected-provisioner rule:
+`E2E-UPG-01/normal_upgrade_lifecycle` provisions the same way, but its spec file holds exactly one
+case, so naming the file is the selection and no `-t` is needed:
 
 ```bash
 pnpm --filter @scvs/e2e-tests run test -- \
-  cases/upg/upg-normal-lifecycle.spec.ts \
-  -t "normal upgrade lifecycle"
+  cases/upg/upg-normal-lifecycle.spec.ts
 ```
 
 The runner creates an isolated address, verifies its v1 source, upgrades only that address to v2,

@@ -411,13 +411,21 @@ jobs:
             cases/upg/upg-normal-lifecycle.spec.ts 2>&1 | tee artifacts/e2e-upgrade-jest.log
           # A suite that selects nothing exits 0 and reads as a benign conditional skip. Only the harness's own
           # gate may skip this case, and it says so in the test name; anything else is a filter that has gone
-          # stale again.
+          # stale again. F-UPG-V1/F-UPG-V2 are the exception: run-upgrade-normal-lifecycle.sh builds, deploys
+          # and registers them within this step, so a gate skip naming them is that script never running —
+          # the one skip reason this step is not allowed to accept from itself.
           node -e '
             const report = require(`${process.env.SCVS_E2E_REPORT_DIR}/upgrade-lifecycle-jest.json`);
             const ran = report.numPassedTests + report.numFailedTests;
             if (ran > 0) process.exit(0);
             const gated = report.testResults.flatMap((r) => r.assertionResults)
               .filter((a) => a.fullName.includes("SKIPPED:"));
+            const unprovisioned = gated.find((a) => /F-UPG-V[12]/.test(a.fullName));
+            if (unprovisioned) {
+              console.error(`E2E-UPG-01 gate-skipped for fixtures this step provisions: ${unprovisioned.fullName}`);
+              console.error("run-upgrade-normal-lifecycle.sh did not run — check the dispatch in setup/run-e2e-test.mjs");
+              process.exit(1);
+            }
             if (gated.length > 0) {
               console.log(`E2E-UPG-01 skipped by its own gate: ${gated[0].fullName}`);
               process.exit(0);

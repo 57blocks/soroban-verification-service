@@ -122,8 +122,7 @@ Run the normal upgrade lifecycle through the same E2E entrypoint:
 
 ```bash
 pnpm --filter @scvs/e2e-tests run test -- \
-  cases/upg/upg-normal-lifecycle.spec.ts \
-  -t "normal upgrade lifecycle"
+  cases/upg/upg-normal-lifecycle.spec.ts
 ```
 
 It builds both versioned source archives, deploys v1 at a run-scoped address, upgrades only that
