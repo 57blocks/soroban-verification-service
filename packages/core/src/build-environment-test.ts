@@ -8,11 +8,11 @@ import {
   OfficialComponent,
   RecordedToolchainPair,
   classifyBuildEnvironment,
-  composedEnvironmentRecipeHash,
   isUndatedNightlyRsver,
   type BuildEnvironmentResolution,
   type ComposedEnvironmentRecipe,
 } from "./build-environment.js";
+import { composedEnvironmentRecipeHash } from "./build-environment-hash.js";
 
 function test(name: string, fn: () => void): void {
   try {

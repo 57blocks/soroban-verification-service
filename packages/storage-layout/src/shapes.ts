@@ -4,7 +4,6 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
-  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -12,7 +11,8 @@ import {
 } from "class-validator";
 // Subpath imports, not `@scvs/core`'s barrel: the barrel re-exports `rebuild-key.js` (`node:crypto`), and
 // `clients/sdk` imports this file's `./shapes` subpath to stay browser-bundleable.
-import { IMAGE_TRUST_LEVELS } from "@scvs/core/registry";
+import { PublishedBuildRecipe } from "@scvs/core/build-environment";
+import { IMAGE_TRUST_LEVELS, type ImageTrustLevel } from "@scvs/core/registry";
 import { ResultPointer, VerificationResultSummary } from "@scvs/core/result";
 import { SupportedSchemaMajor } from "@scvs/core/validators/schema-version";
 
@@ -284,7 +284,10 @@ export class VerificationArtifact {
   @ValidateNested()
   @Type(() => VerificationResultSummary)
   result!: VerificationResultSummary;
-  @IsOptional() @IsObject() build_recipe?: Record<string, unknown>;
+  // Both fields kept `@IsOptional()` so a report published before either existed still reads back as a valid
+  // artifact — see `readLegacyCustody` for the fallback that covers it.
+  @IsOptional() @IsIn(IMAGE_TRUST_LEVELS) image_trust_level?: ImageTrustLevel;
+  @IsOptional() @ValidateNested() @Type(() => PublishedBuildRecipe) build_recipe?: PublishedBuildRecipe;
 }
 
 // wasms/{wasm_hash}.json — the Registry API's per-wasm status object.

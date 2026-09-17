@@ -246,8 +246,6 @@ describe("published build-environment evidence", () => {
       "on_chain_recipe_in_trusted_image",
     );
 
-    expect(artifact.build_recipe?.diagnostics).toBeUndefined();
-
     // `parseDto` runs the assembled artifact through `plainToInstance`, which gives every `@IsOptional()` field
     // on `SandboxDiagnostics` an own key with value `undefined` regardless of what the input carried.
     expect(artifact.result.sandbox_diagnostics?.command).toBeUndefined();
@@ -574,8 +572,8 @@ describe("observeSep55Marker (RA5)", () => {
     );
 
     expect(artifact.trust.sep55_attestation_present).toBe(true);
-    // Guards specifically against a leak through build_recipe's untyped Record<string, unknown> bag — a typed
-    // field would be caught by TypeScript regardless.
+    // Guards against a leak through build_recipe.build_options, the one field on `PublishedBuildRecipe` still a
+    // loose passthrough bag.
     expect(JSON.stringify(artifact)).not.toContain("source_code_verifications");
   });
 

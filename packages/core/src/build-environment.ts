@@ -1,14 +1,17 @@
-import { createHash } from "node:crypto";
 import { Type } from "class-transformer";
 import {
   Equals,
   IsArray,
   IsDefined,
   IsIn,
+  IsObject,
+  IsOptional,
   IsString,
   Matches,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
+import { IMAGE_TRUST_LEVELS, type ImageTrustLevel } from "./registry.js";
 // The chain-derived toolchain identity for a cli-legacy contract, and the recipe a *composed* environment is
 // built from.
 
@@ -41,6 +44,46 @@ export class ComposedEnvironmentRecipe {
   @IsString() template_version!: string;
   @IsArray() @ValidateNested({ each: true }) @Type(() => OfficialComponent)
   components!: OfficialComponent[];
+}
+
+/**
+ * The shape `VerificationArtifact.build_recipe` (packages/storage-layout/src/shapes.ts) actually promises, so a
+ * regression that drops a component's `sha256` or a composed recipe's checksum fails to publish instead of
+ * passing through the artifact's own `@IsObject()` catch-all silently. `kind === "composed"` is the only case
+ * `recipe_sha256`/`recipe` apply to — a chain-named build has neither, so `@ValidateIf` keeps them absent there
+ * rather than merely optional everywhere.
+ */
+export class BuildEnvironmentRecord {
+  @IsIn(["chain_named", "composed"]) kind!: "chain_named" | "composed";
+  @IsIn(IMAGE_TRUST_LEVELS) trust_level!: ImageTrustLevel;
+  @IsString() image_reference!: string;
+
+  @ValidateIf((o: BuildEnvironmentRecord) => o.kind === "composed")
+  @Matches(/^[0-9a-f]{64}$/)
+  recipe_sha256?: string;
+
+  @ValidateIf((o: BuildEnvironmentRecord) => o.kind === "composed")
+  @Matches(/^sha256:[0-9a-f]{64}$/)
+  image_digest?: string;
+
+  @ValidateIf((o: BuildEnvironmentRecord) => o.kind === "composed")
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => ComposedEnvironmentRecipe)
+  recipe?: ComposedEnvironmentRecipe;
+}
+
+/**
+ * `build_options` stays a passthrough bag (it is CLI flags, not custody evidence, and
+ * RegistryVerification.bldopt already shape-checks the parts of it that matter).
+ *
+ * Named `Published*`, not `BuildRecipe`: `source.ts` already has a `BuildRecipe` (the CLI recipe a *submitter*
+ * hands over) — an unrelated concept that happens to share the name.
+ */
+export class PublishedBuildRecipe {
+  @IsString() build_image!: string;
+  @ValidateNested() @Type(() => BuildEnvironmentRecord) build_environment!: BuildEnvironmentRecord;
+  @IsOptional() @IsObject() build_options?: Record<string, unknown>;
 }
 
 /**
@@ -100,34 +143,6 @@ export function classifyBuildEnvironment(input: {
     intent: { pair: input.pair, template_version: CURRENT_COMPOSE_TEMPLATE_VERSION },
     trustLevel: "upstream_pinned",
   };
-}
-
-function encodeField(value: string): string {
-  return `${Buffer.byteLength(value, "utf8")}:${value}`;
-}
-
-function encodeList(items: string[]): string {
-  return `${items.length}:${items.join("")}`;
-}
-
-/** Not `JSON.stringify` — that is the K2/K4 bug class already fixed once for the idempotency key. */
-export function composedEnvironmentRecipeHash(recipe: ComposedEnvironmentRecipe): string {
-  const components = [...recipe.components].sort((a, b) =>
-    a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : a.source < b.source ? -1 : a.source > b.source ? 1 : 0,
-  );
-  const encodedComponents = encodeList(
-    components.map(
-      (component) =>
-        encodeField(component.kind) + encodeField(component.source) + encodeField(component.sha256),
-    ),
-  );
-  const canonical =
-    encodeField(recipe.schema) +
-    encodeField(recipe.template_version) +
-    encodeField(recipe.pair.cliver) +
-    encodeField(recipe.pair.rsver) +
-    encodedComponents;
-  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 /**

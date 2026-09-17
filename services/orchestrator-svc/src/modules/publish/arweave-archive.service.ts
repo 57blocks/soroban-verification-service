@@ -24,10 +24,15 @@ import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
 
-function legacyCustodyFromReport(reportBytes: string): LegacyCustody | undefined {
+/** Exported for its own unit test — the two "read the trust level back out of a report" implementations
+ * (this one, and storage-layout's `readLegacyCustody`) read the same document and must agree. */
+export function legacyCustodyFromReport(reportBytes: string): LegacyCustody | undefined {
   try {
-    const report = JSON.parse(reportBytes) as { build_recipe?: { build_environment?: { trust_level?: unknown } } };
-    const level = report.build_recipe?.build_environment?.trust_level;
+    const report = JSON.parse(reportBytes) as {
+      image_trust_level?: unknown;
+      build_recipe?: { build_environment?: { trust_level?: unknown } };
+    };
+    const level = report.image_trust_level ?? report.build_recipe?.build_environment?.trust_level;
     return (IMAGE_TRUST_LEVELS as readonly string[]).includes(level as string)
       ? { imageTrustLevel: level as LegacyCustody["imageTrustLevel"] }
       : undefined;
