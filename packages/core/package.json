@@ -23,6 +23,10 @@
       "types": "./dist/src/registry.d.ts",
       "default": "./dist/src/registry.js"
     },
+    "./build-environment": {
+      "types": "./dist/src/build-environment.d.ts",
+      "default": "./dist/src/build-environment.js"
+    },
     "./aggregate": {
       "types": "./dist/src/aggregate.d.ts",
       "default": "./dist/src/aggregate.js"

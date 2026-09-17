@@ -21,6 +21,7 @@ export * from "./wasm-metadata.js";
 export * from "./cliver.js";
 export * from "./stellar-network.js";
 export * from "./build-environment.js";
+export * from "./build-environment-hash.js";
 export * from "./composer.js";
 export * from "./validate.js";
 export * from "./schema-hint.js";

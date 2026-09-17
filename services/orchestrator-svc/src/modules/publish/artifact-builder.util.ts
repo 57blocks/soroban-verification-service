@@ -1,4 +1,10 @@
-import type { BuildMode, ComposedEnvironmentRecipe, MechanismReason, SandboxDiagnostics as SandboxDiagnosticsDto } from "@scvs/core";
+import type {
+  BuildMode,
+  ComposedEnvironmentRecipe,
+  MechanismReason,
+  PublishedBuildRecipe,
+  SandboxDiagnostics as SandboxDiagnosticsDto,
+} from "@scvs/core";
 import type { JobRecord } from "@scvs/db";
 import { parseDto, type VerificationResultSummary as VerificationResultSummaryDto } from "@scvs/core";
 import { VerificationArtifact as VerificationArtifactDto } from "@scvs/storage-layout";
@@ -92,6 +98,7 @@ export function assembleArtifact(
       ...(chainSourceSha256 ? { chain_source_sha256: chainSourceSha256 } : {}),
     },
     result: publishedResult(result),
+    image_trust_level: buildEnvironment.trustLevel,
     build_recipe: buildRecipeRecord(job, buildEnvironment),
   } satisfies VerificationArtifactDto);
 }
@@ -187,11 +194,14 @@ function requireSourceSha256(job: JobRecord): string {
   return sourceSha256;
 }
 
-/** `build_recipe` is a loose `Record<string, unknown>` — carries the digest-pinned image and any build options. */
+/**
+ * `build_environment` is schema-enforced (`BuildEnvironmentRecord`); `build_options` stays a loose passthrough
+ * bag of CLI flags.
+ */
 function buildRecipeRecord(
   job: JobRecord,
   environment: PublishedBuildEnvironment,
-): Record<string, unknown> {
+): PublishedBuildRecipe {
   return {
     build_image: environment.buildImage,
     build_environment:
@@ -214,9 +224,9 @@ function buildRecipeRecord(
 }
 
 /** See `scrubInternalEnvBldopt` for why the name is the half worth keeping. */
-function scrubRecipeBuildOptions(buildOptions: unknown): unknown {
+function scrubRecipeBuildOptions(buildOptions: unknown): Record<string, unknown> {
   const stored = buildOptions as { bldopt?: string[]; [key: string]: unknown };
-  if (!Array.isArray(stored?.bldopt)) return buildOptions;
+  if (!Array.isArray(stored?.bldopt)) return stored;
   return { ...stored, bldopt: scrubInternalEnvBldopt(stored.bldopt) };
 }
 

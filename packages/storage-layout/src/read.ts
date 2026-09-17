@@ -36,10 +36,15 @@ export async function readWasmStatus(storage: ResultStorage, wasmHash: string): 
 
 /**
  * What an entry written under the Registry API draft cannot carry itself and the append-style writers need to
- * upgrade it: the trust level, read from the report artifact's `build_recipe.build_environment`.
+ * upgrade it: the trust level. The artifact's own top-level `image_trust_level` is the primary source; a report
+ * published before that field existed still only carries it nested under `build_recipe.build_environment.trust_level`,
+ * so that path stays as the fallback for as long as such a report can still be read.
  */
 export async function readLegacyCustody(storage: ResultStorage, reportSha256: string): Promise<LegacyCustody | undefined> {
   const report = await readReport(storage, reportSha256);
+  if (report?.image_trust_level !== undefined) {
+    return { imageTrustLevel: report.image_trust_level };
+  }
   const environment = (report?.build_recipe as Record<string, unknown> | undefined)?.build_environment as
     | Record<string, unknown>
     | undefined;
