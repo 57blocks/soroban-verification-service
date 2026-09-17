@@ -75,6 +75,11 @@ const configuration = () => ({
   // jobStreamWindowMs, so unlike an ordinary request its cost is concurrent-count, not request-rate — a rate
   // limit on connection setup cannot cap it (see jobs.service.ts's StreamConcurrencyLimiter).
   jobStreamMaxConnectionsPerJob: numberEnv("SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB", 5),
+  // Bounds a single source across many distinct job ids — the per-job ceiling alone lets one caller open one
+  // connection each against as many jobs as it likes, never touching that ceiling (SCV-216). Looser than the
+  // per-job ceiling so a NAT'd office or a legitimate multi-tab user isn't punished for one address serving
+  // several people.
+  jobStreamMaxConnectionsPerIp: numberEnv("SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP", 10),
   jobStreamMaxConnectionsTotal: numberEnv("SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL", 500),
   // How long a job may stay non-terminal before the stream reports `job_timeout`.
   jobMaxWaitMs: numberEnv("SCVS_JOB_MAX_WAIT_MS", 60 * 60_000),

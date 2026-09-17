@@ -86,16 +86,74 @@ piece is portable just because it's "just a database" or "just object storage."
 sits in front of it need to account for that:
 
 - **Per-client concurrent-connection limit** — `verification-svc` itself caps how many of these
-  streams may be open at once, per job id and process-wide
-  (`SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB` / `SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL`), but that
-  ceiling is per process. A deployment running N instances behind one load balancer has an effective
-  ceiling N times larger unless the load balancer or reverse proxy also enforces a per-client limit
-  (for example Nginx's `limit_conn` keyed on the client address) in front of them.
+  streams may be open at once, per job id, per source IP, and process-wide
+  (`SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB` / `SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP` /
+  `SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL`), but every one of those ceilings is per process. A
+  deployment running N instances behind one load balancer has an effective ceiling N times larger
+  unless the load balancer or reverse proxy also enforces a per-client limit (for example Nginx's
+  `limit_conn` keyed on the client address) in front of them. The application-level per-IP ceiling
+  still earns its place on a single instance — and bounds a client that spreads connections across
+  many distinct job ids, which the per-job ceiling alone does not catch — but it does not substitute
+  for a proxy-level limit once you run more than one instance.
 - **Idle timeout** — must exceed `SCVS_JOB_STREAM_WINDOW_MS` (default 15 minutes), or the proxy
   closes the connection before the application does. This is the same class of mismatch
   `SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS` exists to catch for ordinary HTTP keep-alive connections
   (`services/verification-svc/src/config/configuration.ts`); the SSE stream is a second, independently
   configured connection lifetime that needs the same check applied to whatever fronts this service.
+
+**★ Known limitation, not a bug: every one of the ceilings above is per process, and running more
+than one instance multiplies all three by your replica count.** With N instances behind one load
+balancer, the *effective* ceiling a determined caller can reach is `N × SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB`,
+`N × SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP`, and `N × SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL` — not
+the single-instance numbers the defaults suggest. None of these three counters are shared across
+instances (no Redis, no Postgres-backed counter); each replica only ever knows about its own open
+connections. If your deployment runs more than one `verification-svc` instance, treat the
+application-level ceilings as a second line of defense, not the primary control — the load balancer
+or reverse proxy in front of them is what actually bounds the fleet-wide total, and it is the only
+place capable of doing so. A concrete starting point for Nginx, assuming the client address survives
+into `$binary_remote_addr` (see the `trust proxy` note below for why that assumption needs checking):
+
+```nginx
+# In the http {} block:
+limit_conn_zone $binary_remote_addr zone=sse_per_ip:10m;
+
+# In the location {} block for /api/verification/v1/verifications/*/events:
+limit_conn sse_per_ip 10;
+```
+
+Size the zone's limit against your own replica count and `SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP`,
+not against it alone — the proxy-level number is what actually holds across the fleet.
+
+**The per-IP ceiling and per-window abuse-rate tiers both trust `req.ip`, which trusts your network
+boundary, not the request.** `verification-svc` calls Express's `app.set("trust proxy", …)`
+(`services/verification-svc/src/main.ts`) with a fixed allow-list —
+`loopback`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` — so it only honors an `X-Forwarded-For`
+header when the *immediate* connection comes from one of those private ranges, and otherwise falls
+back to the raw TCP peer address. This is safe **only if your load balancer or reverse proxy actually
+sits inside one of those ranges and is the only thing that can reach `verification-svc` directly** —
+which is the normal shape for an ALB/Nginx in a private subnet talking to ECS/Fargate tasks in the
+same VPC (§2's table), but is not automatically true of every deployment. If you expose
+`verification-svc` directly to the internet, or front it with something outside those CIDR blocks,
+either adjust the allow-list to match your actual proxy's address or an attacker's self-supplied
+`X-Forwarded-For` will not be trusted anyway (falling back to the TCP peer, which is still real) —
+the failure mode to avoid is the opposite one: a proxy *inside* the allow-list that does not strip or
+overwrite an inbound client-supplied `X-Forwarded-For` before forwarding, which would let a caller
+forge a fresh "IP" per connection and defeat `SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP` and
+`SCVS_STREAM_ABUSE_MAX_PER_WINDOW` outright. Confirm your proxy overwrites (not appends past) that
+header for untrusted inbound traffic.
+
+**Sizing `SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP` (default 10) against a distributed source.** The
+default is a qualitative choice — looser than the per-job ceiling (5) so a NAT'd office or a
+multi-tab user isn't punished for sharing one address — not a load-tested number the way
+`SCVS_STREAM_ABUSE_MAX_PER_WINDOW`'s default is (see that variable's note in
+`config/env-manifest.yaml` for the kind of derivation this one currently lacks). It bounds a single
+source; it does nothing against a caller with access to many source addresses (a proxy pool or
+botnet) — 100 distinct source IPs at the default of 10 connections each reaches 1,000, already twice
+`SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL`'s default of 500. That is not a gap this variable is meant to
+close — the process-wide total is the backstop for a distributed source, and no per-IP number changes
+that — but it does mean this ceiling's practical value is against a single or small number of abusive
+sources, not a distributed one, and raising it without reasoning about your own expected concurrent
+legitimate-client count is not a safety improvement.
 
 ## 3. The one invariant you must not relax: the builder holds no business credentials
 

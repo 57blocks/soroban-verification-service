@@ -54,6 +54,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS", observable: "presence", group: "base", digest: false },
     { name: "SCVS_HEADERS_TIMEOUT_MS", observable: "presence", group: "base", digest: false },
     { name: "SCVS_JOB_MAX_WAIT_MS", observable: "presence", digest: false },
+    { name: "SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP", observable: "presence", digest: false },
     { name: "SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB", observable: "presence", digest: false },
     { name: "SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL", observable: "presence", digest: false },
     { name: "SCVS_JOB_STREAM_SAFETY_POLL_MS", observable: "presence", digest: false },

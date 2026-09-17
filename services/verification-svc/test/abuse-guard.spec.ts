@@ -6,7 +6,7 @@ import {
   createPrismaClient,
   readDbEnv,
 } from "@scvs/db";
-import { AbuseGuardService, fingerprintRequest } from "../src/common/abuse-guard.js";
+import { AbuseGuardService, fingerprintIp, fingerprintRequest } from "../src/common/abuse-guard.js";
 import { AbuseGuard } from "../src/common/abuse.guard.js";
 import type { ApiError } from "../src/common/api-error.exception.js";
 
@@ -375,5 +375,46 @@ describe("AbuseGuard fallback when the route pattern is unavailable", () => {
     } as never);
 
     expect(seen).toEqual([{ route: "unmatched", maxPerWindow: 6 }]);
+  });
+});
+
+// fingerprintIp backs the SSE per-IP concurrency ceiling (StreamConcurrencyLimiter), which tracks how many
+// connections are open *right now* rather than a count over a window — so unlike fingerprintRequest, it must
+// stay stable for the same address for as long as a connection might be open, not rotate with the clock.
+describe("fingerprintIp", () => {
+  it("produces the same fingerprint for the same address regardless of when it's called", () => {
+    const req = { ip: "203.0.113.7" } as Request;
+    const first = fingerprintIp(req, FINGERPRINT_KEY);
+    const second = fingerprintIp(req, FINGERPRINT_KEY);
+
+    expect(first).toBe(second);
+  });
+
+  it("produces different fingerprints for different addresses", () => {
+    const a = fingerprintIp({ ip: "203.0.113.7" } as Request, FINGERPRINT_KEY);
+    const b = fingerprintIp({ ip: "203.0.113.8" } as Request, FINGERPRINT_KEY);
+
+    expect(a).not.toBe(b);
+  });
+
+  // RP-1's "not reversible" still applies even though this value is never persisted: it can appear in logs
+  // (e.g. the concurrency-ceiling rejection log line), so it must not let a reader recover the address.
+  it("is not the same as the raw address, and depends on the key", () => {
+    const req = { ip: "203.0.113.7" } as Request;
+    const fingerprint = fingerprintIp(req, FINGERPRINT_KEY);
+
+    expect(fingerprint).not.toBe("203.0.113.7");
+    expect(fingerprintIp(req, "a-different-key")).not.toBe(fingerprint);
+  });
+
+  // No window bound into this fingerprint means it never expires the way fingerprintRequest's does: were an
+  // unresolvable address to collapse onto a shared literal (e.g. "unknown"), every such caller would pile into
+  // one bucket for as long as any one of their connections stayed open (up to the 15-minute stream window),
+  // not a 60-second rate-limit window. So an unresolvable address must not fingerprint into a shared value at
+  // all — it must signal "no identity", not "the identity 'unknown'".
+  it("returns null when neither req.ip nor the socket address is available, rather than fingerprinting a shared literal", () => {
+    const req = { ip: undefined, socket: { remoteAddress: undefined } } as unknown as Request;
+
+    expect(fingerprintIp(req, FINGERPRINT_KEY)).toBeNull();
   });
 });
