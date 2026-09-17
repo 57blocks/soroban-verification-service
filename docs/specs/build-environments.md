@@ -46,8 +46,8 @@ only this verifier's own ECR pull coordinate for it. A `Rebuild` keyed by a bare
 composed identity; anything else is a chain-named image reference — one persisted column, two kinds
 of value.
 
-Verified by: `packages/core/src/build-environment.ts` (`composedEnvironmentRecipeHash`,
-`parseRebuildEnvironmentIdentity`).
+Verified by: `packages/core/src/build-environment-hash.ts` (`composedEnvironmentRecipeHash`),
+`packages/core/src/build-environment.ts` (`parseRebuildEnvironmentIdentity`).
 
 ## 5. Trust boundary: the composer never sees submitted input
 
