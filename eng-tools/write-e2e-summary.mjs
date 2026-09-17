@@ -109,6 +109,11 @@ function splitSkipReason(name) {
   return { name: withoutReason.trim(), reason: match[1].trim() };
 }
 
+function ranInAnotherReport(entry, executedNames) {
+  const { name } = splitSkipReason(entry.name);
+  return executedNames.some((executed) => executed.startsWith(name));
+}
+
 function jestCases(report) {
   return (report.testResults ?? []).flatMap((suite) =>
     (suite.assertionResults ?? []).map((assertion) => ({
@@ -191,9 +196,12 @@ const allCases = reports.flatMap((report) => report.cases);
 const failed = reports.flatMap((report) =>
   report.cases.filter((entry) => entry.status === "failed").map((entry) => ({ ...entry, report: report.label }))
 );
-const skipped = reports.flatMap((report) =>
+const everySkip = reports.flatMap((report) =>
   report.cases.filter((entry) => entry.status === "skipped").map((entry) => ({ ...entry, report: report.label }))
 );
+const executed = allCases.filter((entry) => entry.status !== "skipped").map((entry) => entry.name);
+const skipped = everySkip.filter((entry) => !ranInAnotherReport(entry, executed));
+const superseded = everySkip.length - skipped.length;
 
 function overview() {
   const lines = [`## ${title}`, ""];
@@ -223,8 +231,15 @@ function overview() {
     const ms = allCases.reduce((total, entry) => total + entry.ms, 0);
     lines.push(
       `| **total** | **${count(allCases, "passed")}** | **${count(allCases, "failed")}** | ` +
-        `**${count(allCases, "skipped")}** | **${formatDuration(ms)}** |`
+        `**${skipped.length}** | **${formatDuration(ms)}** |`
     );
+    if (superseded > 0) {
+      lines.push(
+        "",
+        `The rows above and the total differ by ${plural(superseded, "skip")}: that many cases are skipped in ` +
+          "one report and run in another, and a case this run executed is not one it skipped."
+      );
+    }
   }
   const flaky = allCases.filter((entry) => entry.flaky).length;
   if (flaky > 0) {
@@ -395,7 +410,7 @@ if (summaryPath) {
   appendFileSync(summaryPath, body);
   console.log(
     `wrote ${reports.length} report(s) to the job summary: ` +
-      `${count(allCases, "passed")} passed, ${count(allCases, "failed")} failed, ${count(allCases, "skipped")} skipped`
+      `${count(allCases, "passed")} passed, ${count(allCases, "failed")} failed, ${skipped.length} skipped`
   );
 } else {
   process.stdout.write(body);
