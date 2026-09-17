@@ -3,8 +3,12 @@
  * whatever happened to be scheduled after it.
  */
 
-/** Spec paths, repo-relative to this package, that must run after every other spec. */
-const RUN_LAST = ["cases/sec/sec-surface-and-quota.spec.ts"];
+/**
+ * Spec paths, repo-relative to this package, that must run after every other spec. QRY-13's burst is sized
+ * from the declared ceiling and sends multiples of it; it idles a full quota window on its way out, so the
+ * entry after it starts on windows as clean as the ones it was given.
+ */
+const RUN_LAST = ["cases/qry/qry-13-read-quota.spec.ts", "cases/sec/sec-surface-and-quota.spec.ts"];
 
 const rank = (test) => {
   const path = String(test.path).split("\\").join("/");
