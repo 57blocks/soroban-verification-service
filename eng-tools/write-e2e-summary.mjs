@@ -109,16 +109,6 @@ function splitSkipReason(name) {
   return { name: withoutReason.trim(), reason: match[1].trim() };
 }
 
-/**
- * One job renders several reports, and a case can be gate-skipped in one and run in another: the suite that
- * provisions E2E-UPG-01's fixtures is the separate step that then runs it, so `test:auto` reports it skipped.
- *
- * `startsWith` and not equality, because the two names are not the same string. A `caseBlock` skip carries its
- * reason on the *describe*, so Jest's full name reads `<label> · SKIPPED: <reason> <test title>` and what
- * survives `splitSkipReason` is the bare `<label>` — exactly the prefix the executed entry's `<label> <title>`
- * opens with. A `rowTest` skip instead ends with its reason, keeps its row in the stripped name, and so
- * matches no sibling row that ran.
- */
 function ranInAnotherReport(entry, executedNames) {
   const { name } = splitSkipReason(entry.name);
   return executedNames.some((executed) => executed.startsWith(name));
