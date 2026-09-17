@@ -104,16 +104,21 @@ jobs:
 
       - name: Read the CI descriptor (version handshake)
         id: descriptor
+        env:
+          TARGET_ENV: ${{ inputs.environment }}
+          TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
-          DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment }}" 2,3)
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh "$TARGET_ENV" 2,3)
           echo "cluster=$(jq -r '.cluster' <<<"$DESC")" >> "$GITHUB_OUTPUT"
-          echo "repository=$(jq -r --arg t "${{ inputs.target }}" '.ecr[$t]' <<<"$DESC")" >> "$GITHUB_OUTPUT"
+          echo "repository=$(jq -r --arg t "$TARGET" '.ecr[$t]' <<<"$DESC")" >> "$GITHUB_OUTPUT"
 
       - name: Resolve the services this image runs
         id: services
+        env:
+          TARGET: ${{ inputs.target }}
         run: |
-          if [ "${{ inputs.target }}" = "web" ]; then
+          if [ "$TARGET" = "web" ]; then
             echo "names=web" >> "$GITHUB_OUTPUT"
           else
             echo "names=verification-svc orchestrator-svc query-svc" >> "$GITHUB_OUTPUT"
@@ -146,6 +151,8 @@ jobs:
         env:
           SERVICES: ${{ steps.services.outputs.names }}
           DIGEST: ${{ steps.digest.outputs.value }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+          TARGET_ENV: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           # Every lookup must succeed before anything is written to $GITHUB_OUTPUT: writing a
@@ -177,7 +184,7 @@ jobs:
             done
 
             if [ -z "$MATCH" ]; then
-              echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${{ inputs.commit_sha }} was never deployed to ${{ inputs.environment }}, or its revision is no longer ACTIVE"
+              echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${COMMIT_SHA} was never deployed to ${TARGET_ENV}, or its revision is no longer ACTIVE"
               exit 1
             fi
 

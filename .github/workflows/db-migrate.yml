@@ -392,6 +392,9 @@ jobs:
         if: always() && steps.run.outputs.task != ''
         env:
           TASK_ARN: ${{ steps.run.outputs.task }}
+          TARGET: ${{ inputs.target }}
+          ACTION: ${{ inputs.action }}
+          SEED_SUFFIX: ${{ inputs.action == 'deploy' && inputs.target == 'query-svc' && ' + `seed-tvl`' || '' }}
         run: |
           set -o pipefail
           CONFIG=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
@@ -418,7 +421,7 @@ jobs:
           {
             # The backslashes before every backtick are load-bearing: this is a DOUBLE-quoted shell string, so
             # an unescaped pair runs what it wraps.
-            echo "### \`${{ inputs.target }}\` — \`prisma migrate ${{ inputs.action }}\`${{ inputs.action == 'deploy' && inputs.target == 'query-svc' && ' + \`seed-tvl\`' || '' }} output"
+            echo "### \`${TARGET}\` — \`prisma migrate ${ACTION}\`${SEED_SUFFIX} output"
             echo '```'
             cat migration.log
             echo '```'
