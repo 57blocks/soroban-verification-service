@@ -694,7 +694,7 @@ dev/staging topology; controlled peer failures and policy-dispute aggregation st
 | SDK | **01, 02, 04/node + browser, 07** | 03 has no public E2E; 06 is **RELEASE** and lives outside this harness (`eng-tools/check-sdk-registry-install.mjs`, run by `release.yml` after the publish step) — it needs a published version, not a deployment. Peer failure and `results_urls` safety are SDK component tests |
 | SRC | 01, 04, 05, **06**, 07 (rewritten per docs/invariants.md rule 20), **08 (×2 rows)**, **11 + 11/negative_control** | 02 (subsumed by 04's upload path), 03 (AUTO-INFRA); 10 (MANUAL) |
 | SEP55 | **01, 03/legacy_source_repo, 03/contains_but_not_prefix, 03/case_variant, 03/empty_after_prefix, 04** | 02 (AUTO-INFRA, needs P8 per-domain egress blocking); 05, 06 (MANUAL) |
-| SEC | **01, 02**, 03 (×4), 04, 05/manifest_path_escape, 11, 12, 14/no_management_surface, 14/policy_matches_boot | 06, **07（由 builder 组件测试覆盖；无部署级网络遥测时不实现 E2E）**, 08–10, 15, 16 (AUTO-INFRA); 13 |
+| SEC | **01, 02**, 03 (×4), 04, 05/manifest_path_escape, 11, 12, 14/no_management_surface, 14/policy_matches_boot | 06, **07 (component-only in builder; no E2E without deployment-level network telemetry)**, 08–10, 15, 16 (AUTO-INFRA); 13 |
 
 ## Conventions
 
