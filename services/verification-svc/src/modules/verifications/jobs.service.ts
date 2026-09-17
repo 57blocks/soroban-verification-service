@@ -77,33 +77,47 @@ function buildLogAvailability(job: {
 }
 
 /**
- * Caps how many `/events` SSE connections may be open at once, per job id and across the process.
+ * Caps how many `/events` SSE connections may be open at once, per job id, per source IP, and across the
+ * process.
  *
  * A rate limit on connection *setup* cannot bound this: once open, a stream holds a socket, a setInterval, and
  * a subscribeToJobUpdates listener for up to jobStreamWindowMs (15 minutes by default) without ever issuing
  * another request, so it never touches a request-rate check again. This tracks the thing that actually needs a
  * ceiling — how many are open right now, not how fast they were opened — and is process-local by design: each
  * instance bounds its own resource usage independently of how many instances a deployment runs.
+ *
+ * The per-IP dimension exists because the per-job ceiling alone does not bound a single source: it can open one
+ * connection each against many distinct job ids — never touching any one job's ceiling — and still accumulate
+ * as many open streams as the process-wide total allows (SCV-216).
  */
 export class StreamConcurrencyLimiter {
   private readonly perJob = new Map<string, number>();
+  private readonly perIp = new Map<string, number>();
   private total = 0;
 
-  tryAcquire(jobId: string, maxPerJob: number, maxTotal: number): boolean {
+  tryAcquire(jobId: string, ipFingerprint: string, maxPerJob: number, maxPerIp: number, maxTotal: number): boolean {
     if (this.total >= maxTotal) return false;
     if ((this.perJob.get(jobId) ?? 0) >= maxPerJob) return false;
+    if ((this.perIp.get(ipFingerprint) ?? 0) >= maxPerIp) return false;
     this.perJob.set(jobId, (this.perJob.get(jobId) ?? 0) + 1);
+    this.perIp.set(ipFingerprint, (this.perIp.get(ipFingerprint) ?? 0) + 1);
     this.total += 1;
     return true;
   }
 
-  release(jobId: string): void {
-    const current = this.perJob.get(jobId);
-    if (current === undefined) return;
-    if (current <= 1) {
+  release(jobId: string, ipFingerprint: string): void {
+    const currentPerJob = this.perJob.get(jobId);
+    if (currentPerJob === undefined) return;
+    if (currentPerJob <= 1) {
       this.perJob.delete(jobId);
     } else {
-      this.perJob.set(jobId, current - 1);
+      this.perJob.set(jobId, currentPerJob - 1);
+    }
+    const currentPerIp = this.perIp.get(ipFingerprint) ?? 0;
+    if (currentPerIp <= 1) {
+      this.perIp.delete(ipFingerprint);
+    } else {
+      this.perIp.set(ipFingerprint, currentPerIp - 1);
     }
     this.total = Math.max(0, this.total - 1);
   }
@@ -286,20 +300,22 @@ export class JobsService {
   }
 
   /** Real push, not a poll: subscribes to `@scvs/db`'s `subscribeToJobUpdates`. */
-  streamJob(jobId: string): Observable<MessageEvent> {
+  streamJob(jobId: string, ipFingerprint: string): Observable<MessageEvent> {
     const safetyPollMs = this.configService.get("jobStreamSafetyPollMs", { infer: true });
     const streamWindowMs = this.configService.get("jobStreamWindowMs", { infer: true });
     const maxWaitMs = this.configService.get("jobMaxWaitMs", { infer: true });
     const maxConnectionsPerJob = this.configService.get("jobStreamMaxConnectionsPerJob", { infer: true });
+    const maxConnectionsPerIp = this.configService.get("jobStreamMaxConnectionsPerIp", { infer: true });
     const maxConnectionsTotal = this.configService.get("jobStreamMaxConnectionsTotal", { infer: true });
 
     return new Observable<MessageEvent>((subscriber) => {
       // Checked before anything else is set up: a rejected connection must never register a listener, an
       // interval, or a timeout — the ceiling exists specifically to bound those.
-      if (!this.streamLimiter.tryAcquire(jobId, maxConnectionsPerJob, maxConnectionsTotal)) {
+      if (!this.streamLimiter.tryAcquire(jobId, ipFingerprint, maxConnectionsPerJob, maxConnectionsPerIp, maxConnectionsTotal)) {
         this.logger.warn("stream connection rejected: concurrency ceiling reached", {
           job_id: jobId,
           max_connections_per_job: maxConnectionsPerJob,
+          max_connections_per_ip: maxConnectionsPerIp,
           max_connections_total: maxConnectionsTotal,
         });
         subscriber.next({
@@ -325,7 +341,7 @@ export class JobsService {
         if (timeout) clearTimeout(timeout);
         if (!released) {
           released = true;
-          this.streamLimiter.release(jobId);
+          this.streamLimiter.release(jobId, ipFingerprint);
         }
       };
 

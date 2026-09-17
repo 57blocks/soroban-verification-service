@@ -18,6 +18,7 @@ import {
   ValidationPipe,
 } from "@nestjs/common";
 import { SkipThrottle, Throttle } from "@nestjs/throttler";
+import { ConfigService } from "@nestjs/config";
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -41,6 +42,7 @@ import { submitAcceptedSchema, submitIncompleteSchema, submitResponseVariants } 
 import type { Request, Response } from "express";
 import type { Observable } from "rxjs";
 import { AbuseGuard } from "../../common/abuse.guard.js";
+import { fingerprintIp } from "../../common/abuse-guard.js";
 import { DrainGuard } from "../../common/drain.guard.js";
 import { ApiError } from "../../common/api-error.exception.js";
 import { ApiErrorResponse } from "../../common/api-error.dto.js";
@@ -48,6 +50,7 @@ import { JobsService } from "./jobs.service.js";
 import { mapSubmitIssues, SubmitRequestDto } from "./submit.dto.js";
 import { SubmitService } from "./submit.service.js";
 import { UploadsService } from "./uploads.service.js";
+import type { AppConfigService } from "../../config/configuration.js";
 
 @Controller()
 export class VerificationsController {
@@ -56,6 +59,7 @@ export class VerificationsController {
     @Inject(SubmitService) private readonly submitService: SubmitService,
     @Inject(JobsService) private readonly jobsService: JobsService,
     @Inject(UploadsService) private readonly uploadsService: UploadsService,
+    @Inject(ConfigService) private readonly configService: AppConfigService,
   ) {}
 
   @Post("api/verification/v1/verifications")
@@ -208,8 +212,10 @@ export class VerificationsController {
       }),
     )
     jobId: string,
+    @Req() req: Request,
   ): Observable<MessageEvent> {
-    return this.jobsService.streamJob(jobId);
+    const ipFingerprint = fingerprintIp(req, this.configService.get("abuseFingerprintKey", { infer: true }));
+    return this.jobsService.streamJob(jobId, ipFingerprint);
   }
 
   @Post("api/verification/v1/uploads/source")

@@ -1237,6 +1237,20 @@ services:
           deployment's effective per-job ceiling is this number times the replica count unless the
           load balancer/reverse proxy also caps per-client concurrent connections — see §2.1 of
           docs/self-hosted-deployment.md.
+      SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP:
+        type: number
+        default: 10
+        note: >-
+          How many `/events` SSE connections the same source IP fingerprint may hold open at once,
+          across every job id — the dimension SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB does not
+          cover: one caller opening a single connection each against many distinct job ids never
+          touches the per-job ceiling, so without this it could still accumulate as many open
+          streams as SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL allows (SCV-216). Looser than the
+          per-job ceiling on purpose — a NAT'd office or a multi-tab user shares one address without
+          being one abusive caller. Fingerprinted the same way as the abuse-guard tiers (HMAC of the
+          address under SCVS_ABUSE_FINGERPRINT_KEY), but not windowed: it must stay stable for as
+          long as a connection is open, not rotate out from under it. Per-instance, for the same
+          reason as the other two.
       SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL:
         type: number
         default: 500

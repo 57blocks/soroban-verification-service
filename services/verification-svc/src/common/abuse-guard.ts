@@ -33,6 +33,18 @@ function currentWindowStart(windowMs: number, now = Date.now()): Date {
   return new Date(Math.floor(now / windowMs) * windowMs);
 }
 
+/**
+ * Identifies a submitter for as long as a connection might stay open, without storing a reversible value:
+ * HMAC-SHA-256 of `req.ip` under the same deployment secret `fingerprintRequest` uses. Unlike that function,
+ * this has no window bound into the input — it backs `StreamConcurrencyLimiter`'s per-IP concurrency ceiling,
+ * which counts connections open *right now*, not requests over a window, so the same address must map to the
+ * same key for the life of a stream rather than rotating out from under an open connection.
+ */
+export function fingerprintIp(req: Request, key: string): string {
+  const identity = req.ip || req.socket.remoteAddress || "unknown";
+  return createHmac("sha256", key).update(identity).digest("hex");
+}
+
 /** Only reached by a caller that omits the threshold — see `checkAbuseFailOpen`. */
 export const DEFAULT_FAILOPEN_THRESHOLD = 10;
 

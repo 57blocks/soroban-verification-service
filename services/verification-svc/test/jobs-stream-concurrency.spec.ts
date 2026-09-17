@@ -15,10 +15,16 @@ function fakeConfig(overrides: Record<string, number> = {}) {
     jobStreamWindowMs: 15 * 60_000,
     jobMaxWaitMs: 60 * 60_000,
     jobStreamMaxConnectionsPerJob: 5,
+    jobStreamMaxConnectionsPerIp: 10,
     jobStreamMaxConnectionsTotal: 500,
     ...overrides,
   };
   return { get: (key: string) => values[key] } as never;
+}
+
+/** A stand-in IP fingerprint — opaque, never parsed, so a unique string identifies a caller as well as a real one. */
+function fakeIp(): string {
+  return `ip-${randomUUID()}`;
 }
 
 function fakeJobRecord(jobId: string): JobRecord {
@@ -55,10 +61,10 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 /** Subscribes and hands back a handle to read emissions and unsubscribe (closing the SSE connection). */
-function openStream(service: JobsService, jobId: string) {
+function openStream(service: JobsService, jobId: string, ipFingerprint: string = fakeIp()) {
   const events: MessageEvent[] = [];
   let completed = false;
-  const subscription = service.streamJob(jobId).subscribe({
+  const subscription = service.streamJob(jobId, ipFingerprint).subscribe({
     next: (event) => events.push(event),
     complete: () => {
       completed = true;
@@ -76,38 +82,80 @@ describe("StreamConcurrencyLimiter", () => {
     const limiter = new StreamConcurrencyLimiter();
     const jobId = randomUUID();
     for (let i = 0; i < 5; i += 1) {
-      expect(limiter.tryAcquire(jobId, 5, 500)).toBe(true);
+      expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 500)).toBe(true);
     }
-    expect(limiter.tryAcquire(jobId, 5, 500)).toBe(false);
+    expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 500)).toBe(false);
   });
 
   it("releasing one slot admits exactly one more", () => {
     const limiter = new StreamConcurrencyLimiter();
     const jobId = randomUUID();
-    for (let i = 0; i < 5; i += 1) expect(limiter.tryAcquire(jobId, 5, 500)).toBe(true);
-    expect(limiter.tryAcquire(jobId, 5, 500)).toBe(false);
+    for (let i = 0; i < 5; i += 1) expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 500)).toBe(true);
+    expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 500)).toBe(false);
 
-    limiter.release(jobId);
-    expect(limiter.tryAcquire(jobId, 5, 500)).toBe(true);
-    expect(limiter.tryAcquire(jobId, 5, 500)).toBe(false);
+    limiter.release(jobId, fakeIp());
+    expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 500)).toBe(true);
+    expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 500)).toBe(false);
   });
 
   it("enforces the process-wide total across many distinct job ids", () => {
     const limiter = new StreamConcurrencyLimiter();
     for (let i = 0; i < 3; i += 1) {
-      expect(limiter.tryAcquire(randomUUID(), 5, 3)).toBe(true);
+      expect(limiter.tryAcquire(randomUUID(), fakeIp(), 5, 10, 3)).toBe(true);
     }
     // A fourth job, well under its own per-job ceiling, still hits the process-wide ceiling.
-    expect(limiter.tryAcquire(randomUUID(), 5, 3)).toBe(false);
+    expect(limiter.tryAcquire(randomUUID(), fakeIp(), 5, 10, 3)).toBe(false);
   });
 
   it("release() on a job with no held slots is a no-op, not a negative count", () => {
     const limiter = new StreamConcurrencyLimiter();
     const jobId = randomUUID();
-    limiter.release(jobId);
+    limiter.release(jobId, fakeIp());
     // Still able to fill the full ceiling afterwards — release() never went negative and inflated capacity.
-    for (let i = 0; i < 5; i += 1) expect(limiter.tryAcquire(jobId, 5, 5)).toBe(true);
-    expect(limiter.tryAcquire(jobId, 5, 5)).toBe(false);
+    for (let i = 0; i < 5; i += 1) expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 5)).toBe(true);
+    expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 5)).toBe(false);
+  });
+
+  // The gap SCV-216's review flagged: an IP can spread connections across many distinct job ids, each well
+  // under the per-job ceiling, without ever being stopped — unless connections are also counted per IP.
+  it("admits up to the per-IP ceiling across many distinct jobs, and refuses the next one", () => {
+    const limiter = new StreamConcurrencyLimiter();
+    const ip = fakeIp();
+    for (let i = 0; i < 10; i += 1) {
+      // One connection per job — never touches the per-job ceiling of 5.
+      expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(true);
+    }
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
+  });
+
+  it("releasing one IP slot admits exactly one more for that IP", () => {
+    const limiter = new StreamConcurrencyLimiter();
+    const ip = fakeIp();
+    const heldJobIds = Array.from({ length: 10 }, () => randomUUID());
+    for (const jobId of heldJobIds) expect(limiter.tryAcquire(jobId, ip, 5, 10, 500)).toBe(true);
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
+
+    limiter.release(heldJobIds[0], ip);
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(true);
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
+  });
+
+  it("keeps two different IPs' ceilings independent", () => {
+    const limiter = new StreamConcurrencyLimiter();
+    const ipA = fakeIp();
+    const ipB = fakeIp();
+    for (let i = 0; i < 10; i += 1) expect(limiter.tryAcquire(randomUUID(), ipA, 5, 10, 500)).toBe(true);
+    expect(limiter.tryAcquire(randomUUID(), ipA, 5, 10, 500)).toBe(false);
+    // ipB is untouched by ipA's ceiling.
+    expect(limiter.tryAcquire(randomUUID(), ipB, 5, 10, 500)).toBe(true);
+  });
+
+  it("release() on an IP with no held slots is a no-op, not a negative count", () => {
+    const limiter = new StreamConcurrencyLimiter();
+    const ip = fakeIp();
+    limiter.release(randomUUID(), ip);
+    for (let i = 0; i < 10; i += 1) expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(true);
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
   });
 });
 
@@ -165,6 +213,50 @@ describe("JobsService.streamJob concurrency ceiling", () => {
     const streamA = openStream(service, jobA);
     await flushMicrotasks();
     const streamB = openStream(service, jobB);
+    await flushMicrotasks();
+
+    expect(streamA.isCompleted()).toBe(false);
+    expect(streamB.isCompleted()).toBe(false);
+
+    streamA.close();
+    streamB.close();
+  });
+
+  it("rejects a new connection once an IP is at its per-IP ceiling across distinct jobs", async () => {
+    const service = new JobsService(
+      fakeConfig({ jobStreamMaxConnectionsPerJob: 5, jobStreamMaxConnectionsPerIp: 2 }),
+      { getJobById: async (id: string) => fakeJobRecord(id) } as never,
+      fakeJobEvents(),
+    );
+    const ip = fakeIp();
+
+    const first = openStream(service, randomUUID(), ip);
+    const second = openStream(service, randomUUID(), ip);
+    await flushMicrotasks();
+
+    // A third job for the same IP — none of these ever touch the per-job ceiling of 5.
+    const third = openStream(service, randomUUID(), ip);
+    await flushMicrotasks();
+
+    expect(third.isCompleted()).toBe(true);
+    expect(third.events[0]?.data).toMatchObject({ error: "stream_connection_limit_reached", status_code: 429 });
+
+    first.close();
+    second.close();
+    third.close();
+  });
+
+  it("keeps two different IPs' ceilings independent", async () => {
+    const jobsRepository = { getJobById: async (id: string) => fakeJobRecord(id) } as never;
+    const service = new JobsService(
+      fakeConfig({ jobStreamMaxConnectionsPerJob: 5, jobStreamMaxConnectionsPerIp: 1 }),
+      jobsRepository,
+      fakeJobEvents(),
+    );
+
+    const streamA = openStream(service, randomUUID(), fakeIp());
+    await flushMicrotasks();
+    const streamB = openStream(service, randomUUID(), fakeIp());
     await flushMicrotasks();
 
     expect(streamA.isCompleted()).toBe(false);

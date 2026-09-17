@@ -60,6 +60,9 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB must be a number" })
   SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB?: string;
 
+  @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP must be a number" })
+  SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP?: string;
+
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL must be a number" })
   SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL?: string;
 

@@ -86,11 +86,15 @@ piece is portable just because it's "just a database" or "just object storage."
 sits in front of it need to account for that:
 
 - **Per-client concurrent-connection limit** — `verification-svc` itself caps how many of these
-  streams may be open at once, per job id and process-wide
-  (`SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB` / `SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL`), but that
-  ceiling is per process. A deployment running N instances behind one load balancer has an effective
-  ceiling N times larger unless the load balancer or reverse proxy also enforces a per-client limit
-  (for example Nginx's `limit_conn` keyed on the client address) in front of them.
+  streams may be open at once, per job id, per source IP, and process-wide
+  (`SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_JOB` / `SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP` /
+  `SCVS_JOB_STREAM_MAX_CONNECTIONS_TOTAL`), but every one of those ceilings is per process. A
+  deployment running N instances behind one load balancer has an effective ceiling N times larger
+  unless the load balancer or reverse proxy also enforces a per-client limit (for example Nginx's
+  `limit_conn` keyed on the client address) in front of them. The application-level per-IP ceiling
+  still earns its place on a single instance — and bounds a client that spreads connections across
+  many distinct job ids, which the per-job ceiling alone does not catch — but it does not substitute
+  for a proxy-level limit once you run more than one instance.
 - **Idle timeout** — must exceed `SCVS_JOB_STREAM_WINDOW_MS` (default 15 minutes), or the proxy
   closes the connection before the application does. This is the same class of mismatch
   `SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS` exists to catch for ordinary HTTP keep-alive connections
