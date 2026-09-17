@@ -28,6 +28,9 @@ const WINDOW_START_MARGIN_MS = 5_000;
 
 const PROBE_TIMEOUT_MS = 2 * WINDOW_MS + 2 * env.requestTimeoutMs + 30_000;
 
+/** Jest allows a hook 5 s by default, and the idle alone outlasts that. */
+const IDLE_TIMEOUT_MS = WINDOW_MS + WINDOW_START_MARGIN_MS + 30_000;
+
 interface Probe {
   /** Requests the route did not refuse with `429`. */
   readonly admitted: number;
@@ -69,9 +72,9 @@ async function sendBurst(
 
 /**
  * This tier anchors a window to its key's first hit, not to a wall-clock boundary — SEC-11 waits for a
- * boundary because `AbuseGuard` floors to one, and that helper does nothing here. QRY-07 drives this route
- * just before, leaving windows part-spent with an unknown remainder, so a burst starting there would straddle
- * an expiry and meet the ceiling twice. One full window of silence retires them.
+ * boundary because `AbuseGuard` floors to one, and that helper does nothing here. Any spec that drives this
+ * route leaves windows part-spent with an unknown remainder, so a burst starting there would straddle an
+ * expiry and meet the ceiling twice. One full window of silence retires them.
  */
 async function idleUntilEveryWindowHasLapsed(): Promise<void> {
   await sleep(WINDOW_MS + WINDOW_START_MARGIN_MS);
@@ -148,6 +151,11 @@ caseBlock(
           "than inventing a number",
   },
   () => {
+    // The burst spends every window it opens, and the next spec's first read would be refused for a quota
+    // it never approached — a `429` that reads as that spec's own defect. In `afterAll` and not after the
+    // probe: a burst that throws leaves the windows just as spent.
+    afterAll(idleUntilEveryWindowHasLapsed, IDLE_TIMEOUT_MS);
+
     it(
       "refuses the excess, in the vocabulary RC6 defines, without falling over",
       async () => {
