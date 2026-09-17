@@ -39,9 +39,16 @@ function currentWindowStart(windowMs: number, now = Date.now()): Date {
  * this has no window bound into the input — it backs `StreamConcurrencyLimiter`'s per-IP concurrency ceiling,
  * which counts connections open *right now*, not requests over a window, so the same address must map to the
  * same key for the life of a stream rather than rotating out from under an open connection.
+ *
+ * Returns `null` when neither `req.ip` nor the socket address is available, rather than fingerprinting a
+ * shared literal like "unknown": because this fingerprint never expires on its own, collapsing every
+ * unresolvable address onto one bucket would let them pile up together for as long as any one of their
+ * connections stayed open (up to the full stream window), not a short rate-limit window. `null` is not a
+ * fingerprint at all — callers treat it as "no identity to rate this dimension by", not as one more caller.
  */
-export function fingerprintIp(req: Request, key: string): string {
-  const identity = req.ip || req.socket.remoteAddress || "unknown";
+export function fingerprintIp(req: Request, key: string): string | null {
+  const identity = req.ip || req.socket.remoteAddress;
+  if (!identity) return null;
   return createHmac("sha256", key).update(identity).digest("hex");
 }
 

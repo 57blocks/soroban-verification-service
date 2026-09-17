@@ -88,24 +88,35 @@ function buildLogAvailability(job: {
  *
  * The per-IP dimension exists because the per-job ceiling alone does not bound a single source: it can open one
  * connection each against many distinct job ids — never touching any one job's ceiling — and still accumulate
- * as many open streams as the process-wide total allows (SCV-216).
+ * as many open streams as the process-wide total allows (SCV-216). `ipFingerprint` is `null` when the request
+ * has no resolvable address (`fingerprintIp`, abuse-guard.ts) — that dimension is skipped entirely rather than
+ * billed against a shared bucket, which would otherwise let every unresolvable-address caller pile up together
+ * for as long as any one of their connections stayed open.
  */
 export class StreamConcurrencyLimiter {
   private readonly perJob = new Map<string, number>();
   private readonly perIp = new Map<string, number>();
   private total = 0;
 
-  tryAcquire(jobId: string, ipFingerprint: string, maxPerJob: number, maxPerIp: number, maxTotal: number): boolean {
+  tryAcquire(
+    jobId: string,
+    ipFingerprint: string | null,
+    maxPerJob: number,
+    maxPerIp: number,
+    maxTotal: number,
+  ): boolean {
     if (this.total >= maxTotal) return false;
     if ((this.perJob.get(jobId) ?? 0) >= maxPerJob) return false;
-    if ((this.perIp.get(ipFingerprint) ?? 0) >= maxPerIp) return false;
+    if (ipFingerprint !== null && (this.perIp.get(ipFingerprint) ?? 0) >= maxPerIp) return false;
     this.perJob.set(jobId, (this.perJob.get(jobId) ?? 0) + 1);
-    this.perIp.set(ipFingerprint, (this.perIp.get(ipFingerprint) ?? 0) + 1);
+    if (ipFingerprint !== null) {
+      this.perIp.set(ipFingerprint, (this.perIp.get(ipFingerprint) ?? 0) + 1);
+    }
     this.total += 1;
     return true;
   }
 
-  release(jobId: string, ipFingerprint: string): void {
+  release(jobId: string, ipFingerprint: string | null): void {
     const currentPerJob = this.perJob.get(jobId);
     if (currentPerJob === undefined) return;
     if (currentPerJob <= 1) {
@@ -113,11 +124,13 @@ export class StreamConcurrencyLimiter {
     } else {
       this.perJob.set(jobId, currentPerJob - 1);
     }
-    const currentPerIp = this.perIp.get(ipFingerprint) ?? 0;
-    if (currentPerIp <= 1) {
-      this.perIp.delete(ipFingerprint);
-    } else {
-      this.perIp.set(ipFingerprint, currentPerIp - 1);
+    if (ipFingerprint !== null) {
+      const currentPerIp = this.perIp.get(ipFingerprint) ?? 0;
+      if (currentPerIp <= 1) {
+        this.perIp.delete(ipFingerprint);
+      } else {
+        this.perIp.set(ipFingerprint, currentPerIp - 1);
+      }
     }
     this.total = Math.max(0, this.total - 1);
   }
@@ -300,7 +313,7 @@ export class JobsService {
   }
 
   /** Real push, not a poll: subscribes to `@scvs/db`'s `subscribeToJobUpdates`. */
-  streamJob(jobId: string, ipFingerprint: string): Observable<MessageEvent> {
+  streamJob(jobId: string, ipFingerprint: string | null): Observable<MessageEvent> {
     const safetyPollMs = this.configService.get("jobStreamSafetyPollMs", { infer: true });
     const streamWindowMs = this.configService.get("jobStreamWindowMs", { infer: true });
     const maxWaitMs = this.configService.get("jobMaxWaitMs", { infer: true });

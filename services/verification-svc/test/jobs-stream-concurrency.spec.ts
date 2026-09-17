@@ -157,6 +157,31 @@ describe("StreamConcurrencyLimiter", () => {
     for (let i = 0; i < 10; i += 1) expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(true);
     expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
   });
+
+  // fingerprintIp returns null when a request has no resolvable address (abuse-guard.ts). Without special
+  // handling that would collapse onto a shared fingerprint, piling up every such caller into one bucket for as
+  // long as any of their connections stayed open. null means "no identity for this dimension", so it must skip
+  // the per-IP ceiling entirely rather than being treated as one more (shared) caller.
+  it("skips the per-IP ceiling entirely when the fingerprint is null", () => {
+    const limiter = new StreamConcurrencyLimiter();
+    // Far more than maxPerIp (1) — every acquire still succeeds because there is no identity to bill against.
+    for (let i = 0; i < 5; i += 1) {
+      expect(limiter.tryAcquire(randomUUID(), null, 5, 1, 500)).toBe(true);
+    }
+  });
+
+  it("release() with a null fingerprint does not touch any IP's count", () => {
+    const limiter = new StreamConcurrencyLimiter();
+    const ip = fakeIp();
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 1, 500)).toBe(true);
+
+    const anonymousJobId = randomUUID();
+    expect(limiter.tryAcquire(anonymousJobId, null, 5, 1, 500)).toBe(true);
+    limiter.release(anonymousJobId, null);
+
+    // ip's own ceiling (1) is still fully held — release(null) must not have decremented it.
+    expect(limiter.tryAcquire(randomUUID(), ip, 5, 1, 500)).toBe(false);
+  });
 });
 
 describe("JobsService.streamJob concurrency ceiling", () => {
