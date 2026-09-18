@@ -253,8 +253,8 @@ for (const name of ARCHIVE_BOUND_ENV_NAMES) {
     throw new Error(
       `${name} is no longer read. An archive bound must come from the deployment: either set ` +
         `SCVS_E2E_ENV=<dev|staging> so the harness reads config/deploy/<env>/builder.json, or supply ` +
-        `live-config evidence for a deployment this repository does not manage. See ` +
-        `docs/qa/e2e-missing-coverage-priority.md § "SEC-03 的准确补齐边界".`
+        `live-config evidence for a deployment this repository does not manage. The accepted sources ` +
+        `are listed under F-ADV-TAR's limits_from in test/fixtures/e2e/registry.yaml.`
     );
   }
 }

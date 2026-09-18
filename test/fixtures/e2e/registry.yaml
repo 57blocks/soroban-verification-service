@@ -988,7 +988,7 @@ required_contracts:
       other_deployments: live-config evidence via the verifier's policy_url; no such field exists yet,
         so the two numeric records are unbuildable there and their rows skip
       never: a SCVS_E2E_LIMIT_* environment variable — the harness asserting its own guess is not
-        evidence about a deployment (docs/qa/e2e-missing-coverage-priority.md § "SEC-03 的准确补齐边界")
+        evidence about a deployment
     note: >-
       `ready` here means the four archives can be *built and submitted*; the two numeric ones still
       skip on a deployment whose bounds cannot be cited. That is a runner precondition, not a fixture
