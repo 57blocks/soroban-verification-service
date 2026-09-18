@@ -8,7 +8,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type ExecutionMode = "AUTO" | "AUTO-INFRA" | "PERF" | "BROWSER" | "MANUAL";
+export type ExecutionMode = "AUTO" | "AUTO-SLOW" | "AUTO-INFRA" | "PERF" | "BROWSER" | "MANUAL";
+export type AutoScope = "auto" | "slow" | "all";
 
 function str(name: string): string | undefined {
   const value = process.env[name];
@@ -48,6 +49,8 @@ export interface E2eEnv {
   readonly allowInfra: boolean;
   /** Performance cases consume shared build capacity and run only through the explicit perf path. */
   readonly allowPerf: boolean;
+  /** Selects routine automated cases, real-timeout cases, or both. */
+  readonly autoScope: AutoScope;
   /** `BROWSER` cases drive a public Web deployment with Playwright. */
   readonly allowBrowser: boolean;
   readonly strictTrd: boolean;
@@ -71,6 +74,13 @@ if (network !== "mainnet" && network !== "testnet") {
   );
 }
 
+const autoScope = str("SCVS_E2E_AUTO_SCOPE") ?? "auto";
+if (autoScope !== "auto" && autoScope !== "slow" && autoScope !== "all") {
+  throw new Error(
+    `SCVS_E2E_AUTO_SCOPE must be "auto", "slow", or "all"; received ${JSON.stringify(autoScope)}.`,
+  );
+}
+
 export const env: E2eEnv = Object.freeze({
   enabled: flag("SCVS_E2E"),
   runId: str("SCVS_E2E_RUN_ID") ?? randomUUID(),
@@ -81,6 +91,7 @@ export const env: E2eEnv = Object.freeze({
   network,
   allowInfra: flag("SCVS_E2E_ALLOW_INFRA"),
   allowPerf: flag("SCVS_E2E_ALLOW_PERF"),
+  autoScope,
   allowBrowser: flag("SCVS_E2E_ALLOW_BROWSER"),
   strictTrd: flag("SCVS_E2E_STRICT_TRD"),
   jobTimeoutMs,
@@ -202,9 +213,50 @@ function deployLiteralNumber(
   return { value, describe: `${variable}=${value} (${deploy.path})` };
 }
 
+function callerSuppliedDeploymentNumber(
+  environmentVariable: string,
+  parameter: string,
+): { value?: number; describe: string } {
+  const raw = str(environmentVariable);
+  if (!raw) return { describe: `${parameter}: unavailable — ${environmentVariable} is unset` };
+
+  if (!/^[1-9][0-9]*$/.test(raw)) {
+    throw new Error(
+      `${environmentVariable} must be a positive whole number supplied from the deployment contract; received ${JSON.stringify(raw)}.`,
+    );
+  }
+
+  return {
+    value: Number(raw),
+    describe: `${parameter}=${raw} (caller-supplied deployment contract ${environmentVariable})`,
+  };
+}
+
+function deploymentNumber(
+  deploy: { path: string; artifact: DeployArtifact } | undefined,
+  variable: string,
+  environmentVariable: string,
+): { value?: number; describe: string } {
+  const supplied = callerSuppliedDeploymentNumber(environmentVariable, variable);
+  if (deploy && supplied.value !== undefined) {
+    throw new Error(
+      `${environmentVariable} and SCVS_E2E_ENV are both set. Supply deployment evidence through one source only.`,
+    );
+  }
+  return supplied.value === undefined ? deployLiteralNumber(deploy, variable) : supplied;
+}
+
 const retryParameters = Object.freeze({
-  interval: deployLiteralNumber(orchestratorDeployArtifact, "SCVS_JOB_RETRY_INTERVAL_MS"),
-  maxAttempts: deployLiteralNumber(orchestratorDeployArtifact, "SCVS_MAX_JOB_RETRY_ATTEMPTS"),
+  interval: deploymentNumber(
+    orchestratorDeployArtifact,
+    "SCVS_JOB_RETRY_INTERVAL_MS",
+    "SCVS_E2E_JOB_RETRY_INTERVAL_MS",
+  ),
+  maxAttempts: deploymentNumber(
+    orchestratorDeployArtifact,
+    "SCVS_MAX_JOB_RETRY_ATTEMPTS",
+    "SCVS_E2E_MAX_JOB_RETRY_ATTEMPTS",
+  ),
 });
 
 export const retryPolicyProvenance = Object.freeze({
@@ -261,14 +313,19 @@ for (const name of ARCHIVE_BOUND_ENV_NAMES) {
 
 function archiveBound(
   variable: string,
-  parameter: string
+  parameter: string,
+  environmentVariable: string,
 ): { value?: number; describe: string } {
+  const supplied = callerSuppliedDeploymentNumber(environmentVariable, parameter);
+  if (deployArtifact && supplied.value !== undefined) {
+    throw new Error(
+      `${environmentVariable} and SCVS_E2E_ENV are both set. Supply deployment evidence through one source only.`,
+    );
+  }
+  if (supplied.value !== undefined) return supplied;
+
   if (!deployEnv) {
-    return {
-      describe:
-        `${parameter}: unavailable — SCVS_E2E_ENV is unset, so no config/deploy artefact is bound, ` +
-        `and the deployment publishes no archive bounds to read instead`,
-    };
+    return { describe: `${parameter}: unavailable — ${supplied.describe}` };
   }
 
   const bound = builderArchiveBound(variable);
@@ -282,12 +339,21 @@ function archiveBound(
 }
 
 const archiveBounds = Object.freeze({
-  limitTarEntries: archiveBound("SCVS_MAX_SOURCE_ARCHIVE_ENTRIES", "LIMIT_TAR_ENTRIES"),
+  limitTarEntries: archiveBound(
+    "SCVS_MAX_SOURCE_ARCHIVE_ENTRIES",
+    "LIMIT_TAR_ENTRIES",
+    "SCVS_E2E_ARCHIVE_MAX_ENTRIES",
+  ),
   limitUncompressedBytes: archiveBound(
     "SCVS_MAX_SOURCE_ARCHIVE_UNCOMPRESSED_BYTES",
-    "LIMIT_UNCOMPRESSED_BYTES"
+    "LIMIT_UNCOMPRESSED_BYTES",
+    "SCVS_E2E_ARCHIVE_MAX_UNCOMPRESSED_BYTES",
   ),
-  limitArchiveBytes: archiveBound("SCVS_MAX_SOURCE_ARCHIVE_BYTES", "LIMIT_ARCHIVE_BYTES"),
+  limitArchiveBytes: archiveBound(
+    "SCVS_MAX_SOURCE_ARCHIVE_BYTES",
+    "LIMIT_ARCHIVE_BYTES",
+    "SCVS_E2E_ARCHIVE_MAX_BYTES",
+  ),
 });
 
 /** Human-readable provenance for the three archive bounds. */
