@@ -7,10 +7,12 @@ import {
   ReportArchiveUploadsRepository,
   SourceArchiveUploadsRepository,
   type JobRecord,
+  type StatusLinkOutcome,
 } from "@scvs/db";
 import {
   appendArchiveReference,
   appendVerifiedSourceCodeUri,
+  type WasmStatusWriteResult,
   readLegacyCustody,
   reportKey,
   sourceFileExtension,
@@ -18,8 +20,9 @@ import {
   sourceSha256FromFileName,
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
-import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, type LegacyCustody } from "@scvs/core";
+import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
 import { buildResultStorage } from "./result-storage.util.js";
+import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
@@ -73,6 +76,7 @@ const SOURCE_CONTENT_TYPES: Record<string, string> = {
 @Injectable()
 export class ArweaveArchiveService {
   private readonly logger = new ScvsLogger("arweave-archive");
+  private readonly metrics = new ScvsMetrics("arweave-archive", { logger: this.logger });
   private uploaderPromise: Promise<IrysUploader> | undefined;
 
   constructor(
@@ -399,7 +403,7 @@ export class ArweaveArchiveService {
     await this.jobs.recordArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      ...(wrote ? { publishedUpdatedAt: new Date() } : {}),
+      statusLink: toStatusLinkOutcome(wrote, { jobId: input.jobId, wasmHash: input.wasmHash, link: "report archive", logger: this.logger, metrics: this.metrics }),
     });
   }
 
@@ -492,8 +496,62 @@ export class ArweaveArchiveService {
     await this.jobs.recordSourceArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
-      ...(wrote ? { publishedUpdatedAt: new Date() } : {}),
+      statusLink: toStatusLinkOutcome(wrote, { jobId: input.jobId, wasmHash: input.wasmHash, link: "source archive", logger: this.logger, metrics: this.metrics }),
     });
+  }
+
+  /**
+   * Replays every link the row says the document should carry, derived from `archivedTxId`,
+   * `sourceArchivedTxId` and `sourceFileName` — the one flag says only that something is missing. Safe to
+   * repeat: each append is idempotent on its URL, and the tx ids are already on the row, so nothing uploads
+   * twice.
+   */
+  async retryPendingStatusLinks(job: JobRecord): Promise<void> {
+    const wasmHash = job.result?.wasm_hash;
+    const reportUrl = job.result?.artifact_url;
+    if (!wasmHash || !reportUrl) {
+      // A link obligation without a published report is a bug elsewhere, not something to paper over: there
+      // is no entry to anchor to and no attempt that could ever succeed.
+      this.logger.error(`job ${job.jobId}: owes a status-document link but carries no published report — holding it`);
+      await this.jobs.recordStatusLinkOutcome(job.jobId, { state: "blocked", reason: "manual_hold" });
+      return;
+    }
+    const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
+    const reportSha256 = reportSha256FromUrl(reportUrl);
+    const legacyCustody = reportSha256 ? await readLegacyCustody(storage, reportSha256) : undefined;
+    const context = (link: string) => ({ jobId: job.jobId, wasmHash, link, logger: this.logger, metrics: this.metrics });
+
+    const outcomes: StatusLinkOutcome[] = [];
+    if (job.archivedTxId && reportSha256) {
+      const wrote = await appendArchiveReference(storage, wasmHash, {
+        reportUrl,
+        reportSha256,
+        archiveUrl: this.gatewayUrlFor(job.archivedTxId),
+        legacyCustody,
+      });
+      outcomes.push(toStatusLinkOutcome(wrote, context("report archive")));
+    }
+    if (job.sourceArchivedTxId) {
+      const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
+        reportUrl,
+        sourceCodeUri: { location: "arweave", url: this.gatewayUrlFor(job.sourceArchivedTxId) },
+        legacyCustody,
+      });
+      outcomes.push(toStatusLinkOutcome(wrote, context("source archive")));
+    }
+    if (job.sourceFileName) {
+      const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
+        reportUrl,
+        sourceCodeUri: {
+          location: "verifier_self_storage",
+          url: `${storage.publicRoot}/${sourceKeyFromFileName(job.sourceFileName)}`,
+        },
+        legacyCustody,
+      });
+      outcomes.push(toStatusLinkOutcome(wrote, context("source uri")));
+    }
+
+    await this.jobs.recordStatusLinkOutcome(job.jobId, combineStatusLinkOutcomes(outcomes));
   }
 
   /** `findOrCreate` on `sourceSha256` — not `findExistingUpload`. */

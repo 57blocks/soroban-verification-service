@@ -60,6 +60,7 @@
     "e2e:check-fixtures": "node eng-tools/check-e2e-fixture-inventory.mjs",
     "e2e:generate-upgrade-inventory": "node eng-tools/generate-e2e-upgrade-inventory.mjs",
     "e2e:check-upgrade-fixtures": "node eng-tools/check-e2e-upgrade-inventory.mjs",
+    "ops:reconcile-published-status-links": "node eng-tools/reconcile-published-status-links.mjs",
     "e2e:summary": "node eng-tools/write-e2e-summary.mjs",
     "report:advisories": "node eng-tools/report-advisories.mjs"
   },

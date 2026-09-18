@@ -17,16 +17,14 @@ import {
 import {
   appendVerifiedSourceCodeUri,
   buildWasmStatus,
-  findOwnEntry,
+  mutateWasmStatus,
   publishReport,
   publishSource,
   readLegacyCustody,
-  readWasmStatus,
   reportKey,
   sourceFileExtension,
   sourceKeyFromFileName,
   sourceSha256FromFileName,
-  wasmStatusKey,
   type ResultStorage,
 } from "@scvs/storage-layout";
 import type {
@@ -49,6 +47,7 @@ import {
   type CanonicalSource,
 } from "./fetch-source-bytes.util.js";
 import { buildResultStorage as buildResultStorageFromConfig } from "./result-storage.util.js";
+import { toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import { SourceResolutionService } from "../source-resolution/source-resolution.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { ConfigurationError } from "../../config/configuration-error.js";
@@ -207,16 +206,16 @@ export class PublishService {
     const sourceArchiveEligible = this.isSourceArchiveEligible(job, sourceDurable, sourceFileName);
 
     // wasms/<hash>.json — the Registry API status object (report-artifact plan.md phase 3).
-    const existingStatus = await readWasmStatus(storage, finalResult.wasm_hash);
     const thisVerdict = matched ? "verified" : "mismatched";
     // Our entry by verifier identity (the result root is the key, AU2) — never by array position, so a document
     // carrying another verifier's entry is left intact.
     const ownIdentity = { name: verifier.displayName, url: storage.publicRoot };
-    const isNoOpOverwrite = findOwnEntry(existingStatus, ownIdentity)?.status === "verified" && thisVerdict === "mismatched";
-    let wasmStatusChanged = false;
-    if (!isNoOpOverwrite) {
-      const status = buildWasmStatus({
-        existing: existingStatus,
+    // Rule 20 is decided inside the mutation, against bytes read in the same compare-and-swap that writes
+    // them. Deciding it out here — as this did — reads a snapshot another replica can invalidate before the
+    // write lands, which is how a `mismatched` displaces a `verified`.
+    const statusOutcome = await mutateWasmStatus(storage, finalResult.wasm_hash, (existing) => {
+      const build = buildWasmStatus({
+        existing,
         wasmHash: finalResult.wasm_hash,
         verifier: ownIdentity,
         verdict: thisVerdict,
@@ -236,13 +235,17 @@ export class PublishService {
         resultsUrls: [{ type: "report", location: "verifier_self_storage", url: reportUrl, sha256: reportSha256 }],
         ...(verifiedSourceCodeUri ? { verifiedSourceCodeUris: [verifiedSourceCodeUri] } : {}),
       });
-      await storage.writeText(
-        wasmStatusKey(finalResult.wasm_hash),
-        `${JSON.stringify(status, null, 2)}\n`,
-        "application/json; charset=utf-8",
+      return build.outcome === "write" ? { write: build.document } : { skip: "superseded" };
+    });
+    // This job has not published yet, so an unlanded write is not a link obligation — it is a failed
+    // publication. Throwing leaves the row in `publishing` for `releaseStalePublishing` to return to
+    // `publish_pending`, and `recordPublishFailure` counts the attempt.
+    if (statusOutcome !== "written" && statusOutcome !== "superseded") {
+      throw new Error(
+        `publishJobResult: job ${jobId} could not write wasms/${finalResult.wasm_hash}.json (${statusOutcome})`,
       );
-      wasmStatusChanged = true;
     }
+    const wasmStatusChanged = statusOutcome === "written";
 
     // policy.json is no longer written here: it is this verifier's own identity/policy information, unrelated
     // to any one job's outcome, so it is written once at process startup by VerifierIdentityPublisher
@@ -289,7 +292,11 @@ export class PublishService {
       try {
         await this.jobs.recordSourcePublishOutcome(
           jobId,
-          sourceDurable && sourceFileName ? { published: true, sourceFileName } : { published: false },
+          sourceDurable && sourceFileName
+            // The status object written moments ago already carries this URI (`verifiedSourceCodeUri` went
+            // into `buildWasmStatus`), so there is nothing for the link scan to do.
+            ? { published: true, sourceFileName, owesStatusLink: false }
+            : { published: false },
         );
       } catch (error) {
         this.logger.warn("failed to record source-publish outcome; the retry scheduler will catch up", {
@@ -458,6 +465,8 @@ export class PublishService {
         ? {
             published: true,
             sourceFileName,
+            // This job's document was written before the source landed, so its URI is not in it yet.
+            owesStatusLink: true,
             ...(sourceArchiveEligible ? { sourceArchivePendingSince: new Date() } : {}),
           }
         : { published: false },
@@ -465,56 +474,15 @@ export class PublishService {
     if (durable) {
       await this.sourceResolution.deleteStagedUpload(job.sourceRef);
       if (sourceFileName) {
-        await this.appendVerifiedSourceCodeUriIfPublished(job, storage, sourceFileName);
+        // The full recompute, not a lone append: `recordSourcePublishOutcome` above wrote the link
+        // obligation in the same statement that discharged the source-publish one, and only a pass that
+        // rebuilds every link this row owes may discharge it in turn.
+        await this.arweaveArchive.retryPendingStatusLinks({ ...job, sourceFileName });
         // wasms/<hash>.json already exists by construction on this retry path (this job already published
         // once), so.
         if (sourceArchiveEligible) {
           await this.maybeScheduleSourceArchive(job, storage, sourceFileName, job.result!.artifact_url!);
         }
-      }
-    }
-  }
-
-  /**
-   * Retries a bounded number of times rather than once: by the time this runs `sourcePublishPendingSince` is
-   * already cleared and `deleteStagedUpload` has run, so no scheduler will ever revisit this job for this
-   * bookkeeping.
-   */
-  private async appendVerifiedSourceCodeUriIfPublished(
-    job: JobRecord,
-    storage: ResultStorage,
-    sourceFileName: string,
-  ): Promise<void> {
-    if (!job.result?.wasm_hash || !job.result.artifact_url) {
-      this.logger.error(
-        `job ${job.jobId}: source-publish retry succeeded but the job carries no published result — cannot locate its wasms/<hash>.json entry`,
-      );
-      return;
-    }
-    const wasmHash = job.result.wasm_hash;
-    const artifactUrl = job.result.artifact_url;
-    const sourceCodeUri: RegistrySourceCodeUri = {
-      location: "verifier_self_storage",
-      url: verifiedSourceCodeUrl(storage, sourceFileName),
-    };
-    const legacyCustody = job.result.artifact_sha256
-      ? await readLegacyCustody(storage, job.result.artifact_sha256)
-      : undefined;
-
-    const attempts = 3;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      try {
-        await appendVerifiedSourceCodeUri(storage, wasmHash, { reportUrl: artifactUrl, sourceCodeUri, legacyCustody });
-        return;
-      } catch (error) {
-        if (attempt === attempts) {
-          this.logger.warn(
-            "failed to append verified_source_code_uris after a successful source-publish retry; giving up — no scheduler will revisit this job for it",
-            { job_id: job.jobId, attempts, error: error instanceof Error ? error : String(error) },
-          );
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
       }
     }
   }

@@ -150,6 +150,18 @@ model Job {
   // ceiling.
   sourceArchiveAttempts     Int       @default(0) @map("source_archive_attempts")
 
+  // At least one link this job owes wasms/<hash>.json is missing from the document. One flag for all three
+  // kinds; the recovery scan derives which are owed from the columns above. Distinct from the *PendingSince
+  // columns above, which track the UPLOAD — an upload that happened is recorded even when its link has not.
+  statusLinkPendingSince    DateTime? @map("status_link_pending_since")
+  // Automatic recovery has stopped and a human has to look. Blocked REFINES pending rather than replacing
+  // it: the row still owes the link, so the clock above keeps running and clearing the reason alone returns
+  // it to the scan. A CHECK holds the shape.
+  statusLinkBlockedSince    DateTime? @map("status_link_blocked_since")
+  // A closed set (`StatusLinkBlockedReason`), never raw error text — which would be derived from stored
+  // bytes we could not read.
+  statusLinkBlockedReason   String?   @map("status_link_blocked_reason")
+
   // Whether the submitter asked for a verdict without publishing one.
   dryRun           Boolean   @default(false) @map("dry_run")
 

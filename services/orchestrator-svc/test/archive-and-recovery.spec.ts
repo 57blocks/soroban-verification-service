@@ -203,7 +203,7 @@ describe("JobsRepository archive-pending queries", () => {
     const pending = await jobs.listJobsPendingArchive();
     expect(pending.some((j) => j.jobId === job.jobId)).toBe(true);
 
-    await jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-cleared" });
+    await jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-cleared", statusLink: { state: "complete", advancePublished: true } });
     const afterClear = await jobs.listJobsPendingArchive();
     expect(afterClear.some((j) => j.jobId === job.jobId)).toBe(false);
   });
@@ -212,7 +212,7 @@ describe("JobsRepository archive-pending queries", () => {
     const job = await createVerifiedJob();
     await jobs.updateJob(job.jobId, { archivePendingSince: new Date() });
 
-    await jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-success" });
+    await jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-success", statusLink: { state: "complete", advancePublished: true } });
 
     const reloaded = await jobs.getJobById(job.jobId);
     expect(reloaded?.archivePendingSince).toBeUndefined();
@@ -676,7 +676,7 @@ describe("archive_backlog gauge (O4)", () => {
     // Drain whatever this test file's own fixtures left pending, so this tick's count is knowable.
     const pending = await jobs.listJobsPendingArchive();
     await Promise.all(
-      pending.map((job) => jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-drained-for-test" })),
+      pending.map((job) => jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-drained-for-test", statusLink: { state: "complete", advancePublished: true } })),
     );
 
     const gaugeCalls: { name: string; value: number }[] = [];

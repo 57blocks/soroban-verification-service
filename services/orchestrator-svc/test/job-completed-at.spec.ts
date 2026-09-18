@@ -170,7 +170,7 @@ describe("nothing but a status transition moves it", () => {
     await jobs.recordArchiveOutcome(jobId, {
       archived: true,
       txId: `tx-${randomBytes(6).toString("hex")}`,
-      publishedUpdatedAt: new Date(Date.now() + 60_000),
+      statusLink: { state: "complete", advancePublished: true },
     });
 
     const after = await read(jobId);

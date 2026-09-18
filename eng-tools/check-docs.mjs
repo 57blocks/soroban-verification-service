@@ -43,7 +43,9 @@ const BUDGETS = {
   // admit ANY new rule. A cap that forces a real constraint to go unrecorded is not a size discipline.
   // Raised again on 2026-09-15, for the same reason at the same margin — rule 35 left three. The pattern is
   // the cap, not the document: it admits roughly one rule per raise, so expect the next one.
-  "docs/invariants.md": 16 * 1024,
+  // It arrived on 2026-09-16, and two rules did: 37 and 38 landed the same day, which is what a one-rule
+  // margin cannot absorb. Raised by 2 KiB rather than 1 so the next pair does not have to queue.
+  "docs/invariants.md": 18 * 1024,
   "docs/specs/build-environments.md": 8 * 1024,
   "docs/specs/configuration.md": 12 * 1024,
   "docs/specs/data-and-lifecycle.md": 12 * 1024,

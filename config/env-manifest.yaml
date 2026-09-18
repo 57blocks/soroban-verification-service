@@ -1967,6 +1967,28 @@ services:
           SCVS_MAX_ARCHIVE_ATTEMPTS counterpart — archival has no abandonment ceiling; a stuck job
           is an observability concern (archive_attempts), not one this scan ever stops retrying.
         tier: knob
+      SCVS_SINGLE_WRITER:
+        type: enum
+        values: ["true", "false"]
+        default: "false"
+        fail: boot
+        note: >-
+          An operator's statement that exactly ONE orchestrator writes this result root. Required to boot on
+          any backend whose conditional writes do not hold across processes (filesystem, and r2 until its
+          behaviour has been measured) — see docs/invariants.md rule 37. Nothing here can count replicas, so
+          the choice is stated rather than detected, and an unset value refuses to start rather than silently
+          reproducing the lost update the conditional write exists to prevent.
+        tier: knob
+      SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS:
+        type: number
+        default: 60000
+        note: >-
+          StatusLinkRecoveryScheduler's poll interval. Deliberately has no give-up bound, unlike
+          SCVS_SOURCE_PUBLISH_RECOVERY's own 24h window: that one abandons because its input is a
+          staged upload that can be permanently gone, while every input this replay needs (the
+          report URL and the archive tx ids) is durable. What stops an unfixable job from being
+          retried forever is the held state on the row, not a deadline.
+        tier: knob
       SCVS_SOURCE_ARCHIVE_CLAIM_TIMEOUT_MS:
         type: number
         default: 300000

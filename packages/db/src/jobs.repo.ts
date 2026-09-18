@@ -25,6 +25,24 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { JobModel as PrismaJob } from "../generated/prisma/models.js";
 
+/** Why automatic status-link recovery stopped. Closed here rather than in SQL: adding one is not a migration. */
+export type StatusLinkBlockedReason = "invalid_document" | "unrepresentable" | "manual_hold";
+
+/**
+ * What one attempt to put a link into `wasms/<hash>.json` left behind. `complete` covers "already there"
+ * too: a process dying between the object write and this row update replays into that, and a consumer
+ * syncing on `published_updated_at` would never learn about the link if it counted as a no-op.
+ */
+export type StatusLinkOutcome =
+  /**
+   * `advancePublished` is false only for a `superseded` entry, where nothing changed for a consumer.
+   * Anywhere ambiguous the caller says true: a needless re-sync costs one read, a missed one loses the link
+   * from every consumer's view.
+   */
+  | { state: "complete"; advancePublished: boolean }
+  | { state: "pending" }
+  | { state: "blocked"; reason: StatusLinkBlockedReason };
+
 export type JobRecord = {
   jobId: string;
   status: JobStatus;
@@ -82,6 +100,12 @@ export type JobRecord = {
   sourceArchivedTxId?: string;
   /** Failed source-archive attempts — see schema.prisma's `source_archive_attempts`. */
   sourceArchiveAttempts: number;
+  /** At least one link this job owes `wasms/<hash>.json` is not in the document yet. */
+  statusLinkPendingSince?: string;
+  /** Set alongside the reason when automatic link recovery stops; blocked rows still owe the link. */
+  statusLinkBlockedSince?: string;
+  /** Why automatic recovery stopped — a closed set, never raw error text. */
+  statusLinkBlockedReason?: StatusLinkBlockedReason;
   /**
    * Written by `report-artifact`'s `writePublication` on first publish, advanced by `archive-and-recovery`'s
    * `appendArchiveReference` on a real archive-backfill write.
@@ -420,26 +444,20 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /** Records the outcome of one archive attempt. Success clears `archivePendingSince` and sets `archivedTxId`. */
+  /**
+   * Records the outcome of one archive attempt. The upload and its link are separate facts and are written
+   * together: an upload that happened is recorded as `archivedTxId` even when its link did not land, because
+   * discarding a paid-for tx_id to express "the link is missing" is a lie in the other direction.
+   */
   async recordArchiveOutcome(
     jobId: string,
-    outcome: { archived: true; txId: string; publishedUpdatedAt?: Date } | { archived: false },
+    outcome: { archived: true; txId: string; statusLink: StatusLinkOutcome } | { archived: false },
   ): Promise<void> {
-    if (outcome.archived) {
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          archivePendingSince: null,
-          archivedTxId: outcome.txId,
-          ...(outcome.publishedUpdatedAt ? { publishedUpdatedAt: outcome.publishedUpdatedAt } : {}),
-        },
-      });
-    } else {
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: { archiveAttempts: { increment: 1 } },
-      });
+    if (!outcome.archived) {
+      await this.prisma.job.update({ where: { id: jobId }, data: { archiveAttempts: { increment: 1 } } });
+      return;
     }
+    await this.writeArchiveAndLink(jobId, "archived_tx_id", "archive_pending_since", outcome.txId, outcome.statusLink);
   }
 
   /**
@@ -459,18 +477,37 @@ export class JobsRepository {
   async recordSourcePublishOutcome(
     jobId: string,
     outcome:
-      | { published: true; sourceFileName: string; sourceArchivePendingSince?: Date }
+      | {
+          published: true;
+          sourceFileName: string;
+          sourceArchivePendingSince?: Date;
+          /**
+           * Whether the document still has to be told about this source. False on a first publish, which
+           * wrote the URI into the entry it was building; true on a retry, which is amending a document that
+           * was written without it.
+           */
+          owesStatusLink: boolean;
+        }
       | { published: false },
   ): Promise<void> {
     if (outcome.published) {
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          sourcePublishPendingSince: null,
-          sourceFileName: outcome.sourceFileName,
-          ...(outcome.sourceArchivePendingSince ? { sourceArchivePendingSince: outcome.sourceArchivePendingSince } : {}),
-        },
-      });
+      // The link obligation is created in the same write that discharges the source-publish one. Setting it
+      // afterwards leaves a window where the old obligation is gone and the new one is not yet written down,
+      // and a crash there loses the link for good — the pattern this whole change exists to remove.
+      const now = new Date();
+      const sourceArchive = outcome.sourceArchivePendingSince;
+      // Never clears the link flag, only raises it — clearing belongs to the pass that recomputed every link.
+      const statusLink = outcome.owesStatusLink
+        ? Prisma.sql`COALESCE("status_link_pending_since", ${now})`
+        : Prisma.sql`"status_link_pending_since"`;
+      await this.expectOneRow(this.prisma.$executeRaw`
+        UPDATE "jobs" SET
+          "source_publish_pending_since" = NULL,
+          "source_file_name" = ${outcome.sourceFileName},
+          "source_archive_pending_since" = ${sourceArchive ?? Prisma.raw('"source_archive_pending_since"')},
+          "status_link_pending_since" = ${statusLink},
+          "updated_at" = ${now}
+        WHERE "id" = ${jobId}::uuid`, jobId);
     } else {
       await this.prisma.job.update({
         where: { id: jobId },
@@ -494,23 +531,146 @@ export class JobsRepository {
   /** Records the outcome of one source-archive attempt (live or reconciliation-scan retry). */
   async recordSourceArchiveOutcome(
     jobId: string,
-    outcome: { archived: true; txId: string; publishedUpdatedAt?: Date } | { archived: false },
+    outcome: { archived: true; txId: string; statusLink: StatusLinkOutcome } | { archived: false },
   ): Promise<void> {
-    if (outcome.archived) {
+    if (!outcome.archived) {
+      await this.prisma.job.update({ where: { id: jobId }, data: { sourceArchiveAttempts: { increment: 1 } } });
+      return;
+    }
+    await this.writeArchiveAndLink(
+      jobId,
+      "source_archived_tx_id",
+      "source_archive_pending_since",
+      outcome.txId,
+      outcome.statusLink,
+    );
+  }
+
+  /**
+   * ONE statement: a crash between recording the upload and recording the link it owes loses the obligation
+   * for good, since nothing would scan the row again.
+   *
+   * Raw because `status_link_pending_since` needs COALESCE — a retry must not restart the clock — which
+   * Prisma's typed update cannot express.
+   */
+  private async writeArchiveAndLink(
+    jobId: string,
+    txIdColumn: "archived_tx_id" | "source_archived_tx_id",
+    pendingColumn: "archive_pending_since" | "source_archive_pending_since",
+    txId: string,
+    statusLink: StatusLinkOutcome,
+  ): Promise<void> {
+    const now = new Date();
+    const txIdSql = Prisma.raw(`"${txIdColumn}"`);
+    const pendingSql = Prisma.raw(`"${pendingColumn}"`);
+    if (statusLink.state === "complete") {
+      // Deliberately leaves the status-link columns alone. One flag covers every link this job owes, and a
+      // job's report archive and source archive run concurrently — clearing it here because THIS link landed
+      // would discharge an obligation another link is still holding, and the scan would never look again.
+      // Only `recordStatusLinkOutcome`, which recomputes every link from the row, may clear it.
+      await this.expectOneRow(this.prisma.$executeRaw`
+        UPDATE "jobs" SET
+          ${txIdSql} = ${txId},
+          ${pendingSql} = NULL,
+          "published_updated_at" = ${statusLink.advancePublished ? now : Prisma.raw('"published_updated_at"')},
+          "updated_at" = ${now}
+        WHERE "id" = ${jobId}::uuid`, jobId);
+      return;
+    }
+    if (statusLink.state === "pending") {
+      await this.expectOneRow(this.prisma.$executeRaw`
+        UPDATE "jobs" SET
+          ${txIdSql} = ${txId},
+          ${pendingSql} = NULL,
+          "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
+          "updated_at" = ${now}
+        WHERE "id" = ${jobId}::uuid`, jobId);
+      return;
+    }
+    await this.expectOneRow(this.prisma.$executeRaw`
+      UPDATE "jobs" SET
+        ${txIdSql} = ${txId},
+        ${pendingSql} = NULL,
+        "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
+        "status_link_blocked_since" = COALESCE("status_link_blocked_since", ${now}),
+        "status_link_blocked_reason" = ${statusLink.reason},
+        "updated_at" = ${now}
+      WHERE "id" = ${jobId}::uuid`, jobId);
+  }
+
+  /**
+   * A raw UPDATE reports rows touched instead of throwing on a `WHERE` that matched nothing, so a job deleted
+   * mid-flight would read as a successful write. These statements each address one row by id.
+   */
+  private async expectOneRow(update: Promise<number>, jobId: string): Promise<void> {
+    const rows = await update;
+    if (rows !== 1) throw new Error(`jobs repository: expected to update job ${jobId}, updated ${rows} row(s)`);
+  }
+
+  /**
+   * Jobs still owing a link and not held for a human. No time bound, unlike the source-publish scan: every
+   * input this replay needs — the report URL, the tx ids, the source file name — is durable.
+   */
+  async listJobsPendingStatusLink(): Promise<JobRecord[]> {
+    const rows = await this.prisma.job.findMany({
+      where: { statusLinkPendingSince: { not: null }, statusLinkBlockedReason: null },
+      orderBy: { statusLinkPendingSince: "asc" },
+    });
+    return rows.map(rowToJob);
+  }
+
+  /** Jobs held for a human, by reason — the gauge the recovery scan cannot see from its own query. */
+  async countJobsBlockedStatusLink(): Promise<{ reason: StatusLinkBlockedReason; count: number }[]> {
+    const grouped = await this.prisma.job.groupBy({
+      by: ["statusLinkBlockedReason"],
+      where: { statusLinkBlockedReason: { not: null } },
+      _count: { _all: true },
+    });
+    return grouped.map((row) => ({
+      reason: row.statusLinkBlockedReason as StatusLinkBlockedReason,
+      count: row._count._all,
+    }));
+  }
+
+  /**
+   * The recovery scan's counterpart to `recordArchiveOutcome`'s link half. It only ever runs on a row that
+   * already owes the link, so `complete` always advances `published_updated_at`: the link is in the document
+   * now and was not before, whether this attempt wrote it or found it already there.
+   */
+  async recordStatusLinkOutcome(jobId: string, outcome: StatusLinkOutcome): Promise<void> {
+    const now = new Date();
+    if (outcome.state === "complete") {
       await this.prisma.job.update({
         where: { id: jobId },
         data: {
-          sourceArchivePendingSince: null,
-          sourceArchivedTxId: outcome.txId,
-          ...(outcome.publishedUpdatedAt ? { publishedUpdatedAt: outcome.publishedUpdatedAt } : {}),
+          statusLinkPendingSince: null,
+          statusLinkBlockedSince: null,
+          statusLinkBlockedReason: null,
+          ...(outcome.advancePublished ? { publishedUpdatedAt: now } : {}),
         },
       });
-    } else {
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: { sourceArchiveAttempts: { increment: 1 } },
-      });
+      return;
     }
+    if (outcome.state === "pending") {
+      // Deliberately writes nothing: the row already owes the link, and re-stamping the clock would hide how
+      // long it has been owed.
+      return;
+    }
+    await this.expectOneRow(this.prisma.$executeRaw`
+      UPDATE "jobs" SET
+        "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
+        "status_link_blocked_since" = COALESCE("status_link_blocked_since", ${now}),
+        "status_link_blocked_reason" = ${outcome.reason},
+        "updated_at" = ${now}
+      WHERE "id" = ${jobId}::uuid`, jobId);
+  }
+
+  /** Puts a blocked job back in the recovery scan, keeping the clock that says how long the link has been owed. */
+  async clearStatusLinkBlock(jobId: string): Promise<void> {
+    await this.prisma.job.update({
+      where: { id: jobId },
+      data: { statusLinkBlockedSince: null, statusLinkBlockedReason: null },
+    });
   }
 
   /** Removes specific jobs by id. **Test cleanup only**. */
@@ -538,6 +698,8 @@ export class JobsRepository {
         archivePendingSince: null,
         sourcePublishPendingSince: null,
         sourceArchivePendingSince: null,
+        // Blocked refines pending, so this one column covers a held job too.
+        statusLinkPendingSince: null,
       },
       orderBy: { createdAt: "asc" },
       take: opts.limit,
@@ -821,6 +983,11 @@ function rowToJob(row: PrismaJob): JobRecord {
     publishAttempts: row.publishAttempts,
     retryAttempts: row.retryAttempts,
     ...(row.archivePendingSince ? { archivePendingSince: row.archivePendingSince.toISOString() } : {}),
+    ...(row.statusLinkPendingSince ? { statusLinkPendingSince: row.statusLinkPendingSince.toISOString() } : {}),
+    ...(row.statusLinkBlockedSince ? { statusLinkBlockedSince: row.statusLinkBlockedSince.toISOString() } : {}),
+    ...(row.statusLinkBlockedReason
+      ? { statusLinkBlockedReason: row.statusLinkBlockedReason as StatusLinkBlockedReason }
+      : {}),
     ...(row.archivedTxId ? { archivedTxId: row.archivedTxId } : {}),
     archiveAttempts: row.archiveAttempts,
     ...(row.publishedUpdatedAt ? { publishedUpdatedAt: row.publishedUpdatedAt.toISOString() } : {}),
