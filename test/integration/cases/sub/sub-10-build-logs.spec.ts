@@ -56,7 +56,7 @@ for (const row of cases) {
     {
       id: `E2E-SUB-10/${row.suffix}`,
       title: `${row.suffix} has a complete build log with no boundary secrets`,
-      mode: "AUTO",
+      mode: row.requiresWallclock ? "AUTO-SLOW" : "AUTO",
       needs: ["SCVS_E2E_VERIFY_URL"],
       prerequisites: ["P1"],
       unless: () =>

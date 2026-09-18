@@ -22,6 +22,12 @@ function missingReason(requirements: CaseRequirements): string | undefined {
   if (requirements.mode === "MANUAL" || requirements.mode === "BROWSER") {
     return `execution mode ${requirements.mode} is not automatable in this package`;
   }
+  if (requirements.mode === "AUTO" && env.autoScope === "slow") {
+    return "AUTO is not selected by SCVS_E2E_AUTO_SCOPE=slow";
+  }
+  if (requirements.mode === "AUTO-SLOW" && env.autoScope === "auto") {
+    return "AUTO-SLOW is not selected; set SCVS_E2E_AUTO_SCOPE=slow or all";
+  }
   if (requirements.mode === "AUTO-INFRA" && !env.allowInfra) {
     return "AUTO-INFRA changes deployment state; set SCVS_E2E_ALLOW_INFRA=1 in a dedicated window";
   }

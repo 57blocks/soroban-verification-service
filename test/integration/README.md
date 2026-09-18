@@ -132,15 +132,24 @@ entry limits, quotas, the build wall-clock ceiling — and most of them belong i
 case whose parameter is missing skips rather than inventing one, because a case that invents its
 own threshold is asserting the harness's guess.
 
-Three of the nine now have a citable source. Set `SCVS_E2E_ENV=dev|staging` and the harness reads the
-archive bounds from `config/deploy/<env>/builder.json` — `SCVS_MAX_SOURCE_ARCHIVE_ENTRIES`,
-`SCVS_MAX_SOURCE_ARCHIVE_UNCOMPRESSED_BYTES`, `SCVS_MAX_SOURCE_ARCHIVE_BYTES` — which is the artefact
-the Batch job definition is rendered from. Naming an environment whose artefact is absent or whose
-`target_env` disagrees is a **hard failure**: "you told me which deployment this is and you were
-wrong" is a runner mistake, and a skip would hide it behind the same green a correct run produces.
-The three matching `SCVS_E2E_LIMIT_*` variables were removed and are now *refused* if set — see
-[`.env.example`](.env.example) for why a harness environment variable cannot stand in for evidence
-about a deployment. The other six parameters are unchanged and still skip.
+For `test_suite=e2e`, `e2e_scope=auto` is the routine suite, `slow` runs only the three real
+builder-timeout cases, and `all` runs both. The latter has a 240-minute workflow limit; `slow` has
+90 minutes and skips Playwright and the normal upgrade lifecycle. `AUTO-INFRA` remains outside all
+three scopes and requires its own maintenance-window gate.
+
+For a local managed-environment run, set `SCVS_E2E_ENV=dev|staging`. The harness then reads archive
+bounds from `config/deploy/<env>/builder.json` and retry policy from
+`config/deploy/<env>/orchestrator-svc.json`. The reusable CI workflow cannot read those files because
+it checks out the application repository, so its operations caller passes one
+`scvs-e2e-deployment-evidence-v1` JSON object. It contains the three `SCVS_MAX_SOURCE_ARCHIVE_*`
+limits, builder `SCVS_CLI_TIMEOUT_MS`, retry policy, and the route quotas. Automated E2E refuses to
+start if its schema, fields, or positive-integer values are invalid; this prevents a deployment-contract
+drift from looking like skipped coverage.
+
+The three legacy `SCVS_E2E_LIMIT_*` archive-bound variables remain refused. A local harness variable
+cannot stand in for evidence about a deployment; see [`.env.example`](.env.example) for the two
+admissible evidence paths. Other optional parameters still skip when their deployment has no published
+source.
 
 ## P8 security probes: SEC-09 and SEC-10
 

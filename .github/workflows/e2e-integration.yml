@@ -26,6 +26,11 @@ on:
         description: "Test scope: smoke, e2e, or perf. perf runs the Locust open-model run against the persistent target pool."
         type: string
         required: true
+      e2e_scope:
+        description: "For test_suite=e2e: auto, slow, or all. AUTO-INFRA remains a separate maintenance run."
+        type: string
+        required: false
+        default: auto
       perf_users:
         description: "Concurrent complete verification flows, for the perf suite."
         type: string
@@ -51,19 +56,6 @@ on:
         type: string
         required: false
         default: "100"
-      submit_quota:
-        description: >-
-          The deployment's SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW. Supplied by the caller, which is the side that
-          holds this deployment's resolved configuration — this repository's checkout has none of it, which is
-          why the quota cannot be read from a file here. Absent, E2E-SEC-11/SEC-12 skip and say so.
-        type: string
-        required: false
-        default: ""
-      submit_window_ms:
-        description: "The deployment's SCVS_ABUSE_WINDOW_MS. Absent, the cases fall back to 60000."
-        type: string
-        required: false
-        default: ""
       on_main:
         description: >-
           Whether `source_sha` is an ancestor of this repository's main. False runs the suite with no AWS
@@ -72,10 +64,10 @@ on:
         type: boolean
         required: false
         default: true
-      query_quota:
+      deployment_evidence:
         description: >-
-          The deployment's SCVS_QUERY_ADDRESS_THROTTLE_LIMIT — the tier on the one query route that reaches an
-          upstream RPC, and the ceiling worth measuring. Absent, E2E-QRY-13 skips and says so.
+          Versioned JSON with all numeric deployment evidence used by automated E2E. The caller owns the
+          resolved deployment contract; this checkout deliberately does not contain it.
         type: string
         required: false
         default: ""
@@ -106,9 +98,7 @@ jobs:
     # This workflow intentionally exercises contracts built on the AMD64 fixture image.
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
-    # PERF-01 may use an approved four-hour window. Keep ordinary E2E runs at their existing limit while
-    # allowing the selected performance test to finish and report its result.
-    timeout-minutes: ${{ inputs.test_suite == 'perf' && 360 || 180 }}
+    timeout-minutes: ${{ inputs.test_suite == 'perf' && 360 || inputs.e2e_scope == 'all' && 240 || inputs.e2e_scope == 'slow' && 90 || 180 }}
     env:
       # The selected environment's role can access only that environment's CI cache. Set per
       # GitHub Environment by the caller; there is no fallback, because a deployment identifier
@@ -128,6 +118,7 @@ jobs:
       # Do not set SCVS_E2E_ENV here. It binds the harness to `config/deploy/<env>/` in the checkout,
       # which the quota step below explains is never on the runner, and the miss throws at import.
       SCVS_E2E_NETWORK: testnet
+      SCVS_E2E_AUTO_SCOPE: ${{ inputs.e2e_scope }}
       SCVS_E2E_FIXTURES: ${{ github.workspace }}/artifacts/e2e-fixtures/e2e-fixtures.ci.json
       SCVS_E2E_PRIVATE_UPLOAD_PATH: ${{ github.workspace }}/artifacts/e2e-fixtures/archives/canonical-source.tar.gz
       SCVS_E2E_RUN_ID: ci-${{ inputs.environment || 'dev' }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -285,37 +276,60 @@ jobs:
       - name: Typecheck E2E harness
         run: pnpm --filter @scvs/e2e-tests run typecheck
 
-      # ★ These numbers arrive as inputs and cannot be read from a file here. The deploy contracts that hold
-      # them live in the operations repository; this workflow's only checkout is the APPLICATION repository
-      # (`repository: ${{ inputs.source_repository }}` above), so `config/deploy/<env>/` is never on the
-      # runner. Reading it was silent: the step found no file, logged "will skip", and exited 0 — which is how
-      # SEC-11/SEC-12 came to skip every run without anyone noticing.
-      #
-      # The caller reads its own contract and passes the value, so there is still exactly one source of truth
-      # and it is still the deployment's own configuration, not a copy kept here.
-      - name: Export the deployment's published quotas
+      - name: Validate E2E scope and deployment evidence
+        if: ${{ inputs.test_suite == 'e2e' || inputs.test_suite == 'both' }}
         shell: bash
         env:
           TARGET_ENV: ${{ inputs.environment || 'dev' }}
-          SUBMIT_QUOTA: ${{ inputs.submit_quota }}
-          SUBMIT_WINDOW_MS: ${{ inputs.submit_window_ms }}
-          QUERY_QUOTA: ${{ inputs.query_quota }}
+          E2E_SCOPE: ${{ inputs.e2e_scope }}
+          DEPLOYMENT_EVIDENCE: ${{ inputs.deployment_evidence }}
         run: |
-          if [[ -n "$SUBMIT_QUOTA" ]]; then
-            echo "SCVS_E2E_QUOTA_SUBMIT=$SUBMIT_QUOTA" >> "$GITHUB_ENV"
-            echo "submission quota for $TARGET_ENV: $SUBMIT_QUOTA per window"
-          else
-            echo "caller passed no submit_quota — E2E-SEC-11/SEC-12 will skip" >&2
+          set -euo pipefail
+
+          case "$E2E_SCOPE" in
+            auto|slow|all) ;;
+            *)
+              echo "::error::e2e_scope must be auto, slow, or all; received $E2E_SCOPE" >&2
+              exit 1
+              ;;
+          esac
+
+          require_positive_integer() {
+            local name="$1" value="$2"
+            if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::deployment_evidence.$name must be a positive whole number from $TARGET_ENV's deployment contract" >&2
+              exit 1
+            fi
+          }
+
+          expected_keys='["archive_max_bytes","archive_max_entries","archive_max_uncompressed_bytes","build_wallclock_ms","job_retry_interval_ms","max_job_retry_attempts","query_quota","schema","submit_quota","submit_window_ms"]'
+          if ! jq -e --argjson expected "$expected_keys" '
+            type == "object" and
+            .schema == "scvs-e2e-deployment-evidence-v1" and
+            (keys | sort) == ($expected | sort)
+          ' <<<"$DEPLOYMENT_EVIDENCE" >/dev/null; then
+            echo "::error::deployment_evidence must be a scvs-e2e-deployment-evidence-v1 object with exactly the required fields" >&2
+            exit 1
           fi
-          if [[ -n "$SUBMIT_WINDOW_MS" ]]; then
-            echo "SCVS_E2E_WINDOW_SUBMIT_MS=$SUBMIT_WINDOW_MS" >> "$GITHUB_ENV"
-          fi
-          if [[ -n "$QUERY_QUOTA" ]]; then
-            echo "SCVS_E2E_QUOTA_QUERY=$QUERY_QUOTA" >> "$GITHUB_ENV"
-            echo "address-route quota for $TARGET_ENV: $QUERY_QUOTA per window"
-          else
-            echo "caller passed no query_quota — E2E-QRY-13 will skip" >&2
-          fi
+
+          export_parameter() {
+            local environment_variable="$1" evidence_key="$2" value
+            value=$(jq -er --arg key "$evidence_key" '.[$key]' <<<"$DEPLOYMENT_EVIDENCE")
+            require_positive_integer "$evidence_key" "$value"
+            echo "$environment_variable=$value" >> "$GITHUB_ENV"
+          }
+
+          export_parameter SCVS_E2E_QUOTA_SUBMIT submit_quota
+          export_parameter SCVS_E2E_WINDOW_SUBMIT_MS submit_window_ms
+          export_parameter SCVS_E2E_QUOTA_QUERY query_quota
+          export_parameter SCVS_E2E_ARCHIVE_MAX_BYTES archive_max_bytes
+          export_parameter SCVS_E2E_ARCHIVE_MAX_ENTRIES archive_max_entries
+          export_parameter SCVS_E2E_ARCHIVE_MAX_UNCOMPRESSED_BYTES archive_max_uncompressed_bytes
+          export_parameter SCVS_E2E_LIMIT_WALLCLOCK_MS build_wallclock_ms
+          export_parameter SCVS_E2E_JOB_RETRY_INTERVAL_MS job_retry_interval_ms
+          export_parameter SCVS_E2E_MAX_JOB_RETRY_ATTEMPTS max_job_retry_attempts
+
+          echo "$TARGET_ENV — accepted deployment evidence for E2E scope $E2E_SCOPE"
           # No variable carries this one: the query throttler's window is the `ttl` hardcoded beside the limit
           # in results.controller.ts, so it is fixed rather than configured.
           echo "SCVS_E2E_WINDOW_QUERY_MS=60000" >> "$GITHUB_ENV"
@@ -329,10 +343,10 @@ jobs:
           set -o pipefail
           pnpm run test:smoke 2>&1 | tee artifacts/e2e-smoke.log
 
-      - name: Run automated E2E cases
+      - name: Run selected automated E2E cases
         if: ${{ inputs.test_suite == 'e2e' || inputs.test_suite == 'both' }}
         env:
-          SCVS_E2E_REPORT_LABEL: auto
+          SCVS_E2E_REPORT_LABEL: e2e-${{ inputs.e2e_scope }}
         shell: bash
         run: |
           set -o pipefail
@@ -396,7 +410,7 @@ jobs:
         # builds, deploys v1 at a run-scoped salt, upgrades, and validates its own inventory. Running
         # it under always() keeps a failed test:auto step from skipping this independent, run-scoped
         # case and losing its signal.
-        if: ${{ always() && (inputs.test_suite == 'e2e' || inputs.test_suite == 'both') }}
+        if: ${{ always() && (inputs.test_suite == 'e2e' || inputs.test_suite == 'both') && inputs.e2e_scope != 'slow' }}
         env:
           SCVS_FIXTURE_TESTNET_ACCOUNT: ${{ secrets.SCVS_FIXTURE_TESTNET_SECRET_KEY }}
           SCVS_E2E_REPORT_LABEL: upgrade-lifecycle
@@ -441,7 +455,7 @@ jobs:
         env:
           SCVS_E2E_SUMMARY_TITLE: >-
             E2E results — ${{ inputs.environment || 'dev' }} ·
-            ${{ inputs.test_suite }}${{ inputs.test_suite == 'perf' && ' (PERF-01)' || '' }}
+            ${{ inputs.test_suite }}${{ inputs.test_suite == 'e2e' && format(' ({0})', inputs.e2e_scope) || inputs.test_suite == 'perf' && ' (PERF-01)' || '' }}
           SCVS_E2E_PERF_LOCUST_SUMMARY_PATH: ${{ github.workspace }}/artifacts/e2e-reports/perf-01/perf-01-summary.json
         run: node eng-tools/write-e2e-summary.mjs
 

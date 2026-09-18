@@ -49,7 +49,7 @@ caseBlock(
   {
     id: "E2E-DEDUP-06/build_timeout_requeued",
     title: "a wall-clock timeout is re-queued through the public Rule D transition",
-    mode: "AUTO",
+    mode: "AUTO-SLOW",
     needs: ["SCVS_E2E_VERIFY_URL", "SCVS_E2E_RESULT_ROOT"],
     prerequisites: ["P1"],
     unless: () =>

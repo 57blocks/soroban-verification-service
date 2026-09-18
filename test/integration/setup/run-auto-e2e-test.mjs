@@ -12,15 +12,25 @@ function run(command, args, env = process.env) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-const browserEnv = { ...process.env, SCVS_E2E_ALLOW_BROWSER: "1" };
+const autoScope = process.env.SCVS_E2E_AUTO_SCOPE ?? "auto";
+if (!["auto", "slow", "all"].includes(autoScope)) {
+  throw new Error(`SCVS_E2E_AUTO_SCOPE must be auto, slow, or all; received ${JSON.stringify(autoScope)}.`);
+}
+
+const autoEnv = {
+  ...process.env,
+  ...(autoScope === "slow" ? {} : { SCVS_E2E_ALLOW_BROWSER: "1" }),
+};
 run(
   "node",
   ["test/integration/setup/run-e2e-test.mjs", ...process.argv.slice(2)],
-  browserEnv
+  autoEnv
 );
+if (autoScope === "slow") process.exit(0);
+
 // The Jest leg above reports through `run-e2e-test.mjs`.
 const playwrightArgs = ["--filter", "@scvs/e2e-tests", "exec", "playwright", "test"];
-const playwrightEnv = { ...browserEnv };
+const playwrightEnv = { ...autoEnv };
 if (process.env.SCVS_E2E_REPORT_DIR) {
   const reportDir = resolve(repoRoot, process.env.SCVS_E2E_REPORT_DIR);
   mkdirSync(reportDir, { recursive: true });

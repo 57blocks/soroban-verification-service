@@ -117,7 +117,7 @@ caseBlock(
   {
     id: "E2E-SUB-09/build_timeout",
     title: "an infinite build is stopped by LIMIT_WALLCLOCK and classified as retryable",
-    mode: "AUTO",
+    mode: "AUTO-SLOW",
     needs: ["SCVS_E2E_VERIFY_URL", "SCVS_E2E_RESULT_ROOT"],
     prerequisites: ["P1"],
     unless: () =>
