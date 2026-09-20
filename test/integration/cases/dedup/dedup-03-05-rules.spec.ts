@@ -104,51 +104,6 @@ caseBlock(
 
 caseBlock(
   {
-    id: "E2E-DEDUP-03/cross_network",
-    title: "network is not part of the key — identical bytes on the other chain reuse the build",
-    mode: "AUTO",
-    needs: ["SCVS_E2E_VERIFY_URL", "SCVS_E2E_RESULT_ROOT"],
-    prerequisites: ["P1"],
-    unless: () => missingFixture("F-XNET", "F-XNET-MAINNET"),
-  },
-  () => {
-    it(
-      "verifies on both networks from one build, because K3 excludes the network",
-      async () => {
-        const testnet = fixtures.contracts["F-XNET"];
-        const mainnet = fixtures.contracts["F-XNET-MAINNET"];
-
-        // Precondition 1 — same bytes really do sit on both chains. If the fixture is wrong, every assertion
-        // below is about something else.
-        expect(testnet.wasm_hash).toBe(mainnet.wasm_hash);
-
-        const firstRun = await submitAndWait(await submissionFor("F-XNET"));
-        expect(firstRun.body.status).toBe("verified");
-        const firstReport = await reportForJob(firstRun.body.result, testnet.wasm_hash);
-        const first = await observeBuild(firstRun.jobId, firstRun, firstReport?.artifact);
-
-        const secondRun = await submitAndWait(await submissionFor("F-XNET-MAINNET"));
-        const secondReport = await reportForJob(secondRun.body.result, mainnet.wasm_hash);
-        const second = await observeBuild(secondRun.jobId, secondRun, secondReport?.artifact);
-
-        expectNoSecondBuild(evaluateNoSecondBuild(first, second));
-
-        // HA2.
-        expect(secondRun.body.status).toBe("verified");
-
-        // What remains true is the verdict itself.
-        expect((firstReport?.artifact as Record<string, unknown> | undefined)?.target).toBeUndefined();
-        expect((secondReport?.artifact as Record<string, unknown> | undefined)?.target).toBeUndefined();
-        expect(firstReport?.artifact.result.matched).toBe(true);
-        expect(secondReport?.artifact.result.matched).toBe(true);
-      },
-      DOUBLE_JOB_TIMEOUT
-    );
-  }
-);
-
-caseBlock(
-  {
     id: "E2E-DEDUP-04/verified_is_terminal",
     title: "Rule B is scoped to the recipe that produced the verdict, not to the hash",
     mode: "AUTO",

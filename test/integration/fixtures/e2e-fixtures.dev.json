@@ -201,26 +201,6 @@
       "note": "CI-only cli-58 private-upload fixture. generate-e2e-ci-inventory.mjs fills its fresh target and run-scoped source archive after the purpose-built contract is deployed.",
       "network": "testnet"
     },
-    "F-PRIV-MISMATCH": {
-      "id": "F-PRIV-MISMATCH",
-      "note": "E2E-SRC-03/on_mismatched private-only variant. It makes the same source edit as F-LEG-3 but adds a non-build canary, so its source hash cannot collide with SRC-07's publicly retained mismatch archive.",
-      "network": "testnet",
-      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
-      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
-      "source_path": "artifacts/e2e-fixtures/archives/src03-mismatch-private.tar.gz",
-      "source_sha256": "be4563d689c6a98cf1c517e928ffd14c69b52dce110f5305c41bff8f910a517a",
-      "run_scoped_recipe": true,
-      "bldarg": [
-        "contract",
-        "build"
-      ],
-      "bldopt": [
-        "--locked",
-        "--manifest-path=contracts/verified-demo/Cargo.toml",
-        "--package=verified-demo",
-        "--optimize"
-      ]
-    },
     "F-LEG-3": {
       "id": "F-LEG-3",
       "note": "Dedicated cli-legacy mismatch target. No matching-source fixture verifies this hash, so ADR-014 cannot hide the expected mismatched publication.",
@@ -229,46 +209,6 @@
       "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
       "source_path": "artifacts/e2e-fixtures/archives/mismatch.tar.gz",
       "source_sha256": "f7715c78c9c6888c92c3051e73bbbe65c9edb8ddc232232c26d1f1d230a541b7",
-      "run_scoped_recipe": true,
-      "bldarg": [
-        "contract",
-        "build"
-      ],
-      "bldopt": [
-        "--locked",
-        "--manifest-path=contracts/verified-demo/Cargo.toml",
-        "--package=verified-demo",
-        "--optimize"
-      ]
-    },
-    "F-SRC11-FAULT": {
-      "id": "F-SRC11-FAULT",
-      "note": "E2E-SRC-11's fault run. bulk-002 — a compilable source that rebuilds to bytes other than F-LEG-3's target, so the job reaches a *published* mismatch (a build failure would publish nothing and retain nothing, and SRC-11 is about the retention write, not the build). ★ It must be an archive no other case retains: SRC-11 asserts that `sources/{file}` is ABSENT while writes to that prefix are faulted, and a hash some other case already stored would make that assertion unfalsifiable. Targets purpose_testnet_f_leg_3_target because a published `mismatched` there cannot be hidden by ADR-014.",
-      "network": "testnet",
-      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
-      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
-      "source_path": "artifacts/e2e-fixtures/archives/bulk/bulk-002.tar.gz",
-      "source_sha256": "4bb96e0ddca348f9d0bc00eb4222eb66c118c69949fa90c9a421ff448ae7f87c",
-      "run_scoped_recipe": true,
-      "bldarg": [
-        "contract",
-        "build"
-      ],
-      "bldopt": [
-        "--locked",
-        "--manifest-path=contracts/verified-demo/Cargo.toml",
-        "--package=verified-demo",
-        "--optimize"
-      ]
-    },
-    "F-SRC11-CONTROL": {
-      "id": "F-SRC11-CONTROL",
-      "note": "E2E-SRC-11's 🔁 negative control. bulk-003, same shape as F-SRC11-FAULT and deliberately a different archive: the control proves retention WORKS on this deployment while the fault run proves it fails only under the injected fault. Sharing one archive between the two would let the control's stored copy satisfy the fault run's read.",
-      "network": "testnet",
-      "contract_id": "CCJENL4UNF7PRSOGZU5YPP72PRDLTQCLI4QWNIRR3XXPCRFCDGXTGWFW",
-      "wasm_hash": "4951e3ebda3287d45c48482b44d858ed02d048e264a406766e1bcf8ca61504ab",
-      "source_path": "artifacts/e2e-fixtures/archives/bulk/bulk-003.tar.gz",
-      "source_sha256": "dab5989b7d9f85d3f8e1496887d11e9d80c43ea5adef11977583b120c3267fa8",
       "run_scoped_recipe": true,
       "bldarg": [
         "contract",
@@ -507,7 +447,7 @@
     },
     "F-UPG": {
       "id": "F-UPG",
-      "note": "purpose_testnet_f_upg — currently in state `old` (wasm 8d5b4341…); prepared new is 0b260ed5…. test/fixtures/e2e/set-upgrade-testnet-version.sh flips it. The full E2E-QRY-06 needs that flip mid-case, which is AUTO-INFRA; the AUTO half here only reads.",
+      "note": "purpose_testnet_f_upg — currently in state `old` (wasm 8d5b4341…); prepared new is 0b260ed5…. test/fixtures/e2e/set-upgrade-testnet-version.sh flips it. The cases here only read; nothing in this package flips it.",
       "network": "testnet",
       "contract_id": "CDPEO2O4QSD7BRBWRF6ZK3XNW44W7CF23XRUP2ZRAV6CZKJCGT7ATOMR",
       "wasm_hash": "8d5b43411d6e4a9cad08814c2212a93d0ab7b6c8d6f453bc60a118c523c692e2",
@@ -528,7 +468,7 @@
     },
     "F-PRIV-BUILDFAILED": {
       "id": "F-PRIV-BUILDFAILED",
-      "note": "E2E-SRC-03/on_build_failed. The already-generated build-failed archive — F-LEG-1's canonical source with `this is not valid rust` appended to contracts/verified-demo/src/lib.rs, so cargo runs and rustc fails (test/fixtures/e2e/validate-local.sh asserts a recognizable compiler error). Targets F-LEG-1's contract; the verdict never gets far enough to compare bytes. Its source hash is used by no public-source case, which is what makes SRC-03's HA3 attributable to this submission. SUB-09/build_failed can reuse it.",
+      "note": "E2E-SUB-09/build_failed. The already-generated build-failed archive — F-LEG-1's canonical source with `this is not valid rust` appended to contracts/verified-demo/src/lib.rs, so cargo runs and rustc fails (test/fixtures/e2e/validate-local.sh asserts a recognizable compiler error). Targets F-LEG-1's contract; the verdict never gets far enough to compare bytes. Its source hash is used by no public-source case.",
       "network": "testnet",
       "contract_id": "CBKT6EZFBMPC67NLUPCREJM65MKDAAWQCGLZUEJPNUSR7SKYLQLB3Q76",
       "wasm_hash": "34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37",
@@ -1419,8 +1359,6 @@
   },
   "$omitted": {
     "F-LEG-2": "candidate — needs a reproducible verifier-composed image digest for one of its candidates. E2E-PUB-15's queued row skips. ★ E2E-SUB-02/compose_cache_hit no longer waits on it: that case needs one environment row serving two *different* contracts, and F-LEG-1 + F-MULTIPKG are both ready on cliver 27.0.0#5a7c5fe7… / rsver 1.96.0. F-LEG-2 stays open for the claim only it can make — a contract this project did not build, rebuilt in an environment this project composed.",
-    "F-XNET / F-XNET-MAINNET": "blocked — needs the recorded Wasm deployed unchanged on mainnet with a funded signer. E2E-DEDUP-03/cross_network and E2E-PUB-10 skip.",
-    "F-DARK": "candidate — the fixture server (test/fixtures/e2e/dark-source-server.mjs) has to be exposed at a URL this deployment can reach.",
     "F-PUBTEST": "candidate — the three real public testnet contracts (stellaroid_earn 27.0.0/1.95.0, stellaroid_2026 25.2.0/1.94.0, smart_block cli-none/1.99.0-nightly) still need rebuild evidence. Deliberately absent per this file's own rule above: a fixture not proven to rebuild fails for a fixture reason and reads as a conformance failure. Run test/fixtures/e2e/validate-public-testnet-candidates.sh, then prove an exact rebuild, then promote in registry.yaml first."
   },
   "images": {

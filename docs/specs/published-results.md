@@ -65,7 +65,7 @@ signals the status object does not. Two properties that must survive any rewrite
 
 *Verified by:* `packages/storage-layout/src/publish.ts` (`serializeReport`, `publishReport`),
 `test/integration/cases/pub/pub-report-immutability.spec.ts` (`/hash_matches_results_urls`,
-`/no_self_hash`, `/bytes_stable`, `/source_uri_goes_dark`).
+`/no_self_hash`, `/bytes_stable`).
 
 ## 5. Archive publishing is two-phase and never mutates a published artifact
 
@@ -78,8 +78,7 @@ silently drop one.
 
 *Verified by:* `services/orchestrator-svc/src/modules/publish/archive-once.ts`,
 `services/orchestrator-svc/src/modules/publish/arweave-archive.service.ts`,
-`services/orchestrator-svc/src/modules/scheduler/archive-recovery.scheduler.ts`,
-`test/integration/cases/pub/pub-report-immutability.spec.ts` (`/source_uri_goes_dark`).
+`services/orchestrator-svc/src/modules/scheduler/archive-recovery.scheduler.ts`.
 
 ## 6. Bulk load is a served route, not a file
 

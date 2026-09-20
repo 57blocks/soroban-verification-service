@@ -208,7 +208,7 @@ export async function uploadFixtureArchive(id: string) {
   const f = fixture(id);
   if (!f.source_path) {
     throw new Error(
-      `Fixture ${id} has no source_path, so there is nothing to upload. E2E-SRC-03 needs a local ` +
+      `Fixture ${id} has no source_path, so there is nothing to upload. An upload needs a local ` +
         `archive: a fixture reached through source_uri is never staged and has no staging object.`
     );
   }

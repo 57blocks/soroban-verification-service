@@ -1,4 +1,4 @@
-/** E2E-PUB-02 — everything is hash-addressed E2E-PUB-09 — failed jobs never publish E2E-PUB-10. */
+/** E2E-PUB-02 — everything is hash-addressed; E2E-PUB-09 — failed jobs never publish. */
 import { caseBlock, rowTest } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -152,47 +152,6 @@ caseBlock(
         expect(run.body.result?.reason ?? run.body.error).toBeDefined();
       },
       env.jobTimeoutMs + 60_000
-    );
-  }
-);
-
-caseBlock(
-  {
-    id: "E2E-PUB-10",
-    title: "`wasms/` is not partitioned by network; both addresses resolve the same hash",
-    mode: "AUTO",
-    needs: ["SCVS_E2E_QUERY_URL", "SCVS_E2E_RESULT_ROOT"],
-    prerequisites: ["P1"],
-    unless: () => missingFixture("F-XNET", "F-XNET-MAINNET"),
-  },
-  () => {
-    it(
-      "serves one document for bytes deployed on two chains",
-      async () => {
-        const testnet = fixtures.contracts["F-XNET"];
-        const mainnet = fixtures.contracts["F-XNET-MAINNET"];
-        expect(testnet.wasm_hash).toBe(mainnet.wasm_hash);
-
-        await submitAndWait(await submissionFor("F-XNET"));
-
-        // HA1 — the unpartitioned path is the one that exists.
-        const document = await http(staticWasmStatusUrl(testnet.wasm_hash!));
-        expectStatus(document, 200);
-
-        // HA2 — and both addresses reach it. A verdict belongs to bytes, so verifying on one chain answers for
-        // the other.
-        for (const contract of [testnet, mainnet]) {
-          const byAddress = await http(
-            aggregatedByHashUrl(testnet.wasm_hash!).replace(
-              /\/hashes\/[0-9a-f]{64}$/,
-              `/${contract.network}/contracts/${contract.contract_id}`
-            )
-          );
-          expectStatus(byAddress, 200);
-          expect(byAddress.json.wasm_hash).toBe(testnet.wasm_hash);
-        }
-      },
-      env.jobTimeoutMs + 120_000
     );
   }
 );

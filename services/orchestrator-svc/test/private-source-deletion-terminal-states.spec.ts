@@ -94,7 +94,7 @@ async function seedPrivateJob(uploadId: string) {
   return { jobId, sourceRef };
 }
 
-/** The four states `E2E-SRC-03`'s parameter table polls to, plus `evaluated`. */
+/** The four terminal states a private upload can reach, plus `evaluated`. */
 const TERMINAL_STATES: {
   label: string;
   status: Extract<JobStatus, "published" | "failed" | "evaluated">;

@@ -223,22 +223,8 @@ Reflector Pulse is a ready public `F-LEG-1-MAINNET` fixture. The fixed source ar
 recipe rebuilt to the observed mainnet Wasm hash in the verifier's composed Stellar CLI 27.0.0 / Rust
 1.97.1 image; rerun `validate-mainnet-reflector-rebuild.sh` to repeat that evidence. The same contract
 also supplies the recipe-free `F-MAINNET-READ-ONLY` view for non-mutating `E2E-NET-01` rows. Mainnet
-F-58, F-UPG, and the mainnet side of F-XNET remain explicit blockers; preparing those by deployment
-requires an approved funded mainnet signer.
-
-## Serve F-DARK
-
-After generating the local data set, start the controllable source endpoint:
-
-```bash
-node test/fixtures/e2e/dark-source-server.mjs
-```
-
-It serves the byte-pinned canonical archive at `http://127.0.0.1:8787/source.tar.gz` with caching
-disabled. Point F-DARK's submitted `source_uri` at the routed deployment URL, complete the
-verification, then stop the server before the source-visibility check. Set
-`SCVS_FIXTURE_DARK_HOST` and `SCVS_FIXTURE_DARK_PORT` when the verifier cannot reach localhost.
-This fixture is only `candidate` until that route is configured in the E2E environment.
+F-58 and F-UPG remain explicit blockers; preparing those by deployment requires an approved funded
+mainnet signer.
 
 ## Registry states
 

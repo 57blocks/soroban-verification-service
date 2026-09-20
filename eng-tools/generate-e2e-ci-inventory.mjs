@@ -244,7 +244,6 @@ applyTarget(inventory.contracts?.["F-ADV-BUILDRS"], verifiedTarget);
 applyTarget(inventory.contracts?.["F-LEG-3"], mismatchTarget);
 applyTarget(inventory.contracts?.["F-URI-MISMATCH"], mismatchTarget);
 applyTarget(inventory.contracts?.["F-MISMATCH-ALT"], mismatchTarget);
-applyTarget(inventory.contracts?.["F-PRIV-MISMATCH"], mismatchTarget);
 applyTarget(inventory.contracts?.["F-S55-E"], s55CaseVariantTarget);
 applyTarget(inventory.contracts?.["F-S55-F"], s55EmptyPrefixTarget);
 const privateCli58Fixture = inventory.contracts?.["F-58-PRIV"];

@@ -56,7 +56,7 @@ discovery:
   mainnet_wasm_endpoint: https://api.stellar.expert/explorer/public/wasm/{wasm_hash}
   testnet_contract_index: https://api.stellar.expert/explorer/testnet/contract
   testnet_wasm_endpoint: https://api.stellar.expert/explorer/testnet/wasm/{wasm_hash}
-  note: The StellarExpert contract-list cursor repeated pages during the 2026-08-03 scan. A read-only mainnet recheck on 2026-08-18 (ascending and descending) returned two pages before each next cursor self-looped; the mainnet Wasm endpoint returned 404 for F-XNET's testnet hash (the testnet endpoint returns 200). No matching mainnet contract was found in the visible sample, but the API pagination defect means this is not a complete chain rescan.
+  note: The StellarExpert contract-list cursor repeated pages during the 2026-08-03 scan. A read-only mainnet recheck on 2026-08-18 (ascending and descending) returned two pages before each next cursor self-looped; the mainnet Wasm endpoint returned 404 for testnet hash 34fc22d0… (the testnet endpoint returns 200). No matching mainnet contract was found in the visible sample, but the API pagination defect means this is not a complete chain rescan.
 
 testnet_lifecycle:
   ttl_extended_at: "2026-08-03T08:48:35Z"
@@ -824,121 +824,24 @@ required_contracts:
   F-UPG-mainnet:
     status: blocked
     need: approved funded mainnet signer and lifecycle plan
-  F-XNET:
-    status: blocked
-    testnet_contract: purpose_testnet_f_leg_1
-    wasm_hash: 34fc22d0f0531ccd2bcc782b86a9af5523f2aca5a463a87af8df3899ffefba37
-    need: deploy the recorded Wasm unchanged with an approved funded mainnet signer
-  F-DARK:
-    status: candidate
-    source_archive: artifacts/e2e-fixtures/archives/canonical-source.tar.gz
-    source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
-    server: test/fixtures/e2e/dark-source-server.mjs
-    need: expose the fixture server at a URL reachable by the deployment under test
-    validation:
-      - local server response bytes matched source_sha256 with cache disabled
-    # ── What E2E-SRC-08 checks about this fixture before it will run (2026-08-20) ─────────────────
-    # Both are premises the case asserts rather than assumes, because either one silently produces a
-    # green run that proves nothing.
-    requirements:
-      - >-
-        The `source_uri` recorded in the fixture inventory must be an address the DEPLOYMENT resolves.
-        The verifier fetches the source, not the harness, so the 127.0.0.1 default is local smoke only
-        — bind with SCVS_FIXTURE_DARK_HOST=0.0.0.0 behind a reachable address.
-      - >-
-        ★ The archive must NOT be the canonical one recorded above. Its sha256 is F-LEG-1's, and
-        E2E-SRC-01 retains that archive — so `/visibility_reflects_reality` would pass by finding
-        SRC-01's copy and would prove nothing about this fixture. Point SCVS_FIXTURE_DARK_ARCHIVE at
-        an archive with its own hash (the bulk corpus has 200) and record that hash here and in the
-        inventory. The case refuses to run when the hash collides with another fixture's.
-    control_protocol: >-
-      POST {control} {"available": boolean} — implemented by dark-source-server.mjs's /control route
-      and driven by test/integration/support/source-control.ts. Set SCVS_E2E_DARK_SOURCE_CONTROL_URL
-      to it. Nothing else may stand in: E2E-SRC-08 is about a source that really stopped answering,
-      and env.ts refuses SCVS_E2E_ASSUME_SOURCE_DARK outright.
   F-PRIV:
     status: ready
     source_record: private-canary
     canary: SCVS-PRIVATE-CANARY-20260803
     target: purpose_testnet_f_leg_1
-    # ★ 2026-08-20. E2E-SRC-03 needs one private fixture per terminal state, and the three below are
-    # variants of this one rather than separate fixtures: same target, same recipe, different source.
-    # None of them needs a new on-chain contract — the variable is the archive, not the chain.
-    src03_terminal_state_variants:
-      on_verified:
-        status: ready
-        source_record: private-canary
-        terminal_state: verified
-      on_mismatched:
-        status: ready
-        source_record: src03-mismatch-private
-        source_archive: artifacts/e2e-fixtures/archives/src03-mismatch-private.tar.gz
-        source_sha256: be4563d689c6a98cf1c517e928ffd14c69b52dce110f5305c41bff8f910a517a
-        terminal_state: job `mismatch`, verdict `mismatched`
-        fixture: F-PRIV-MISMATCH
-        why_not_reuse_mismatch_archive: >-
-          SRC-07 submits mismatch.tar.gz with is_public true, so its bytes are retained at
-          sources/<hash>. An SRC-03 row sharing that source hash could not distinguish "this private
-          submission was not published" from "a public case published the same archive earlier", which
-          is HA3. The canary in the variant makes the hash diverge while leaving the build — and so the
-          mismatched verdict — untouched.
-      on_build_failed:
-        status: ready
-        source_record: build-failed
-        source_archive: artifacts/e2e-fixtures/archives/build-failed.tar.gz
-        source_sha256: 96879a2eb739032612785151a1642ae93ebb28853b0bc5900d4974914fa64033
-        terminal_state: failed / build_failed
-        note: >-
-          Already generated; validate-local.sh asserts it produces a recognizable rustc error rather
-          than merely failing. Wired into the inventory as F-PRIV-BUILDFAILED. Deliberately not a
-          newly written syntax-error source: a second one would have to be kept in step with this one.
-      on_internal_error:
-        status: ready
-        source_record: private-canary
-        target: SCVS_E2E_INTERNAL_ERROR_CONTRACT_ID
-        need: >-
-          Runner supplies a structurally valid contract id that is absent on the target network for the
-          maintenance window. The real chain lookup then records internal_error with
-          stellar_contract_fetch_failed. This row observes first-failure cleanup only; it does not
-          assert Rule D retry retention.
-    observer_requirement: >-
-      HA1/HA2 are not observable over HTTP by design (no upload GET/HEAD, no sourceRef on the job body,
-      log route fenced to build-logs/). The runner needs SCVS_E2E_STAGING_PROBE_URL (existence-only
-      probe — the only admissible option on a shared bucket, since HeadObject requires s3:GetObject) or
-      SCVS_E2E_STAGING_BUCKET/REGION against an isolated E2E bucket, plus an approved
-      SCVS_E2E_STAGING_DELETION_DEADLINE_MS. Re-submitting the upload_id is DB-row evidence only.
-  F-SRC-11:
-    status: ready
-    # ★ No new contract, and that is the finding rather than a shortcut. Source retention is keyed by
-    # `source_sha256`, not by target, so what E2E-SRC-11 needs is two source archives nothing else has
-    # retained — not two deployed contracts. Both borrow purpose_testnet_f_leg_3_target, whose
-    # published verdict is `mismatched` and therefore cannot be displaced into hiding by ADR-014.
-    fault_run:
-      fixture: F-SRC11-FAULT
-      source_archive: artifacts/e2e-fixtures/archives/bulk/bulk-002.tar.gz
-      source_sha256: 4bb96e0ddca348f9d0bc00eb4222eb66c118c69949fa90c9a421ff448ae7f87c
-    negative_control:
-      fixture: F-SRC11-CONTROL
-      source_archive: artifacts/e2e-fixtures/archives/bulk/bulk-003.tar.gz
-      source_sha256: dab5989b7d9f85d3f8e1496887d11e9d80c43ea5adef11977583b120c3267fa8
-    why_two_archives: >-
-      The 🔁 control proves retention works on this deployment; the fault run proves it fails only
-      under the injected fault. One shared archive would let the control's stored copy answer the
-      fault run's read, and the case would pass with the fault doing nothing.
-    why_a_bulk_archive: >-
-      It has to compile. A generated non-compiling archive ends the job at build_failed, which
-      publishes nothing and retains nothing — and SRC-11 is about the retention write on a job that
-      DID publish. The bulk corpus is 200 compilable sources whose builds mismatch, each with its own
-      hash, which is exactly the shape needed.
-    not_blocked_on: >-
-      a contract. It is blocked on prerequisite P12 only — an object-store fault injector that can
-      fail writes under `sources/` while `wasms/` and `reports/` stay healthy. Wire it to
-      SCVS_E2E_OBJECT_STORE_FAULT_URL; anything wider turns the run into E2E-PUB-16.
-    cleanup: >-
-      The case heals the fault and backfills by re-submitting under a fresh run-scoped recipe. If it
-      cannot, it says so: a record left `is_public: true` with no stored copy is the state README gap
-      9 describes and E2E-SRC-09 reports.
-
+    # The build-failed variant is this fixture with a different archive rather than a separate
+    # fixture: same target, same recipe. The variable is the archive, not the chain.
+    build_failed_variant:
+      status: ready
+      source_record: build-failed
+      source_archive: artifacts/e2e-fixtures/archives/build-failed.tar.gz
+      source_sha256: 96879a2eb739032612785151a1642ae93ebb28853b0bc5900d4974914fa64033
+      terminal_state: failed / build_failed
+      fixture: F-PRIV-BUILDFAILED
+      note: >-
+        Already generated; validate-local.sh asserts it produces a recognizable rustc error rather
+        than merely failing. Deliberately not a newly written syntax-error source: a second one would
+        have to be kept in step with this one.
   F-BULK:
     status: ready
     source_records: bulk-001 through bulk-200

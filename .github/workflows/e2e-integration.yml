@@ -27,7 +27,7 @@ on:
         type: string
         required: true
       e2e_scope:
-        description: "For test_suite=e2e: auto, slow, or all. AUTO-INFRA remains a separate maintenance run."
+        description: "For test_suite=e2e: auto, slow, or all."
         type: string
         required: false
         default: auto

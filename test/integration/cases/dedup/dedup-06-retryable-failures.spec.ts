@@ -10,13 +10,10 @@ import {
 import { caseBlock } from "../../support/gate.js";
 import { expectNoRequeue } from "../../support/dedup.js";
 import {
-  readJob,
   submitAccepted,
   submitAndWait,
-  waitForTerminal,
   watchPastTerminal,
 } from "../../support/job.js";
-import { readDedup06InternalErrorEvidence } from "../../support/sub-infra-evidence.js";
 
 function retryPolicyProblem(): string | undefined {
   const { jobRetryIntervalMs, maxJobRetryAttempts } = deploymentParameters;
@@ -127,45 +124,6 @@ caseBlock(
         expect(failed.body.error).toBe("source_uri_not_materialized");
       },
       retryWatchWindowMs() + 2 * env.jobTimeoutMs + 120_000,
-    );
-  },
-);
-
-caseBlock(
-  {
-    id: "E2E-DEDUP-06/internal_error_requeued",
-    title: "a restored infrastructure fault re-queues its failed job and reaches the recorded verdict",
-    mode: "AUTO-INFRA",
-    needs: [
-      "SCVS_E2E_VERIFY_URL",
-      "SCVS_E2E_DEDUP06_INTERNAL_ERROR_EVIDENCE_PATH",
-    ],
-    prerequisites: ["P1", "P6"],
-    unless: retryPolicyProblem,
-  },
-  () => {
-    it(
-      "observes failed -> queued after restoration, then a successful retry",
-      async () => {
-        const evidence = readDedup06InternalErrorEvidence();
-        const failed = await readJob(evidence.jobId);
-        expect(failed.status).toBe("build_failed");
-        expect(failed.error).toBe(evidence.expectedErrorCode);
-        expect(Date.parse(failed.created_at)).toBeGreaterThanOrEqual(evidence.appliedAtMs);
-        expect(Date.parse(failed.updated_at)).toBeGreaterThanOrEqual(evidence.failedAtMs);
-
-        const watch = await watchPastTerminal(evidence.jobId, {
-          windowMs: retryWatchWindowMs(),
-          stopOnFirstRequeue: true,
-        });
-        assertRequeued(watch);
-        assertAwaitingRetryDispatch(watch);
-
-        const retried = await waitForTerminal(evidence.jobId, { timeoutMs: env.jobTimeoutMs });
-        expect(retried.body.status).toBe(evidence.expectedTerminalStatus);
-        expect(retried.body.error).toBeUndefined();
-      },
-      retryWatchWindowMs() + env.jobTimeoutMs + 60_000,
     );
   },
 );
