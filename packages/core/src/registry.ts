@@ -15,6 +15,7 @@ import {
   validateSync,
 } from "class-validator";
 import { SchemaHint } from "./schema-hint.js";
+import { IsResultUrlList } from "./validators/result-url-list.js";
 import { IsSourceCodeUriList } from "./validators/source-code-uri-list.js";
 import { DtoValidationError } from "./validate.js";
 import { ClosedTo } from "./validators/closed-to.js";
@@ -247,19 +248,45 @@ export class PeerRegistryVerification {
   @IsOptional() @IsString() processed_at?: string;
 
   /**
-   * Structured entries only since 2026-09-10, where a bare URI string — the Registry API draft's shape —
-   * was accepted before. **This field and not its neighbour**: `stellar-verification-aggregate` names
-   * `results_urls` and types a relayed link as an object, so a string read here reaches a document it makes
-   * non-conformant. Nothing downstream constrains `verified_source_code_uris`, so nothing is bought by
-   * refusing a string there and a peer's whole document is the price.
+   * A bare URI string — the Registry API draft's shape — or the structured entry. Refusing the string here
+   * between 2026-09-10 and this change cost the reader the *whole document*, which bricked every status
+   * object we ourselves published before that date: `mutateWasmStatus` parses the stored document before
+   * amending it, so those hashes could never be re-verified (`invalid-document`, retried to exhaustion).
    *
-   * `PeerRegistryResultUrl` and not `RegistryResultUrl`: the *shape* is required, the *vocabulary* is not.
+   * The concern that motivated refusing it was real but belongs one step later:
+   * `stellar-verification-aggregate` types a relayed link as an object, so a string must not reach it. That
+   * is `toResultUrl`'s job — it is documented as reading either shape, and every consumer here already calls
+   * it. Enforcing the aggregate's shape by dropping the document is the failure the peer/producer split
+   * exists to prevent, and `verified_source_code_uris` beside it already made the other choice.
+   *
+   * The producer shape (`RegistryVerification`) is unchanged: we still emit objects only.
    */
+  // Inlined rather than `$ref`-ed: `PeerRegistryResultUrl` is a consumer type and reaches no route, so it is
+  // not among the emitted schemas — unlike `RegistrySourceCodeUri`, which is, and which the neighbour below
+  // can therefore name.
+  @SchemaHint({
+    type: "array",
+    items: {
+      oneOf: [
+        { type: "string", format: "uri" },
+        {
+          type: "object",
+          required: ["type", "url"],
+          properties: {
+            type: { type: "string" },
+            url: { type: "string" },
+            location: { type: "string" },
+            sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+          },
+        },
+      ],
+    },
+    description: "A bare URI (pre-SEP draft shape) or a {type, url, location?, sha256?} entry.",
+  })
   @IsOptional()
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => PeerRegistryResultUrl)
-  results_urls?: PeerRegistryResultUrl[];
+  @IsResultUrlList()
+  results_urls?: (string | PeerRegistryResultUrl)[];
 
   @SchemaHint({
     type: "array",

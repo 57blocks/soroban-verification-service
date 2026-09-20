@@ -25,32 +25,32 @@ async function fixture(name: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(join(registryFixtures, name), "utf8")) as Record<string, unknown>;
 }
 
-/**
- * The draft example every other test here builds on. Not `200-verified.json`: its `results_urls` are bare
- * strings, which stopped being readable on 2026-09-10 — `draftExamplesParse` is where that is pinned.
- */
+/** The draft example every other test here builds on. */
 const READABLE_DRAFT = "200-out-of-band.json";
 
-/** The one example whose links are bare strings, and therefore the one that no longer reads. */
+/** The one example whose `results_urls` are bare strings — the draft's own link shape. */
 const BARE_STRING_LINKS = "200-verified.json";
 
 /**
- * Every worked example in the draft parses, except the one carrying a link shape we stopped accepting; if
- * one of the others fails, our shape has drifted from the draft.
+ * Every worked example in the draft parses, bare-string links included; if one fails, our shape has drifted
+ * from the draft. A consumer normalises a link with `toResultUrl` rather than being handed a document that
+ * refused to read over one field's shape.
  */
 async function draftExamplesParse(): Promise<void> {
   const files = (await readdir(registryFixtures)).filter((name) => name.endsWith(".json"));
   assert.ok(files.length >= 5, `expected the draft's examples, found ${files.length}`);
   for (const name of files) {
     const document = await fixture(name);
-    if (name === BARE_STRING_LINKS) {
-      assert.throws(() => validateStatusObject(document, name), `${name} carries bare-string links`);
-      continue;
-    }
     const parsed = validateStatusObject(document, name);
     assert.equal(parsed.schema_version, "1.0", `${name} lost its schema_version`);
     assert.ok(parsed.source_code_verifications.length >= 1, `${name} parsed with no verifications`);
   }
+
+  const raw = (await fixture(BARE_STRING_LINKS)) as {
+    source_code_verifications: { results_urls?: unknown[] }[];
+  };
+  const links = raw.source_code_verifications[0].results_urls ?? [];
+  assert.ok(links.some((link) => typeof link === "string"), `${BARE_STRING_LINKS} lost its bare-string links`);
 }
 
 /** Unknown fields tolerated by default; the base projection on request. */

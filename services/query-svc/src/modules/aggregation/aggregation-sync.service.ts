@@ -4,6 +4,7 @@ import { AggregationRepository, TrustedVerifiersRepository } from "@scvs/db-quer
 import {
   ScvsLogger,
   isSameVerifier,
+  toResultUrl,
   type AgreementSummary,
   type PeerRegistryStatusObject,
   type PeerRegistryVerification,
@@ -122,7 +123,12 @@ export class AggregationSyncService {
             ...(fields.verified_source_code_uris !== undefined
               ? { verifiedSourceCodeUris: fields.verified_source_code_uris }
               : {}),
-            ...(entry.results_urls !== undefined ? { resultsUrls: entry.results_urls } : {}),
+            // Normalised, never relayed verbatim: `stellar-verification-aggregate` types a link as an
+            // object, and a peer on the draft shape sends bare strings. The reader tolerates both; this is
+            // the boundary where that tolerance has to end.
+            ...(entry.results_urls !== undefined
+              ? { resultsUrls: entry.results_urls.map(toResultUrl) }
+              : {}),
             ...(entry.processed_at !== undefined ? { processedAt: entry.processed_at } : {}),
           },
           retrievedAt: now,

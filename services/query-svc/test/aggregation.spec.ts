@@ -516,6 +516,38 @@ describe("the retained copy is what /api/query/v1 serves, so the sync must not n
     await prisma.trustedVerifier.deleteMany({ where: { verifierId: { in: [VERIFIER_A, VERIFIER_B] } } });
   });
 
+  // A peer still on the Registry API draft sends `results_urls` as bare URI strings. The reader accepts
+  // them — refusing cost the peer its whole document — so this relay is where the tolerance has to end:
+  // `stellar-verification-aggregate` types a link as an object.
+  it("normalises a peer's bare-string results_urls rather than relaying them into the aggregate", async () => {
+    const [hash] = HASHES;
+    const reportSha = "d".repeat(64);
+    serve(
+      peerDocument(hash, {
+        source_code_verifications: [
+          {
+            ...peerDocument(hash).source_code_verifications[0],
+            results_urls: [`${PEER_ROOT}reports/${reportSha}.json`, "https://gateway.irys.xyz/legacy-tx"],
+          },
+        ],
+      }),
+      hash,
+    );
+    await syncPeerOnce(hash);
+    // Set here rather than inherited from an earlier case, so this one states its own precondition and
+    // survives being run alone.
+    (app.get(AggregationSyncService) as unknown as { firstPassComplete: boolean }).firstPassComplete = true;
+
+    const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${hash}`);
+    expect(res.status).toBe(200);
+    const [served] = res.body.source_code_verifications;
+    expect(served.results_urls).toEqual([
+      // The report URL carries its own sha256 in the path, so normalising recovers the anchor too.
+      { type: "report", url: `${PEER_ROOT}reports/${reportSha}.json`, sha256: reportSha },
+      { type: "report", url: "https://gateway.irys.xyz/legacy-tx" },
+    ]);
+  });
+
   it("keeps every field the peer sent, not the six the recipe column used to whitelist", async () => {
     const [hash] = HASHES;
     serve(
@@ -631,12 +663,12 @@ describe("the retained copy is what /api/query/v1 serves, so the sync must not n
     expect(served.schema_version).toBe("1.1");
   });
 
-  it("drops a peer whose results_urls are bare strings, rather than relaying a shape it cannot serve", async () => {
+  it("keeps a peer whose results_urls are bare strings, normalising rather than dropping the document", async () => {
     const [, , , hash] = HASHES;
-    // The Registry API draft's spelling. Relayed, it would land in a stellar-verification-aggregate, whose
-    // schema types THIS link field as an object — so the peer loses the document rather than the aggregate
-    // losing conformance. The test above is the counterpart: a field no downstream document types is
-    // relayed as it came. Structurally wrong is not the same as unrecognised — CV8's unknown fields survive.
+    // The Registry API draft's spelling. It used to cost the peer its whole document, on the argument that a
+    // relayed string would land in a stellar-verification-aggregate whose schema types this link as an
+    // object. The shape still has to be right at that boundary — but `toResultUrl` is what makes it right,
+    // and dropping the document instead also refused every status object we published before 2026-09-10.
     serve(
       peerDocument(hash, {
         source_code_verifications: [
@@ -649,13 +681,18 @@ describe("the retained copy is what /api/query/v1 serves, so the sync must not n
       hash,
     );
     await syncPeerOnce(hash);
+    (app.get(AggregationSyncService) as unknown as { firstPassComplete: boolean }).firstPassComplete = true;
 
     const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${hash}`);
     expect(res.status).toBe(200);
-    expect(res.body.source_code_verifications).toEqual([]);
-    expect(res.body.unavailable_verifiers.map((entry: { reason: string }) => entry.reason)).toContain(
-      "invalid_response",
-    );
+    expect(res.body.source_code_verifications).toHaveLength(1);
+    // Not `abc`: the sha256 is only recovered from a `/reports/<64 hex>.json` path, and an entry the
+    // aggregate cannot anchor is served without one rather than with a made-up one.
+    expect(res.body.source_code_verifications[0].results_urls).toEqual([
+      { type: "report", url: "https://peer.spec.test/reports/abc.json" },
+    ]);
+    // The peer is no longer among the ones we could not read.
+    expect(oursOnly(res.body.unavailable_verifiers)).toEqual([]);
   });
 
   it("relays a non-string draft field unchanged instead of dropping it (CV8)", async () => {

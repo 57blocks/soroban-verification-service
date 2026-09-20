@@ -118,9 +118,65 @@ function seed(params: BuildWasmStatusParams = baseParams()): RacingStorage {
   return storage;
 }
 
+/**
+ * A document in the shape this verifier published before the SEP one: `results_urls` is a list of bare URI
+ * strings and the entry's verifier carries a name and no `url`. Written straight into the store, because
+ * `buildWasmStatus` cannot emit it — which is exactly why no fixture here had this shape, and why refusing
+ * it on read went unnoticed until a hash from that era was re-verified.
+ */
+function seedLegacyDocument(): RacingStorage {
+  const storage = new RacingStorage();
+  const document = {
+    wasm_hash: WASM_HASH,
+    updated_at: "2026-08-21T10:02:12.856Z",
+    source_code_verifications: [
+      {
+        verifier: { name: OURS.name },
+        status: "verified",
+        out_of_band: true,
+        bldimg: `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`,
+        bldopt: ["--locked"],
+        source_sha256: "b".repeat(64),
+        processed_at: "2026-08-21T10:02:12.856Z",
+        results_urls: [REPORT_URL, "https://gateway.irys.xyz/legacy-tx"],
+      },
+    ],
+    schema_version: "1.0",
+  };
+  storage.objects.set(KEY, { text: `${JSON.stringify(document, null, 2)}\n`, version: 1 });
+  return storage;
+}
+
 async function main(): Promise<void> {
   const archiveUrl = "https://gateway.irys.xyz/tx-1";
   const competingUrl = `${OURS.url}/sources/${"b".repeat(64)}.tar.gz`;
+
+  // The regression: a stored document from before the SEP shape must still be amendable. Refusing its bare
+  // `results_urls` strings made the whole document unreadable, so `mutateWasmStatus` answered
+  // `invalid-document` — which it never overwrites — and every re-verification of such a hash exhausted its
+  // retries and abandoned. Measured on dev: 45 of 135 stored documents.
+  {
+    const storage = seedLegacyDocument();
+
+    const result = await mutateWasmStatus(storage, WASM_HASH, (existing) => {
+      assert.ok(existing, "the legacy document parsed");
+      const build = buildWasmStatus({ ...baseParams(), existing });
+      return build.outcome === "write" ? { write: build.document } : { skip: "superseded" };
+    });
+
+    assert.equal(result, "written", "a pre-SEP document is amendable, not `invalid-document`");
+
+    // And the rewrite is in the SEP shape: the upgrade is what the strings buy their way into, so nothing
+    // downstream ever sees the legacy form again.
+    const final = JSON.parse(storage.objects.get(KEY)!.text);
+    assert.equal(final.schema, "stellar-verification-status");
+    for (const entry of final.source_code_verifications) {
+      for (const link of entry.results_urls ?? []) {
+        assert.equal(typeof link, "object", `results_urls entry ${JSON.stringify(link)} is still a string`);
+        assert.ok(link.url, "the upgraded link kept its url");
+      }
+    }
+  }
 
   // A lost swap re-reads and re-runs the mutation against what the winner left, so both updates survive.
   {
