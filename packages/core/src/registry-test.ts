@@ -195,19 +195,37 @@ function main(): void {
   );
 
   // ---- the draft shape, as a peer may still publish it -------------------------------------------
-  // Four of the five still read: the draft's own vocabulary (`out_of_band`, `source_repo`, a missing
-  // `schema`) is unknown fields and unknown values, which CV6/CV8/CV10 keep. The fifth is the line that
-  // moved on 2026-09-10 — its `results_urls` are bare strings, and a *known* field of the wrong type costs
-  // the peer its document, because a relayed one has nowhere conformant to go.
+  // All five read: the draft's own vocabulary (`out_of_band`, `source_repo`, a missing `schema`) is unknown
+  // fields and unknown values, which CV6/CV8/CV10 keep — and so are its bare-string `results_urls`. Between
+  // 2026-09-10 and this change the fifth was refused, on the argument that a relayed link has nowhere
+  // conformant to go; but that is `toResultUrl`'s job at the relay boundary, and dropping the document
+  // instead also bricked every status object THIS verifier published before that date.
   const BARE_STRING_LINKS = "200-verified.json";
   const examples = readdirSync(draftFixtures).filter((name) => name.endsWith(".json"));
   assert.equal(examples.length, 5, "expected the draft's five status examples");
+  assert.ok(
+    (load(draftFixtures, BARE_STRING_LINKS).source_code_verifications[0].results_urls as unknown[]).some(
+      (link) => typeof link === "string",
+    ),
+    "the draft fixture no longer carries the bare-string links this case exists for",
+  );
   for (const name of examples) {
     const document = load(draftFixtures, name);
-    if (name === BARE_STRING_LINKS) rejectsAsPeer(`draft example ${name} against the consumer shape`, document);
-    else parseDto(PeerRegistryStatusObject, document);
+    parseDto(PeerRegistryStatusObject, document);
     // …and none of them is something WE would publish any more: no `schema`, draft vocabulary.
     rejects(`draft example ${name} against the producer shape`, document);
+  }
+
+  // Tolerated on the way in, normalised on the way out: `toResultUrl` is what keeps a bare string from
+  // reaching `stellar-verification-aggregate`, which types a relayed link as an object.
+  {
+    const peer = parseDto(PeerRegistryStatusObject, load(draftFixtures, BARE_STRING_LINKS));
+    const links = (peer.source_code_verifications[0].results_urls ?? []).map(toResultUrl);
+    assert.ok(links.length > 0, "the fixture carries links to normalise");
+    for (const link of links) {
+      assert.equal(typeof link, "object");
+      assert.ok(link.url && link.type, "a normalised link carries both a url and a type");
+    }
   }
 
   // The base for the tolerance tests below is a draft document that carries no links, so what they exercise

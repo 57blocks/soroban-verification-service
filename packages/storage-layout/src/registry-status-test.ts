@@ -245,16 +245,15 @@ async function main(): Promise<void> {
     assert.deepEqual(reVerified.source_code_verifications[0].verifier, OURS);
   }
 
-  // Every draft example still reads as a PEER document — except the one whose links are bare strings, which
-  // stopped being readable on 2026-09-10 and is the whole point of that change.
+  // Every draft example reads as a PEER document, bare-string links included. Refusing those between
+  // 2026-09-10 and this change also refused every status object we ourselves published before that date,
+  // which `mutateWasmStatus` then declined to overwrite — see mutate-status-test.ts.
   {
     const files = (await readdir(draftExamplesDir)).filter((name) => name.endsWith(".json"));
     assert.equal(files.length, 5);
     for (const name of files) {
       const raw = JSON.parse(await readFile(join(draftExamplesDir, name), "utf8"));
-      const readable = parsePeerWasmStatus(raw);
-      if (name === "200-verified.json") assert.equal(readable, undefined, `${name} carries bare-string links`);
-      else assert.ok(readable, `${name} must parse as a peer document`);
+      assert.ok(parsePeerWasmStatus(raw), `${name} must parse as a peer document`);
       assert.throws(() => validateWasmStatus(raw), `${name} is not something we would publish`);
     }
     validateWasmStatus(JSON.parse(await readFile(sepExample, "utf8")));
