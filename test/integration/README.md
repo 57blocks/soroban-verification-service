@@ -59,9 +59,9 @@ selection manifest is [`setup/smoke-cases.ts`](setup/smoke-cases.ts): verificati
 `E2E-SUB-01/testnet`, `E2E-SUB-03`, the two source-upload flows, query address/open-surface checks,
 the verifier manifest, and the public Web console's preflight. These cover cli-legacy and cli-58
 with both public `source_uri` and private `upload_id` references. The command selects case IDs with
-Jest's test-name pattern, so a neighbouring case in the same spec file does not run. It disables
-`AUTO-INFRA`; the cli-58 private upload's existing fixed provisioner creates its
-run-scoped fixture before running that one case. The runner fails an enabled smoke run if a selected
+Jest's test-name pattern, so a neighbouring case in the same spec file does not run. The cli-58
+private upload's existing fixed provisioner creates its run-scoped fixture before running that one
+case. The runner fails an enabled smoke run if a selected
 direct Jest case was not executed. The public Web case runs first, before any build-producing Jest
 case, so a broken console or ALB default route fails without consuming Batch capacity.
 
@@ -94,14 +94,12 @@ runs it as a separate targeted Jest step after `test:auto`. The two Docker-hoste
 `test:perf:locust` for PERF-01 closed-loop traffic and
 `test:perf:locust:open` for PERF-02 fixed-interval bursts, which start at their configured interval
 without waiting for earlier flows to settle.
-`test:auto` skips `AUTO-INFRA` cases unless their separate gate is set.
 
 Three gates, each opt-in separately, matching plan §1.2.1's execution modes:
 
 | Variable | Unlocks | Why it is separate |
 | --- | --- | --- |
 | `SCVS_E2E=1` | everything | a real deployment is being written to |
-| `SCVS_E2E_ALLOW_INFRA=1` | `AUTO-INFRA` | these change deployment state — stopping services, editing the TVL, injecting storage faults — and need a window and a restoration plan |
 | `SCVS_E2E_ALLOW_PERF=1` | `PERF` | performance and capacity probes consume shared build capacity; both Locust commands require it |
 | `SCVS_E2E_ALLOW_BROWSER=1` | `BROWSER` | Playwright against the deployed public Web console |
 
@@ -134,8 +132,7 @@ own threshold is asserting the harness's guess.
 
 For `test_suite=e2e`, `e2e_scope=auto` is the routine suite, `slow` runs only the three real
 builder-timeout cases, and `all` runs both. The latter has a 240-minute workflow limit; `slow` has
-90 minutes and skips Playwright and the normal upgrade lifecycle. `AUTO-INFRA` remains outside all
-three scopes and requires its own maintenance-window gate.
+90 minutes and skips Playwright and the normal upgrade lifecycle.
 
 For a local managed-environment run, set `SCVS_E2E_ENV=dev|staging`. The harness then reads archive
 bounds from `config/deploy/<env>/builder.json` and retry policy from
@@ -151,156 +148,13 @@ cannot stand in for evidence about a deployment; see [`.env.example`](.env.examp
 admissible evidence paths. Other optional parameters still skip when their deployment has no published
 source.
 
-## P8 security probes: SEC-09 and SEC-10
+## No case mutates deployment state
 
-`E2E-SEC-09` and `E2E-SEC-10` are `AUTO-INFRA` because the public API intentionally cannot expose
-either IAM state or a credential-bearing presigned URL. Do not add a verification-service endpoint
-or log the URL to make these tests easier: that would violate S18/S22 and invalidate the control.
-Run them only with `SCVS_E2E_ALLOW_INFRA=1` and a P8 Operations export from the same test window.
-
-`SCVS_E2E_SEC09_EVIDENCE_PATH` names a local JSON file collected for the diagnostic Batch job, and
-`SCVS_E2E_SEC09_JOB_ID` binds it to the exact AWS Batch job the window selected. The exporter must
-derive these results from the job/container and its network observations, not from the task definition
-alone:
-
-```json
-{
-  "schema": "scvs-e2e-sec09-v1",
-  "job_id": "<AWS Batch job id>",
-  "database": { "credential_present": false, "outcome": "denied" },
-  "result_bucket": { "get": "denied", "put": "denied" },
-  "publishing_key": {
-    "environment": false,
-    "credentials_file": false,
-    "imds": "unreachable",
-    "mounted_secrets": false
-  },
-  "network": { "unexpected_outbound_destinations": [] }
-}
-```
-
-`SCVS_E2E_SEC10_CAPTURE_PATH` names a local, restricted-permission file captured only after the
-builder used both output URLs. It must never be committed or printed. `control.url` is a separate,
-disposable object signed by the same policy, so the test can prove a pre-expiry PUT works without
-writing over the builder's terminal artifacts. `SCVS_E2E_UPLOAD_URL_TTL_MS` is the actual
-`TTL_UPLOAD_URL` value from the deployment, not a guessed threshold.
-
-```json
-{
-  "schema": "scvs-e2e-sec10-v1",
-  "captured_at": "2026-08-20T12:00:00.000Z",
-  "targets": {
-    "recipe": { "url": "https://<redacted>", "content_type": "application/json", "consumed_at": "2026-08-20T12:00:01.000Z" },
-    "rebuilt_wasm": { "url": "https://<redacted>", "content_type": "application/wasm", "consumed_at": "2026-08-20T12:00:01.000Z" }
-  },
-  "control": { "url": "https://<redacted>", "content_type": "application/octet-stream", "expires_at": "2026-08-20T12:15:00.000Z" }
-}
-```
-
-The runner intentionally sends a second PUT to each consumed target. A successful response is a
-hard failure: it demonstrates that the sandbox can overwrite an output before URL expiry. On the
-current generic S3 presigner this test is expected to expose that gap, because a presigned
-`PutObject` is reusable unless storage policy or conditional-write support adds a one-write guard.
-
-## SUB-09/11/12 infrastructure-window evidence
-
-Three SUB cases need facts the public application surface deliberately cannot expose. They consume
-versioned, local Operations evidence, then independently read the named public job/log/result objects.
-Evidence files must contain no credentials, signed URLs or secret configuration values.
-
-`SCVS_E2E_SUB09_INTERNAL_ERROR_EVIDENCE_PATH` records one job submitted while a temporary external
-dependency or Batch path was unavailable. `published_*_sha256` is the SHA-256 of the target's complete
-`wasms/<hash>.json` bytes before and after the window, or `null` when it was absent both times:
-
-```json
-{
-  "schema": "scvs-e2e-sub09-internal-error-v1",
-  "job_id": "<verification job uuid>",
-  "fault_kind": "batch_job_failed_no_artifact",
-  "expected_error_code": "batch_job_failed_no_artifact",
-  "applied_at": "2026-08-20T12:00:00.000Z",
-  "restored_at": "2026-08-20T12:10:00.000Z",
-  "published_before_sha256": "<64 hex or null>",
-  "published_after_sha256": "<same 64 hex or null>"
-}
-```
-
-`SCVS_E2E_SUB11_EVIDENCE_PATH` is produced by this sequence: hold dispatch, submit and observe
-`queued`, deploy the stricter policy to verification-svc and orchestrator-svc together, resume, wait
-for rejection, restore policy/capacity. Hash the exact published `policy.json` bytes in each state:
-
-```json
-{
-  "schema": "scvs-e2e-sub11-v1",
-  "job_id": "<verification job uuid>",
-  "image_digest": "docker.io/stellar/stellar-cli@sha256:<64 hex>",
-  "expected_error_code": "image_not_policy_accepted",
-  "queued_at": "2026-08-20T12:00:00.000Z",
-  "policy_changed_at": "2026-08-20T12:05:00.000Z",
-  "dispatch_resumed_at": "2026-08-20T12:06:00.000Z",
-  "restored_at": "2026-08-20T12:15:00.000Z",
-  "policy_before_sha256": "<64 hex>",
-  "policy_restricted_sha256": "<different 64 hex>"
-}
-```
-
-`SCVS_E2E_SUB12_EVIDENCE_PATH` uses the already-prepared F-UPG contract. Put it in `old`, hold
-dispatch, submit its v1 source by `contract_id`, observe `queued`, switch it to `new`, resume, wait for
-publication, then restore dispatch. The contract deliberately remains at `new` so the spec's final
-public preflight independently confirms the new binding:
-
-```bash
-SCVS_FIXTURE_TESTNET_ACCOUNT=<alias> test/fixtures/e2e/set-upgrade-testnet-version.sh old
-# hold dispatch; submit F-UPG and record job/queued_at
-SCVS_FIXTURE_TESTNET_ACCOUNT=<alias> test/fixtures/e2e/set-upgrade-testnet-version.sh new
-# resume dispatch; wait for terminal; restore dispatch and write the evidence file
-```
-
-```json
-{
-  "schema": "scvs-e2e-sub12-v1",
-  "job_id": "<verification job uuid>",
-  "contract_id": "<F-UPG contract id>",
-  "old_hash": "<F-UPG v1 64 hex>",
-  "new_hash": "<F-UPG v2 64 hex>",
-  "queued_at": "2026-08-20T12:00:00.000Z",
-  "upgraded_at": "2026-08-20T12:02:00.000Z",
-  "dispatch_resumed_at": "2026-08-20T12:03:00.000Z",
-  "restored_at": "2026-08-20T12:15:00.000Z"
-}
-```
-
-No generic shell-command hook exists in the Jest process. The sole exception is
-`E2E-QRY-09/peer_unreachable`: it owns a narrow AWS CLI control that can only scale the opposite
-environment's `verification-svc` to zero and restore its observed desired count. It derives the
-peer from `SCVS_E2E_ENV` (`dev -> staging`, `staging -> dev`), requires an exact confirmation token,
-and verifies `SCVS_VERIFIER_ID` from the peer task definition before issuing `update-service`. Its
-configuration and maintenance-window requirements are documented in [`.env.example`](.env.example).
-All other deployment mutation remains an explicit Operations action with a restoration plan; the test
-process receives facts and read-only public URLs.
-
-## The one case that reaches outside the public surface
-
-`E2E-SRC-03` is the exception to this package's own rule, and the exception is the point. It asserts
-that a private upload's staging object is **gone** once the job terminates — and nothing on the public
-surface can see a staging object. There is no upload `GET`/`HEAD` route, the job body does not project
-`sourceRef`, and `GET …/log` refuses every key outside `build-logs/`. All three are the same privacy
-boundary: that bucket holds other submitters' private tarballs, and this case must not weaken it to
-make itself easier to write.
-
-So the case reads the object through a configured observer ([`support/staging.ts`](support/staging.ts))
-and skips, naming what is missing, when a run has none. Two are admissible:
-`SCVS_E2E_STAGING_PROBE_URL`, an existence-only control-plane probe — the only option against a bucket
-shared with real submissions, because `HeadObject` requires `s3:GetObject` and there is no HEAD-only
-permission — or `SCVS_E2E_STAGING_BUCKET`/`_REGION` against an **isolated** E2E bucket. Configuring the
-bound deployment's own bucket is refused at load, not warned about.
-
-What the case must never do is fall back to the signal the API *does* offer. Re-submitting the same
-`upload_id` answers `400 upload_not_found` once the `uploads` row is gone — but `deleteStagedUpload`
-deletes the row first and the object second and swallows a failure on the second, so that probe passes
-in exactly the state the case exists to catch. Worse, the residue is not self-healing: the expiry sweep
-enumerates objects *from* the uploads rows, so once the row is gone the orphan cannot be found again.
-The probe is recorded as a diagnostic and never as evidence.
+Every case here enters through the public surface and reads. No case stops a service, edits the
+Trusted Verifiers List, injects a storage fault or shells out, and the harness has no generic
+shell-command hook. Deployment mutation is an explicit Operations action with a restoration plan,
+carried out and evidenced outside this package; the test process receives facts and read-only
+public URLs.
 
 ## The drift ledger
 
@@ -689,21 +543,23 @@ local tar rather than our validator.
 
 ## Coverage
 
-Implemented, by case ID. The documented scope is limited to paths executable against the normal
-dev/staging topology; controlled peer failures and policy-dispute aggregation stay in component tests.
+Implemented, by case ID. Every case here runs against the normal dev/staging topology through the
+public surface. A case needing a maintenance window, a fault injector, a mainnet deployment or an
+Operations export is not implemented here; the omissions column says which, and the behaviour stays
+covered by component tests.
 
 | Group | Implemented | Notable omissions |
 | --- | --- | --- |
-| SUB | 01 (×2 networks), **02/compose_cache_miss**, **02/compose_cache_hit**, **02/compose_unofficial_pair (×3 pairs)**, **03**, 04, 05 (×3), 06, 07/mismatch_no_retry, 08 (×3), **09/unsupported_toolchain**, 10, 13 (×2), 14 (×2), **18/dry_run** | 09's infrastructure suffix; 11, 12 (AUTO-INFRA); 15 (BROWSER); 16 (needs the CLI helper) |
-| DEDUP | 01, 02 (×4), 03, 03/cross_network, 04/verified_is_terminal, **04/force_reverify_not_user_facing (public negative half)**, 05 (×2), **06/build_timeout_requeued**, **06/non_retryable_returned_for_correction** | 04 operator force-reverify + audit evidence (blocked on undefined/unimplemented P11); **06/internal_error_requeued** (AUTO-INFRA) |
-| PUB | 02, 04 (×5), 07, 08, 09, 10, 11 (×3), 14, 15, 17 (×2) | 01, 05, 12, 13, 16 (AUTO-INFRA); 03 (needs the draft Registry schema) |
+| SUB | 01 (×2 networks), **02/compose_cache_miss**, **02/compose_cache_hit**, **02/compose_unofficial_pair (×3 pairs)**, **03**, 04, 05 (×3), 06, 07/mismatch_no_retry, 08 (×3), **09/unsupported_toolchain**, 10, 13 (×2), 14 (×2), **18/dry_run** | 09's infrastructure suffix; 11, 12 (need a deployment-mutating window); 15 (BROWSER); 16 (needs the CLI helper) |
+| DEDUP | 01, 02 (×4), 03, 04/verified_is_terminal, **04/force_reverify_not_user_facing (public negative half)**, 05 (×2), **06/build_timeout_requeued**, **06/non_retryable_returned_for_correction** | 03/cross_network (needs the same bytes deployed on mainnet); 04 operator force-reverify + audit evidence (blocked on undefined/unimplemented P11); 06/internal_error_requeued (needs an injected infrastructure fault) |
+| PUB | 02, 04 (×5), 07, 08, 09, 11 (×3), 14, 15, 17 (×2) | 06 (needs a source somebody can switch off); 10 (needs the same bytes deployed on mainnet); 01, 05, 12, 13, 16 (need a deployment-mutating window); 03 (needs the draft Registry schema) |
 | QRY | 01, 06, 07, **08**, 11, 12, **13** | 02–05, 09, 10 are component-only because normal dev/staging cannot create policy disagreement, controlled peer failure, or three TVL states |
 | VERIFY | **HEALTH** | — |
 | WEB | **01/public_console_preflight**; SDK-04/browser | Result explorer remains feature-flagged |
 | SDK | **01, 02, 04/node + browser, 07** | 03 has no public E2E; 06 is **RELEASE** and lives outside this harness (`eng-tools/check-sdk-registry-install.mjs`, run by `release.yml` after the publish step) — it needs a published version, not a deployment. Peer failure and `results_urls` safety are SDK component tests |
-| SRC | 01, 04, 05, **06**, 07 (rewritten per docs/invariants.md rule 20), **08 (×2 rows)**, **11 + 11/negative_control** | 02 (subsumed by 04's upload path), 03 (AUTO-INFRA); 10 (MANUAL) |
-| SEP55 | **01, 03/legacy_source_repo, 03/contains_but_not_prefix, 03/case_variant, 03/empty_after_prefix, 04** | 02 (AUTO-INFRA, needs P8 per-domain egress blocking); 05, 06 (MANUAL) |
-| SEC | **01, 02**, 03 (×4), 04, 05/manifest_path_escape, 11, 12, 14/no_management_surface, 14/policy_matches_boot | 06, **07 (component-only in builder; no E2E without deployment-level network telemetry)**, 08–10, 15, 16 (AUTO-INFRA); 13 |
+| SRC | 01, 04, 05, **06**, 07 (rewritten per docs/invariants.md rule 20) | 02 (subsumed by 04's upload path); 03 (needs a privileged staging observer); 08 (needs a source somebody can switch off); 11 (needs an object-store fault injector); 10 (MANUAL) |
+| SEP55 | **01, 03/legacy_source_repo, 03/contains_but_not_prefix, 03/case_variant, 03/empty_after_prefix, 04** | 02 (needs P8 per-domain egress blocking); 05, 06 (MANUAL) |
+| SEC | **01, 02**, 03 (×4), 04, 05/manifest_path_escape, 11, 12, 14/no_management_surface, 14/policy_matches_boot | 06, **07 (component-only in builder; no E2E without deployment-level network telemetry)**, 08–10, 15, 16 (need a P8 Operations export or a deployment-mutating window); 13 |
 
 ## Conventions
 

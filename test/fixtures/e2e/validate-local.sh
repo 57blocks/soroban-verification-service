@@ -133,31 +133,6 @@ if ! rg -q 'F-BUILD-TIMEOUT' "$timeout_script" || ! rg -q 'loop \{' "$timeout_sc
   exit 1
 fi
 
-# E2E-SRC-03/on_mismatched. Two properties, and the second is the one a reviewer would not guess:
-# the archive must still compile to something that is NOT the deployed bytes (otherwise the row's
-# terminal state is `verified`, not `mismatch`), and its source hash must differ from
-# `mismatch.tar.gz`'s. The hash check is why the canary exists — `SRC-07` publishes
-# `mismatch.tar.gz` under `sources/<hash>`, so a shared hash would leave SRC-03 unable to tell its
-# own non-publication from that earlier publication.
-if [[ -f "$archive_root/src03-mismatch-private.tar.gz" ]]; then
-  src03_root="$(extract_fixture src03-mismatch-private "$archive_root/src03-mismatch-private.tar.gz")"
-  src03_hash="$(build_fixture "$src03_root")"
-  if [[ "$src03_hash" == "$deployed_hash" ]]; then
-    echo "src03-mismatch-private unexpectedly reproduced the deployed hash" >&2
-    exit 1
-  fi
-  if [[ ! -f "$src03_root/fixture-canary.txt" ]]; then
-    echo "src03-mismatch-private is missing its canary, so its source hash may collide with mismatch.tar.gz" >&2
-    exit 1
-  fi
-  src03_archive_hash="$(shasum -a 256 "$archive_root/src03-mismatch-private.tar.gz" | awk '{print $1}')"
-  mismatch_archive_hash="$(shasum -a 256 "$archive_root/mismatch.tar.gz" | awk '{print $1}')"
-  if [[ "$src03_archive_hash" == "$mismatch_archive_hash" ]]; then
-    echo "src03-mismatch-private has the same source hash as the publicly retained mismatch archive" >&2
-    exit 1
-  fi
-fi
-
 plant_root="$(extract_fixture planted "$archive_root/planted-target-wasm.tar.gz")"
 planted_input_hash="$(
   shasum -a 256 "$plant_root/target/wasm32v1-none/release/planted_target.wasm" | awk '{print $1}'

@@ -38,8 +38,8 @@ rules:
 Verified by: `services/query-svc/src/modules/aggregation/aggregation-sync.service.ts`
 (the aggregation record's own `updated_at` as sort key, `unavailable_verifiers` on failure);
 `test/integration/cases/qry/qry-bulk-load.spec.ts` (E2E-QRY-08, cursor form and monotonic advance);
-`test/integration/cases/qry/qry-peer-outage.spec.ts` (E2E-QRY-09, retained aggregate survives a
-peer outage, `unavailable_verifiers` names the failure).
+`services/query-svc/test/aggregation.spec.ts` (serves retained peer evidence while naming the peer's
+failed sync).
 
 ## Verifier discovery: manifest, policy, and the Trusted Verifiers List
 
@@ -155,7 +155,8 @@ time, while that verifier is unreachable. The retained copy is a cache, not a st
 is derived from result roots and discardable, which is what keeps this layer replaceable by any
 other implementation reading the same TVL and result roots.
 
-Verified by: `test/integration/cases/qry/qry-peer-outage.spec.ts` (E2E-QRY-09).
+Verified by: `services/query-svc/test/aggregation.spec.ts` (serves retained peer evidence while
+naming the peer's failed sync).
 
 ## The SDK's aggregation mode
 

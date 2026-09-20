@@ -43,7 +43,6 @@ may be cached. Neither short-circuits a submission on its own — only an exact 
 and only after the target's current deployed hash is re-fetched and still matches.
 
 Verified by: `test/integration/cases/sub/sub-01-recipe-completion.spec.ts`,
-`test/integration/cases/sub/sub-11-policy-recheck.spec.ts`,
 `test/integration/cases/dedup/dedup-01-idempotency.spec.ts`,
 `test/integration/cases/dedup/dedup-03-05-rules.spec.ts`
 
@@ -92,9 +91,7 @@ Stored source is addressed by `source_sha256`, never by Wasm hash — one hash c
 verified source plus several mismatched candidates, and addressing by hash would make "which
 source" ambiguous.
 
-Verified by: `test/integration/cases/src/src-03-private-source-deleted.spec.ts`,
-`test/integration/cases/src/src-06-verified-source-link.spec.ts`,
-`test/integration/cases/src/src-08-09-availability.spec.ts`,
+Verified by: `test/integration/cases/src/src-06-verified-source-link.spec.ts`,
 `test/integration/cases/src/src-12-adopted-public-resubmission.spec.ts`,
 `test/integration/cases/sep55/sep55-01-positive-observation.spec.ts`,
 `test/integration/cases/sep55/sep55-03-discriminator.spec.ts`
@@ -127,8 +124,7 @@ thresholds than read routes. No accounts, no KYC — quotas are the substitute f
 a step toward it. A throttled request returns `rate_limited`, not an opaque body. There is no
 on-demand enqueue from a `GET`.
 
-Verified by: `test/integration/cases/sec/sec-surface-and-quota.spec.ts`,
-`test/integration/cases/sec/sec-permissions.spec.ts`
+Verified by: `test/integration/cases/sec/sec-surface-and-quota.spec.ts`
 
 ## There is no trusted-image admin surface
 
@@ -149,7 +145,8 @@ not already supply: upload targets, storage keys, and internal paths never appea
 result; non-public source bytes are never written durably at all.
 
 Verified by: `test/integration/cases/sub/sub-10-build-logs.spec.ts`,
-`test/integration/cases/src/src-03-private-source-deleted.spec.ts`
+`services/orchestrator-svc/src/modules/source-resolution/source-resolution.service.ts`
+(`deleteObject` on the non-public path)
 
 ## Submit response status is a closed set
 

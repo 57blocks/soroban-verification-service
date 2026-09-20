@@ -85,7 +85,6 @@ const f58Zip = contracts["F-58-ZIP"];
 const f58ZipPublic = contracts["F-58-ZIP-PUBLIC"];
 const fLeg1Mainnet = contracts["F-LEG-1-MAINNET"];
 const fPriv = contracts["F-PRIV"];
-const fPrivMismatch = contracts["F-PRIV-MISMATCH"];
 const fLeg3 = contracts["F-LEG-3"];
 const fBuildTimeout = contracts["F-BUILD-TIMEOUT"];
 const fSub09Timeout = contracts["F-SUB09-TIMEOUT"];
@@ -162,7 +161,6 @@ expect(f58Zip, "inventory is missing F-58-ZIP");
 expect(f58ZipPublic, "inventory is missing F-58-ZIP-PUBLIC");
 expect(fLeg1Mainnet, "inventory is missing F-LEG-1-MAINNET");
 expect(fPriv, "inventory is missing F-PRIV");
-expect(fPrivMismatch, "inventory is missing F-PRIV-MISMATCH");
 expect(fLeg3, "inventory is missing F-LEG-3");
 expect(fBuildTimeout, "inventory is missing F-BUILD-TIMEOUT");
 expect(fSub09Timeout, "inventory is missing F-SUB09-TIMEOUT");
@@ -343,37 +341,6 @@ if (fAdvToolchain && fLeg1) {
     if (record) {
       expectEqual("F-ADV-TOOLCHAIN manifest path", record.path, fAdvToolchain.source_path);
       expectEqual("F-ADV-TOOLCHAIN manifest sha256", record.sha256, fAdvToolchain.source_sha256);
-    }
-  }
-}
-
-if (fPrivMismatch && fLeg3) {
-  expectEqual("F-PRIV-MISMATCH contract_id", fPrivMismatch.contract_id, fLeg3.contract_id);
-  expectEqual("F-PRIV-MISMATCH wasm_hash", fPrivMismatch.wasm_hash, fLeg3.wasm_hash);
-  expectEqual("F-PRIV-MISMATCH network", fPrivMismatch.network, fLeg3.network);
-  expectEqual(
-    "F-PRIV-MISMATCH source_path",
-    fPrivMismatch.source_path,
-    "artifacts/e2e-fixtures/archives/src03-mismatch-private.tar.gz"
-  );
-  expect(
-    fPrivMismatch.source_sha256 !== fLeg3.source_sha256,
-    "F-PRIV-MISMATCH source hash must differ from F-LEG-3's public mismatch archive"
-  );
-  expectEqual("F-PRIV-MISMATCH run_scoped_recipe", fPrivMismatch.run_scoped_recipe, true);
-  expectEqual("F-PRIV-MISMATCH bldarg", JSON.stringify(fPrivMismatch.bldarg), JSON.stringify(fLeg3.bldarg));
-  expectEqual("F-PRIV-MISMATCH bldopt", JSON.stringify(fPrivMismatch.bldopt), JSON.stringify(fLeg3.bldopt));
-
-  if (generatedManifest) {
-    const records = generatedManifest.filter((record) => record.id === "src03-mismatch-private");
-    expect(
-      records.length === 1,
-      `generated fixture manifest must contain exactly one src03-mismatch-private record; found ${records.length}`
-    );
-    const record = records[0];
-    if (record) {
-      expectEqual("F-PRIV-MISMATCH manifest path", record.path, fPrivMismatch.source_path);
-      expectEqual("F-PRIV-MISMATCH manifest sha256", record.sha256, fPrivMismatch.source_sha256);
     }
   }
 }

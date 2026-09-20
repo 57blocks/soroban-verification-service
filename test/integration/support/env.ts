@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type ExecutionMode = "AUTO" | "AUTO-SLOW" | "AUTO-INFRA" | "PERF" | "BROWSER" | "MANUAL";
+export type ExecutionMode = "AUTO" | "AUTO-SLOW" | "PERF" | "BROWSER" | "MANUAL";
 export type AutoScope = "auto" | "slow" | "all";
 
 function str(name: string): string | undefined {
@@ -45,8 +45,6 @@ export interface E2eEnv {
 
   readonly network: "mainnet" | "testnet";
 
-  /** `AUTO-INFRA` cases mutate deployment state; they need their own opt-in and a maintenance window. */
-  readonly allowInfra: boolean;
   /** Performance cases consume shared build capacity and run only through the explicit perf path. */
   readonly allowPerf: boolean;
   /** Selects routine automated cases, real-timeout cases, or both. */
@@ -89,7 +87,6 @@ export const env: E2eEnv = Object.freeze({
   webUrl: str("SCVS_E2E_WEB_URL") && trimTrailingSlash(str("SCVS_E2E_WEB_URL")!),
   resultRoot: str("SCVS_E2E_RESULT_ROOT") && trimTrailingSlash(str("SCVS_E2E_RESULT_ROOT")!),
   network,
-  allowInfra: flag("SCVS_E2E_ALLOW_INFRA"),
   allowPerf: flag("SCVS_E2E_ALLOW_PERF"),
   autoScope,
   allowBrowser: flag("SCVS_E2E_ALLOW_BROWSER"),
@@ -104,13 +101,6 @@ export const env: E2eEnv = Object.freeze({
  * deployment this repository does not manage.
  */
 const deployEnv = str("SCVS_E2E_ENV");
-
-/** The two managed environments that may participate in the peer-outage E2E control. */
-export type ManagedE2eEnvironment = "dev" | "staging";
-
-/** `SCVS_E2E_ENV` remains open for ordinary E2E cases that bind a deployment artifact. */
-export const managedE2eEnvironment: ManagedE2eEnvironment | undefined =
-  deployEnv === "dev" || deployEnv === "staging" ? deployEnv : undefined;
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -363,174 +353,6 @@ export const archiveLimitProvenance: Readonly<Record<keyof typeof archiveBounds,
     limitUncompressedBytes: archiveBounds.limitUncompressedBytes.describe,
     limitArchiveBytes: archiveBounds.limitArchiveBytes.describe,
   });
-
-/** How `E2E-SRC-03` observes whether a private upload's staging object still exists. */
-export type StagingObserver =
-  | { readonly kind: "probe"; readonly probeUrl: string; readonly describe: string }
-  | {
-      readonly kind: "s3";
-      readonly bucket: string;
-      readonly region: string;
-      readonly describe: string;
-    }
-  | { readonly kind: "absent"; readonly describe: string };
-
-/**
- * The deployment's own staging bucket, as its artefact declares it — used only to refuse it as a direct-S3
- * target.
- */
-function boundDeploymentStagingBucket(): string | undefined {
-  if (!deployEnv) return undefined;
-  const artifact = loadDeployArtifact("verification-svc")?.artifact;
-  if (!artifact) return undefined;
-  const declared = declaredVariable(artifact, "SCVS_STORAGE_BUCKET");
-  const raw = declared?.value ?? declared?.default;
-  return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : undefined;
-}
-
-function resolveStagingObserver(): StagingObserver {
-  const probeUrl = str("SCVS_E2E_STAGING_PROBE_URL");
-  if (probeUrl) {
-    return {
-      kind: "probe",
-      probeUrl: trimTrailingSlash(probeUrl),
-      describe: `existence-only probe at ${trimTrailingSlash(probeUrl)}`,
-    };
-  }
-
-  const bucket = str("SCVS_E2E_STAGING_BUCKET");
-  if (!bucket) {
-    return {
-      kind: "absent",
-      describe:
-        "no staging observer: set SCVS_E2E_STAGING_PROBE_URL (existence-only probe, required on a " +
-        "shared bucket) or SCVS_E2E_STAGING_BUCKET + SCVS_E2E_STAGING_REGION against an isolated " +
-        "E2E bucket — see E2E-SRC-03's evidence boundary",
-    };
-  }
-
-  const region = str("SCVS_E2E_STAGING_REGION");
-  if (!region) {
-    throw new Error(
-      "SCVS_E2E_STAGING_BUCKET is set but SCVS_E2E_STAGING_REGION is not. Both are required, and " +
-        "neither is inferred: a region guessed from a default would HEAD a different bucket of the " +
-        "same name in another region and report `absent` for an object that exists."
-    );
-  }
-
-  const deploymentBucket = boundDeploymentStagingBucket();
-  if (deploymentBucket && deploymentBucket === bucket) {
-    throw new Error(
-      `SCVS_E2E_STAGING_BUCKET=${bucket} is the bucket config/deploy/${deployEnv}/verification-svc.json ` +
-        `declares as the deployment's own SCVS_STORAGE_BUCKET. HeadObject requires s3:GetObject, so ` +
-        `credentials for it can read every submitter's private tarball in that bucket — which is the ` +
-        `privacy boundary E2E-SRC-03 exists to protect. Use an isolated E2E staging bucket, or set ` +
-        `SCVS_E2E_STAGING_PROBE_URL to an existence-only probe that holds the permission itself.`
-    );
-  }
-
-  return {
-    kind: "s3",
-    bucket,
-    region,
-    describe: `HeadObject on s3://${bucket} (${region})`,
-  };
-}
-
-export const stagingObserver: StagingObserver = Object.freeze(resolveStagingObserver());
-
-/** The approved window between a job's first terminal observation and the staging object disappearing. */
-export const stagingDeletionDeadlineMs: number | undefined = (() => {
-  const raw = str("SCVS_E2E_STAGING_DELETION_DEADLINE_MS");
-  if (!raw) return undefined;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(
-      `SCVS_E2E_STAGING_DELETION_DEADLINE_MS must be a positive number of milliseconds; received ${JSON.stringify(raw)}.`
-    );
-  }
-  return value;
-})();
-
-/** A structurally valid but deliberately unresolved contract id for `E2E-SRC-03/on_internal_error`. */
-export const internalErrorTargetContractId: string | undefined = (() => {
-  const contractId = str("SCVS_E2E_INTERNAL_ERROR_CONTRACT_ID");
-  if (!contractId) return undefined;
-  if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
-    throw new Error(
-      "SCVS_E2E_INTERNAL_ERROR_CONTRACT_ID must be a valid Stellar contract id for a controlled " +
-        "unresolved-target test; received " +
-        JSON.stringify(contractId)
-    );
-  }
-  return contractId;
-})();
-
-/** Two control-plane capabilities the SRC group needs, and the reason they are endpoints rather than flags. */
-const ASSUMPTION_ENV_NAMES = [
-  "SCVS_E2E_ASSUME_SOURCE_DARK",
-  "SCVS_E2E_ASSUME_RETENTION_FAILED",
-] as const;
-
-for (const name of ASSUMPTION_ENV_NAMES) {
-  if (str(name)) {
-    throw new Error(
-      `${name} is not read, and will not be. E2E-SRC-08 and E2E-SRC-11 are about states somebody has ` +
-        `to actually establish — a source that really 404s, an object-store prefix whose writes really ` +
-        `fail. Asserting the premise from an environment variable would make the case report a green ` +
-        `result for a condition that never existed. Configure SCVS_E2E_DARK_SOURCE_CONTROL_URL or ` +
-        `SCVS_E2E_OBJECT_STORE_FAULT_URL instead, or let the case skip.`
-    );
-  }
-}
-
-export type ControlEndpoint =
-  | { readonly kind: "endpoint"; readonly controlUrl: string; readonly describe: string }
-  | { readonly kind: "absent"; readonly describe: string };
-
-function controlEndpoint(name: string, absent: string): ControlEndpoint {
-  const raw = str(name);
-  if (!raw) return { kind: "absent", describe: absent };
-
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new Error(`${name} must be an absolute http(s) URL; received ${JSON.stringify(raw)}.`);
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`${name} must be http or https; received ${parsed.protocol}.`);
-  }
-  return {
-    kind: "endpoint",
-    controlUrl: trimTrailingSlash(raw),
-    describe: `${name}=${trimTrailingSlash(raw)}`,
-  };
-}
-
-/** Takes `F-DARK`'s source URL offline and brings it back — `POST` with `{"available": boolean}`. */
-export const darkSourceControl: ControlEndpoint = Object.freeze(
-  controlEndpoint(
-    "SCVS_E2E_DARK_SOURCE_CONTROL_URL",
-    "no dark-source control endpoint: run test/fixtures/e2e/dark-source-server.mjs where the " +
-      "deployment can reach it and set SCVS_E2E_DARK_SOURCE_CONTROL_URL to its /control route " +
-      "(registry.yaml's F-DARK entry: \"expose the fixture server at a URL reachable by the " +
-      "deployment under test\")"
-  )
-);
-
-/**
- * Prerequisite P12, scoped to one prefix — `POST` with `{"prefix": "sources/", "mode": "fail_writes" |
- * "healthy"}`.
- */
-export const objectStoreFaultInjector: ControlEndpoint = Object.freeze(
-  controlEndpoint(
-    "SCVS_E2E_OBJECT_STORE_FAULT_URL",
-    "no object-store fault injector (plan prerequisite P12): set SCVS_E2E_OBJECT_STORE_FAULT_URL to " +
-      "a control endpoint that can fail writes under a single result-root prefix while leaving the " +
-      "others healthy"
-  )
-);
 
 /**
  * A 📐-marked case must read its parameter from the deployment rather than invent one — so each is optional

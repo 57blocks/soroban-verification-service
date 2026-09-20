@@ -123,32 +123,6 @@ package_private_canary() {
   assert_hash "$output" "$expected_hash"
 }
 
-package_src03_private_mismatch() {
-  local output="$1"
-  local expected_hash="$2"
-  local tree="$work_root/src03-mismatch-private"
-  local source_file
-
-  cp -R "$work_root/base" "$tree"
-  source_file="$tree/source/contracts/verified-demo/src/lib.rs"
-  if ! grep -q '"Hello"' "$source_file"; then
-    echo "canonical source no longer contains the expected greeting: $source_file" >&2
-    exit 1
-  fi
-  perl -0pi -e 's/"Hello"/"Fixture mismatch"/' "$source_file"
-  printf 'SCVS-SRC03-MISMATCH-CANARY-20260820\n' > "$tree/source/fixture-canary.txt"
-  mkdir -p "$(dirname "$output")"
-  (
-    cd "$tree"
-    find source -exec touch -t 202001010000 {} +
-    LC_ALL=C find source -print | LC_ALL=C sort \
-      | COPYFILE_DISABLE=1 "$tar_bin" --format ustar --no-recursion \
-          "${tar_owner_args[@]}" -cf - -T - \
-      | gzip -n > "$output"
-  )
-  assert_hash "$output" "$expected_hash"
-}
-
 package_multi_package() {
   local output="$1"
   local expected_hash="$2"
@@ -236,14 +210,9 @@ package_private_canary \
   "$archive_root/private-canary.tar.gz" \
   "$private_hash"
 
-src03_mismatch_hash="$(jq -er '.contracts["F-PRIV-MISMATCH"].source_sha256' "$inventory")"
-package_src03_private_mismatch \
-  "$archive_root/src03-mismatch-private.tar.gz" \
-  "$src03_mismatch_hash"
-
 multi_package_hash="$(jq -er '.contracts["F-MULTIPKG"].source_sha256' "$inventory")"
 package_multi_package \
   "$archive_root/multi-package-source.tar.gz" \
   "$multi_package_hash"
 
-echo "prepared and verified canonical, private/public ZIP source trees, private-canary, src03-mismatch-private, mismatch, bulk-001, and multi-package E2E source archives"
+echo "prepared and verified canonical, private/public ZIP source trees, private-canary, mismatch, bulk-001, and multi-package E2E source archives"

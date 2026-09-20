@@ -28,9 +28,6 @@ function missingReason(requirements: CaseRequirements): string | undefined {
   if (requirements.mode === "AUTO-SLOW" && env.autoScope === "auto") {
     return "AUTO-SLOW is not selected; set SCVS_E2E_AUTO_SCOPE=slow or all";
   }
-  if (requirements.mode === "AUTO-INFRA" && !env.allowInfra) {
-    return "AUTO-INFRA changes deployment state; set SCVS_E2E_ALLOW_INFRA=1 in a dedicated window";
-  }
   if (requirements.mode === "PERF" && !env.allowPerf) {
     return "PERF consumes shared build capacity; run a Locust performance command or set SCVS_E2E_ALLOW_PERF=1";
   }

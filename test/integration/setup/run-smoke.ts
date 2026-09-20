@@ -131,7 +131,6 @@ function assertBrowserCasesExecuted(report: unknown): void {
 const smokeEnv = {
   ...process.env,
   SCVS_E2E_SMOKE: "1",
-  SCVS_E2E_ALLOW_INFRA: "0",
   SCVS_E2E_ALLOW_BROWSER: "1",
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --experimental-vm-modules`.trim(),
 };

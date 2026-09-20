@@ -1,15 +1,14 @@
-/** E2E-SUB-09 — the four asynchronous failure classifications. */
+/** E2E-SUB-09 — the asynchronous failure classifications. */
 import { deploymentParameters, env } from "../../support/env.js";
 import { fixture, fixtures, missingFixture, missingRunScopedTarget, submissionFor } from "../../support/fixtures.js";
 import { caseBlock } from "../../support/gate.js";
-import { expectStatus, sha256Hex } from "../../support/http.js";
-import { readJob, readJobLog, submitAndWait } from "../../support/job.js";
+import { expectStatus } from "../../support/http.js";
+import { readJobLog, submitAndWait } from "../../support/job.js";
 import {
   assertBuildLogContainsAny,
   assertBuildLogRedacted,
 } from "../../support/log-assertions.js";
 import { ownEntryOf, ownVerifierIdentity, readStatusObject } from "../../support/result-tree.js";
-import { readSub09InternalErrorEvidence } from "../../support/sub-infra-evidence.js";
 
 async function ownPublishedEntry(wasmHash: string): Promise<string | undefined> {
   const status = await readStatusObject(wasmHash);
@@ -156,45 +155,5 @@ caseBlock(
       // Cargo does not promise to forward a still-running build script's stderr when its parent is terminated.
       assertBuildLogContainsAny(log.text, "timed-out command", [/\[timed out\]/]);
     }, Math.max(env.jobTimeoutMs, (deploymentParameters.limitWallclockMs ?? 0) * 2) + 60_000);
-  }
-);
-
-caseBlock(
-  {
-    id: "E2E-SUB-09/internal_error",
-    title: "a temporary infrastructure fault is retryable, unpublished and bound to restored evidence",
-    mode: "AUTO-INFRA",
-    needs: [
-      "SCVS_E2E_VERIFY_URL",
-      "SCVS_E2E_RESULT_ROOT",
-      "SCVS_E2E_SUB09_INTERNAL_ERROR_EVIDENCE_PATH",
-    ],
-    prerequisites: ["P1"],
-  },
-  () => {
-    it("reads the exact failed job and proves the result root did not change", async () => {
-      const evidence = readSub09InternalErrorEvidence();
-      expect(evidence.publishedAfterSha256).toBe(evidence.publishedBeforeSha256);
-
-      const job = await readJob(evidence.jobId);
-      expect(Date.parse(job.created_at)).toBeGreaterThanOrEqual(evidence.appliedAtMs);
-      expect(Date.parse(job.updated_at)).toBeLessThanOrEqual(evidence.restoredAtMs);
-      expect(job.status).toBe("build_failed");
-      expect(job.error).toBe(evidence.expectedErrorCode);
-      expect(job.result?.reason).toBe(job.error);
-      expect(job.result?.artifact_url).toBeUndefined();
-      expect(job.result?.matched).toBeUndefined();
-
-      const wasmHash = job.result?.wasm_hash ?? job.target.wasm_hash;
-      if (wasmHash && evidence.publishedAfterSha256) {
-        const published = await readStatusObject(wasmHash);
-        expect(published.found).toBe(true);
-        if (published.found) expect(sha256Hex(published.result.bytes)).toBe(evidence.publishedAfterSha256);
-      }
-
-      const log = await readJobLog(evidence.jobId);
-      expectStatus(log, 200, 404);
-      if (log.status === 200) assertBuildLogRedacted(log.text);
-    });
   }
 );

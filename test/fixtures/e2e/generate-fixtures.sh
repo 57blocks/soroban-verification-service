@@ -153,24 +153,6 @@ private_archive="$archive_root/private-canary.tar.gz"
 package_tree "$private_tree" "$private_archive"
 record_archive "private-canary" "private upload retention and backup search" "$private_archive"
 
-# E2E-SRC-03/on_mismatched. The mismatch edit plus a canary the build never reads, which is the whole
-# point: the verdict stays `mismatched` while the source hash diverges from `mismatch.tar.gz`. That
-# divergence is load-bearing rather than tidy — `SRC-07` submits `mismatch.tar.gz` with
-# `is_public: true`, so its bytes are retained under `sources/<hash>`, and an SRC-03 row reusing that
-# hash could not tell "this private submission was not published" from "a public case published the
-# same archive earlier". Same reason `private-canary` above exists rather than reusing the canonical
-# source.
-src03_mismatch_tree="$work_root/src03-mismatch-private"
-clone_base "$src03_mismatch_tree"
-perl -0pi -e 's/"Hello"/"Fixture mismatch"/' \
-  "$src03_mismatch_tree/source/contracts/verified-demo/src/lib.rs"
-printf 'SCVS-SRC03-MISMATCH-CANARY-20260820\n' > "$src03_mismatch_tree/source/fixture-canary.txt"
-src03_mismatch_archive="$archive_root/src03-mismatch-private.tar.gz"
-package_tree "$src03_mismatch_tree" "$src03_mismatch_archive"
-record_archive "src03-mismatch-private" \
-  "private-only mismatch with a source hash distinct from the publicly retained mismatch archive" \
-  "$src03_mismatch_archive"
-
 toolchain_tree="$work_root/toolchain-selector"
 clone_base "$toolchain_tree"
 printf '[toolchain]\nchannel = "1.99.0"\nprofile = "minimal"\n' \

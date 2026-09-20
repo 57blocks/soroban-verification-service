@@ -121,8 +121,7 @@ out by their timeouts.
 | Submitter identity | Never collected |
 
 Verified by: `services/orchestrator-svc/src/modules/source-resolution/source-resolution.service.ts`
-(`deleteObject` on the non-public path), `test/integration/cases/src/src-03-private-source-deleted.spec.ts`
-(E2E-SRC-03).
+(`deleteObject` on the non-public path).
 
 Verification is independent of storage: a submission whose source is not stored still receives a real
 verdict, published like any other. A verdict is never downgraded because source became unavailable

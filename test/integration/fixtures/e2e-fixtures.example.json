@@ -161,24 +161,6 @@
       "network": "testnet",
       "contract_id": "C..."
     },
-    "F-XNET": {
-      "id": "F-XNET",
-      "note": "identical bytes deployed on both networks; the mainnet twin goes in F-XNET-MAINNET",
-      "network": "testnet",
-      "contract_id": "C...",
-      "wasm_hash": "<64 hex>",
-      "source_uri": "https://example.invalid/f-xnet.tar.gz",
-      "source_sha256": "<64 hex>"
-    },
-    "F-XNET-MAINNET": {
-      "id": "F-XNET-MAINNET",
-      "note": "the same bytes as F-XNET, deployed on mainnet",
-      "network": "mainnet",
-      "contract_id": "C...",
-      "wasm_hash": "<64 hex>",
-      "source_uri": "https://example.invalid/f-xnet.tar.gz",
-      "source_sha256": "<64 hex>"
-    },
     "F-UPG": {
       "id": "F-UPG",
       "note": "upgradeable; test/fixtures/e2e/set-upgrade-testnet-version.sh flips it between old/new",
@@ -216,15 +198,6 @@
       "id": "F-RULE-D-TIMEOUT",
       "note": "Run-scoped deployed target for E2E-DEDUP-06/build_timeout_requeued; deploy-testnet.sh creates it from f-leg-1-official.wasm with the run's salt.",
       "network": "testnet"
-    },
-    "F-DARK": {
-      "id": "F-DARK",
-      "note": "source_uri under runner control so it can be taken down; see test/fixtures/e2e/dark-source-server.mjs",
-      "network": "testnet",
-      "contract_id": "C...",
-      "wasm_hash": "<64 hex>",
-      "source_uri": "http://127.0.0.1:8787/source.tar.gz",
-      "source_sha256": "<64 hex>"
     },
     "F-MULTIPKG": {
       "id": "F-MULTIPKG",
