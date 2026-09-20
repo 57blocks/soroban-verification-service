@@ -165,6 +165,7 @@ describe("stage two validates the required evidence before it submits", () => {
     act(() => {
       result.current.form.setValue("source_sha256", SHA);
       result.current.form.setValue("source_uri", "https://example.org/src.tar.gz");
+      result.current.terms.onAcceptedChange(true);
     });
     await act(async () => {
       await result.current.submitCompletedManifest();
@@ -222,7 +223,7 @@ describe("the refusal is rendered beside the control that caused it", () => {
     render(<Card mode="upload_archive" />);
 
     expect(screen.getByTestId("source-access-message").textContent).toMatch(
-      /Select the exact \.tar\.gz/,
+      /Select the exact gzip tarball or zip/,
     );
   });
 });

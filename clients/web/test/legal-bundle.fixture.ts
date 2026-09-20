@@ -2,8 +2,8 @@
  * The wire bundle `GET /api/verification/v1/legal` answers with, for specs that drive the console.
  *
  * Every console spec needs one now: the submit path binds the operator's terms version, and it refuses to
- * submit when no bundle loaded (versioned-terms-and-assent design.md TA-1, TA-6). `effective_date` is null,
- * so acceptance is offered and not required — a spec that wants the enforced regime passes a date.
+ * submit when no bundle loaded. `effective_date` decides only whether the *server* rejects a submission
+ * carrying no accepted version; the console requires the act either way, so a spec that submits must accept.
  */
 export const legalBundleFixture = (effectiveDate: string | null = null) => ({
   // The generated client returns the whole `AxiosResponse`, not the unwrapped body — its mutator's type is

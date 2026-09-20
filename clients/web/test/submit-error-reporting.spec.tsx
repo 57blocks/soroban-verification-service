@@ -74,6 +74,9 @@ const runToSubmit = async (availableFields: Record<string, string> = {}) => {
   act(() => {
     result.current.form.setValue("source_sha256", "b".repeat(64));
     result.current.form.setValue("source_uri", "https://example.org/src.tar.gz");
+    // The console refuses a submission with no accepted terms, so every spec that means to reach the endpoint
+    // has to make the act first.
+    result.current.terms.onAcceptedChange(true);
   });
   await act(async () => {
     await result.current.submitCompletedManifest();

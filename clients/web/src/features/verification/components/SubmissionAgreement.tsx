@@ -44,6 +44,8 @@ type SubmissionAgreementProps = {
     onAcceptedChange: (accepted: boolean) => void;
     /** Why the control cannot be used, when it cannot — an unloaded bundle has nothing to accept. */
     disabledReason?: string;
+    /** Set once a submission has been turned away for want of the act. */
+    error?: string;
   };
 };
 
@@ -57,10 +59,15 @@ type SubmissionAgreementProps = {
  */
 export const SubmissionAgreement = ({ className, acceptance }: SubmissionAgreementProps) => {
   if (!acceptance) {
+    // Set off from the card's own body copy by the rule above it: as a run-on paragraph this sentence read as
+    // more description, which is how a submitter reaches the acceptance control never having seen the terms.
     return (
       <p
         data-testid="submission-agreement"
-        className={cn("m-0 mt-2 text-[0.8rem] leading-[1.5] text-ink/[0.55]", className)}
+        className={cn(
+          "m-0 mt-3 border-t border-line pt-3 text-[0.8rem] leading-[1.5] text-ink/[0.7]",
+          className,
+        )}
       >
         <AgreementText />
       </p>
@@ -68,14 +75,21 @@ export const SubmissionAgreement = ({ className, acceptance }: SubmissionAgreeme
   }
 
   const disabled = acceptance.disabledReason !== undefined;
+  const problem = acceptance.error ?? acceptance.disabledReason;
   return (
-    <div className={cn("m-0 mt-2", className)}>
+    <div
+      className={cn(
+        "rounded-md border bg-surface-alt p-3.5",
+        acceptance.error ? "border-danger-fg" : "border-line-strong",
+        className,
+      )}
+    >
       <label
         htmlFor="accept-terms"
         data-testid="submission-agreement"
         className={cn(
-          "flex items-start gap-2.5 text-[0.8rem] leading-[1.5]",
-          disabled ? "text-ink/[0.4]" : "cursor-pointer text-ink/[0.75]",
+          "flex items-start gap-2.5 text-[0.8125rem] leading-[1.5]",
+          disabled ? "text-ink/[0.4]" : "cursor-pointer text-ink",
         )}
       >
         <input
@@ -84,21 +98,29 @@ export const SubmissionAgreement = ({ className, acceptance }: SubmissionAgreeme
           type="checkbox"
           checked={acceptance.accepted}
           disabled={disabled}
+          required
+          aria-invalid={acceptance.error ? true : undefined}
           onChange={(event) => acceptance.onAcceptedChange(event.target.checked)}
           className="mt-0.5 size-4 shrink-0 accent-yellow"
-          {...(disabled ? { "aria-describedby": "accept-terms-blocked" } : {})}
+          {...(problem ? { "aria-describedby": "accept-terms-blocked" } : {})}
         />
         <span>
           <AgreementText />
+          {/* Non-breaking, so the marker never wraps to a line of its own at narrow widths. */}
+          <span className="text-danger-mark">{" *"}</span>
         </span>
       </label>
-      {disabled && (
+      {problem && (
         <p
           id="accept-terms-blocked"
           data-testid="accept-terms-blocked"
-          className="m-0 mt-1.5 text-[0.75rem] leading-[1.5] text-warning-fg"
+          role={acceptance.error ? "alert" : undefined}
+          className={cn(
+            "m-0 mt-2 pl-[1.625rem] text-[0.75rem] font-medium leading-[1.5]",
+            acceptance.error ? "text-danger-fg" : "text-warning-fg",
+          )}
         >
-          {acceptance.disabledReason}
+          {problem}
         </p>
       )}
     </div>

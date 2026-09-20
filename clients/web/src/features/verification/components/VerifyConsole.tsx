@@ -73,7 +73,6 @@ export const VerifyConsole = ({
     preflight,
     rejectedOptions,
     terms,
-    canSubmit,
     availableFields,
     sourceArchive,
     submitCompletedManifest,
@@ -143,7 +142,6 @@ export const VerifyConsole = ({
                   onSubmit={submitCompletedManifest}
                   rejectedOptions={rejectedOptions}
                   terms={terms}
-                  canSubmit={canSubmit}
                 />
               </div>
             )}
@@ -186,7 +184,6 @@ export const VerifyConsole = ({
                     onSubmit={submitCompletedManifest}
                     rejectedOptions={rejectedOptions}
                     terms={terms}
-                    canSubmit={canSubmit}
                   />
                 )}
               </div>

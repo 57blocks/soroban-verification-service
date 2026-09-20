@@ -126,9 +126,9 @@ describe("archive format parity — the CLI, this extractor, the upload door and
   it("has no format the console offers that the build path cannot read", () => {
     const offered = consoleAcceptList().filter((entry) => entry.startsWith("."));
     const readable = ROWS.filter((row) => row.weExtract).map((row) => row.consoleSuffix);
-    // `.tgz` is gzip under a second name; it needs no row of its own, and listing it here rather than silently
-    // dropping it keeps the assertion total over the accept list.
-    const alias: Record<string, string> = { ".tgz": ".tar.gz" };
+    // `.tgz` and `.gz` are gzip under other names; neither needs a row of its own, and listing them here
+    // rather than silently dropping them keeps the assertion total over the accept list.
+    const alias: Record<string, string> = { ".tgz": ".tar.gz", ".gz": ".tar.gz" };
 
     const unreadable = offered.filter((entry) => !readable.includes(alias[entry] ?? entry));
 

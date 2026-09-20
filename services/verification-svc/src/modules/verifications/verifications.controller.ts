@@ -232,7 +232,7 @@ export class VerificationsController {
   @ApiOkResponse({ type: UploadSourceResponse })
   // Both were already sent and neither was described: the format gate reads the archive's magic number off the
   // body (uploads.service.ts), and the ceiling refuses mid-upload (raw-archive-body.middleware.ts).
-  @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_upload, or source_archive_format_unsupported — a gzip tarball (.tar.gz/.tgz) or a zip (.zip) is accepted." })
+  @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_upload, or source_archive_format_unsupported — a gzip tarball (.tar.gz/.tgz/.gz) or a zip (.zip) is accepted." })
   @ApiResponse({ status: 413, type: ApiErrorResponse, description: "source_archive_too_large." })
   @ApiServiceUnavailableResponse({ type: ApiErrorResponse, description: "draining" })
   @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
