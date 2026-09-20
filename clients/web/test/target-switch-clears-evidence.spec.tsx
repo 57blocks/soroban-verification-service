@@ -171,6 +171,8 @@ describe("changing the target after preflight has answered", () => {
     // The chain's own hash, so the console's pre-submit chain-source check has nothing to refuse.
     act(() => {
       result.current.form.setValue("source_uri", "https://example.org/typed-by-hand.tar.gz");
+      // Without the act the console refuses before the endpoint is reached.
+      result.current.terms.onAcceptedChange(true);
     });
     submitVerification.mockResolvedValue({
       status: 200,

@@ -31,7 +31,7 @@ const hintCopy: Record<SourceAccessMode, string> = {
   public_uri:
     "Public link to the exact source archive used for the contract build.",
   upload_archive:
-    "Select the exact .tar.gz (or .tgz) archive used for the contract build. Its SHA-256 is recorded in the submission.",
+    "Select the exact gzip tarball or zip used for the contract build — the archive is read by its bytes, whatever it is named. Its SHA-256 is recorded in the submission.",
 };
 
 /** Where the verifier gets the exact source bytes: a public URL, or an upload from this browser. */

@@ -63,34 +63,33 @@ describe("the acceptance control", () => {
 });
 
 /**
- * The gate the hook applies, restated as a unit so the table in TRD §8.1 has a console-side counterpart.
- * `buildTermsGate` is not exported, so this exercises it through the shape the hook returns.
+ * Why a refused submission is legible. The old shape put the reason in a `title` on a disabled button —
+ * a tooltip that needs a hovering mouse, which a touch screen does not have and a disabled element does not
+ * reliably fire anyway.
  */
-describe("the submit control follows the operator's effective date", () => {
-  const Harness = ({ canSubmit, reason }: { canSubmit: boolean; reason?: string }) => (
-    <div>
+describe("a refused submission", () => {
+  test("states the reason on the page, as an alert", async () => {
+    await renderInRouter(
       <SubmissionAgreement
         acceptance={{
           accepted: false,
           onAcceptedChange: vi.fn(),
-          ...(reason ? { disabledReason: reason } : {}),
+          error: "Accept the Terms of Service and acknowledge the Privacy Notice before submitting.",
         }}
-      />
-      <button disabled={!canSubmit} title={canSubmit ? undefined : "Accept the Terms of Service to submit"}>
-        Submit completed manifest
-      </button>
-    </div>
-  );
+      />,
+    );
 
-  test("a blocked submit control states the reason rather than failing on press", async () => {
-    await renderInRouter(<Harness canSubmit={false} />);
-    const button = screen.getByRole("button", { name: /submit completed manifest/i });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Accept the Terms of Service to submit");
+    const said = screen.getByTestId("accept-terms-blocked");
+    expect(said).toHaveAttribute("role", "alert");
+    expect(said.textContent).toMatch(/Accept the Terms of Service/);
+    expect(screen.getByTestId("accept-terms")).toHaveAttribute("aria-invalid", "true");
   });
 
-  test("an unblocked control carries no reason", async () => {
-    await renderInRouter(<Harness canSubmit />);
-    expect(screen.getByRole("button", { name: /submit completed manifest/i })).not.toBeDisabled();
+  test("says nothing before a submission has been refused", async () => {
+    await renderInRouter(
+      <SubmissionAgreement acceptance={{ accepted: false, onAcceptedChange: vi.fn() }} />,
+    );
+    expect(screen.queryByTestId("accept-terms-blocked")).toBeNull();
+    expect(screen.getByTestId("accept-terms")).not.toHaveAttribute("aria-invalid");
   });
 });

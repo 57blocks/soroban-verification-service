@@ -119,5 +119,9 @@ export class SubmittedSourceManifest {
 // ---------------------------------------------------------------------------
 // What the upload door accepts.
 
-/** The names an accepted source archive may arrive under, for the picker's accept list and the refusal. */
-export const ACCEPTED_UPLOAD_ARCHIVE_SUFFIXES = [".tar.gz", ".tgz", ".zip"] as const;
+/**
+ * The names an accepted source archive may arrive under, for the picker's accept list and the refusal.
+ * Never the rule — the door reads the magic number — so `.gz` is here beside `.tar.gz`: it is the same gzip
+ * under the name a browser gives a tarball downloaded twice, `archive.tar(2).gz`.
+ */
+export const ACCEPTED_UPLOAD_ARCHIVE_SUFFIXES = [".tar.gz", ".tgz", ".gz", ".zip"] as const;

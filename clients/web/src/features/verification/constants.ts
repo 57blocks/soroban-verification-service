@@ -26,8 +26,13 @@ export const evidenceFields = ["source_sha256", "source_uri", "bldarg", "bldopt"
 export const submissionAgreementCopy =
   "By submitting a contract for verification you agree to the";
 
-/** What the upload endpoint accepts, as a file input `accept` attribute. */
-export const sourceArchiveAccept = ".tar.gz,.tgz,.zip,application/gzip,application/zip";
+/**
+ * The picker's `accept` attribute — a convenience filter, not the rule. `.gz` is listed beside `.tar.gz`
+ * because a browser names a re-downloaded tarball `archive.tar(2).gz`, which the longer suffix greys out.
+ * What decides is `archiveFormatRefusal`, on the bytes.
+ */
+export const sourceArchiveAccept =
+  ".tar.gz,.tgz,.gz,.zip,application/gzip,application/zip";
 
 /** What each blocked preflight answer tells the submitter. */
 export const preflightBlockedCopy: Record<string, { title: string; description: string }> = {

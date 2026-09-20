@@ -73,10 +73,17 @@ export const useVerificationConsole = ({
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [rejectedOptions, setRejectedOptions] = useState<RejectedBuildOption[]>([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  /** Set by a submission the gate turned away, so the refusal is on the page and not only in a toast. */
+  const [termsRefused, setTermsRefused] = useState(false);
 
   // The operator's bundle: its `version` is what a submission binds, and its absence is what blocks one.
   const legal = useLegalDocuments();
   const termsGate = buildTermsGate(legal, termsAccepted);
+
+  const acceptTerms = (accepted: boolean) => {
+    setTermsAccepted(accepted);
+    if (accepted) setTermsRefused(false);
+  };
 
   const recentJobs = useRecentJobs();
   const preflight = usePreflight(form);
@@ -258,6 +265,7 @@ export const useVerificationConsole = ({
 
     // Same rule for the terms, and for the same reason: a rule that lives only on the input is not a rule.
     if (termsGate.blockedReason !== undefined) {
+      setTermsRefused(true);
       toast.error(termsGate.blockedReason);
       return;
     }
@@ -379,6 +387,13 @@ export const useVerificationConsole = ({
   /** Stage two: the evidence the verifier asked for. */
   const submitCompletedManifest = async () => {
     const refusals: { field?: "source_sha256" | "source_uri"; message: string }[] = [];
+
+    // First, so an unchecked box is what the toast says even when fields are missing too: it is the refusal
+    // a submitter is least likely to have noticed, having read the sentence as a notice rather than a control.
+    if (termsGate.blockedReason !== undefined) {
+      setTermsRefused(true);
+      refusals.push({ message: termsGate.blockedReason });
+    }
 
     const shaRefusal = sourceSha256Refusal(values.source_sha256);
     if (shaRefusal) refusals.push({ field: "source_sha256", message: shaRefusal });
@@ -561,11 +576,11 @@ export const useVerificationConsole = ({
     rejectedOptions,
     terms: {
       accepted: termsAccepted,
-      onAcceptedChange: setTermsAccepted,
+      onAcceptedChange: acceptTerms,
       ...(termsGate.unavailableReason ? { disabledReason: termsGate.unavailableReason } : {}),
+      // Only after a refused press. The block states what it wants before then; it does not open in red.
+      ...(termsRefused && termsGate.blockedReason ? { error: termsGate.blockedReason } : {}),
     },
-    /** Whether the submit control may be pressed at all — false while the terms gate refuses. */
-    canSubmit: termsGate.blockedReason === undefined,
   };
 };
 
@@ -578,8 +593,9 @@ type TermsGate = {
 };
 
 /**
- * TA-1 and TA-7 in one place. The control renders and works whether or not the operator's text is in
- * effect; what the effective date decides is whether leaving it unchecked stops the submission.
+ * The console requires the affirmative act unconditionally. The operator's `effective_date` governs whether
+ * the *server* rejects a submission that carries no accepted version, not whether this browser offers to
+ * make one — a control that can be ignored is not the gate TA-1 describes.
  */
 function buildTermsGate(
   legal: ReturnType<typeof useLegalDocuments>,
@@ -594,9 +610,13 @@ function buildTermsGate(
     const reason = "The terms could not be loaded, so nothing can be submitted right now.";
     return { blockedReason: reason, unavailableReason: reason };
   }
-  const { version, effectiveDate } = legal.bundle;
-  if (effectiveDate !== null && !accepted) {
-    return { blockedReason: "You must accept the Terms of Service before submitting.", version };
+  const { version } = legal.bundle;
+  if (!accepted) {
+    return {
+      blockedReason:
+        "Accept the Terms of Service and acknowledge the Privacy Notice before submitting.",
+      version,
+    };
   }
   return { version };
 }

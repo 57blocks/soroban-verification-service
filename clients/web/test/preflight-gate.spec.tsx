@@ -137,6 +137,7 @@ describe("the preflight gate (UI1)", () => {
     act(() => {
       result.current.form.setValue("source_sha256", "b".repeat(64));
       result.current.form.setValue("source_uri", "https://example.org/src.tar.gz");
+      result.current.terms.onAcceptedChange(true);
     });
     await act(async () => {
       await result.current.submitCompletedManifest();
@@ -148,6 +149,39 @@ describe("the preflight gate (UI1)", () => {
     expect(submitVerification.mock.calls[0][0].data).toMatchObject({
       accepted_terms_version: legalBundleFixture().data.version,
     });
+  });
+
+  test("an unaccepted agreement issues no request, whatever the operator's effective date", async () => {
+    // The fixture's `effective_date` is null — the regime in which the server does not compel an accepted
+    // version. The console compels the act regardless: a control that can be ignored is not a gate.
+    preflightVerification.mockResolvedValue(
+      preflightBody({ kind: "compose", intent: {}, trustLevel: "upstream_pinned" }),
+    );
+
+    const result = await runTarget();
+    act(() => {
+      result.current.form.setValue("source_sha256", "b".repeat(64));
+      result.current.form.setValue("source_uri", "https://example.org/src.tar.gz");
+    });
+    await act(async () => {
+      await result.current.submitCompletedManifest();
+    });
+
+    expect(submitVerification).not.toHaveBeenCalled();
+    // On the page, not only in a toast.
+    expect(result.current.terms.error).toMatch(/Terms of Service/);
+
+    // And the act clears it and lets the same submission through.
+    act(() => {
+      result.current.terms.onAcceptedChange(true);
+    });
+    expect(result.current.terms.error).toBeUndefined();
+
+    submitVerification.mockResolvedValue({ status: 202, data: { status: "queued", job_id: "job-2" } });
+    await act(async () => {
+      await result.current.submitCompletedManifest();
+    });
+    expect(submitVerification).toHaveBeenCalledTimes(1);
   });
 
   test("refuses to submit at all when the operator's bundle could not be loaded", async () => {
@@ -166,7 +200,9 @@ describe("the preflight gate (UI1)", () => {
       await result.current.submitCompletedManifest();
     });
 
-    expect(result.current.canSubmit).toBe(false);
+    // The control itself is unusable, not merely unchecked: a submitter must never accept text that did not
+    // load.
+    expect(result.current.terms.disabledReason).toMatch(/could not be loaded/);
     expect(submitVerification).not.toHaveBeenCalled();
   });
 });

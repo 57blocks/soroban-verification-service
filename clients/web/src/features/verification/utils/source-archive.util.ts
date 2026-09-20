@@ -1,17 +1,52 @@
-import { sourceArchiveAccept } from "../constants";
+/**
+ * `uploadArchiveFormat` (`packages/core/src/archive-format.ts`) is the authority and is deliberately copied
+ * rather than imported: the web bundle does not depend on `@scvs/core`.
+ */
 
-/** The suffixes out of the picker's accept list; the MIME entries beside them are advisory to it. */
-const acceptedSuffixes = sourceArchiveAccept
-  .split(",")
-  .map((entry) => entry.trim())
-  .filter((entry) => entry.startsWith("."));
+/** Enough for every marker below: `ustar` sits at offset 257, the other two at 0. */
+export const archiveHeadBytes = 262;
 
-/** Derived from the accept list rather than restated, so the picker's filter and this refusal cannot disagree. */
-export const isAcceptedSourceArchiveName = (name: string): boolean =>
-  acceptedSuffixes.some((suffix) => name.toLowerCase().endsWith(suffix));
+export type PickedArchiveFormat = "gzip" | "zip" | "tar" | "unknown";
 
-/** What to submit instead, for the refusal toast. */
-export const acceptedSourceArchiveSuffixes = acceptedSuffixes;
+export const sniffArchiveFormat = (head: Uint8Array): PickedArchiveFormat => {
+  if (head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b) return "gzip";
+  // Local file header, empty archive, and spanned archive — all three are `PK` plus a two-byte kind.
+  if (head.length >= 4 && head[0] === 0x50 && head[1] === 0x4b) {
+    const kind = (head[2] << 8) | head[3];
+    if (kind === 0x0304 || kind === 0x0506 || kind === 0x0708) return "zip";
+  }
+  if (head.length >= archiveHeadBytes && latin1(head.subarray(257, 262)) === "ustar") return "tar";
+  return "unknown";
+};
+
+const latin1 = (bytes: Uint8Array): string => {
+  let out = "";
+  for (const byte of bytes) out += String.fromCharCode(byte);
+  return out;
+};
+
+/** Only the head is materialised; the archive itself may be 50 MB. */
+export const readArchiveHead = async (file: File): Promise<Uint8Array> =>
+  new Uint8Array(await file.slice(0, archiveHeadBytes).arrayBuffer());
+
+/**
+ * Why the picked bytes are not an archive this door admits, or `null`.
+ *
+ * Judged on the magic number and never on the name, because that is what `POST /v1/uploads/source` does —
+ * a name rule here is strictly narrower than the endpoint it guards, and refuses uploads the API accepts
+ * (`archive.tar(2).gz`, the name a browser gives a re-downloaded tarball).
+ */
+export const archiveFormatRefusal = (head: Uint8Array): string | null => {
+  switch (sniffArchiveFormat(head)) {
+    case "gzip":
+    case "zip":
+      return null;
+    case "tar":
+      return "This is an uncompressed tar. Compress it — `gzip archive.tar` — and select the result.";
+    default:
+      return "This file is not a gzip-compressed tarball or a zip. The archive is read by its bytes, not its name.";
+  }
+};
 
 /** The code verification-svc answers with when the submitted archive is not the one the deployed Wasm records. */
 export const sourceArchiveNotChainRecorded = "source_archive_not_chain_recorded";

@@ -29,14 +29,13 @@ type EvidenceCardProps = {
   onSubmit: () => void;
   /** Build options this verifier will not replay — UI1a, labelled `policy_rejected`. */
   rejectedOptions: RejectedBuildOption[];
-  /** The clickwrap state — this card holds the only control that forms an agreement (design.md TA-1). */
+  /** The clickwrap state — this card holds the only control that forms an agreement. */
   terms: {
     accepted: boolean;
     onAcceptedChange: (accepted: boolean) => void;
     disabledReason?: string;
+    error?: string;
   };
-  /** False while the terms gate refuses; the button says why rather than failing on press. */
-  canSubmit: boolean;
 };
 
 /** Stage two: the source and build evidence the chain did not already state. */
@@ -48,7 +47,6 @@ export const EvidenceCard = ({
   onSubmit,
   rejectedOptions,
   terms,
-  canSubmit,
 }: EvidenceCardProps) => (
   <section className="overflow-hidden rounded-lg bg-surface shadow-panel">
     <div className="p-6">
@@ -77,16 +75,16 @@ export const EvidenceCard = ({
       />
 
       {/* This button is the submission — the public declaration made above becomes permanent
-          here — so the agreement is restated beside it, not only at the preflight step. */}
-      <div className="flex flex-wrap items-end justify-end gap-x-6 gap-y-2">
+          here — so the agreement is restated beside it, not only at the preflight step. It gets the full
+          width rather than a column in the button row: at `max-w-[36ch]` beside the rejected options it was
+          the smallest thing on the row that had to be acted on. */}
+      <SubmissionAgreement className="mt-6" acceptance={terms} />
+
+      {/* Enabled even when the agreement has not been made: a disabled button states its reason only in a
+          tooltip nobody on a touch screen can open, so the press is what surfaces the refusal. */}
+      <div className="mt-4 flex flex-wrap items-end justify-end gap-x-6 gap-y-2">
         <RejectedOptions rejected={rejectedOptions} />
-        <SubmissionAgreement className="mt-0 max-w-[36ch] text-left" acceptance={terms} />
-        <Button
-          onClick={onSubmit}
-          disabled={isSubmitting || !canSubmit}
-          aria-busy={isSubmitting}
-          title={canSubmit ? undefined : "Accept the Terms of Service to submit"}
-        >
+        <Button onClick={onSubmit} disabled={isSubmitting} aria-busy={isSubmitting}>
           Submit completed manifest
           <PillIcon animated={!isSubmitting}>
             {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "→"}

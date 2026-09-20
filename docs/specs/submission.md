@@ -78,8 +78,9 @@ Three retrieval modes: fetched by the verifier from a public `source_uri` (store
 stored — only the hash is retained, bytes deleted at job termination on every path including
 failure).
 
-The upload route admits gzip (`.tar.gz`, `.tgz`) and zip archives, decided from file bytes, never
-from a client-supplied filename. A zip is treated as a container and its inner archive is what gets
+The upload route admits gzip (`.tar.gz`, `.tgz`, `.gz`) and zip archives, decided from file bytes,
+never from a client-supplied filename — and the console's picker applies that same rule, so a name
+a browser mangled on a second download (`archive.tar(2).gz`) is not refused before it is read. A zip is treated as a container and its inner archive is what gets
 hashed and served. For a contract that records a `source_sha256` on-chain, an archive that does not
 hash to it is rejected at submit, not silently rebuilt or substituted.
 

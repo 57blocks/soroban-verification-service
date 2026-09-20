@@ -11,9 +11,9 @@ import type {
 } from "../types";
 import { fileToSha256 } from "../utils/format.util";
 import {
-  acceptedSourceArchiveSuffixes,
+  archiveFormatRefusal,
   chainSourceRefusal,
-  isAcceptedSourceArchiveName,
+  readArchiveHead,
 } from "../utils/source-archive.util";
 
 /** How the verifier will get the source bytes. Either a public URI it fetches itself, or an archive picked here. */
@@ -65,16 +65,15 @@ export const useSourceArchive = (
       return;
     }
 
-    // The `accept` attribute only filters the picker — "All Files" defeats it — so the same rule is applied to
-    // what came back.
-    if (!isAcceptedSourceArchiveName(file.name)) {
-      refuse(
-        `Only a gzip-compressed tarball or a zip is accepted (${acceptedSourceArchiveSuffixes.join(", ")}).`,
-      );
-      return;
-    }
-
     try {
+      // The `accept` attribute only filters the picker — "All Files" defeats it — so the format is decided
+      // here, off the head, exactly as the endpoint decides it off the body.
+      const formatRefusal = archiveFormatRefusal(await readArchiveHead(file));
+      if (formatRefusal) {
+        refuse(formatRefusal);
+        return;
+      }
+
       const sha256 = await fileToSha256(file);
 
       // Refusing at the picker rather than at submit keeps the reason next to the control that caused it,
@@ -93,11 +92,11 @@ export const useSourceArchive = (
     } catch (cause) {
       // Swallowing this made every cause look identical: a missing SubtleCrypto, a file the browser can no
       // longer read, a permission prompt the user dismissed.
-      console.error("Source archive SHA-256 failed", cause);
+      console.error("Source archive could not be read", cause);
       refuse(
         cause instanceof Error
-          ? `Could not calculate source archive hash: ${cause.message}`
-          : "Could not calculate source archive hash",
+          ? `Could not read the source archive: ${cause.message}`
+          : "Could not read the source archive",
       );
     }
   };
