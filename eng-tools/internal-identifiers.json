@@ -13,7 +13,9 @@
     "",
     "  aws-account-id     add the SHA-256 of your account id to `digests` — never the id itself,",
     "                     because this file is public",
-    "  internal-hostname  add `\"domain\": \"<your-domain>\"`; with none, the rule never fires",
+    "  internal-hostname  add `\"domain\": \"<your-domain>\"`; with none, the rule never fires. List",
+    "                     in `published` any exact host under it that IS published surface — ours",
+    "                     serves the schema `$id`s — or the rule reports what it exists to let through",
     "",
     "`pending` is a ratchet, not an allowlist: it records what the tree carried when the gate was",
     "armed, the gate fails when a count grows or a file not named here acquires one, and",
@@ -30,9 +32,10 @@
     },
     "internal-hostname": {
       "why": "Per-environment hostnames name endpoints that are not part of the published surface.",
-      "matches": "any subdomain of `domain` below; no rule fires when it is absent",
+      "matches": "any subdomain of `domain` below, except an exact host in `published`; no rule fires when `domain` is absent",
       "redacts-to": "the same subdomains under example.com",
-      "domain": "57blocks.io"
+      "domain": "blocksmith.co",
+      "published": ["sv.blocksmith.co"]
     },
     "aws-resource-id": {
       "why": "A VPC, subnet or security-group id is the network topology of a live deployment.",

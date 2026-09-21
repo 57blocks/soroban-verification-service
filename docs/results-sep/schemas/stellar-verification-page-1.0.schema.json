@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sv.57blocks.com/schemas/stellar-verification-page-1.0.schema.json",
+  "$id": "https://sv.blocksmith.co/schemas/stellar-verification-page-1.0.schema.json",
   "$comment": "Contract Verification Results SEP (draft) — one page of a bulk-load stream, TRD 2.1 §5.4 / §8.2 / §5.7. Closed for a producer; a consumer validates with additionalProperties relaxed (IMPLEMENTATION-SPEC CV6) so a higher MINOR stays readable.",
   "title": "Contract Verification Bulk-Load Page (Results SEP 1.0)",
   "description": "The body of GET /v1/wasms on a verifier: records reference this verifier's own documents. The envelope is shared and the record shape belongs to the role serving the stream — the Contract Verification Aggregation SEP defines an aggregator's records over the same schema value, in stellar-verification-page-aggregated-1.0.schema.json.",

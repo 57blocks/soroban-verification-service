@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sv.57blocks.com/schemas/stellar-verification-aggregate-1.0.schema.json",
+  "$id": "https://sv.blocksmith.co/schemas/stellar-verification-aggregate-1.0.schema.json",
   "$comment": "Contract Verification Aggregation SEP (draft) — the aggregated view across verifiers, TRD 2.1 §8.2 / §5.7. Closed for a producer; a consumer validates with additionalProperties relaxed (IMPLEMENTATION-SPEC CV6). An entry here is a RELAY: it keeps every field the verifier published, including ones this schema does not name, which is why `verification` is the one object in the SEP that is deliberately open.",
   "title": "Contract Verification Aggregate (Aggregation SEP 1.0)",
   "description": "The body of GET /v1/wasms/{wasm_hash} on an aggregator. Assembled per request — no static file corresponds to it, and `unavailable_verifiers` describes this fetch. An aggregator relays and does not judge: entries are never merged into one verdict, and `agreement` is a description of how they relate, not a conclusion.",

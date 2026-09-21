@@ -19,6 +19,14 @@ const hostRe = internalDomain
       new RegExp(`\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)${internalDomain.replace(/\./g, "\\.")}\\b`, `${flags}i`)
   : null;
 
+// Since SCV-304 the published surface is a subdomain of the internal domain, so the rule's own shape
+// can no longer tell them apart and the host has to be named. `pending` is the wrong instrument: it is
+// a ratchet over debt, and it would refuse the next file that cites a schema.
+const publishedHosts = new Set(
+  (rules.rules["internal-hostname"]?.published ?? []).map((h) => h.toLowerCase()),
+);
+const isPublished = (host) => publishedHosts.has(host.toLowerCase());
+
 const accountDigests = new Set(rules.rules["aws-account-id"].digests);
 const isAccountId = (s) => accountDigests.has(createHash("sha256").update(s).digest("hex"));
 
@@ -45,10 +53,16 @@ export const detectors = [
     id: "internal-hostname",
     // The domain is data, not a literal in this file: the exported copy of this gate carries the
     // mechanism without carrying whose deployment it was written for.
-    find: (text) => (hostRe ? [...text.matchAll(hostRe("g"))].map((m) => m.index) : []),
+    find: (text) =>
+      hostRe
+        ? [...text.matchAll(hostRe("g"))].filter((m) => !isPublished(m[0])).map((m) => m.index)
+        : [],
     // The subdomain structure carries no secret and losing it would make a document unreadable; the
     // registrable domain is the whole finding.
-    redact: (text) => (hostRe ? text.replace(hostRe("g"), "$1example.com") : text),
+    redact: (text) =>
+      hostRe
+        ? text.replace(hostRe("g"), (host, labels) => (isPublished(host) ? host : `${labels}example.com`))
+        : text,
   },
   {
     id: "aws-resource-id",
