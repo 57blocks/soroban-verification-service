@@ -14,12 +14,21 @@ const AGGREGATION_SYNC_TIMEOUT_MS = 100_000;
 const AGGREGATION_SYNC_JEST_TIMEOUT_MS =
   AGGREGATION_SYNC_TIMEOUT_MS + env.requestTimeoutMs + env.pollIntervalMs + 10_000;
 
+/** The SDK walks the TVL, the hosted aggregate returns its own query order, and nothing promises the
+ * two agree — so the verifier-keyed arrays compare as sets. Only those: `bldarg`/`bldopt` inside an
+ * entry are order-significant (SEP-58). */
+const byResultRoot = (left?: string, right?: string) =>
+  normalizeResultRoot(left ?? "").localeCompare(normalizeResultRoot(right ?? ""));
+
 function normaliseAggregate(value: AggregatedWasmStatus): Omit<AggregatedWasmStatus, "updated_at"> {
   const { updated_at: _updatedAt, ...aggregate } = value;
   return {
     ...aggregate,
-    source_code_verifications: aggregate.source_code_verifications.map(
-      ({ retrieved_at: _retrievedAt, ...entry }) => entry,
+    source_code_verifications: aggregate.source_code_verifications
+      .map(({ retrieved_at: _retrievedAt, ...entry }) => entry)
+      .sort((left, right) => byResultRoot(left.verifier.url, right.verifier.url)),
+    unavailable_verifiers: [...aggregate.unavailable_verifiers].sort((left, right) =>
+      byResultRoot(left.url, right.url),
     ),
   };
 }
