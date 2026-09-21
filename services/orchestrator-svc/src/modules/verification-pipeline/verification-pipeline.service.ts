@@ -324,6 +324,13 @@ export class VerificationPipelineService {
     });
     // Only one direction of disagreement is interesting, and it is not "differs".
     if (mechanism.mode === "build" && rebuild.buildMode === "verify") {
+      // Reporting this and dispatching anyway sent the job down a path routing can no longer choose.
+      // Reconcilable only while the rebuild is still `pending`; past that its mode records an attempt that
+      // really ran, and the log stays the whole answer.
+      const reconciled = await this.rebuilds.reconcileBuildMode(
+        rebuild.rebuildId,
+        mechanism.mode
+      );
       this.logger.error(
         "attached to a rebuild set to the CLI path for a recipe PA1 routes to the sandbox",
         {
@@ -331,8 +338,10 @@ export class VerificationPipelineService {
           rebuild_build_mode: rebuild.buildMode,
           this_job_would_use: mechanism.mode,
           reason: mechanism.reason,
+          reconciled,
         }
       );
+      if (reconciled) rebuild = { ...rebuild, buildMode: mechanism.mode };
     }
 
     // A job attached earlier and already riding this exact rebuild never comes back through here (it re-enters
@@ -784,7 +793,7 @@ export class VerificationPipelineService {
     }
     this.logger.log("verdict resolved", {
       rebuild_id: rebuild.rebuildId,
-      build_mode: rebuild.buildMode ?? "verify",
+      build_mode: rebuild.buildMode ?? "build",
       rebuilt_wasm_hash: rebuild.rebuiltWasmHash,
       deployed_wasm_hash: freshDeployedHash,
       matched: verdict.matched,
@@ -835,7 +844,7 @@ export class VerificationPipelineService {
       ? undefined
       : await this.mismatchDiagnostics.describe({
           rebuildId: rebuild.rebuildId,
-          buildMode: rebuild.buildMode ?? "verify",
+          buildMode: rebuild.buildMode ?? "build",
           runner: rebuild.runner,
           deployedWasmPath: chainLookup.metadata.wasm_path,
           existing: verdict.result.sandbox_diagnostics,
