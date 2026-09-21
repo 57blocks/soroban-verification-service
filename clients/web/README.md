@@ -1,8 +1,8 @@
-# Soroban Verify
+# Soroban Verifier
 
-Workspace implementation of the `/` landing page and `/verify` verification submission page described in:
+Workspace implementation of the `/` landing page and `/verify` verification submission page:
 
-- Stellar-inspired verification landing page;
+- landing page in the BlockSmith design system, the brand this service is hosted alongside;
 - contract ID or Wasm hash target submission;
 - preflight-style incomplete response handling;
 - SEP-58 submitted-source manifest completion;
@@ -31,8 +31,8 @@ src/
     root-route.tsx           the one root route, the `/` redirect, and the not-found component
     router.tsx               assembles the route tree from each feature's exported routes
   components/ui/           shadcn/ui primitives, restyled to the design tokens:
-                             button, pill-icon, input, label, select, collapsible,
-                             badge, sonner
+                             button, input, label, select, collapsible, badge,
+                             sonner, fade-up
   components/              site-nav + site-footer (the console and legal pages),
                              legal-links (the two legal documents, linked from both footers
                              and from the submission control), not-found (what an unrouted
@@ -126,8 +126,8 @@ Rules that keep this from drifting:
   not inline in JSX, so wording changes never touch layout.
 - **Styling is Tailwind utilities written inline in the JSX.** There are no feature stylesheets and
   no CSS modules: `index.css` holds Tailwind's three directives, a handful of base element rules,
-  and one scrollbar utility. Nothing else. Anything that cannot be a utility — the dot field, the
-  hero glow, the pill arrow's hover animation — is a named `backgroundImage`/`keyframes` entry in
+  and one scrollbar utility — the scroll-triggered fade-up's two states, which a utility cannot
+  express. Nothing else. Anything else that cannot be a utility is a named entry in
   `tailwind.config.js` and is still applied as a class.
 - **UI primitives come from shadcn/ui, in `src/components/ui`.** They are copied into the repo, not
   imported from a package, so they are ours to restyle — and they are already restyled to the
@@ -197,22 +197,23 @@ transient user activation.
 
 ## Design tokens
 
-`tailwind.config.js` is the single definition of the palette, transcribed from the approved design.
-Every value in a component resolves through it.
+`tailwind.config.js` is the single definition of the palette. Its values are BlockSmith's — the brand
+this service is hosted alongside — and the group names are this app's own, so a token says what a
+value is *for* rather than what colour it is. The product keeps its own name and mark: the visual
+language is shared, the identity is not, and neither site links to the other.
 
 | Group | What it is |
 | --- | --- |
-| `ink.*` | Neutral scale: `ink` (#0f0f0f) headings and dark sections, `ink-body` copy, `ink-soft` eyebrows, `ink-label` panel sub-headings, `ink-value` diagnostics values, `ink-warm` console captions, `ink-mute` footer/meta |
-| `yellow.*` | The one accent (#fdda24), plus `soft`/`pale` washes, `bright` hover, `deep` card eyebrows, `shade` the ◆ text-shadow, `dot` the queued status dot |
-| `surface.*` | Light fills, in stacking order: white → `alt` tinted → `hover` → `hero` wash → `field`/`track`/`chip` |
-| `line.*` | Hairlines: `line` landing, `strong` console + inputs, `hero`, `soft` flow track, `mute`, `quiet` |
-| `dark.*` | The two near-black sections and their cards: `card`, `line`, `rule`, `hover`, `fg`, `cmd`, `text`, `dim`, `bright` |
+| `ink.*` | Neutral scale: `ink` (#101828) headings, solid buttons and the dark section, `ink-body` copy (#4a5565), `ink-soft` eyebrows, `ink-label` panel sub-headings, `ink-value` diagnostics values, `ink-warm` console captions, `ink-mute` footer/meta |
+| `yellow.*` | The one accent (#f5d35a), plus `soft`/`pale` washes, `bright` hover, `deep` (#a77d0e) the text-safe member, `shade` the ◆ glyph, `dot` the queued status dot |
+| `surface.*` | Light fills, in stacking order: white → `alt` tinted (#f6f7fb) → `hover` → `hero` wash → `field`/`track`/`chip` |
+| `line.*` | Hairlines: `line` (#e5e7eb) everywhere, `strong` console + inputs, `hero`, `soft` flow track, `mute`, `quiet` |
+| `dark.*` | The closing CTA's near-black band and its cards: `card`, `line`, `rule`, `hover`, `fg`, `cmd`, `text`, `dim`, `bright` |
 | `success.* warning.* danger.* neutral.*` | Verdict tones. Within a group, `fg` is text, `surface` a panel fill, `badge` a pill fill, `dot` the recent-jobs status dot |
 
-Also owned here, and used the same way: `maxWidth.shell` (1320px, the page width) and
-`maxWidth.console` (900px), `boxShadow.panel`/`dropdown`/`float`/`underline`/`focus`,
-`backgroundImage.dots`/`hero-glow`/`cta-glow`/`console-page`, and the `arrow-slide`/`glow`
-animations.
+Also owned here, and used the same way: `maxWidth.shell` (1440px, the page width) and
+`maxWidth.console` (900px), `boxShadow.panel`/`dropdown`/`float`/`focus`, and the two families in
+`fontFamily` — `sans` (Inter) and `mono` (JetBrains Mono).
 
 Conventions:
 
@@ -221,11 +222,21 @@ Conventions:
 - **Alpha comes from the opacity modifier on a token** — `text-ink/[0.66]`, `bg-surface/60`,
   `border-ink/[0.16]` — not from a second hex.
 - **`theme()` is allowed inside an arbitrary value** where Tailwind has no utility for the property,
-  e.g. the heading highlight `shadow-[inset_0_-0.18em_0_theme(colors.yellow.DEFAULT)]`. The colour
-  is still the token.
-- **`backgroundImage` and `backgroundSize` share the `bg-*` namespace.** That is why the dot field's
-  size key is `dotgrid` (`bg-dots bg-dotgrid`) and the console page pairs `bg-console-page` with an
-  arbitrary `bg-[length:auto,13px_13px]`.
+  e.g. the pipeline numeral's highlight `shadow-[inset_0_-0.28em_0_theme(colors.yellow.DEFAULT)]`.
+  The colour is still the token.
+- **The accent is never text on white.** At #f5d35a that is under 2:1; `yellow-deep` is the member of
+  the family that clears AA, and the rest are fills and rules.
+- **Fonts are self-hosted, always** (`src/fonts.ts`). A `@import` from a font CDN discloses every
+  visitor's IP to it, which is the request this console removed and may not reintroduce.
+
+Card and control idiom, so a new component matches the ones beside it:
+
+- a card is `rounded-xl border border-line bg-surface`, lifting on hover with
+  `transition-all duration-300 hover:-translate-y-1 hover:shadow-lg`;
+- a floating console panel is the same, plus `shadow-panel`;
+- a button is `rounded-md`, solid `ink` for the primary action, `accent` on the dark band, bordered
+  white otherwise — one shape, no pills;
+- a section is `px-4 md:px-20 py-16 md:py-24`, alternating white and `surface-alt` down the page.
 
 ## Run
 

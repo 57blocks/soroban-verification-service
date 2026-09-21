@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PillIcon } from "@/components/ui/pill-icon";
 import { SiteFooter } from "./site-footer";
 import { SiteNav } from "./site-nav";
 
@@ -16,7 +16,7 @@ export const NotFoundPage = () => (
         <span className="mb-3.5 block font-mono text-[0.75rem] uppercase tracking-[0.12em] text-ink-mute">
           404
         </span>
-        <h1 className="m-0 font-display text-[clamp(2rem,3.4vw,2.9rem)] font-medium leading-[1.12] tracking-[-0.01em]">
+        <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
           No page at this address
         </h1>
       </header>
@@ -27,11 +27,10 @@ export const NotFoundPage = () => (
         reports are permanent.
       </p>
 
-      {/* The default `pill` reserves its right inset for the badge, so it needs one — see `PillIcon`. */}
       <Button asChild>
         <Link to="/verify">
           Go to the console
-          <PillIcon animated>→</PillIcon>
+          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
         </Link>
       </Button>
 

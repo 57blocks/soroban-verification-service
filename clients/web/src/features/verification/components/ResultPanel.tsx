@@ -145,9 +145,9 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
   return (
     <section
       data-testid="verification-result"
-      className="rounded-lg bg-surface p-6 shadow-panel"
+      className="rounded-xl border border-line bg-surface p-6 shadow-panel"
     >
-      <h2 className="m-0 mb-4 font-display text-[1.35rem] font-semibold">
+      <h2 className="m-0 mb-4 text-[1.35rem] font-semibold">
         Verification result
       </h2>
 

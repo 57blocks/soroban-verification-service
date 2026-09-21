@@ -58,7 +58,7 @@ export const TrustedVerifiers = () => {
             className="list-none rounded-lg border border-line bg-surface p-4"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="font-display text-[1rem] font-semibold text-ink">{heading}</span>
+              <span className="text-[1rem] font-semibold text-ink">{heading}</span>
               <span className="inline-flex items-center gap-2">
                 <span
                   aria-hidden

@@ -24,7 +24,7 @@ export const VerifierResult = ({ entry }: VerifierResultProps) => (
   >
     <div className="flex flex-wrap items-center justify-between gap-3">
       {/* `name` is self-claimed and optional; `url` is the identity, and is what a reader can check. */}
-      <span className="font-display text-[1rem] font-semibold text-ink">
+      <span className="text-[1rem] font-semibold text-ink">
         {entry.verifier.name ?? entry.verifier.url}
       </span>
       <span className="inline-flex items-center gap-2">

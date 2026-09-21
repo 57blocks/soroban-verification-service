@@ -22,8 +22,8 @@ const badgeVariant = {
 
 /** Jobs this browser has seen. Kept in localStorage — there is no per-user account. */
 export const RecentJobsCard = ({ jobs }: { jobs: RecentJob[] }) => (
-  <section className="mt-8 rounded-lg bg-surface p-5 shadow-panel">
-    <h2 className="m-0 font-display text-[1.35rem] font-semibold">
+  <section className="mt-8 rounded-xl border border-line bg-surface p-5 shadow-panel">
+    <h2 className="m-0 text-[1.35rem] font-semibold">
       Recent verification jobs
     </h2>
     <p className="m-0 mt-1 text-[0.875rem] leading-[1.5] text-ink/[0.66]">

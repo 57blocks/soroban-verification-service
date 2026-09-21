@@ -1,7 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
-import { DotFieldLight } from "@/components/ui/dot-field";
 import { useVerificationConsole } from "../hooks/use-verification-console";
 import type { VerifyMode } from "../types";
 import { RESULT_STATES } from "../utils/flow.util";
@@ -20,7 +19,7 @@ import { TargetCard } from "./TargetCard";
 import { RebuildCard } from "./RebuildCard";
 
 const ConsoleLoading = ({ mode }: { mode: VerifyMode }) => (
-  <div className="mt-8 flex items-center gap-3 rounded-lg bg-surface p-5 shadow-panel">
+  <div className="mt-8 flex items-center gap-3 rounded-xl border border-line bg-surface p-5 shadow-panel">
     <Loader2 aria-hidden className="size-4 animate-spin text-ink" />
     <span className="text-[0.875rem] font-medium text-ink-value">
       {mode === "job"
@@ -81,12 +80,6 @@ export const VerifyConsole = ({
 
   return (
     <main className="relative min-h-screen bg-surface-alt font-sans leading-normal text-ink antialiased">
-      {/* Interactive dot field — same light preset, bulge-away interaction. The field fades
-          out down the page rather than covering it: the console runs to whatever length its
-          results need, and an evenly dotted wall behind a page of panels reads as noise.
-          The ramp reproduces what bg-console-page's linear-gradient layer used to do, except
-          it is erased out of the canvas, so it fades the dots instead of sitting under them. */}
-      <DotFieldLight fadeStart={540} fadeEnd={760} />
       <div className="relative z-[1]">
         <SiteNav />
 

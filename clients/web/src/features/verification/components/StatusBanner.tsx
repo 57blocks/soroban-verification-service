@@ -36,7 +36,7 @@ export const StatusBanner = ({
         <div className="flex-1">
           <h3
             className={cn(
-              "m-0 inline-flex items-center gap-2 font-display text-[1.2rem] font-semibold",
+              "m-0 inline-flex items-center gap-2 text-[1.2rem] font-semibold",
               toneText[meta.tone],
             )}
           >

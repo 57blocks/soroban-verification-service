@@ -14,6 +14,11 @@ export type TrustSignal = {
   title: string;
   description: string;
   tag: string;
+  /**
+   * The card's hash comparison, drawn as the deployed digest over the rebuilt one. Illustrative digests, split
+   * into chunks so the eye can find the chunk that differs — which is what reading a real one is like.
+   */
+  compare: { deployed: string[]; rebuilt: string[] };
 };
 
 /**
@@ -28,6 +33,10 @@ export const trustSignals: TrustSignal[] = [
     description:
       "Byte-for-byte match under this verifier's digest-pinned trusted image policy.",
     tag: "trusted image",
+    compare: {
+      deployed: ["a91c4e02", "7b3df610", "55e2c9a8", "0d4f7b21"],
+      rebuilt: ["a91c4e02", "7b3df610", "55e2c9a8", "0d4f7b21"],
+    },
   },
   {
     tone: "warn",
@@ -36,5 +45,9 @@ export const trustSignals: TrustSignal[] = [
     description:
       "A different policy, a different verdict — attribution keeps both signals visible.",
     tag: "rebuild mismatch",
+    compare: {
+      deployed: ["a91c4e02", "7b3df610", "55e2c9a8", "0d4f7b21"],
+      rebuilt: ["a91c4e02", "7b3df610", "c4e81b93", "0d4f7b21"],
+    },
   },
 ];

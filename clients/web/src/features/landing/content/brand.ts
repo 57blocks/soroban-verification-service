@@ -2,18 +2,14 @@
 
 export const brandName = "Soroban Verifier";
 
-export const rotatingWords = [
-  "verifiable",
-  "auditable",
-  "reproducible",
-  "trustworthy",
-];
-
 export const heroCopy = {
-  // Rendered as two nowrap lines, exactly as the design breaks them.
+  title: "Does the deployed contract match its source?",
+  /** The word the hero marks with the accent. It must appear in `title` exactly once. */
+  highlight: "match",
+  // Two sentences, broken onto their own lines on a wide viewport.
   lines: [
-    "Hosted contract source verification for Stellar Soroban.",
-    "Sandboxed rebuild, byte-for-byte Wasm match, per-verifier attribution.",
+    "Submit a Soroban contract and its source.",
+    "We rebuild it in a sandbox with no network and no credentials, compare the result byte for byte against the chain, and publish what we found.",
   ],
   cta: "Verify a contract",
 };

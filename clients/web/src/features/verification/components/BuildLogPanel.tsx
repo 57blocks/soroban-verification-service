@@ -90,9 +90,9 @@ export const BuildLogPanel = ({ state, token }: BuildLogPanelProps) => {
     return (
       <section
         data-testid="build-log"
-        className="overflow-hidden rounded-lg bg-surface p-6 shadow-panel"
+        className="overflow-hidden rounded-xl border border-line bg-surface p-6 shadow-panel"
       >
-        <h3 className="m-0 font-display text-[1.2rem] font-semibold">Build log</h3>
+        <h3 className="m-0 text-[1.2rem] font-semibold">Build log</h3>
         <div className="mt-4">{renderBody(state, segments)}</div>
       </section>
     );
@@ -101,7 +101,7 @@ export const BuildLogPanel = ({ state, token }: BuildLogPanelProps) => {
   return (
     <section
       data-testid="build-log"
-      className="overflow-hidden rounded-lg bg-surface px-6 shadow-panel"
+      className="overflow-hidden rounded-xl border border-line bg-surface px-6 shadow-panel"
     >
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger className="flex w-full select-none items-center gap-2 border-0 bg-transparent py-5 text-left">
@@ -113,7 +113,7 @@ export const BuildLogPanel = ({ state, token }: BuildLogPanelProps) => {
               open ? "rotate-0" : "-rotate-90",
             )}
           />
-          <h3 className="m-0 font-display text-[1.2rem] font-semibold">Build log</h3>
+          <h3 className="m-0 text-[1.2rem] font-semibold">Build log</h3>
           {hidden > 0 && (
             <span className="text-[0.75rem] text-ink/[0.55]">
               {hidden.toLocaleString()} routine lines folded

@@ -1,8 +1,7 @@
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PillIcon } from "@/components/ui/pill-icon";
 import {
   Select,
   SelectContent,
@@ -53,10 +52,10 @@ export const TargetCard = ({
   const isContractId = targetType === "contract_id";
 
   return (
-    <section className="overflow-hidden rounded-lg bg-surface shadow-panel">
+    <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-panel">
       <div className="p-6">
         <div className="mb-5">
-          <h2 className="m-0 font-display text-[1.35rem] font-semibold">
+          <h2 className="m-0 text-[1.35rem] font-semibold">
             Contract to verify
           </h2>
           <p className="m-0 mt-1 text-[0.875rem] leading-[1.5] text-ink/[0.66]">
@@ -140,13 +139,11 @@ export const TargetCard = ({
               aria-busy={isSubmitting}
             >
               Check this contract
-              <PillIcon animated={!isSubmitting}>
-                {isSubmitting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  "→"
-                )}
-              </PillIcon>
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              )}
             </Button>
           </div>
         </div>

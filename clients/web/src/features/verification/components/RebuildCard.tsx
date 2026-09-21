@@ -38,9 +38,9 @@ export const RebuildCard = ({ groups }: RebuildCardProps) => {
   return (
     <section
       data-testid="rebuild-provenance"
-      className="rounded-lg bg-surface p-6 shadow-panel"
+      className="rounded-xl border border-line bg-surface p-6 shadow-panel"
     >
-      <h2 className="m-0 mb-1 font-display text-[1.35rem] font-semibold">
+      <h2 className="m-0 mb-1 text-[1.35rem] font-semibold">
         How this was rebuilt
       </h2>
       <p className="m-0 mb-4 text-[0.85rem] leading-[1.5] text-ink/[0.66]">

@@ -10,7 +10,7 @@ import { SiteNav } from "@/components/site-nav";
 import { githubRepoUrl, sourceIsPublic } from "@/config/site";
 import { audienceCards } from "@/features/landing/content";
 import { landingRoutes } from "@/features/landing/routes";
-import { footerColumns } from "@/features/landing/navigation";
+import { footerColumns, operatorPointer } from "@/features/landing/navigation";
 import { renderInRouter } from "./render-in-router";
 
 /**
@@ -54,11 +54,15 @@ describe("a private repository is not linked from anywhere", () => {
 describe("withheld, not deleted", () => {
   test("the footer still declares the repository links it is not rendering", () => {
     const hrefs = footerColumns.flatMap((column) => column.items.map((item) => item.href));
-    expect(hrefs.filter((href) => href.startsWith(githubRepoUrl))).toHaveLength(5);
+    expect(hrefs.filter((href) => href.startsWith(githubRepoUrl))).toHaveLength(4);
   });
 
-  test("both audience cards still declare their destination", () => {
+  test("the operator pointer is declared, and withheld with the rest", () => {
+    expect(operatorPointer.href.startsWith(githubRepoUrl)).toBe(true);
+  });
+
+  test("the integrator card still declares its destination", () => {
     const external = audienceCards.map((c) => c.action).filter((a) => a.kind === "external");
-    expect(external).toHaveLength(2);
+    expect(external).toHaveLength(1);
   });
 });

@@ -14,13 +14,13 @@
     @apply m-0 min-h-full w-full bg-surface p-0 font-sans leading-normal text-ink antialiased;
   }
 
-  /* The design's links are plain text that darkens on hover; underlines are opt-in per link. */
+  /* Links are plain text that darkens on hover; underlines are opt-in per link. */
   a {
     @apply text-inherit no-underline;
   }
 
   /* `:where()` keeps this at element-only specificity so any colour utility on the anchor wins.
-     Without it, `a:hover` (0,1,1) outranks a plain `text-white` (0,1,0) and the pill CTAs turn
+     Without it, `a:hover` (0,1,1) outranks a plain `text-white` (0,1,0) and a solid ink CTA turns
      black-on-black on hover. Plain links, which carry no colour class, still darken. */
   a:where(:hover) {
     @apply text-ink;
@@ -35,15 +35,6 @@
 }
 
 @layer components {
-  /* Interactive dot-field background — the canvas sits inside this and is sized from it.
-     `pointer-events: none` lets mouse events pass through to content on top. */
-  .dot-field-container {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-  }
-
   /* ── Scroll-triggered fade-up (see components/ui/fade-up.tsx) ──
      The hidden/visible pair lives here rather than in inline styles so the
      reduced-motion override below can switch the whole effect off in one place. */
@@ -61,46 +52,12 @@
     transform: translateY(0);
   }
 
-  /* ── Rotating text (see components/ui/rotating-text.tsx) ──
-     The old word's characters slide up and fade out, and only then do the new word's
-     characters rise into place. The two halves never overlap, so exactly one word is
-     ever in the DOM and no positioning trickery is needed to keep them apart.
-
-     Nothing clips overflow: the travel is under an em and a character is fully
-     transparent by the time it gets there, so clipping would only cost the
-     descenders. */
-
-  .rotating-text {
-    display: inline-block;
-    white-space: nowrap;
-  }
-
-  .rotating-char {
-    display: inline-block;
-    will-change: transform, opacity;
-  }
-
-  .rotating-char[data-dir="in"] {
-    @apply animate-rotate-char-in;
-  }
-
-  .rotating-char[data-dir="out"] {
-    @apply animate-rotate-char-out;
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .fade-up,
     .fade-up[data-visible="true"] {
       opacity: 1;
       transform: none;
       transition: none;
-    }
-
-    /* With the animation off, `both` fill mode would otherwise hold a leaving
-       character's start frame and freeze the word mid-cycle. */
-    .rotating-char[data-dir="in"],
-    .rotating-char[data-dir="out"] {
-      animation: none;
     }
   }
 }

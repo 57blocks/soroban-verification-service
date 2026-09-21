@@ -10,7 +10,7 @@ const Shell = ({ title, children }: { title: string; children: ReactNode }) => (
   <main className="min-h-screen bg-surface font-sans leading-normal text-ink antialiased">
     <SiteNav />
     <article className="mx-auto max-w-console px-8 pb-16 pt-14">
-      <h1 className="m-0 font-display text-[clamp(2rem,3.4vw,2.9rem)] font-medium leading-[1.12] tracking-[-0.01em]">
+      <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
         {title}
       </h1>
       {children}

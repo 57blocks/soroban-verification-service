@@ -14,7 +14,7 @@ export const PreflightCard = ({ state }: PreflightCardProps) => {
 
   if (state.phase === "running") {
     return (
-      <div className="mt-8 flex items-center gap-3 rounded-lg bg-surface p-5 shadow-panel">
+      <div className="mt-8 flex items-center gap-3 rounded-xl border border-line bg-surface p-5 shadow-panel">
         <Loader2 aria-hidden className="size-4 animate-spin text-ink" />
         <span className="text-[0.875rem] font-medium text-ink-value">
           Checking whether this contract can be verified...
@@ -80,7 +80,7 @@ const Banner = ({ tone, title, description, note, detail }: BannerProps) => (
   <div data-tone={tone} data-testid="preflight-card" className={cn("mt-8 rounded-lg p-4", toneSurface[tone])}>
     <h3
       className={cn(
-        "m-0 inline-flex items-center gap-2 font-display text-[1.2rem] font-semibold",
+        "m-0 inline-flex items-center gap-2 text-[1.2rem] font-semibold",
         toneText[tone],
       )}
     >

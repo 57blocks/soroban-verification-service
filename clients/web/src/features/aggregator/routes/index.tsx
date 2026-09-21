@@ -18,7 +18,7 @@ const aggregatorRoute = createRoute({
     }
   },
   component: function AggregatorRoute() {
-    useDocumentTitle("Aggregated Verification Results | Soroban Verify");
+    useDocumentTitle("Aggregated Verification Results | Soroban Verifier");
     return <AggregatorPage />;
   },
 });

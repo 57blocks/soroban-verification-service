@@ -19,7 +19,7 @@ export const JobTimingCard = ({ timing }: JobTimingCardProps) => {
   return (
     <section
       data-testid="job-timing"
-      className="mb-5 rounded-lg bg-surface p-4 shadow-panel"
+      className="mb-5 rounded-xl border border-line bg-surface p-4 shadow-panel"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MutedLabel>Build timing</MutedLabel>

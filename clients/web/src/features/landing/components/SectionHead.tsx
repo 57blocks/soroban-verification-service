@@ -9,35 +9,33 @@ type SectionHeadProps = {
   tone?: "light" | "dark";
 };
 
-/** The eyebrow + display heading + blurb block that opens every landing section. */
+/** The eyebrow + heading + blurb block that opens every landing section. */
 export const SectionHead = ({
   label,
   title,
   description,
   tone = "light",
 }: SectionHeadProps) => (
-  <div className="mb-16 grid gap-1">
-    <div>
-      <span
-        className={cn(
-          "mb-3.5 block font-sans text-[0.9rem] font-medium",
-          tone === "dark" ? "text-yellow" : "text-ink-soft",
-        )}
-      >
-        {label}
-      </span>
-      <h2
-        className={cn(
-          "m-0 font-display text-[clamp(2rem,3.4vw,2.9rem)] font-medium leading-[1.12] tracking-[-0.01em]",
-          tone === "dark" && "text-dark-bright",
-        )}
-      >
-        {title}
-      </h2>
+  <div className="mb-9">
+    <div
+      className={cn(
+        "mb-2.5 font-mono text-[11px] uppercase tracking-[0.12em]",
+        tone === "dark" ? "text-yellow" : "text-yellow-deep",
+      )}
+    >
+      {label}
     </div>
+    <h2
+      className={cn(
+        "m-0 text-[26px] font-bold leading-tight tracking-tight md:text-[32px]",
+        tone === "dark" && "text-dark-bright",
+      )}
+    >
+      {title}
+    </h2>
     <p
       className={cn(
-        "mt-3 max-w-[62ch] font-sans text-base leading-[1.6]",
+        "m-0 mt-2 max-w-[62ch] text-base leading-[1.6]",
         tone === "dark" ? "text-dark-dim" : "text-ink-body",
       )}
     >
