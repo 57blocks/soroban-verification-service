@@ -57,6 +57,22 @@ function isCommit(sha) {
   }
 }
 
+/**
+ * True when `sha` is an ancestor of HEAD. Content equality is not enough: GitHub resolves a
+ * `uses:@<sha>` only against a commit reachable from a branch or tag, so a pin written on a branch
+ * that is then SQUASH-merged names a dead sha the moment that branch is deleted — and the caller
+ * fails as a startup_failure with no job, no log and no annotation. On a feature branch the pin is a
+ * commit of that branch and passes; on main after a bad squash it is an ancestor of nothing.
+ */
+function isReachable(sha) {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // A shallow clone has neither the pinned commits nor the history to place them, and answering "current"
 // from what it does have would be the wrong answer rather than no answer.
 if (git("rev-parse", "--is-shallow-repository") === "true") {
@@ -86,7 +102,8 @@ for (const file of files) {
     references += 1;
     const at = `${file}:${i + 1}`;
 
-    const current = SHA.test(ref) && isCommit(ref) && matchesTree(ref, path);
+    const current =
+      SHA.test(ref) && isCommit(ref) && matchesTree(ref, path) && isReachable(ref);
     if (current) return;
 
     if (!WRITE) {
@@ -97,6 +114,13 @@ for (const file of files) {
         );
       } else if (!isCommit(ref)) {
         findings.push(`${at}|${ref} is not a commit in this repository, so this reference cannot resolve`);
+      } else if (!isReachable(ref)) {
+        findings.push(
+          `${at}|${ref} is not an ancestor of HEAD, so GitHub cannot resolve this reference however ` +
+            `identical its copy of ${path} is — every caller fails as a startup_failure with no job ` +
+            `and no log. A squash-merged branch's head does this. Bump the pin: ` +
+            `pnpm run check:workflow-pins -- --write`,
+        );
       } else {
         findings.push(
           `${at}|${ref}'s copy of ${path} is not this tree's. Bump the pin: ` +
