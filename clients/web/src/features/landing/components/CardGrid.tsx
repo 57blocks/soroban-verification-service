@@ -1,6 +1,6 @@
+import { MonoChip } from "@/components/mono-chip";
 import { FadeUp } from "@/components/ui/fade-up";
 import type { Capability } from "../content";
-import { MonoChip } from "./MonoChip";
 import { cn } from "@/lib/utils";
 
 /**

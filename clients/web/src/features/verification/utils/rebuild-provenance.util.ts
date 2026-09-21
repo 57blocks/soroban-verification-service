@@ -8,7 +8,6 @@ export type ProvenanceField = {
   label: string;
   value: string;
   href?: string;
-  mono?: boolean;
 };
 
 export type ProvenanceGroup = {
@@ -84,11 +83,10 @@ export const rebuildProvenance = ({
       key: "cliver",
       label: "Stellar CLI (cliver)",
       value: recipe.pair.cliver,
-      mono: true,
     });
   }
   if (recipe.pair?.rsver) {
-    declared.push({ key: "rsver", label: "Rust (rsver)", value: recipe.pair.rsver, mono: true });
+    declared.push({ key: "rsver", label: "Rust (rsver)", value: recipe.pair.rsver });
   }
   const chainMetadata = parsePairs(recipe.metadataReplay);
   for (const [key, value] of chainMetadata) {
@@ -97,7 +95,6 @@ export const rebuildProvenance = ({
       key: `meta_${key}`,
       label: key === "source_repo" ? "Source repository" : key,
       value,
-      mono: true,
       ...(href ? { href } : {}),
     });
   }
@@ -117,7 +114,6 @@ export const rebuildProvenance = ({
       key: "source_uri",
       label: "Source archive",
       value: sourceUri,
-      mono: true,
       ...(httpHref(sourceUri) ? { href: sourceUri } : {}),
     });
   }
@@ -126,7 +122,6 @@ export const rebuildProvenance = ({
       key: "source_sha256",
       label: "Source SHA-256",
       value: sourceSha256,
-      mono: true,
     });
   }
   if (recipe.buildOptions.length) {
@@ -134,7 +129,6 @@ export const rebuildProvenance = ({
       key: "bldopt",
       label: "Build options",
       value: recipe.buildOptions.join(" "),
-      mono: true,
     });
   }
   const manifestPath =
@@ -142,7 +136,7 @@ export const rebuildProvenance = ({
       ? diagnostics.container_manifest_path
       : undefined;
   if (manifestPath) {
-    recipeFields.push({ key: "manifest", label: "Manifest", value: manifestPath, mono: true });
+    recipeFields.push({ key: "manifest", label: "Manifest", value: manifestPath });
   }
   if (recipeFields.length && recipe.recipeSource) {
     groups.push({ key: "recipe", ...RECIPE_ORIGINS[recipe.recipeSource], fields: recipeFields });

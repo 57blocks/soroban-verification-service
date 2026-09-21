@@ -86,7 +86,7 @@ export const VerifyConsole = ({
         {/* Submission is driven by explicit buttons, not a native submit — the page holds two
           stages of one request and each has its own handler. */}
         <form onSubmit={(event) => event.preventDefault()}>
-          <div className="mx-auto max-w-console px-8 pb-16 pt-14">
+          <div className="mx-auto max-w-console px-8 pb-16 pt-10">
             <ConsoleHero mode={mode} />
 
             {mode === "job" && (
@@ -96,14 +96,17 @@ export const VerifyConsole = ({
               </>
             )}
 
-            {/* `allComplete` had one producer, `already_verified`, which submit could never send.
+            {/* Only once there is a job to track. Before that the strip reported the first step of a form
+                the reader can already see, which is what put it between them and the field.
+                `allComplete` had one producer, `already_verified`, which submit could never send.
                 `verified` is the state that actually completes the flow. */}
-            <FlowProgress
-              currentStep={currentStep}
-              isFailed={isFailed}
-              allComplete={submissionState === "verified"}
-              showDescriptions={mode !== "job"}
-            />
+            {submissionState !== "idle" && (
+              <FlowProgress
+                currentStep={currentStep}
+                isFailed={isFailed}
+                allComplete={submissionState === "verified"}
+              />
+            )}
 
             {showSubmitForm && (
               <TargetCard

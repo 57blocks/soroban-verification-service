@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { toneDot } from "../constants";
+import { MonoLabel } from "./MonoLabel";
 import type { RecentJob } from "../types";
 import { formatDateTime, formatDuration, parseTimestamp } from "../utils/duration.util";
 import { getRecentJobTone, getTargetSummary } from "../utils/result.util";
@@ -52,9 +53,7 @@ export const RecentJobsCard = ({ jobs }: { jobs: RecentJob[] }) => (
                       " ",
                     )}
                   />
-                  <span className="shrink-0 text-[0.75rem] font-semibold uppercase text-ink-warm">
-                    {target.kind}
-                  </span>
+                  <MonoLabel className="inline shrink-0">{target.kind}</MonoLabel>
                   <span
                     className="truncate text-[0.875rem] font-medium text-ink-value"
                     title={target.title}
@@ -84,7 +83,7 @@ export const RecentJobsCard = ({ jobs }: { jobs: RecentJob[] }) => (
 
               <div className="flex items-center gap-2 md:justify-end">
                 <Badge variant={badgeVariant[tone]}>{job.status}</Badge>
-                <span className="font-mono text-[0.75rem] text-ink-warm">
+                <span className="font-mono text-[0.75rem] text-ink-mute">
                   {job.job_id.slice(0, 8)}
                 </span>
               </div>

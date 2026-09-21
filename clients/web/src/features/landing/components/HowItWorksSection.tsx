@@ -1,6 +1,6 @@
+import { MonoChip } from "@/components/mono-chip";
 import { FadeUp } from "@/components/ui/fade-up";
 import { pipelineHead, pipelineStages } from "../content";
-import { MonoChip } from "./MonoChip";
 import { SectionHead } from "./SectionHead";
 
 export const HowItWorksSection = () => (

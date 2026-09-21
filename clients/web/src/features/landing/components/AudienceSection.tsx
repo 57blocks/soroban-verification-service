@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { MonoChip } from "@/components/mono-chip";
 import { FadeUp } from "@/components/ui/fade-up";
 import { audienceHead, visibleAudienceCards } from "../content";
-import { MonoChip } from "./MonoChip";
 import { SectionHead } from "./SectionHead";
 
 /** Both arms of `AudienceAction` render the same underlined call to action. */

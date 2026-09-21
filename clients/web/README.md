@@ -22,7 +22,7 @@ tailwind.config.js         every design token — see "Design tokens" below
 components.json            shadcn/ui generator config (style, aliases, icon library)
 spa-routes.ts              renders route-paths.ts into nginx `location` blocks; a build plugin
                              emits it as dist/spa-routes.conf — see "Routing" below
-public/                    design assets: 57blocks.png, tick-circle.svg, archive-tick.svg
+public/                    design assets: 57blocks.png, archive-tick.svg
 src/
   main.tsx                 React root: query client, router provider, sonner Toaster
   index.css                Tailwind entry + the few global element rules
@@ -36,7 +36,8 @@ src/
   components/              site-nav + site-footer (the console and legal pages),
                              legal-links (the two legal documents, linked from both footers
                              and from the submission control), not-found (what an unrouted
-                             path renders)
+                             path renders), and the three shared visual devices —
+                             hash-compare, mono-chip, sealed-box — see "Shared devices" below
   config/site.ts           links used by more than one feature (outbound, and the legal routes)
   hooks/use-legal-documents  the operator's legal bundle — shared, because the legal pages render it
                              and the console binds its version to a submission
@@ -54,7 +55,9 @@ src/
       navigation.ts          nav + footer link tables
       index.ts               public surface: the routes
     verification/          the verify console at /verify and /verify/jobs/$job_id
-      components/            VerifyConsole (container) + one component per panel
+      components/            VerifyConsole (container) + one component per panel;
+                             MonoLabel (the caption over a value) and ValueStrip
+                             (caption + mono-chip) are what every result grid is made of
       hooks/                 use-verification-console (the state machine),
                              use-job-event-stream (SSE), use-recent-jobs,
                              use-source-archive
@@ -135,6 +138,22 @@ Rules that keep this from drifting:
   hand-roll one.
 - **No raw colours in components.** Every colour is a named token — see below.
 
+## Shared devices
+
+Three components in `src/components/` are the visual language both the landing page and the console
+speak. They live at the root rather than in `features/landing/`, where they started, because a second
+feature uses them — the same promote-on-second-use rule as everything else here:
+
+| Device | What it says | Landing | Console |
+| --- | --- | --- | --- |
+| `hash-compare` | two digests, chunk by chunk, with the differing chunks marked in tone *and* glyph | illustrative digests on the trust-model cards | the real deployed-vs-rebuilt digests, via `DigestCompare` |
+| `mono-chip` | one concrete value, set apart from the prose around it | a sample under a card | the real evidence: recipe, source, timings, comparison values |
+| `sealed-box` | *this happened inside the sealed environment* | the hero diagram's rebuild lane | the whole `RebuildCard` — the inputs a real rebuild ran on |
+
+**Colour marks a verdict, and nothing else.** That is why a `mono-chip` span takes a tone only for an
+outcome, and why the console's selection controls are neutral: a chosen lookup mode is not a verdict.
+The accent belongs to a verdict or a highlight, never to a selection or an eyebrow.
+
 ## Routing
 
 `src/app/route-paths.ts` is the declared route surface. Two consumers read it: each feature's `path:`
@@ -204,15 +223,16 @@ language is shared, the identity is not, and neither site links to the other.
 
 | Group | What it is |
 | --- | --- |
-| `ink.*` | Neutral scale: `ink` (#101828) headings, solid buttons and the dark section, `ink-body` copy (#4a5565), `ink-soft` eyebrows, `ink-label` panel sub-headings, `ink-value` diagnostics values, `ink-warm` console captions, `ink-mute` footer/meta |
+| `ink.*` | Neutral scale: `ink` (#101828) headings, solid buttons and the dark section, `ink-body` copy (#4a5565), `ink-soft` eyebrows, `ink-label` panel sub-headings, `ink-value` diagnostics values, `ink-warm` ghost buttons and recent-job timestamps, `ink-mute` footer/meta and every mono caption |
 | `yellow.*` | The one accent (#f5d35a), plus `soft`/`pale` washes, `bright` hover, `deep` (#a77d0e) the text-safe member, `shade` the ◆ glyph, `dot` the queued status dot |
-| `surface.*` | Light fills, in stacking order: white → `alt` tinted (#f6f7fb) → `hover` → `hero` wash → `field`/`track`/`chip` |
+| `surface.*` | Light fills, in stacking order: white → `alt` tinted (#f6f7fb), also every mono strip → `hover` → `hero` wash → `track`/`chip` |
 | `line.*` | Hairlines: `line` (#e5e7eb) everywhere, `strong` console + inputs, `hero`, `soft` flow track, `mute`, `quiet` |
 | `dark.*` | The closing CTA's near-black band and its cards: `card`, `line`, `rule`, `hover`, `fg`, `cmd`, `text`, `dim`, `bright` |
 | `success.* warning.* danger.* neutral.*` | Verdict tones. Within a group, `fg` is text, `surface` a panel fill, `badge` a pill fill, `dot` the recent-jobs status dot |
 
 Also owned here, and used the same way: `maxWidth.shell` (1440px, the page width) and
-`maxWidth.console` (900px), `boxShadow.panel`/`dropdown`/`float`/`focus`, and the two families in
+`maxWidth.console` (1120px, the console's column — see the token's own comment for why it is not 900),
+`boxShadow.panel`/`dropdown`/`float`/`focus`, and the two families in
 `fontFamily` — `sans` (Inter) and `mono` (JetBrains Mono).
 
 Conventions:

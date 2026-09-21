@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { cn } from "@/lib/utils";
 import { flowSteps } from "../constants";
 
@@ -7,84 +8,69 @@ type FlowProgressProps = {
   isFailed: boolean;
   /** An already-published result skips the pipeline entirely, so every step reads complete. */
   allComplete: boolean;
-  /**
-   * The per-step captions instruct a submitter about a form ahead of them, so they are off on a job page, where
-   * there is no form.
-   */
-  showDescriptions?: boolean;
 };
 
-/** The three-stage tracker across the top of both console pages. */
+/**
+ * Where a job has got to, as one rule across the page.
+ *
+ * It was a panel carrying `01 / 02 / 03` and a caption apiece, standing between the reader and the form while
+ * saying nothing a job had not started. The captions are gone, the panel with them, and the caller renders this
+ * only once there is job state for it to carry.
+ */
 export const FlowProgress = ({
   currentStep,
   isFailed,
   allComplete,
-  showDescriptions = true,
 }: FlowProgressProps) => (
-  <section className="mb-5 rounded-xl border border-line bg-surface p-4 shadow-panel">
-    <div className="grid gap-3 md:grid-cols-3">
-      {flowSteps.map(({ label, desc }, index) => {
-        const isComplete = allComplete || currentStep > index;
-        const isCurrent = currentStep === index && !isFailed;
-        // A failure is always reported against the first step — that is where the user acts.
-        const isStepFailed = isFailed && index === 0;
-        const isLast = index === flowSteps.length - 1;
+  <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-y border-line py-2.5 font-mono text-[10px] uppercase tracking-[0.12em]">
+    {flowSteps.map(({ label }, index) => {
+      const isComplete = allComplete || currentStep > index;
+      const isCurrent = currentStep === index && !isFailed;
+      // A failure is always reported against the first step — that is where the user acts.
+      const isStepFailed = isFailed && index === 0;
+      const isLast = index === flowSteps.length - 1;
 
-        return (
-          <div key={label} className="grid content-start gap-3">
-            <div className="flex items-center gap-2.5">
-              {isComplete ? (
-                <img
-                  src="/tick-circle.svg"
-                  alt="Done"
-                  className="block size-7 shrink-0"
-                />
-              ) : (
-                <span
-                  className={cn(
-                    "inline-grid size-[26px] shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-[0.68rem] font-bold tracking-[0.04em]",
-                    isStepFailed
-                      ? "border-danger-fg bg-surface text-danger-fg"
-                      : isCurrent
-                        ? "border-ink bg-surface text-ink"
-                        : "border-line-mute bg-transparent text-ink/40",
-                  )}
-                >
-                  {String(index + 1).padStart(2, "0")}
-                </span>
+      return (
+        <Fragment key={label}>
+          <span className="inline-flex items-center gap-2">
+            <span
+              aria-hidden
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                isStepFailed
+                  ? "bg-danger-fg"
+                  : isComplete
+                    ? "bg-success-fg"
+                    : isCurrent
+                      ? "bg-ink"
+                      : "bg-line-mute",
               )}
-
-              <span
-                className={cn(
-                  "whitespace-nowrap text-[0.9rem] font-semibold",
-                  isStepFailed
-                    ? "text-danger-fg"
-                    : isComplete || isCurrent
-                      ? "text-ink"
-                      : "text-ink/[0.55]",
-                )}
-              >
-                {label}
-              </span>
-
-              {!isLast && (
-                <span
-                  className={cn(
-                    "ml-1 hidden h-0.5 flex-1 rounded-[1px] md:block",
-                    isComplete ? "bg-yellow" : "bg-line-soft",
-                  )}
-                />
+            />
+            <span
+              className={cn(
+                "whitespace-nowrap",
+                isStepFailed
+                  ? "text-danger-fg"
+                  : isComplete || isCurrent
+                    ? "text-ink"
+                    : "text-ink-mute",
               )}
-            </div>
+            >
+              {label}
+            </span>
+          </span>
 
-            {showDescriptions && (
-              <div className="ml-9 text-[0.78rem] leading-[1.5] text-ink/60">
-                {desc}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  </section>
+          {!isLast && (
+            <span
+              aria-hidden
+              className={cn(
+                "hidden h-px w-8 md:block",
+                isComplete ? "bg-ink/25" : "bg-line-soft",
+              )}
+            />
+          )}
+        </Fragment>
+      );
+    })}
+  </div>
 );

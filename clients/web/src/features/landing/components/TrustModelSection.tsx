@@ -1,7 +1,7 @@
+import { HashCompare } from "@/components/hash-compare";
 import { Badge } from "@/components/ui/badge";
 import { FadeUp } from "@/components/ui/fade-up";
 import { trustModelHead, trustSignals } from "../content";
-import { HashCompare } from "./HashCompare";
 import { SectionHead } from "./SectionHead";
 
 export const TrustModelSection = () => (

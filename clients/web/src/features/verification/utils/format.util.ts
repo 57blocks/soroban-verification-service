@@ -9,6 +9,23 @@ export const formatValue = (value: unknown) => {
   return String(value);
 };
 
+/** The width `HashCompare` sets each chunk to, and what a digest is split on for it. */
+const HASH_CHUNK_CHARS = 8;
+
+/**
+ * Splits a hex digest for the chunk-by-chunk comparison. Returns `null` for anything that is not a digest, so a
+ * caller renders nothing rather than a comparison of malformed strings.
+ */
+export const hashChunks = (hash: unknown): string[] | null => {
+  if (typeof hash !== "string" || !/^[a-fA-F0-9]{64}$/.test(hash)) return null;
+  const chunks: string[] = [];
+  // Hex case is not significant, and two digests that differ only in it are the same digest.
+  for (let at = 0; at < hash.length; at += HASH_CHUNK_CHARS) {
+    chunks.push(hash.slice(at, at + HASH_CHUNK_CHARS).toLowerCase());
+  }
+  return chunks;
+};
+
 export const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

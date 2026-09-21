@@ -59,15 +59,13 @@ type SubmissionAgreementProps = {
  */
 export const SubmissionAgreement = ({ className, acceptance }: SubmissionAgreementProps) => {
   if (!acceptance) {
-    // Set off from the card's own body copy by the rule above it: as a run-on paragraph this sentence read as
-    // more description, which is how a submitter reaches the acceptance control never having seen the terms.
+    // Placed by its caller, beside the control it qualifies. It carries no chrome of its own: set as grey type
+    // under a card's heading it read as more description, which is how a submitter reaches the acceptance
+    // control never having seen the terms.
     return (
       <p
         data-testid="submission-agreement"
-        className={cn(
-          "m-0 mt-3 border-t border-line pt-3 text-[0.8rem] leading-[1.5] text-ink/[0.7]",
-          className,
-        )}
+        className={cn("m-0 text-[0.8rem] leading-[1.5] text-ink/[0.7]", className)}
       >
         <AgreementText />
       </p>
