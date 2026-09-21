@@ -470,6 +470,7 @@ const TIER_INJECT = {
     "batch-job-definition",
     "batch-container-environment",
     "batch-submit-job",   // per-invocation job params — a spec, nothing to protect
+    "ecs-run-task-override", // same, for a task started by `run-task` rather than a job submit
     "docker-build-arg",
   ],
 };

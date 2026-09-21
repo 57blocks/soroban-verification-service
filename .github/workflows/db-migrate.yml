@@ -225,6 +225,17 @@ jobs:
           echo "TASK_DEFINITION=$TD" >> "$GITHUB_ENV"
           echo "Borrowing: $TD"
 
+      # Carries this environment's Trusted Verifiers List, which is the caller's and not in the image.
+      # `continue-on-error` so the seed step below diagnoses an absent artifact — it can name both
+      # remedies — rather than download-artifact's bare "not found". Still fatal.
+      - name: Take this deployment's contracts
+        if: inputs.action == 'deploy' && inputs.target == 'query-svc'
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Resolve the image to migrate from
         id: image
         env:
@@ -286,34 +297,46 @@ jobs:
 
           COMMAND="cd /app/$MIGRATE_PACKAGE && ./node_modules/.bin/$PRISMA_CMD"
 
-          # The list of verifiers a deployment trusts is that deployment's own value, and it reaches the
-          # container the way every other one does — its configuration. This step used to compose an
-          # in-image path instead, which made the image a function of WHOSE deployment it was; nothing
-          # is composed here now.
-          #
-          # Never fall through to the built-in default: `config/trusted-verifiers.local.json` ships in the
-          # image and exists, so an unset variable would seed a development list into a real environment
-          # and say nothing. A deployment that declares no source gets no seed, loudly.
-          #
+          # The list a deployment trusts is the caller's, and arrives in the `deploy-contracts` artifact.
+          # No source is a hard failure, never a fall-through: `config/trusted-verifiers.local.json`
+          # ships in the image and exists, so an unset variable seeds localhost URLs and exits 0.
           # `tsx` (not `node`) because scripts/ is TypeScript that is never compiled into dist/.
           if [ "$ACTION" = "deploy" ] && [ "$TARGET" = "query-svc" ]; then
+            TVL_DOC="/tmp/deploy-contracts/${ENVIRONMENT}/trusted-verifiers.json"
+
+            # The other accepted shape: a deployment that hosts its list sets the variable to an
+            # `https:` URL on the definition this run borrows, `db-migrate` having none of its own.
             DECLARED=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
               --region "$AWS_REGION" --output json \
               | jq -r '[.taskDefinition.containerDefinitions[]
                         | ((.environment // []) + (.secrets // []))[]
                         | select(.name == "SCVS_TRUSTED_VERIFIERS_SOURCE")] | length')
-            if [ "$DECLARED" = "0" ]; then
-              echo "::warning::$TASK_DEFINITION declares no SCVS_TRUSTED_VERIFIERS_SOURCE, so the Trusted Verifiers List is NOT seeded. Set it in this environment's deployment contract; it is not this repository's to supply."
-            else
-              # These two markers are the only way the "Fail if..." step below can tell a DDL
-              # failure from a seed failure: both stages run inside one shell command in one ECS
-              # task, so there is no separate GitHub Actions step to attach that distinction to.
-              # MIGRATE_OK only appears if the `prisma migrate deploy` above it already exited 0
-              # (it is joined by `&&`); SEED_OK only appears if seed-tvl.ts also exited 0.
+
+            if [ -f "$TVL_DOC" ] && [ "$DECLARED" != "0" ]; then
+              echo "::error::two Trusted Verifiers Lists are on offer for $ENVIRONMENT — a document in the deploy-contracts artifact AND SCVS_TRUSTED_VERIFIERS_SOURCE on $TASK_DEFINITION. Which verifiers this deployment trusts is not something to resolve by precedence. Remove one."
+              exit 1
+            elif [ -f "$TVL_DOC" ]; then
+              # Here, not in the task: past this point a bad document fails after the DDL is applied.
+              if ! jq -e 'type == "object" and (.verifiers | type) == "array" and (.verifiers | length) > 0' "$TVL_DOC" >/dev/null; then
+                echo "::error::$TVL_DOC is not a trusted verifiers list document with a non-empty \`verifiers\` array. An empty list seeds an empty table, and the symptom surfaces later as GET /verifiers returning []."
+                exit 1
+              fi
+              # `run-task` gives no volume to mount, so the overrides are the only channel. Base64 of
+              # the exact bytes, never re-serialised: the seed reads what was reviewed.
+              TVL_B64=$(base64 < "$TVL_DOC" | tr -d '\n')
+              COMMAND="$COMMAND && echo '--- MIGRATE_OK: DDL applied, seeding TVL ---'"
+              COMMAND="$COMMAND && printf %s '$TVL_B64' | base64 -d > /tmp/trusted-verifiers.json"
+              COMMAND="$COMMAND && cd /app && SCVS_TRUSTED_VERIFIERS_SOURCE=/tmp/trusted-verifiers.json ./node_modules/.bin/tsx scripts/seed-tvl.ts"
+              COMMAND="$COMMAND && echo '--- SEED_OK: TVL seed complete ---'"
+              echo "Will seed the TVL from this deployment's own document ($(jq -r '.verifiers | length' "$TVL_DOC") verifier(s), $(wc -c <"$TVL_DOC" | tr -d ' ') bytes)"
+            elif [ "$DECLARED" != "0" ]; then
               COMMAND="$COMMAND && echo '--- MIGRATE_OK: DDL applied, seeding TVL ---'"
               COMMAND="$COMMAND && cd /app && ./node_modules/.bin/tsx scripts/seed-tvl.ts"
               COMMAND="$COMMAND && echo '--- SEED_OK: TVL seed complete ---'"
-              echo "Will seed the TVL from the source this environment's configuration declares"
+              echo "Will seed the TVL from the source $TASK_DEFINITION declares"
+            else
+              echo "::error::no Trusted Verifiers List for $ENVIRONMENT, so the seed cannot run. Supply it one of two ways, both of which are the caller's: put the document at \`$ENVIRONMENT/trusted-verifiers.json\` in the \`deploy-contracts\` artifact this workflow downloads (alongside \`$ENVIRONMENT/<service>.json\`), or, if you host your list, set SCVS_TRUSTED_VERIFIERS_SOURCE to its https: URL — plus SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 — on $TASK_DEFINITION. This is not this repository's to supply: the image holds no environment's list."
+              exit 1
             fi
           fi
 
@@ -340,6 +363,14 @@ jobs:
             --arg name "$CONTAINER_NAME" \
             --arg cmd "$COMMAND" \
             '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd]}]}')
+
+          # ECS caps `--overrides` at 8192 bytes and the planted TVL rides inside it. Checked here so
+          # outgrowing the channel names its own fix, not a run-task `ClientException`.
+          OVERRIDES_BYTES=$(printf %s "$OVERRIDES" | wc -c | tr -d ' ')
+          if [ "$OVERRIDES_BYTES" -gt 8192 ]; then
+            echo "::error::the run-task overrides are ${OVERRIDES_BYTES} bytes and ECS caps them at 8192. The Trusted Verifiers List document planted into the command is what grew. Host the list and declare it as an https: URL with SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 instead."
+            exit 1
+          fi
 
           # The service's own `awsvpcConfiguration` is by definition the network that reaches this environment's
           # RDS instance, so this is both correct per environment and self-healing when Terraform moves a
