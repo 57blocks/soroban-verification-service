@@ -1,7 +1,6 @@
 import type { UseFormReturn } from "react-hook-form";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PillIcon } from "@/components/ui/pill-icon";
 import type {
   RejectedBuildOption,
   SourceAccessMode,
@@ -48,10 +47,10 @@ export const EvidenceCard = ({
   rejectedOptions,
   terms,
 }: EvidenceCardProps) => (
-  <section className="overflow-hidden rounded-lg bg-surface shadow-panel">
+  <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-panel">
     <div className="p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-        <h2 className="m-0 font-display text-[1.35rem] font-semibold text-ink">
+        <h2 className="m-0 text-[1.35rem] font-semibold text-ink">
           Complete missing evidence
         </h2>
       </div>
@@ -86,9 +85,11 @@ export const EvidenceCard = ({
         <RejectedOptions rejected={rejectedOptions} />
         <Button onClick={onSubmit} disabled={isSubmitting} aria-busy={isSubmitting}>
           Submit completed manifest
-          <PillIcon animated={!isSubmitting}>
-            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "→"}
-          </PillIcon>
+          {isSubmitting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+          )}
         </Button>
       </div>
     </div>

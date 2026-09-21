@@ -1,40 +1,27 @@
 import { FadeUp } from "@/components/ui/fade-up";
 import { pipelineHead, pipelineStages } from "../content";
+import { MonoChip } from "./MonoChip";
 import { SectionHead } from "./SectionHead";
 
 export const HowItWorksSection = () => (
-  <section id="how" className="px-8 py-[120px]">
+  <section id="how" className="bg-surface px-4 py-16 md:px-20 md:py-24">
     <div className="mx-auto max-w-shell">
       <FadeUp>
         <SectionHead {...pipelineHead} />
       </FadeUp>
-    </div>
 
-    <div className="mx-auto grid max-w-shell border border-line md:grid-cols-4">
-      {pipelineStages.map(({ num, title, description }, index) => (
-        // FadeUp is the grid item, so the divider and the row-filling height move onto it.
-        <FadeUp
-          key={num}
-          delay={index * 100}
-          className={[
-            "h-full",
-            index < pipelineStages.length - 1
-              ? "md:border-r md:border-line"
-              : "",
-          ].join(" ")}
-        >
-          <div className="px-7 pb-12 pt-10">
-            {/* The yellow highlight is an inset shadow so it hugs the digits, not the box. */}
-            <span className="mb-[30px] block w-fit px-0.5 font-display text-[2.4rem] font-medium leading-none text-ink shadow-[inset_0_-0.28em_0_theme(colors.yellow.DEFAULT)]">
-              {num}
-            </span>
-            <h3 className="m-0 mb-2.5 text-[1.25rem] font-semibold tracking-[-0.015em]">
-              {title}
-            </h3>
-            <p className="m-0 text-[0.92rem] text-ink-body">{description}</p>
-          </div>
-        </FadeUp>
-      ))}
+      <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+        {pipelineStages.map(({ num, title, description, sample }, index) => (
+          <FadeUp key={num} delay={index * 80} className="h-full">
+            <div className="flex h-full flex-col gap-2 rounded-xl border border-line bg-surface p-6 transition-all duration-150 hover:-translate-y-1 hover:shadow-lg">
+              <span className="font-mono text-[13px] font-medium text-yellow-deep">{num}</span>
+              <h3 className="m-0 text-base font-semibold text-ink">{title}</h3>
+              <p className="m-0 mb-2 text-sm leading-[1.55] text-ink-body">{description}</p>
+              <MonoChip sample={sample} />
+            </div>
+          </FadeUp>
+        ))}
+      </div>
     </div>
   </section>
 );

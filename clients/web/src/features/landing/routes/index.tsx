@@ -8,7 +8,7 @@ const landingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.landing,
   component: function LandingRoute() {
-    useDocumentTitle("Soroban Verify - Contract Source Verification Service");
+    useDocumentTitle("Soroban Verifier — Contract Source Verification Service");
     return <LandingPage />;
   },
 });

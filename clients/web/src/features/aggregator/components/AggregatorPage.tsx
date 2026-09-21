@@ -24,7 +24,7 @@ export const AggregatorPage = () => {
   return (
     <main className="relative min-h-screen bg-surface-alt font-sans leading-normal text-ink antialiased">
       <div className="mx-auto max-w-console px-8 pb-16 pt-14">
-        <h1 className="m-0 font-display text-[2rem] font-semibold">Aggregated Verification Results</h1>
+        <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight">Aggregated Verification Results</h1>
         <p className="mb-0 mt-2 max-w-[64ch] text-[0.95rem] leading-relaxed text-ink-muted">
           What the verifiers this deployment trusts say about a Wasm hash or a deployed contract.
           Answers come from the aggregate it retained, so a slow verifier never holds up a page — and

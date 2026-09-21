@@ -1,13 +1,11 @@
-import { ArchitectureSection } from "./ArchitectureSection";
 import { AudienceSection } from "./AudienceSection";
-import { CapabilitiesSection } from "./CapabilitiesSection";
 import { ClosingCta } from "./ClosingCta";
 import { HeroSection } from "./HeroSection";
 import { HowItWorksSection } from "./HowItWorksSection";
 import { LandingFooter } from "./LandingFooter";
 import { LandingNav } from "./LandingNav";
+import { ResultSection } from "./ResultSection";
 import { SecuritySection } from "./SecuritySection";
-import { SelfHostSection } from "./SelfHostSection";
 import { TrustModelSection } from "./TrustModelSection";
 import { TrustStrip } from "./TrustStrip";
 
@@ -17,13 +15,11 @@ export const LandingPage = () => (
     <LandingNav />
     <HeroSection />
     <TrustStrip />
-    <AudienceSection />
     <HowItWorksSection />
-    <ArchitectureSection />
+    <ResultSection />
     <TrustModelSection />
-    <CapabilitiesSection />
     <SecuritySection />
-    <SelfHostSection />
+    <AudienceSection />
     <ClosingCta />
     <LandingFooter />
   </main>

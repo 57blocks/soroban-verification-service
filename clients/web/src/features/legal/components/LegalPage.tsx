@@ -69,7 +69,7 @@ export const LegalPage = ({ doc, bundle }: { doc: LegalDocument; bundle: LegalBu
         <span className="mb-3.5 block font-sans text-[0.9rem] font-medium text-ink-soft">
           Legal · {bundle.operatorName} reference deployment
         </span>
-        <h1 className="m-0 font-display text-[clamp(2rem,3.4vw,2.9rem)] font-medium leading-[1.12] tracking-[-0.01em]">
+        <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
           {doc.title}
         </h1>
         <p className="m-0 mt-3 font-mono text-[0.75rem] uppercase tracking-[0.12em] text-ink-mute">
@@ -113,7 +113,7 @@ export const LegalPage = ({ doc, bundle }: { doc: LegalDocument; bundle: LegalBu
       <div className="grid gap-12">
         {doc.sections.map(({ id, heading, blocks }) => (
           <section key={id} id={id} className="scroll-mt-24">
-            <h2 className="m-0 mb-4 font-display text-[1.45rem] font-medium leading-[1.25]">
+            <h2 className="m-0 mb-4 text-xl font-semibold leading-snug md:text-2xl">
               {heading}
             </h2>
             <LegalBlocks blocks={blocks} />

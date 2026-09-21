@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Soroban Verify</title>
+    <title>Soroban Verifier</title>
     <meta
       name="description"
-      content="Source verification for Soroban contracts with reproducible build results."
+      content="Hosted source verification for Stellar Soroban contracts: a sandboxed rebuild, a byte-for-byte Wasm comparison, and an attributed published result."
     />
     <link rel="icon" href="/favicon.png" sizes="32x32" type="image/png" />
-    <!-- Lora is the display serif behind every heading in the design; Inter is the UI font. Both are
-         self-hosted and loaded from src/fonts.ts: a Google Fonts request disclosed every visitor's IP to
-         Google (docs/features/retention-and-pseudonymisation/design.md RP-4). -->
+    <!-- Inter is the UI font and the only one headings use; JetBrains Mono carries hashes, commands and
+         build logs. Both are self-hosted and loaded from src/fonts.ts: a font request to a third party
+         disclosed every visitor's IP to it — see src/fonts.ts. -->
     <!--
       Runtime configuration, substituted by docker/web-entrypoint.sh at container start. Inline and
       synchronous so a route guard can read it during the first navigation — a fetched config.json

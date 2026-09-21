@@ -1,17 +1,18 @@
 import { FadeUp } from "@/components/ui/fade-up";
 import { securityCapabilities, securityHead } from "../content";
-import { CapabilityGrid } from "./CapabilityGrid";
+import { CardGrid } from "./CardGrid";
 import { SectionHead } from "./SectionHead";
 
 export const SecuritySection = () => (
-  <section className="px-8 py-[120px]">
+  <section
+    id="security"
+    className="border-y border-line bg-surface-alt px-4 py-16 md:px-20 md:py-24"
+  >
     <div className="mx-auto max-w-shell">
       <FadeUp>
         <SectionHead {...securityHead} />
       </FadeUp>
+      <CardGrid items={securityCapabilities} />
     </div>
-    <FadeUp>
-      <CapabilityGrid items={securityCapabilities} />
-    </FadeUp>
   </section>
 );

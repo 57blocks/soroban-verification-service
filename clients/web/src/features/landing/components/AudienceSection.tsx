@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { FadeUp } from "@/components/ui/fade-up";
 import { audienceHead, visibleAudienceCards } from "../content";
+import { MonoChip } from "./MonoChip";
 import { SectionHead } from "./SectionHead";
 
 /** Both arms of `AudienceAction` render the same underlined call to action. */
@@ -11,54 +12,48 @@ export const AudienceSection = () => {
   const cards = visibleAudienceCards();
 
   return (
-    <section className="px-8 pt-[120px]">
+    <section id="start" className="bg-surface px-4 py-16 md:px-20 md:py-24">
       <div className="mx-auto max-w-shell">
         <FadeUp>
           <SectionHead {...audienceHead} />
         </FadeUp>
-      </div>
 
-      {/* One hairline grid: each card carries the divider on its right, the last one does not. */}
-      <div className="mx-auto grid max-w-shell border border-line md:grid-cols-3">
-        {cards.map(({ label, title, description, action }, index) => (
-          // FadeUp is the grid item, so it carries the divider and `h-full` — without that the card's background
-          // stops short of the tallest cell in the row.
-          <FadeUp
-            key={label}
-            delay={index * 120}
-            className={[
-              "h-full",
-              index < cards.length - 1 ? "md:border-r md:border-line" : "",
-            ].join(" ")}
-          >
-            <div className="h-full bg-surface px-8 pb-14 pt-12 transition-colors hover:bg-surface-hover">
-              <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-yellow-deep">
-                {label}
-              </span>
-              <h3 className="mb-4 mt-[18px] font-display text-[1.9rem] font-medium leading-[1.12] tracking-[-0.01em]">
-                {title}
-              </h3>
-              <p className="m-0 mb-7 text-[0.95rem] text-ink-body">
-                {description}
-              </p>
+        <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
+          {cards.map(({ label, title, description, sample, action }, index) => (
+            // FadeUp is the grid item, so it carries `h-full` — without that the card's background stops short
+            // of the tallest cell in the row.
+            <FadeUp key={label} delay={index * 120} className="h-full">
+              <div className="flex h-full flex-col rounded-xl border border-line bg-surface p-6 transition-all duration-150 hover:-translate-y-1 hover:shadow-lg md:p-7">
+                <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-yellow-deep">
+                  {label}
+                </span>
+                <h3 className="mb-2 mt-3 text-lg font-semibold leading-tight text-ink">{title}</h3>
+                <p className="m-0 mb-5 text-sm leading-[1.6] text-ink-body">{description}</p>
 
-              {!action ? null : action.kind === "route" ? (
-                <Link to={action.to} className={actionClass}>
-                  {action.label} →
-                </Link>
-              ) : (
-                <a
-                  href={action.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={actionClass}
-                >
-                  {action.label} →
-                </a>
-              )}
-            </div>
-          </FadeUp>
-        ))}
+                <MonoChip sample={sample} className="mt-auto" />
+
+                {action && (
+                  <div className="mt-5">
+                    {action.kind === "route" ? (
+                      <Link to={action.to} className={actionClass}>
+                        {action.label} →
+                      </Link>
+                    ) : (
+                      <a
+                        href={action.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={actionClass}
+                      >
+                        {action.label} →
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            </FadeUp>
+          ))}
+        </div>
       </div>
     </section>
   );

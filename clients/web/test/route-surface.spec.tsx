@@ -57,7 +57,7 @@ describe("the root route renders the landing page rather than redirecting off it
     });
     render(<RouterProvider router={memory} />);
     const heading = await screen.findByRole("heading", { level: 1 });
-    expect(heading.textContent).toMatch(/Where Soroban source/);
+    expect(heading.textContent).toMatch(/Does the deployed contract match/);
     expect(memory.state.location.pathname).toBe("/");
   });
 });

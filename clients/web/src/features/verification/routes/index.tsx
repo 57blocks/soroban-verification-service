@@ -24,7 +24,7 @@ const verifyRoute = createRoute({
     }
   },
   component: function VerifyRoute() {
-    useDocumentTitle("Submit Soroban Verification | Soroban Verify");
+    useDocumentTitle("Submit Soroban Verification | Soroban Verifier");
     const { new: forceNewParam } = verifyRoute.useSearch();
     return <VerifyConsole mode="submit" forceNew={forceNewParam === "1"} />;
   },
@@ -34,7 +34,7 @@ const verifyJobRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.verifyJob,
   component: function VerifyJobRoute() {
-    useDocumentTitle("Verification Job | Soroban Verify");
+    useDocumentTitle("Verification Job | Soroban Verifier");
     const { job_id } = verifyJobRoute.useParams();
     return <VerifyConsole mode="job" initialJobId={job_id} />;
   },

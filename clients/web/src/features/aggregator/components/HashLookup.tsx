@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PillIcon } from "@/components/ui/pill-icon";
 import type { AdditionalRoot } from "../hooks/use-additional-roots";
 import { lookupFailureCopy, useHashLookup } from "../hooks/use-hash-lookup";
 import { useRootLookups } from "../hooks/use-root-lookups";
@@ -42,7 +42,7 @@ export const HashLookup = ({ additionalRoots = [] }: { additionalRoots?: readonl
         />
         <Button type="submit">
           Look up
-          <PillIcon animated>→</PillIcon>
+          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
         </Button>
       </form>
 

@@ -6,7 +6,7 @@ import { githubRepoUrl, sourceIsPublic } from "@/config/site";
  * is public — the round GitHub link on the right.
  */
 export const SiteNav = () => (
-  <nav className="sticky top-0 z-50 border-b border-line-strong bg-surface/[0.92] backdrop-blur-[10px]">
+  <nav className="sticky top-0 z-50 border-b border-line bg-surface/[0.92] backdrop-blur-[10px]">
     <div className="mx-auto flex max-w-shell items-center justify-between gap-6 px-8 py-[18px]">
       <Link
         to="/"
@@ -23,7 +23,7 @@ export const SiteNav = () => (
           rel="noreferrer"
           title="View source on GitHub"
           aria-label="View source on GitHub"
-          className="inline-grid size-9 place-items-center rounded-full border border-line-strong bg-surface text-[0.8rem] font-bold text-ink transition-colors hover:border-ink hover:bg-yellow"
+          className="inline-grid size-9 place-items-center rounded-md border border-line-strong bg-surface text-[0.8rem] font-bold text-ink transition-colors hover:border-ink hover:bg-surface-alt"
         >
           GH
         </a>

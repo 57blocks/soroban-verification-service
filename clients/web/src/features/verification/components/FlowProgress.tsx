@@ -21,7 +21,7 @@ export const FlowProgress = ({
   allComplete,
   showDescriptions = true,
 }: FlowProgressProps) => (
-  <section className="mb-5 rounded-lg bg-surface p-4 shadow-panel">
+  <section className="mb-5 rounded-xl border border-line bg-surface p-4 shadow-panel">
     <div className="grid gap-3 md:grid-cols-3">
       {flowSteps.map(({ label, desc }, index) => {
         const isComplete = allComplete || currentStep > index;

@@ -21,13 +21,13 @@ export const ConsoleHero = ({ mode }: { mode: VerifyMode }) => {
 
   return (
     <div className="mx-auto mb-[54px] max-w-console text-center">
-      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-ink/[0.16] bg-surface px-3 py-1.5 text-[0.875rem] font-semibold shadow-underline">
+      <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-[0.875rem] font-semibold shadow-[inset_0_-2px_0_theme(colors.yellow.DEFAULT)]">
         <span aria-hidden>◈</span> Soroban source verification
       </div>
-      <h1 className="m-0 font-display text-[clamp(2.3rem,4.4vw,3.3rem)] font-medium leading-[1.02] tracking-[0.005em] text-ink">
+      <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight text-ink md:text-[2.75rem]">
         {title}
       </h1>
-      <p className="m-0 mt-4 font-display text-[1.05rem] leading-[1.6] text-ink/[0.72]">
+      <p className="m-0 mt-4 text-[1.05rem] leading-[1.7] text-ink-body">
         {lines.map((line, index) => (
           <span key={line}>
             {index > 0 && <br />}

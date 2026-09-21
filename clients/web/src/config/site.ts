@@ -5,15 +5,15 @@ export const githubRepoUrl =
 
 /**
  * The repository above is private, so every link into it answers 404 for a reader outside the organisation.
- * Publication is a mirror rather than a visibility change, so turning this on and repointing `githubRepoUrl`
- * at that mirror are one edit — not two.
+ * It was created private and is still private — the flip to public had not happened as of 2026-09-21, and
+ * nothing here changes until it does.
  */
 export const sourceIsPublic: boolean = false;
 
 export const sdkReadmeUrl = `${githubRepoUrl}/tree/main/clients/sdk`;
 
-/** The self-host entry point: both Compose files and what each one is for. */
-export const dockerReadmeUrl = `${githubRepoUrl}/tree/main/docker`;
+/** The self-host entry point: what standing up your own verifier actually requires. */
+export const selfHostGuideUrl = `${githubRepoUrl}/blob/main/docs/self-hosted-deployment.md`;
 
 export const docsUrl = `${githubRepoUrl}/tree/main/docs`;
 

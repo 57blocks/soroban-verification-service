@@ -1,68 +1,64 @@
 import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PillIcon } from "@/components/ui/pill-icon";
-import { DotFieldLight } from "@/components/ui/dot-field";
-import RotatingText from "@/components/ui/rotating-text";
 import { FadeUp } from "@/components/ui/fade-up";
-import { heroCopy, rotatingWords } from "../content";
+import { heroCopy } from "../content";
+import { RebuildPipeline } from "./RebuildPipeline";
+
+/**
+ * The headline with its one marked word. The mark is a background gradient rather than a text colour: the
+ * accent is unreadable as type on white, and behind ink it is exactly what it is for.
+ */
+const Headline = () => {
+  const [before, after] = heroCopy.title.split(heroCopy.highlight);
+
+  return (
+    <h1 className="m-0 mx-auto max-w-[820px] text-4xl font-bold leading-[1.12] tracking-tight text-ink md:text-5xl lg:text-[54px]">
+      {before}
+      <span className="bg-gradient-to-b from-transparent from-64% to-yellow to-64%">
+        {heroCopy.highlight}
+      </span>
+      {after}
+    </h1>
+  );
+};
 
 export const HeroSection = () => (
-  <section
+  <header
     id="hero"
-    className="relative overflow-hidden border-b border-line-hero bg-surface-hero px-8 pb-[116px] pt-[100px]"
+    className="border-b border-line-hero bg-gradient-to-b from-surface to-surface-hero px-4 md:px-20"
   >
-    <DotFieldLight />
+    {/* The wash behind the diagram, sized to it rather than to the section. */}
+    <div className="mx-auto max-w-shell bg-[radial-gradient(720px_340px_at_50%_78%,theme(colors.yellow.DEFAULT/0.30),transparent_70%)] pb-20 pt-20 text-center md:pb-[110px] md:pt-24">
+      <FadeUp>
+        <Headline />
+      </FadeUp>
 
-    <div className="relative z-[2] mx-auto grid max-w-shell justify-items-center gap-10 text-center">
-      <h1 className="m-0 font-display text-[clamp(2.25rem,5.4vw,4.8rem)] font-medium leading-[1.12] tracking-[-0.01em] text-ink md:whitespace-nowrap">
-        {/* One FadeUp per line, each a block — the line's own inline flow stays intact.
-            Wrapping only part of a line in an inline-block sizes that box to the widest
-            line and opens a gap where the rest of the line should continue, which is
-            what the `<br/>`-inside-one-wrapper version did. */}
-        <FadeUp as="span" display="block" delay={0}>
-          Where Soroban source
-        </FadeUp>
-        <FadeUp as="span" display="block" delay={120}>
-          meets{" "}
-          <span className="font-display font-medium italic shadow-[inset_0_-0.18em_0_theme(colors.yellow.DEFAULT)]">
-            <RotatingText
-              words={rotatingWords}
-              intervalMs={2800}
-              staggerMs={45}
-            />
-          </span>{" "}
-          trust.
-        </FadeUp>
-      </h1>
+      <FadeUp delay={120}>
+        <p className="m-0 mx-auto mt-5 max-w-[640px] text-lg leading-[1.6] text-ink-body">
+          {heroCopy.lines.map((line, index) => (
+            <span key={line}>
+              {index > 0 && " "}
+              {line}
+            </span>
+          ))}
+        </p>
+      </FadeUp>
 
-      <FadeUp delay={300}>
-        <div className="grid justify-items-center gap-8">
-          <p className="m-0 font-sans text-[1.05rem] leading-[1.6] text-ink-body">
-            {heroCopy.lines.map((line, index) => (
-              <span key={line}>
-                {index > 0 && <br />}
-                <span className="md:whitespace-nowrap">{line}</span>
-              </span>
-            ))}
-          </p>
-
-          <div className="flex flex-wrap gap-3.5">
-            <Button
-              asChild
-              variant="primary"
-              size="pillHero"
-              className="border-0 hover:bg-ink-hover"
-            >
-              <Link to="/verify">
-                {heroCopy.cta}
-                <PillIcon size="md" animated>
-                  →
-                </PillIcon>
-              </Link>
-            </Button>
-          </div>
+      <FadeUp delay={240}>
+        <div className="mt-8">
+          <Button asChild variant="primary" size="lg">
+            <Link to="/verify">
+              {heroCopy.cta}
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+            </Link>
+          </Button>
         </div>
       </FadeUp>
+
+      <FadeUp delay={360}>
+        <RebuildPipeline />
+      </FadeUp>
     </div>
-  </section>
+  </header>
 );
