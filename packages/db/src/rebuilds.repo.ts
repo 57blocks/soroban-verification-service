@@ -235,6 +235,25 @@ export class RebuildsRepository {
     return count === 1;
   }
 
+  /**
+   * Moves a not-yet-dispatched rebuild onto the mode routing actually chose. `selectBuildMechanism` is total
+   * on `"build"`, so a persisted `"verify"` cannot be a decision any live routing would make — it is a row
+   * that outlived the CLI path. A CAS on `pending` because that is the one status where nothing has been
+   * submitted yet: a claimed or finished rebuild's mode describes an attempt that really happened, and
+   * rewriting it would make its own record untrue.
+   */
+  async reconcileBuildMode(rebuildId: string, buildMode: BuildMode): Promise<boolean> {
+    const { count } = await this.prisma.rebuild.updateMany({
+      where: {
+        id: rebuildId,
+        status: "pending" satisfies RebuildStatus,
+        buildMode: { not: buildMode },
+      },
+      data: { buildMode },
+    });
+    return count === 1;
+  }
+
   /** Rebuilds that were mid-`SubmitJob` when a process died — the reason `"dispatching"` is a distinct status. */
   async listStuckDispatching(): Promise<RebuildRecord[]> {
     const rows = await this.prisma.rebuild.findMany({
