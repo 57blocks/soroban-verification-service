@@ -115,7 +115,10 @@ export function buildArtifacts(manifest, environments) {
           // Legal locally, wrong in a deployed environment — a distinction `required: forbidden` cannot draw,
           // because it is absolute.
           neverDeployed.push(name);
-        } else if (inject === "batch-submit-job") {
+        } else if (inject === "batch-submit-job" || inject === "ecs-run-task-override") {
+          // Two mechanisms, one meaning: nothing durable carries the value, so a definition holding
+          // it holds a stale one. A job parameter, or the `run-task` override db-migrate.yml
+          // composes — the only channel into a task that borrows another service's definition.
           perInvocation.push(name);
         } else if (inject === "ecs-secrets") {
           // A `credential` entry names its own pre-existing secret; a `config` entry lands in the per-service
@@ -180,7 +183,9 @@ export function buildArtifacts(manifest, environments) {
           ? {
               per_invocation: {
                 $note:
-                  "injected per job/request by another service — must NOT appear in the task or job definition",
+                  "supplied per invocation by whatever starts this — another service's submit call, or the " +
+                  "pipeline's `run-task` override. Must NOT appear in the task or job definition: a value " +
+                  "baked there is a stale spec that will be used.",
                 variables: perInvocation.sort(),
               },
             }
