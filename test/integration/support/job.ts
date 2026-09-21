@@ -73,30 +73,58 @@ export interface TerminalJob {
   readonly progressSteps: string[];
 }
 
+/**
+ * `build_failed` is the only published status a job can leave again: `requeueRetryableFailures` scans
+ * internal `failed` rows whose reason is `build_timeout` or `internal_error`, and both publish as
+ * `build_failed`. The published body never says which reason it was, so outlasting one scan is the only way
+ * to tell a final failure from one about to be retried — which is why this is a caller's choice. A case
+ * asserting *that* a build failed wants the first terminal state; a case that needs the job's final answer
+ * passes `settleMs`.
+ */
+const REQUEUEABLE_STATUS = "build_failed";
+
+/** One `SCVS_JOB_RETRY_INTERVAL_MS` scan plus a poll, so a re-queue that is going to happen has happened. */
+export const RETRYABLE_SETTLE_MS = Number(process.env.SCVS_JOB_RETRY_INTERVAL_MS || 60_000) + 2_000;
+
 export async function waitForTerminal(
   jobId: string,
-  options: { timeoutMs?: number; startedAt?: number } = {}
+  options: { timeoutMs?: number; startedAt?: number; settleMs?: number } = {}
 ): Promise<TerminalJob> {
   const timeoutMs = options.timeoutMs ?? env.jobTimeoutMs;
+  const settleMs = options.settleMs ?? 0;
   const startedAt = options.startedAt ?? Date.now();
   const deadline = startedAt + timeoutMs;
   const statusSequence: string[] = [];
   const progressSteps: string[] = [];
   let last: JobStatusBody | undefined;
+  // When the status now being held was first seen. T1/T2 measure to that instant, not to `Date.now()`, so
+  // settling does not inflate the wall clock a caller reads.
+  let heldSince = 0;
 
   while (Date.now() < deadline) {
+    const previous = last?.status;
     last = await readJob(jobId);
-    if (statusSequence[statusSequence.length - 1] !== last.status) {
+    if (last.status !== previous) {
       statusSequence.push(last.status);
+      heldSince = Date.now();
     }
     const step = last.progress?.step;
     if (step && progressSteps[progressSteps.length - 1] !== step) {
       progressSteps.push(step);
     }
     if (TERMINAL_JOB_STATUSES.includes(last.status)) {
-      return { body: last, wallClockMs: Date.now() - startedAt, statusSequence, progressSteps };
+      const mayStillBeRequeued = settleMs > 0 && last.status === REQUEUEABLE_STATUS;
+      if (!mayStillBeRequeued || Date.now() - heldSince >= settleMs) {
+        return { body: last, wallClockMs: heldSince - startedAt, statusSequence, progressSteps };
+      }
     }
     await sleep(env.pollIntervalMs);
+  }
+
+  // A `build_failed` still inside its settle window when the job timeout expired did reach a terminal state.
+  // Reporting "never reached one" would be false.
+  if (last && TERMINAL_JOB_STATUSES.includes(last.status)) {
+    return { body: last, wallClockMs: heldSince - startedAt, statusSequence, progressSteps };
   }
 
   throw new Error(
@@ -111,7 +139,7 @@ export async function waitForTerminal(
 
 export async function submitAndWait(
   body: SubmitBody,
-  options: { timeoutMs?: number; requireFreshTargetJob?: boolean } = {}
+  options: { timeoutMs?: number; requireFreshTargetJob?: boolean; settleMs?: number } = {}
 ): Promise<TerminalJob & { jobId: string }> {
   const { jobId, at } = await submitAccepted(body, options);
   const terminal = await waitForTerminal(jobId, { ...options, startedAt: at });
