@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sv.57blocks.com/schemas/stellar-verification-page-aggregated-1.0.schema.json",
+  "$id": "https://sv.blocksmith.co/schemas/stellar-verification-page-aggregated-1.0.schema.json",
   "$comment": "Contract Verification Aggregation SEP (draft) — an aggregator's page of the bulk-load stream, TRD 2.1 §8.2 / §5.7. The envelope is the Results SEP's stellar-verification-page, unchanged and under the same schema value; only `records` differs, which is why this is a second file rather than a branch in that one — a verifier implementing only the Results SEP validates against a document that cannot mention aggregation.",
   "title": "Contract Verification Bulk-Load Page, aggregated (Aggregation SEP 1.0)",
   "description": "The body of GET /v1/wasms on an aggregator: records are whole stellar-verification-aggregate documents, because an aggregator's value is that a consumer gets one stream instead of traversing a Trusted Verifiers List and synchronising against every member.",

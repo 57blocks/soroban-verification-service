@@ -1,6 +1,6 @@
 {
   "schema": "scvs-legal-documents-v1",
-  "version": "2026-09-17",
+  "version": "2026-09-21",
   "effective_date": null,
   "operator_name": "57Blocks",
   "service_name": "Soroban Verify",
@@ -11,7 +11,7 @@
       "slug": "terms",
       "title": "Terms of Service",
       "document_title": "Terms of Service | Soroban Verify",
-      "intro": "These terms govern your use of Soroban Verify, the hosted Soroban source verification service operated at this domain by 57Blocks Technology Inc., a California corporation with an address at 3001 Bishop Dr, Suite 300, San Ramon, California 94583, United States (\"57Blocks\", \"we\", or \"us\") (the \"Service\"). They cover the hosted Service only. The software behind it is open source under the [Apache License 2.0](https://sv.57blocks.com/schemas/LICENSE), and your use of that software is governed by that license, not by these terms.",
+      "intro": "These terms govern your use of Soroban Verify, the hosted Soroban source verification service operated at this domain by 57Blocks Technology Inc., a California corporation with an address at 3001 Bishop Dr, Suite 300, San Ramon, California 94583, United States (\"57Blocks\", \"we\", or \"us\") (the \"Service\"). They cover the hosted Service only. The software behind it is open source under the [Apache License 2.0](https://sv.blocksmith.co/schemas/LICENSE), and your use of that software is governed by that license, not by these terms.",
       "sections": [
         {
           "id": "what-the-service-does",
