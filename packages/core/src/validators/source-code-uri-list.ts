@@ -5,8 +5,7 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from "class-validator";
-
-const HEX_SHA256 = /^[0-9a-f]{64}$/;
+import { HEX_SHA256 } from "../digest.js";
 
 /** True for either form a `verified_source_code_uris` item can take on the wire: a bare URI, or `{location, url, sha256?}`. */
 export function isSourceCodeUriItem(value: unknown): boolean {
