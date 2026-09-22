@@ -187,12 +187,29 @@ describe("GET /api/verification/v1/wasms — BL1's stream, verification-svc's ow
 });
 
 describe("GET /api/verification/v1/wasms.json — the deprecated spelling", () => {
-  it("answers what the canonical route answers, and says it is deprecated", async () => {
-    const wasmHash = `${"6".repeat(63)}c`;
-    await createPublishedJob({ wasmHash, publishedUpdatedAt: "2097-06-30T00:00:00.000Z" });
+  // A sibling suite re-stamps `published_updated_at` on a row it already published (`recordArchiveOutcome`,
+  // `recordStatusLinkOutcome`), so both routes are asked for a one-row window opened 1 ms below a row this file
+  // created. `f`×64 is above every hex hash, so nothing sharing that lower bound's millisecond slips in.
+  const windowFrom = (at: string) => `order=asc&limit=1&cursor=${new Date(at).getTime() - 1}-${"f".repeat(64)}`;
 
-    const canonical = await request(server).get("/api/verification/v1/wasms?limit=200&order=desc");
-    const alias = await request(server).get("/api/verification/v1/wasms.json?limit=200&order=desc");
+  it("answers what the canonical route answers, and says it is deprecated", async () => {
+    const publishedUpdatedAt = "2097-06-30T00:00:00.000Z";
+    const wasmHash = `${"6".repeat(63)}c`;
+    await createPublishedJob({ wasmHash, publishedUpdatedAt });
+    const query = windowFrom(publishedUpdatedAt);
+
+    const canonical = await request(server).get(`/api/verification/v1/wasms?${query}`);
+    const alias = await request(server).get(`/api/verification/v1/wasms.json?${query}`);
+
+    // Spelled out, so the equality below can never hold by both routes answering an empty page.
+    expect(canonical.status).toBe(200);
+    expect(canonical.body).toEqual({
+      schema: "stellar-verification-page",
+      schema_version: "1.0",
+      order: "asc",
+      cursor: `${new Date(publishedUpdatedAt).getTime()}-${wasmHash}`,
+      records: [{ wasm_hash: wasmHash, updated_at: publishedUpdatedAt }],
+    });
 
     expect(alias.status).toBe(200);
     expect(alias.body).toEqual(canonical.body);
@@ -201,12 +218,19 @@ describe("GET /api/verification/v1/wasms.json — the deprecated spelling", () =
   });
 
   it("shares one cursor space with the canonical route, so a consumer can migrate mid-stream", async () => {
-    const first = await request(server).get("/api/verification/v1/wasms.json?limit=1&order=asc");
+    // One pair on one timestamp: the handover only proves something if the canonical route resolves the same
+    // wasm_hash tiebreak the deprecated route's cursor encoded.
+    const publishedUpdatedAt = "2097-07-01T00:00:00.000Z";
+    const hashes = [`${"6".repeat(63)}d`, `${"6".repeat(63)}e`];
+    for (const wasmHash of hashes) await createPublishedJob({ wasmHash, publishedUpdatedAt });
+
+    const first = await request(server).get(`/api/verification/v1/wasms.json?${windowFrom(publishedUpdatedAt)}`);
     expect(first.status).toBe(200);
-    expect(first.body.cursor).not.toBeNull();
+    expect(first.body.records).toEqual([{ wasm_hash: hashes[0], updated_at: publishedUpdatedAt }]);
+    expect(first.body.cursor).toBe(`${new Date(publishedUpdatedAt).getTime()}-${hashes[0]}`);
 
     const second = await request(server).get(`/api/verification/v1/wasms?limit=1&cursor=${first.body.cursor}`);
     expect(second.status).toBe(200);
-    expect(second.body.records[0]?.wasm_hash).not.toBe(first.body.records[0]?.wasm_hash);
+    expect(second.body.records).toEqual([{ wasm_hash: hashes[1], updated_at: publishedUpdatedAt }]);
   });
 });
