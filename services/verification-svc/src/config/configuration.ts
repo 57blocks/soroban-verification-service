@@ -42,6 +42,7 @@ const configuration = () => ({
   // The in-process tier's ceiling — `ThrottlerGuard`, applied globally in app.module.ts.
   throttleLimit: numberEnv("SCVS_THROTTLE_LIMIT", 60),
   uploadCleanupIntervalMs: numberEnv("SCVS_UPLOAD_CLEANUP_INTERVAL_MS", 60_000),
+  abuseSweepIntervalMs: numberEnv("SCVS_ABUSE_SWEEP_INTERVAL_MS", 300_000),
   // Anchored against SCVS_ENVIRONMENT_COMPOSE_TIMEOUT_MS's 30-minute default for a *different* job type
   // (composer), scaled up because a verify/build sandbox routinely runs longer (full `cargo vendor` + compile).
   stagingSweepJobAgeCeilingMs: numberEnv("SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS", 14_400_000),

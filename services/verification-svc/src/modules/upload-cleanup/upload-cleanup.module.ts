@@ -3,7 +3,7 @@ import { UploadCleanupService } from "../../common/upload-cleanup.js";
 import { UploadCleanupScheduler } from "./upload-cleanup.scheduler.js";
 
 /**
- * Wraps the `@Interval`-driven expired-upload sweep as its own feature module (was a bare
+ * Wraps the interval-driven expired-upload sweep as its own feature module (was a bare
  * `UploadCleanupScheduler` provider on AppModule).
  */
 @Module({

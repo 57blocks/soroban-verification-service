@@ -1,26 +1,14 @@
 import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import {
-  DrainState,
-  ScvsLogger,
-  ScvsMetrics,
-  runWithLogContext,
-  type Network,
-} from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { DrainState, ScvsLogger, ScvsMetrics, runWithLogContext, startInterval, type Network } from "@scvs/core";
 import { JobsRepository, type JobRecord } from "@scvs/db";
 import { WorkerTickState } from "../../common/worker-tick.module.js";
 import { VerificationPipelineService } from "../verification-pipeline/verification-pipeline.service.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const POLL_INTERVAL_MS = Number(
-  process.env.SCVS_WORKER_POLL_INTERVAL_MS || 2_000
-);
-
-/** Replaces main.ts's old `setInterval` poll loop with `@nestjs/schedule`'s `@Interval`. */
+/** Replaces main.ts's old `setInterval` poll loop with one `@nestjs/schedule` owns. */
 @Injectable()
 export class BuildDispatchScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("build-dispatch");
@@ -44,19 +32,21 @@ export class BuildDispatchScheduler implements OnModuleInit {
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(VerificationPipelineService)
     private readonly pipeline: VerificationPipelineService,
-    @Inject(JobsRepository) private readonly jobs: JobsRepository
+    @Inject(JobsRepository) private readonly jobs: JobsRepository,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
   // Kick off an immediate poll on cold start so we don't idle a full interval — same as the old code's `void
   // pollOnce()` right after `main()`'s startup logging.
   onModuleInit(): void {
+    const intervalMs = this.configService.get("workerPollIntervalMs", { infer: true });
+    startInterval(this.schedule, "build-dispatch", intervalMs, () => this.pollOnce());
     this.logger.log("polling @scvs/db for queued jobs", {
-      interval_ms: POLL_INTERVAL_MS,
+      interval_ms: intervalMs,
     });
     void this.pollOnce();
   }
 
-  @Interval(POLL_INTERVAL_MS)
   async pollOnce(): Promise<void> {
     // O9: stop *claiming* while draining. In-flight jobs keep their slice, and a rebuild already dispatched to
     // Batch outlives this process.

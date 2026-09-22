@@ -94,6 +94,11 @@ const configuration = () => ({
     "SCVS_PUBLISH_RECOVERY_INTERVAL_MS",
     60_000
   ),
+  // Drives both the report-archive scan and the source-archive one: same rung, same cadence, deliberately one
+  // knob (scheduler/archive-recovery + source-archive-recovery).
+  archiveRecoveryIntervalMs: numberEnv("SCVS_ARCHIVE_RECOVERY_INTERVAL_MS", 60_000),
+  jobRetryIntervalMs: numberEnv("SCVS_JOB_RETRY_INTERVAL_MS", 60_000),
+  statusLinkRecoveryIntervalMs: numberEnv("SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS", 60_000),
   // How many times publishing one job's verdict may fail before the recovery scan stops retrying it.
   maxPublishAttempts: numberEnv("SCVS_MAX_PUBLISH_ATTEMPTS", 10),
   // Three attempts at an hour's span is enough to ride out an RPC blip or a Batch capacity gap.

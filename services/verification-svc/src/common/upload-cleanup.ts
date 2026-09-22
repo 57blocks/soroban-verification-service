@@ -14,7 +14,7 @@ export function stagingUploadKey(uploadId: string, filename: string): string {
   return `staging/uploads/${uploadId}/${filename}`;
 }
 
-/** Driven by `UploadCleanupScheduler`'s `@Interval`. */
+/** Driven by `UploadCleanupScheduler`'s interval. */
 @Injectable()
 export class UploadCleanupService {
   // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
