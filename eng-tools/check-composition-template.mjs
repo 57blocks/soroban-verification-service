@@ -136,7 +136,7 @@ async function main() {
 
 /** Asserts the composed image's *docker-level* runtime surface, the part `stellar version` cannot see. */
 async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
-  const { runCommand } = await import("../services/composer/dist/modules/composer/process-utils.js");
+  const { runCommand } = await import("../packages/core/dist/src/process.js");
 
   console.log("\n— comparing the docker-level runtime surface against the official image —");
   const format = "{{json .Config.Entrypoint}}\t{{json .Config.Cmd}}\t{{.Config.WorkingDir}}";
@@ -201,7 +201,7 @@ async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
 
 /** Compiles an actual Soroban contract inside the composed image. */
 async function assertBuildsAContract(environmentId) {
-  const { runCommand } = await import("../services/composer/dist/modules/composer/process-utils.js");
+  const { runCommand } = await import("../packages/core/dist/src/process.js");
 
   console.log("\n— compiling a scaffolded contract in it (proves the toolchain works, not just runs) —");
   const build = await runCommand(
