@@ -20,7 +20,7 @@ async function main(): Promise<void> {
 
   await app.close();
   console.log(`[verification-svc] wrote ${outFile.pathname}`);
-  // `@nestjs/schedule`'s registered `@Interval` (see upload-cleanup.scheduler.ts) keeps a timer alive past
+  // The interval `@nestjs/schedule` holds (see upload-cleanup.scheduler.ts) keeps a timer alive past
   // `app.close()` — force the exit rather than waiting on it.
   process.exit(0);
 }

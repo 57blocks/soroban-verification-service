@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { DrainState, type Network } from "@scvs/core";
 import {
   DbModule,
@@ -77,6 +78,9 @@ async function buildSchedulerHarness(pipeline: {
 }> {
   const moduleRef = await Test.createTestingModule({
     imports: [
+      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness needs
+      // the module that provides it.
+      ScheduleModule.forRoot(),
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
       DbModule.forRootAsync({
         inject: [ConfigService],

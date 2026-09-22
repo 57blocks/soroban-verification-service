@@ -106,7 +106,7 @@ export class AbuseGuardService {
   constructor(
     @Inject(AbuseControlRepository)
     private readonly abuseControl: AbuseControlRepository,
-    // Not `process.env` at module load, which is what the `@Interval`/`@Throttle` call sites here must do —
+    // Not `process.env` at module load, which is what the `@Throttle` call sites here must do —
     // this is an ordinary injection, so it goes through ConfigService like every other setting.
     @Inject(ConfigService)
     private readonly configService: AppConfigService

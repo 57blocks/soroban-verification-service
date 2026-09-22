@@ -1,26 +1,31 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger } from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, startInterval } from "@scvs/core";
 import { AbuseControlRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const INTERVAL_MS = Number(process.env.SCVS_ABUSE_SWEEP_INTERVAL_MS || 300_000);
-
 /** Keeps `abuse_control` inside its retention window (retention-and-pseudonymisation design.md RP-2). */
 @Injectable()
-export class AbuseControlSweepScheduler {
+export class AbuseControlSweepScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("abuse-control-sweep");
 
   // Explicit `@Inject()` — see preflight.controller.ts's comment.
   constructor(
     @Inject(AbuseControlRepository) private readonly abuseControl: AbuseControlRepository,
     @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "abuse-control-sweep",
+      this.configService.get("abuseSweepIntervalMs", { infer: true }),
+      () => this.handleSweep(),
+    );
+  }
+
   async handleSweep(): Promise<void> {
     try {
       const retentionMs = this.configService.get("abuseCounterRetentionMs", { infer: true });

@@ -1,7 +1,7 @@
 import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger } from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { PublishService } from "../publish/publish.service.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
@@ -9,9 +9,6 @@ import type { AppConfigService } from "../../config/configuration.js";
 
 /** Enough ids to act on; a backlog-sized array in one log record helps nobody. */
 const LOGGED_ID_LIMIT = 20;
-
-// Low-frequency safety net, not the primary publish path.
-const PUBLISH_RECOVERY_INTERVAL_MS = Number(process.env.SCVS_PUBLISH_RECOVERY_INTERVAL_MS || 60_000);
 
 /** How long a job may sit in `publishing` before its worker is presumed dead. */
 const PUBLISH_STALE_MS = Number(process.env.SCVS_PUBLISH_STALE_MS || 600_000);
@@ -25,13 +22,19 @@ export class PublishRecoveryScheduler implements OnModuleInit {
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(PublishService) private readonly publish: PublishService,
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
   onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "publish-recovery",
+      this.configService.get("publishRecoveryIntervalMs", { infer: true }),
+      () => this.recoverStuckPublishes(),
+    );
     void this.recoverStuckPublishes();
   }
 
-  @Interval(PUBLISH_RECOVERY_INTERVAL_MS)
   async recoverStuckPublishes(): Promise<void> {
     try {
       const maxAttempts = this.configService.get("maxPublishAttempts", { infer: true });

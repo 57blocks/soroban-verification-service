@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import {
   DbModule,
   JobsRepository,
@@ -270,6 +271,9 @@ beforeAll(async () => {
   moduleRef = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
+      // needs the module that provides it.
+      ScheduleModule.forRoot(),
       DbModule.forRootAsync({
         inject: [ConfigService],
         useFactory: (configService: AppConfigService) =>

@@ -1,14 +1,10 @@
 import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics } from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 import { ArweaveArchiveService } from "../publish/arweave-archive.service.js";
-
-// Low-frequency reconciliation scan for a mainnet+public job's source-archive obligation
-// (mainnet-source-archive design.md MSA-2).
-const SOURCE_ARCHIVE_RECOVERY_INTERVAL_MS = Number(process.env.SCVS_ARCHIVE_RECOVERY_INTERVAL_MS || 60_000);
 
 @Injectable()
 export class SourceArchiveRecoveryScheduler implements OnModuleInit {
@@ -21,9 +17,16 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit {
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
     @Inject(ArweaveArchiveService) private readonly arweaveArchive: ArweaveArchiveService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
   onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "source-archive-recovery",
+      this.configService.get("archiveRecoveryIntervalMs", { infer: true }),
+      () => this.recoverPendingSourceArchives(),
+    );
     const config = this.configService.get("arweave", { infer: true });
     if (config.sourceArchiveEnabled && config.mode === "disabled") {
       this.logger.warn(
@@ -34,7 +37,6 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit {
     void this.recoverPendingSourceArchives();
   }
 
-  @Interval(SOURCE_ARCHIVE_RECOVERY_INTERVAL_MS)
   async recoverPendingSourceArchives(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingSourceArchive();
