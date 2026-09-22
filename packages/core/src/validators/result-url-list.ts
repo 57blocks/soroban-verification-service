@@ -5,8 +5,7 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from "class-validator";
-
-const HEX_SHA256 = /^[0-9a-f]{64}$/;
+import { HEX_SHA256 } from "../digest.js";
 
 /**
  * True for either form a `results_urls` item can take on the wire: a bare URI — the Registry API draft's

@@ -12,6 +12,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { IMAGE_TRUST_LEVELS, type ImageTrustLevel } from "./registry.js";
+import { HEX_SHA256, PREFIXED_SHA256 } from "./digest.js";
 // The chain-derived toolchain identity for a cli-legacy contract, and the recipe a *composed* environment is
 // built from.
 
@@ -32,7 +33,7 @@ export class OfficialComponent {
     | "base_image"
     | "runtime_library";
   @IsString() source!: string;
-  @Matches(/^sha256:[0-9a-f]{64}$/) sha256!: string;
+  @Matches(PREFIXED_SHA256) sha256!: string;
 }
 
 /** `template_version` identifies which template version produced it. */
@@ -59,11 +60,11 @@ export class BuildEnvironmentRecord {
   @IsString() image_reference!: string;
 
   @ValidateIf((o: BuildEnvironmentRecord) => o.kind === "composed")
-  @Matches(/^[0-9a-f]{64}$/)
+  @Matches(HEX_SHA256)
   recipe_sha256?: string;
 
   @ValidateIf((o: BuildEnvironmentRecord) => o.kind === "composed")
-  @Matches(/^sha256:[0-9a-f]{64}$/)
+  @Matches(PREFIXED_SHA256)
   image_digest?: string;
 
   @ValidateIf((o: BuildEnvironmentRecord) => o.kind === "composed")
@@ -184,11 +185,9 @@ export type RebuildEnvironmentIdentity =
   | { kind: "chain_named"; image: string }
   | { kind: "composed"; recipeSha256: string };
 
-const BARE_SHA256_RE = /^[0-9a-f]{64}$/;
-
 /** Reads `Rebuild.imageDigest` back as what it actually is. One column, two kinds of value. */
 export function parseRebuildEnvironmentIdentity(persisted: string): RebuildEnvironmentIdentity {
-  if (BARE_SHA256_RE.test(persisted)) {
+  if (HEX_SHA256.test(persisted)) {
     return { kind: "composed", recipeSha256: persisted };
   }
   return { kind: "chain_named", image: persisted };

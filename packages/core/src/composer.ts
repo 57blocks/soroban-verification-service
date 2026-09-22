@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { ComposedEnvironmentRecipe, RecordedToolchainPair } from "./build-environment.js";
+import { HEX_SHA256, PREFIXED_SHA256 } from "./digest.js";
 
 // The orchestrator↔composer wire contract — the composition half of what `batch.ts` is for the builder.
 
@@ -51,9 +52,9 @@ export class ComposerArtifact {
   @IsString() composed_at!: string;
 
   /** The published immutable identity — `composedEnvironmentRecipeHash(recipe)`. Success only. */
-  @IsOptional() @Matches(/^[0-9a-f]{64}$/) recipe_sha256?: string;
+  @IsOptional() @Matches(HEX_SHA256) recipe_sha256?: string;
   /** The pushed image's own OCI digest in our ECR repository. Success only. */
-  @IsOptional() @Matches(/^sha256:[0-9a-f]{64}$/) image_digest?: string;
+  @IsOptional() @Matches(PREFIXED_SHA256) image_digest?: string;
   /** The architecture the pushed image declares, read from its own config. Success only. */
   @IsOptional() @IsString() image_architecture?: string;
   /** The full recipe `recipe_sha256` is the hash of. Success only. */
@@ -70,14 +71,13 @@ export class ComposerArtifact {
   @IsOptional() failure_context?: Record<string, unknown>;
 }
 
-const IMAGE_DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
 /** Builds the digest-pinned pull reference for a cli-legacy rebuild — `<repository-uri>@sha256:<64 hex>`. */
 export function composedEnvironmentImageReference(
   ecrRepositoryUri: string,
   imageDigest: string,
 ): string {
-  if (!IMAGE_DIGEST_RE.test(imageDigest)) {
+  if (!PREFIXED_SHA256.test(imageDigest)) {
     throw new Error(
       `A composed environment must be referenced by digest, got ${JSON.stringify(imageDigest)}. ` +
         "Expected sha256:<64 lowercase hex chars>.",

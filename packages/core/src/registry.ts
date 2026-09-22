@@ -21,6 +21,7 @@ import { DtoValidationError } from "./validate.js";
 import { ClosedTo } from "./validators/closed-to.js";
 import { PresentOnlyWhen } from "./validators/present-only-when.js";
 import { SupportedSchemaMajor } from "./validators/schema-version.js";
+import { HEX_SHA256 } from "./digest.js";
 
 // Two classes per level, deliberately:
 
@@ -28,7 +29,7 @@ import { SupportedSchemaMajor } from "./validators/schema-version.js";
  * Every 32-byte digest the status object carries — `wasm_hash`, `source_sha256`, `rebuilt_hash`, a
  * `results_urls` entry's `sha256` — in the one spelling it may be published in.
  */
-export const SEP58_HEX_SHA256 = /^[0-9a-f]{64}$/;
+export const SEP58_HEX_SHA256 = HEX_SHA256;
 
 /** SO5: one complete flag per entry, `=` form, order not significant. */
 export const SEP58_BLDOPT_ENTRY = /^--[A-Za-z][A-Za-z0-9_-]*(=.+)?$/;
@@ -276,7 +277,7 @@ export class PeerRegistryVerification {
             type: { type: "string" },
             url: { type: "string" },
             location: { type: "string" },
-            sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+            sha256: { type: "string", pattern: SEP58_HEX_SHA256.source },
           },
         },
       ],
