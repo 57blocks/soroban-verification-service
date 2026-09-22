@@ -1,3 +1,4 @@
+import { SealedBox } from "@/components/sealed-box";
 import { pipelineSample } from "../content";
 
 /**
@@ -43,16 +44,11 @@ const ConnectorDown = ({ delay }: { delay: number }) => (
   </svg>
 );
 
-/** The sandbox, drawn as the one box with a heavier edge and a label on its rim. */
-const SealedBox = ({ className = "" }: { className?: string }) => (
-  <div
-    className={`relative rounded-xl border-[1.5px] border-ink bg-surface px-5 pb-4 pt-[22px] text-left ${className}`}
-  >
-    <span className="absolute -top-[11px] left-4 rounded-md bg-ink px-2.5 py-[3px] font-mono text-[10px] text-white">
-      {pipelineSample.seal}
-    </span>
+/** The rebuild lane's sealed box, with this diagram's own rim label and content. */
+const RebuildSeal = ({ className }: { className?: string }) => (
+  <SealedBox label={pipelineSample.seal} {...(className ? { className } : {})}>
     <span className="font-mono text-[13px] text-ink">{pipelineSample.rebuild}</span>
-  </div>
+  </SealedBox>
 );
 
 /** The verdict the two lanes meet at. */
@@ -81,7 +77,7 @@ export const RebuildPipeline = () => (
             <span className="mt-1 block">{pipelineSample.source}</span>
           </div>
           <Connector delay={0} />
-          <SealedBox />
+          <RebuildSeal />
           <Connector delay={500} />
           <span className={hashChipClass}>{pipelineSample.rebuiltHash}</span>
         </div>
@@ -129,7 +125,7 @@ export const RebuildPipeline = () => (
         {pipelineSample.source}
       </div>
       <ConnectorDown delay={0} />
-      <SealedBox className="w-full" />
+      <RebuildSeal className="w-full" />
       <ConnectorDown delay={250} />
       <div className="w-full rounded-lg border border-line bg-surface-alt px-3.5 py-2.5 text-left font-mono text-[11px] text-ink">
         {pipelineSample.rebuiltHash}

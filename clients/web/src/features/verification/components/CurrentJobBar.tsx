@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 type CurrentJobBarProps = {
   jobId?: string;
@@ -13,7 +13,7 @@ export const CurrentJobBar = ({ jobId, onCopyLink }: CurrentJobBarProps) => (
   <section className="mb-5 rounded-xl border border-line bg-surface p-4 shadow-panel">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <MutedLabel>Current job</MutedLabel>
+        <MonoLabel>Current job</MonoLabel>
         <div className="mt-1 break-all font-mono text-[0.875rem] font-semibold text-ink">
           {jobId || "Loading..."}
         </div>

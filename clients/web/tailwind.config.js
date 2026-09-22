@@ -27,7 +27,7 @@ export default {
           label: "#475467", // panel sub-headings
           body: "#4a5565", // body copy — BlockSmith's `secondary`
           value: "#344054", // diagnostics + recent-job values
-          warm: "#667085", // small uppercase captions in the console
+          warm: "#667085", // ghost buttons, and the recent-jobs timestamps
           mute: "#6b7280", // footer/meta text — BlockSmith's `secondary.light`
         },
 
@@ -49,7 +49,6 @@ export default {
           alt: "#f6f7fb", // tinted section + console page background — BlockSmith's `mist`
           hover: "#f1f3f9", // card hover on light sections
           hero: "#f8fafc", // landing hero wash
-          field: "#fdfdfd", // available-metadata rows
           track: "#eef0f6", // segmented control track
           chip: "#f6f7fb", // pill chips
         },
@@ -125,9 +124,12 @@ export default {
       },
 
       maxWidth: {
-        // BlockSmith's page width, and the console's narrower column.
+        // BlockSmith's page width, and the console's narrower column. `console` was sized for a form beside a
+        // decorative field that no longer exists; at 900px on a 1360px page it left void either side while the
+        // two-up rows inside it crowded. 1120px is what the console's own widest content needs: two columns of
+        // result evidence, and a 64-character digest comparison on one line.
         shell: "1440px",
-        console: "900px",
+        console: "1120px",
       },
 
       keyframes: {

@@ -1,33 +1,29 @@
+import { MonoChip } from "@/components/mono-chip";
 import { formatValue } from "../utils/format.util";
+import { MonoLabel } from "./MonoLabel";
 
-/** What the verifier could already resolve from chain metadata. */
+/** What the verifier could already resolve from chain metadata, one monospace strip per field. */
 export const EvidenceMetadata = ({
   availableFields,
 }: {
   availableFields: Record<string, unknown>;
 }) => (
   <div className="mb-6">
-    <h3 className="m-0 mb-3 text-[0.875rem] font-semibold uppercase text-ink-label">
+    <MonoLabel as="h3" className="mb-2.5">
       Available metadata
-    </h3>
+    </MonoLabel>
 
     {Object.keys(availableFields).length ? (
-      <div className="grid gap-2 text-[0.875rem]">
+      <div className="grid gap-2">
         {Object.entries(availableFields).map(([key, value]) => (
-          <div
+          <MonoChip
             key={key}
-            className="grid gap-1 rounded-md bg-surface-field px-3 py-2 md:grid-cols-[132px_1fr]"
-          >
-            <span className="text-[0.7rem] font-semibold uppercase text-ink-warm">
-              {key}
-            </span>
-            <span
-              className="break-all font-medium text-ink"
-              title={formatValue(value)}
-            >
-              {formatValue(value)}
-            </span>
-          </div>
+            className="text-[12px]"
+            sample={[
+              { text: `${key}  `, tone: "key" },
+              { text: formatValue(value), tone: "value" },
+            ]}
+          />
         ))}
       </div>
     ) : (

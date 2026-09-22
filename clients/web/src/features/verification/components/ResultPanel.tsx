@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ExternalLink, Wrench } from "lucide-react";
+import { MonoChip } from "@/components/mono-chip";
 import { cn } from "@/lib/utils";
 import type { SubmissionState } from "../types";
 import {
@@ -15,8 +16,8 @@ import {
   troubleshootingMessage,
 } from "../utils/result.util";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
-import { MetaTile } from "./MetaTile";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
+import { ValueStrip } from "./ValueStrip";
 import { WasmCompareGrid } from "./WasmCompareGrid";
 
 const AdviceBox = ({
@@ -28,13 +29,11 @@ const AdviceBox = ({
   className?: string;
   children: ReactNode;
 }) => (
-  <div className={cn("rounded-md bg-surface-alt p-3", className)}>
+  <div className={cn("rounded-md border border-line bg-surface-alt p-3.5", className)}>
     <div className="flex items-start gap-2">
       <Wrench size={14} className="mt-0.5 shrink-0 text-ink-value" />
       <div className="min-w-0">
-        <div className="text-[0.7rem] font-semibold uppercase tracking-[0.05em] text-ink-label">
-          {title}
-        </div>
+        <MonoLabel className="text-ink-label">{title}</MonoLabel>
         {children}
       </div>
     </div>
@@ -50,19 +49,21 @@ const ArtifactLink = ({
   url: string;
   note?: string;
 }) => (
-  <div className="rounded-md bg-surface-alt p-3">
-    <MutedLabel>{label}</MutedLabel>
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="mt-1 inline-flex max-w-full items-start gap-1.5 break-all font-mono text-[0.8rem] text-ink underline decoration-ink/25 underline-offset-[3px] transition-colors hover:decoration-ink"
-    >
-      {url}
-      <ExternalLink size={12} aria-hidden className="mt-0.5 shrink-0" />
-    </a>
+  <div className="min-w-0">
+    <MonoLabel>{label}</MonoLabel>
+    <MonoChip className="mt-1.5 text-[12px]">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="inline-flex max-w-full items-start gap-1.5 break-all text-ink underline decoration-ink/25 underline-offset-[3px] transition-colors hover:decoration-ink"
+      >
+        {url}
+        <ExternalLink size={12} aria-hidden className="mt-0.5 shrink-0" />
+      </a>
+    </MonoChip>
     {note && (
-      <p className="m-0 mt-1.5 text-[0.75rem] leading-[1.5] text-ink/[0.66]">
+      <p className="m-0 mt-1 text-[0.75rem] leading-[1.5] text-ink/[0.66]">
         {note}
       </p>
     )}
@@ -94,11 +95,9 @@ const PublishedResults = ({
             : {})}
         />
       ) : (
-        <div className="rounded-md bg-surface-alt p-3">
-          <MutedLabel>Verification report</MutedLabel>
-          <div className="mt-1 text-[0.875rem] text-ink-warm">
-            Not published.
-          </div>
+        <div className="min-w-0">
+          <MonoLabel>Verification report</MonoLabel>
+          <MonoChip className="mt-1.5 text-[12px]" sample="not published" />
         </div>
       )}
 
@@ -152,9 +151,9 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
       </h2>
 
       {(reason || detail) && (
-        <div className="mb-4 rounded-md bg-warning-surface p-3">
+        <div className="mb-4 rounded-md bg-warning-surface p-3.5">
           {reason && (
-            <div className="text-[0.7rem] font-semibold uppercase tracking-[0.05em] text-warning-fg">
+            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-warning-fg">
               {reason}
             </div>
           )}
@@ -168,7 +167,7 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
 
       {showTroubleshooting && (
         <AdviceBox title="Troubleshooting" className="mb-4">
-          <p className="m-0 mt-1 text-[0.875rem] leading-[1.5] text-ink-value">
+          <p className="m-0 mt-1.5 text-[0.875rem] leading-[1.5] text-ink-value">
             {troubleshooting}
           </p>
         </AdviceBox>
@@ -185,14 +184,13 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
       {summary.length > 0 && (
         <div
           data-testid="result-summary"
-          className="mt-3 grid gap-3 text-[0.875rem] md:grid-cols-2"
+          className="mt-3 grid gap-3 md:grid-cols-2"
         >
           {summary.map(([key, value]) => (
-            <MetaTile
+            <ValueStrip
               key={key}
               label={resultLabel(key)}
               value={formatValue(value)}
-              mono={key === "rebuilt_wasm_hash"}
             />
           ))}
         </div>

@@ -1,11 +1,11 @@
 import { Copy } from "lucide-react";
+import { MonoChip } from "@/components/mono-chip";
 import { copyValue } from "../utils/clipboard.util";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 type CopyableFieldProps = {
   label: string;
   value?: string;
-  mono?: boolean;
   copyable?: boolean;
 };
 
@@ -13,29 +13,21 @@ type CopyableFieldProps = {
 export const CopyableField = ({
   label,
   value,
-  mono = false,
   copyable = true,
 }: CopyableFieldProps) => (
   <div className="min-w-0">
-    <MutedLabel>{label}</MutedLabel>
-    <div className="mt-1 flex min-w-0 items-center gap-2">
-      <span
-        className={[
-          "min-w-0 text-[0.9rem] text-ink",
-          mono
-            ? "scroll-x-hidden overflow-x-auto whitespace-nowrap font-mono"
-            : "font-medium",
-        ].join(" ")}
-      >
+    <MonoLabel>{label}</MonoLabel>
+    <div className="mt-1.5 flex min-w-0 items-start gap-2">
+      <MonoChip className="min-w-0 flex-1 text-[12px] text-ink">
         {value || "none"}
-      </span>
+      </MonoChip>
       {copyable && value && value !== "none" && (
         <button
           type="button"
           onClick={() => copyValue(value)}
           title="Copy to clipboard"
           aria-label={`Copy ${label}`}
-          className="grid size-[26px] shrink-0 place-items-center rounded-md border-0 bg-transparent p-0 text-ink-warm transition-colors hover:bg-yellow-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow"
+          className="mt-0.5 grid size-[26px] shrink-0 place-items-center rounded-md border-0 bg-transparent p-0 text-ink-mute transition-colors hover:bg-yellow-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow"
         >
           <Copy size={13} />
         </button>

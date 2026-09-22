@@ -1,4 +1,5 @@
 import type { RejectedBuildOption } from "../types";
+import { MonoLabel } from "./MonoLabel";
 
 type RejectedOptionsProps = {
   rejected: RejectedBuildOption[];
@@ -10,10 +11,8 @@ export const RejectedOptions = ({ rejected }: RejectedOptionsProps) => {
 
   return (
     <div data-testid="rejected-options" className="mt-4 rounded-lg bg-danger-surface p-4">
-      <p className="m-0 text-[0.85rem] font-semibold uppercase tracking-wide text-danger-fg">
-        policy_rejected
-      </p>
-      <p className="mb-0 mt-1 text-[0.9rem] text-ink-muted">
+      <MonoLabel className="text-danger-fg">policy_rejected</MonoLabel>
+      <p className="mb-0 mt-1 text-[0.9rem] text-ink-body">
         These build options cannot be replayed as written. This is not a feature that is coming
         later — correct or remove them to submit.
       </p>
@@ -21,7 +20,7 @@ export const RejectedOptions = ({ rejected }: RejectedOptionsProps) => {
         {rejected.map((entry) => (
           <li key={entry.option} className="list-none">
             <code className="break-all font-mono text-[0.85rem] text-ink-value">{entry.option}</code>
-            <span className="block text-[0.85rem] text-ink-muted">{entry.detail}</span>
+            <span className="block text-[0.85rem] text-ink-body">{entry.detail}</span>
           </li>
         ))}
       </ul>
