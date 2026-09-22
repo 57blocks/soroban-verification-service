@@ -30,6 +30,16 @@ export const FlowProgress = ({
       const isStepFailed = isFailed && index === 0;
       const isLast = index === flowSteps.length - 1;
 
+      // The dot is the only thing carrying the step's state, and a dot is not readable. The tick this
+      // replaced was an `<img alt="Done">`, so the state was spoken before; it has to stay spoken.
+      const state = isStepFailed
+        ? "Failed"
+        : isComplete
+          ? "Done"
+          : isCurrent
+            ? "In progress"
+            : "Not started";
+
       return (
         <Fragment key={label}>
           <span className="inline-flex items-center gap-2">
@@ -46,6 +56,7 @@ export const FlowProgress = ({
                       : "bg-line-mute",
               )}
             />
+            <span className="sr-only">{`${state}: `}</span>
             <span
               className={cn(
                 "whitespace-nowrap",

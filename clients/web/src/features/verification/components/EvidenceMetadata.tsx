@@ -9,7 +9,9 @@ export const EvidenceMetadata = ({
   availableFields: Record<string, unknown>;
 }) => (
   <div className="mb-6">
-    <MonoLabel className="mb-2.5">Available metadata</MonoLabel>
+    <MonoLabel as="h3" className="mb-2.5">
+      Available metadata
+    </MonoLabel>
 
     {Object.keys(availableFields).length ? (
       <div className="grid gap-2">
