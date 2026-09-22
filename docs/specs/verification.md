@@ -16,7 +16,7 @@ built — a deployed Wasm never acquires metadata later.
 The "Environment" column is which build image the class resolves to; which mechanism performs the
 rebuild is a separate question, covered below.
 
-Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/chain-reader.service.ts`,
+Verified by: `packages/core/src/chain-reader.ts`, `packages/core/src/chain-reader-test.ts`,
 `packages/core/src/wasm-metadata.ts`
 
 ## Mechanism

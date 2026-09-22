@@ -1,15 +1,30 @@
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { byteSize, runCommand, sha256File, type CommandResult } from "./process.js";
+import { stellarNetworkArgs } from "./stellar-network.js";
 import {
   parseContractMetaSections,
   planMetadataReplay,
   recordedToolchainPair,
-  stellarNetworkArgs,
-  type RecordedToolchainPair,
   type Sep58Metadata,
-  type VerificationTarget,
-} from "@scvs/core";
-import { byteSize, runCommand, sha256File, type CommandResult } from "@scvs/core/process";
+} from "./wasm-metadata.js";
+import type { RecordedToolchainPair } from "./build-environment.js";
+import type { VerificationTarget } from "./target.js";
+
+/**
+ * Reading a deployed contract's Wasm and its SEP-58 build metadata off the chain — the one implementation.
+ *
+ * `verification-svc` asks before accepting a submission and `orchestrator-svc` asks again before dispatching a
+ * build, and each held a copy. The copies were the same reader in two wrappers: plain functions taking a
+ * config object on one side, a Nest `@Injectable()` reading the same four values from `ConfigService` on the
+ * other. The orchestrator's own header said as much.
+ *
+ * What made the duplication worth removing is not the line count but what it duplicated: the
+ * `stellar contract fetch` argument list, including which network flags a target gets. Only one copy had
+ * pulled that out where a test could reach it.
+ *
+ * Node-only, so **not exported from this package's barrel** — reach it at `@scvs/core/chain-reader`.
+ */
 
 export type WasmMetadata = {
   wasm_hash: string;
@@ -38,7 +53,7 @@ export type ChainLookupResult =
       diagnostics: Record<string, unknown>;
     };
 
-/** Sourced from `ConfigService` by every caller in this service (preflight.service.ts, submit.service.ts). */
+/** What the reader needs, however the caller's service happens to hold it. */
 export type ChainReaderConfig = {
   stellarCliPath: string;
   artifactDir: string;
@@ -52,7 +67,7 @@ export type ChainReaderConfig = {
 
 /**
  * The full `stellar contract fetch` invocation. Exported so the network-argument rules are directly
- * unit-testable without shelling out.
+ * unit-testable without shelling out — which was true of one copy and not the other.
  */
 export function buildFetchCommand(
   target: VerificationTarget,
@@ -70,17 +85,35 @@ export function buildFetchCommand(
   ];
 }
 
+/** A fetch that failed because the target is not there, told apart from one that failed for any other reason. */
+export function classifyFetchFailure(result: CommandResult): "not_found" | "chain_lookup_failed" {
+  const text = `${result.stdout}\n${result.stderr}\n${result.error || ""}`.toLowerCase();
+  if (text.includes("not found") || text.includes("does not exist")) {
+    return "not_found";
+  }
+  return "chain_lookup_failed";
+}
+
+/** What the submitter is told. Bounded, because CLI output can be long and reaches an API response. */
+export function summarizeCommandFailure(result: CommandResult): string {
+  if (result.error) {
+    return result.error;
+  }
+  const text = (result.stderr || result.stdout || "Stellar CLI command failed.").trim();
+  return text.length > 500 ? `${text.slice(0, 500)}...` : text;
+}
+
 export async function getWasmMetadata(
   target: VerificationTarget,
   config: ChainReaderConfig,
 ): Promise<ChainLookupResult> {
-  const artifactRoot = config.artifactDir;
-  await mkdir(artifactRoot, { recursive: true });
-  const workdir = await mkdtemp(join(artifactRoot, "chain-"));
+  await mkdir(config.artifactDir, { recursive: true });
+  const workdir = await mkdtemp(join(config.artifactDir, "chain-"));
   const wasmPath = join(workdir, "target.wasm");
 
   const fetchCommand = buildFetchCommand(target, config, wasmPath);
-  // Neither mirrored nor recorded here, as before: the shared runner defaults to both for `builder`'s sake.
+  // Neither service mirrored the CLI's output to its own stdout, nor retained the command; the shared runner
+  // defaults to both for `builder`'s sake, so both are declined here.
   const fetch = await runCommand(fetchCommand, {
     timeout_ms: config.cliTimeoutMs,
     mirrorOutput: false,
@@ -109,14 +142,12 @@ export async function getWasmMetadata(
       diagnostics: { mode: "stellar_cli", fetch, metadata_parse_error: detail },
     };
   }
-  const wasmHash = await sha256File(wasmPath);
-  const wasmByteSize = await byteSize(wasmPath);
 
   return {
     ok: true,
     metadata: {
-      wasm_hash: wasmHash,
-      wasm_byte_size: wasmByteSize,
+      wasm_hash: await sha256File(wasmPath),
+      wasm_byte_size: await byteSize(wasmPath),
       sep58: parsed.replay?.sep58 ?? { raw_entries: [] },
       ...(parsed.toolchainPair ? { toolchain_pair: parsed.toolchainPair } : {}),
       ...(parsed.replay
@@ -146,24 +177,6 @@ async function parseMetadata(wasmPath: string) {
       toolchainPair: replay?.sep58.bldimg ? undefined : recordedToolchainPair(sections),
     };
   } catch (error) {
-    throw new Error(
-      `metadata_parse_failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+    throw new Error(`metadata_parse_failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-function classifyFetchFailure(result: CommandResult): "not_found" | "chain_lookup_failed" {
-  const text = `${result.stdout}\n${result.stderr}\n${result.error || ""}`.toLowerCase();
-  if (text.includes("not found") || text.includes("does not exist")) {
-    return "not_found";
-  }
-  return "chain_lookup_failed";
-}
-
-function summarizeCommandFailure(result: CommandResult): string {
-  if (result.error) {
-    return result.error;
-  }
-  const text = (result.stderr || result.stdout || "Stellar CLI command failed.").trim();
-  return text.length > 500 ? `${text.slice(0, 500)}...` : text;
 }
