@@ -1,6 +1,6 @@
 import { isBuildArchitecture, parseCliver } from "@scvs/core";
 import type { BuildArchitecture, ComposerSmokeTest, RecordedToolchainPair } from "@scvs/core";
-import { runCommand, type CommandResult } from "./process-utils.js";
+import { runCommand, type CommandResult } from "@scvs/core/process";
 import type { CompositionTemplate } from "./template.js";
 
 /**

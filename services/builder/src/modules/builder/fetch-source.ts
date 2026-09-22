@@ -11,7 +11,7 @@ import {
   readBoundedBytes,
 } from "@scvs/core/fetch-policy";
 import { alignArchiveNameForCli } from "./archive-format.js";
-import { byteSize, sha256File } from "./process-utils.js";
+import { byteSize, sha256File } from "@scvs/core/process";
 
 export type MaterializedSource = {
   mode: "public_repo" | "hosted_tarball" | "private_uploaded_tarball" | "source_uri";

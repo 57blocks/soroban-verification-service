@@ -123,7 +123,9 @@ async function main() {
   } finally {
     await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     if (!process.argv.includes("--keep-image")) {
-      const { runCommand } = await import(`${composer}/process-utils.js`);
+      // The runner moved out of `services/composer` and into `@scvs/core`; both reach this script through
+      // built output, so the path follows it rather than the package specifier.
+      const { runCommand } = await import("../packages/core/dist/src/process.js");
       await runCommand(["docker", "image", "rm", "-f", `scvs-composed:${environmentId}`], {
         timeout_ms: 60_000,
         mirrorOutput: false,
@@ -134,7 +136,7 @@ async function main() {
 
 /** Asserts the composed image's *docker-level* runtime surface, the part `stellar version` cannot see. */
 async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
-  const { runCommand } = await import("../services/composer/dist/modules/composer/process-utils.js");
+  const { runCommand } = await import("../packages/core/dist/src/process.js");
 
   console.log("\n— comparing the docker-level runtime surface against the official image —");
   const format = "{{json .Config.Entrypoint}}\t{{json .Config.Cmd}}\t{{.Config.WorkingDir}}";
@@ -199,7 +201,7 @@ async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
 
 /** Compiles an actual Soroban contract inside the composed image. */
 async function assertBuildsAContract(environmentId) {
-  const { runCommand } = await import("../services/composer/dist/modules/composer/process-utils.js");
+  const { runCommand } = await import("../packages/core/dist/src/process.js");
 
   console.log("\n— compiling a scaffolded contract in it (proves the toolchain works, not just runs) —");
   const build = await runCommand(

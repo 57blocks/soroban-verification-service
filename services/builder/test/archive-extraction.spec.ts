@@ -12,7 +12,7 @@ import {
   stripDepthFor,
   totalUncompressedBytes,
 } from "../src/modules/builder/archive-extraction.js";
-import { runCommand } from "../src/modules/builder/process-utils.js";
+import { runCommand } from "@scvs/core/process";
 import { zipArchive } from "./malicious-corpus.js";
 
 describe("extractSourceArchive", () => {

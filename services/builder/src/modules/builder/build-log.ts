@@ -1,4 +1,4 @@
-import { recordedCommands } from "./process-utils.js";
+import { recordedCommands } from "@scvs/core/process";
 import { redactAll, redactCommand } from "./redact.js";
 
 /** The sink records the real thing; this file bounds and redacts it. */

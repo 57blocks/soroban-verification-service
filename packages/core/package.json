@@ -47,7 +47,15 @@
       "types": "./dist/src/policy-bound-fetch.d.ts",
       "default": "./dist/src/policy-bound-fetch.js"
     },
-    "./pinned-fetch": {
+    "./chain-reader": {
+      "types": "./dist/src/chain-reader.d.ts",
+      "default": "./dist/src/chain-reader.js"
+    },
+  "./process": {
+      "types": "./dist/src/process.d.ts",
+      "default": "./dist/src/process.js"
+    },
+  "./pinned-fetch": {
       "types": "./dist/src/pinned-fetch.d.ts",
       "default": "./dist/src/pinned-fetch.js"
     },

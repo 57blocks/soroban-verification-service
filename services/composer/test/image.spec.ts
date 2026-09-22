@@ -7,7 +7,7 @@ import {
   reportsExpectedRev,
   reportsExpectedVersion,
 } from "../src/modules/composer/image.js";
-import type { CommandResult } from "../src/modules/composer/process-utils.js";
+import type { CommandResult } from "@scvs/core/process";
 
 /** The pure half of `image.ts`. */
 

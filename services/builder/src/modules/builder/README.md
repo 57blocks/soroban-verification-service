@@ -23,7 +23,7 @@ entire previous public surface, and no caller or test needed editing.
 | `run-cli.types.ts` | shared | Shapes only, no logic |
 | `run-cli.config.ts` | shared | `RunCliRuntimeConfig` → env → default accessors |
 | `fetch-source.ts` | **sandbox-hardening, source-storage** | Source materialisation. Holds conformance row `0.2` — the tarball checks that no-op on an attacker-supplied filename |
-| `process-utils.ts`, `recipe.ts`, `upload.ts` | — | Unchanged by this split |
+| `recipe.ts`, `upload.ts` | — | Unchanged by this split |
 
 ## Two things a reader should know
 

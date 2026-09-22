@@ -2,7 +2,7 @@ import type { RebuildErrorCode } from "@scvs/core";
 import { chmod, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { sniffArchiveFormat, type ArchiveFormat } from "./archive-format.js";
-import { runCommand, type CommandResult } from "./process-utils.js";
+import { runCommand, type CommandResult } from "@scvs/core/process";
 import { cliTimeoutMs } from "./run-cli.config.js";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
 

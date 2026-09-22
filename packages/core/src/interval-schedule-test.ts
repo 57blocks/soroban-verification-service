@@ -11,6 +11,15 @@ function test(name: string, fn: () => void): void {
   }
 }
 
+/** Waits for a condition instead of a duration: a loaded runner is slow, not broken. */
+async function until(condition: () => boolean, what: string, deadlineMs = 2_000): Promise<void> {
+  const deadline = Date.now() + deadlineMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 function fakeRegistry(): IntervalRegistry & { readonly registered: Array<[string, NodeJS.Timeout]> } {
   const registered: Array<[string, NodeJS.Timeout]> = [];
   return {
@@ -50,9 +59,8 @@ test("the tick runs on the interval", async () => {
     calls += 1;
     return Promise.resolve();
   });
-  await new Promise((resolve) => setTimeout(resolve, 15));
+  await until(() => calls > 0, "the first tick");
   clearInterval(registry.registered[0]![1]);
-  assert.ok(calls > 0, "the tick should have run at least once");
 });
 
 // Node turns an unhandled rejection into a fatal error. A sweep that throws must cost its own tick, not the
@@ -64,9 +72,10 @@ test("a rejecting tick is caught, and the schedule survives it", async () => {
     calls += 1;
     return Promise.reject(new Error("the tick blew up"));
   });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Waited for, not slept through: a 1 ms interval is not guaranteed two ticks inside a fixed 20 ms window
+  // on a loaded runner, which is how this failed in CI while passing everywhere else.
+  await until(() => calls > 1, "a second tick after the first one rejected");
   clearInterval(registry.registered[0]![1]);
-  assert.ok(calls > 1, "a rejection must not stop the following ticks");
 });
 
 // The service's HTTP listener keeps the process alive. A sweep timer that also did would hold a finished
