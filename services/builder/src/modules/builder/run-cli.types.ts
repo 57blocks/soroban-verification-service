@@ -1,6 +1,6 @@
 // Shared shapes for the builder's rebuild pipeline. No logic, no owner — every module below imports from here.
 
-import type { BuildMode, BuildRecipe, SandboxDiagnostics, SourceCanonicalisation, VerificationTarget } from "@scvs/core";
+import type { BuildMode, BuildRecipe, RebuildErrorCode, SandboxDiagnostics, SourceCanonicalisation, VerificationTarget } from "@scvs/core";
 import type { MaterializedSource } from "./fetch-source.js";
 import { cliTimeoutMs, dependencyPrefetchTimeoutMs, dockerCheckTimeoutMs, prefetchAllowedHosts } from "./run-cli.config.js";
 
@@ -45,7 +45,7 @@ export type RunCliResult = {
   runner: "stellar_contract_verify" | "docker_build_image_rebuild";
   exit_code: number | null;
   /** Set when outcome === "cli_failure". */
-  reason?: string;
+  reason?: RebuildErrorCode;
   rebuilt_wasm_path?: string;
   rebuilt_wasm_hash?: string;
   rebuilt_wasm_size_bytes?: number;

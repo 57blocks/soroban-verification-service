@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { toneBadge, toneGlyph, toneSurface, toneText } from "../constants";
 import type { BannerView, ResultTone, SubmissionState } from "../types";
 import { CopyableField } from "./CopyableField";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 type StatusBannerProps = {
   state: SubmissionState;
@@ -81,26 +81,26 @@ export const StatusBanner = ({
 
         {jobId && showJobId && (
           <div className="shrink-0 md:text-right">
-            <MutedLabel>Job ID</MutedLabel>
-            <div className="mt-0.5 font-mono text-[0.85rem] text-ink">
-              {jobId}
-            </div>
+            <MonoLabel>Job ID</MonoLabel>
+            <div className="mt-1 font-mono text-[0.8rem] text-ink">{jobId}</div>
           </div>
         )}
       </div>
 
+      {/* One field per row: a 64-character digest in half this width wraps mid-digest, which is the one
+          place a hash must not break. */}
       {target && (
-        <div className="mt-4 grid gap-4 rounded-md bg-surface/60 p-4">
+        <div className="mt-4 grid gap-4 rounded-lg bg-surface/70 p-4">
           <CopyableField
             label="Network"
             value={target.network || fallbackNetwork}
             copyable={false}
           />
           {target.contract_id && (
-            <CopyableField label="Contract ID" value={target.contract_id} mono />
+            <CopyableField label="Contract ID" value={target.contract_id} />
           )}
           {target.wasm_hash && (
-            <CopyableField label="Wasm hash" value={target.wasm_hash} mono />
+            <CopyableField label="Wasm hash" value={target.wasm_hash} />
           )}
         </div>
       )}

@@ -1,3 +1,4 @@
+import type { RebuildErrorCode } from "@scvs/core";
 import { chmod, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { sniffArchiveFormat, type ArchiveFormat } from "./archive-format.js";
@@ -42,7 +43,7 @@ export type ExtractSourceArchiveResult =
       /** Absent when nothing was peeled, so a depth-0 extraction reports exactly what it always did. */
       canonicalisation?: Canonicalisation;
     }
-  | { ok: false; reason: string; detail: string; extract?: CommandResult };
+  | { ok: false; reason: RebuildErrorCode; detail: string; extract?: CommandResult };
 
 /** The refusal arm on its own, so the helpers that only ever return one can say so. */
 type ExtractionFailure = Extract<ExtractSourceArchiveResult, { ok: false }>;

@@ -1,40 +1,34 @@
 import type { VerifyMode } from "../types";
 
-const heroCopy: Record<VerifyMode, { title: string; lines: string[] }> = {
+const heroCopy: Record<VerifyMode, { title: string; line: string }> = {
   submit: {
     title: "Verify a Soroban contract",
-    lines: [
-      "Submit a contract ID or Wasm hash, complete only the missing metadata or upload a manifest,",
-      "and get a reproducible verification result that downstream tools can inspect.",
-    ],
+    line: "Submit a contract ID or Wasm hash, complete only the metadata the chain does not already carry, and get a reproducible result downstream tools can inspect.",
   },
   job: {
     title: "Verification job",
-    lines: [
-      "Track the current rebuild, share this job link, or return to the console to submit another contract.",
-    ],
+    line: "Track this rebuild, share the job link, or return to the console to submit another contract.",
   },
 };
 
+/**
+ * The page header. Deliberately not a hero: this page is a tool, and the landing page is where the argument for
+ * it is made — an eyebrow, one heading and one line, so the target form opens the first viewport.
+ */
 export const ConsoleHero = ({ mode }: { mode: VerifyMode }) => {
-  const { title, lines } = heroCopy[mode];
+  const { title, line } = heroCopy[mode];
 
   return (
-    <div className="mx-auto mb-[54px] max-w-console text-center">
-      <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-[0.875rem] font-semibold shadow-[inset_0_-2px_0_theme(colors.yellow.DEFAULT)]">
-        <span aria-hidden>◈</span> Soroban source verification
+    <header className="mb-7">
+      <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-yellow-deep">
+        Soroban source verification
       </div>
-      <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight text-ink md:text-[2.75rem]">
+      <h1 className="m-0 mt-2 text-[1.75rem] font-bold leading-tight tracking-tight text-ink">
         {title}
       </h1>
-      <p className="m-0 mt-4 text-[1.05rem] leading-[1.7] text-ink-body">
-        {lines.map((line, index) => (
-          <span key={line}>
-            {index > 0 && <br />}
-            {line}
-          </span>
-        ))}
+      <p className="m-0 mt-1.5 max-w-[78ch] text-[0.9rem] leading-[1.6] text-ink-body">
+        {line}
       </p>
-    </div>
+    </header>
   );
 };

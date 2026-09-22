@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import type { BuildLogState } from "../types";
 import { foldBuildLog, foldedLineCount, type LogSegment } from "../utils/build-log.util";
 import { CopyableField } from "./CopyableField";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 type BuildLogPanelProps = {
   state: BuildLogState;
@@ -138,8 +138,8 @@ export const BuildLogPanel = ({ state, token }: BuildLogPanelProps) => {
  * anywhere else.
  */
 const LogToken = ({ token }: { token: string }) => (
-  <div className="mt-4 rounded-md bg-surface-alt p-4">
-    <CopyableField label="Build-log token (keep it: this Service cannot re-issue it)" value={token} mono />
+  <div className="mt-4">
+    <CopyableField label="Build-log token (keep it: this Service cannot re-issue it)" value={token} />
   </div>
 );
 
@@ -149,7 +149,7 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
       return (
         <div className="flex items-center gap-3">
           <Loader2 aria-hidden className="size-4 animate-spin text-ink" />
-          <span className="text-[0.875rem] text-ink-muted">Loading the build log...</span>
+          <span className="text-[0.875rem] text-ink-body">Loading the build log...</span>
         </div>
       );
 
@@ -162,7 +162,7 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
 
     case "empty":
       return (
-        <p className="m-0 text-[0.9rem] text-ink-muted">
+        <p className="m-0 text-[0.9rem] text-ink-body">
           The build ran and produced no output. There is nothing to show, which is itself unusual —
           if this job failed, the reason is on the result above rather than here.
         </p>
@@ -175,7 +175,7 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
     // not to the job id in this URL (build-log-access design.md BL-1, §4).
     case "needs-token":
       return (
-        <p className="m-0 text-[0.9rem] text-ink-muted">
+        <p className="m-0 text-[0.9rem] text-ink-body">
           The raw build log is not part of this page. It answers to a one-time token that was shown to
           whoever submitted this job, in this browser &mdash; not to the job link, which anyone may hold.
           The verdict and the diagnostics above are the whole public record; ask the submitter if you need
@@ -185,7 +185,7 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
 
     case "expired":
       return (
-        <p className="m-0 text-[0.9rem] text-ink-muted">
+        <p className="m-0 text-[0.9rem] text-ink-body">
           The raw build log has passed its retention period and been deleted. Compiler output can carry
           source, paths and credentials, so it is not kept indefinitely. Everything above is unaffected and
           is permanent.
@@ -194,7 +194,7 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
 
     case "unreadable":
       return (
-        <p className="m-0 text-[0.9rem] text-ink-muted">
+        <p className="m-0 text-[0.9rem] text-ink-body">
           This job&apos;s build log could not be read. That is different from there not being one —
           the reference exists, but fetching it failed. Retry shortly; if it persists it is a
           verifier-side problem, not a problem with your submission.
@@ -208,15 +208,15 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
 
 const Unavailable = ({ body }: { body: BuildLogUnavailableResponse }) => (
   <div>
-    <p className="m-0 text-[0.9rem] text-ink-muted">
+    <p className="m-0 text-[0.9rem] text-ink-body">
       No build was started for this job, so there is no log. What follows is why it was not
       attempted — not an error fetching it.
     </p>
     <div className="mt-3 space-y-1">
-      {body.job_status && <MutedLabel>Job status: {body.job_status}</MutedLabel>}
-      {body.failure_reason && <MutedLabel>Reason: {body.failure_reason}</MutedLabel>}
+      {body.job_status && <MonoLabel>Job status: {body.job_status}</MonoLabel>}
+      {body.failure_reason && <MonoLabel>Reason: {body.failure_reason}</MonoLabel>}
       {!body.job_status && !body.failure_reason && body.message && (
-        <MutedLabel>{body.message}</MutedLabel>
+        <MonoLabel>{body.message}</MonoLabel>
       )}
     </div>
   </div>

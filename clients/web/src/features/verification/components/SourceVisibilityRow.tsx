@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import type { PublishedArtifactState } from "../types";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 /**
- * `MutedLabel` is `uppercase`, which is right for a caption and wrong for a sentence — and actively harmful
+ * `MonoLabel` is `uppercase`, which is right for a caption and wrong for a sentence — and actively harmful
  * over 64 hex characters.
  */
 const Sentence = ({ children }: { children: ReactNode }) => (
@@ -25,7 +25,7 @@ export const SourceVisibilityRow = ({ state }: SourceVisibilityRowProps) => {
   if (state.phase === "unreadable" || state.source.isPublic === null) {
     return (
       <div data-testid="source-visibility">
-        <MutedLabel>Source availability</MutedLabel>
+        <MonoLabel>Source availability</MonoLabel>
         <Sentence>
           Not stated by this result. That is not the same as non-public — it could not be
           determined.
@@ -38,7 +38,7 @@ export const SourceVisibilityRow = ({ state }: SourceVisibilityRowProps) => {
 
   return (
     <div data-testid="source-visibility" className="space-y-1">
-      <MutedLabel>Source</MutedLabel>
+      <MonoLabel>Source</MonoLabel>
       <Sentence>
         {isPublic
           ? "Published, and retrievable by anyone."

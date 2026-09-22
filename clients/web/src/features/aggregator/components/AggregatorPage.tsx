@@ -25,7 +25,7 @@ export const AggregatorPage = () => {
     <main className="relative min-h-screen bg-surface-alt font-sans leading-normal text-ink antialiased">
       <div className="mx-auto max-w-console px-8 pb-16 pt-14">
         <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight">Aggregated Verification Results</h1>
-        <p className="mb-0 mt-2 max-w-[64ch] text-[0.95rem] leading-relaxed text-ink-muted">
+        <p className="mb-0 mt-2 max-w-[64ch] text-[0.95rem] leading-relaxed text-ink-body">
           What the verifiers this deployment trusts say about a Wasm hash or a deployed contract.
           Answers come from the aggregate it retained, so a slow verifier never holds up a page — and
           an answer reflects the last successful sync rather than this instant.
@@ -63,7 +63,7 @@ export const AggregatorPage = () => {
                 "rounded-full border px-4 py-2 text-[0.85rem] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow",
                 tab.id === active
                   ? "border-ink bg-ink font-medium text-surface"
-                  : "border-line bg-surface text-ink-muted hover:text-ink",
+                  : "border-line bg-surface text-ink-body hover:text-ink",
               )}
             >
               {tab.label}

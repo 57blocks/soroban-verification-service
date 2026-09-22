@@ -36,7 +36,7 @@ export const VerifierResult = ({ entry }: VerifierResultProps) => (
       </span>
     </div>
 
-    <dl className="mt-3 space-y-1 text-[0.75rem] text-ink-muted">
+    <dl className="mt-3 space-y-1 text-[0.75rem] text-ink-mute">
       {entry.recipe_source && <Row label="recipe_source" value={entry.recipe_source} />}
       {entry.image_trust_level && <Row label="image_trust_level" value={entry.image_trust_level} />}
       {/* A peer still on the Registry API draft's shape says this with one boolean instead. */}

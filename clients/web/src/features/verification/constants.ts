@@ -68,10 +68,11 @@ export const preflightBlockedCopy: Record<string, { title: string; description: 
   },
 };
 
+/** The three stages the flow rule names. The per-step captions went with the panel that carried them. */
 export const flowSteps = [
-  { label: "Submit target", desc: "Contract ID or Wasm hash" },
-  { label: "Queue or resolve", desc: "Check metadata, request evidence" },
-  { label: "Rebuild & compare", desc: "Byte-for-byte Wasm match" },
+  { label: "Submit target" },
+  { label: "Queue or resolve" },
+  { label: "Rebuild & compare" },
 ];
 
 /**

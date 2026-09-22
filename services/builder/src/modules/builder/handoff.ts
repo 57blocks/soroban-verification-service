@@ -1,3 +1,4 @@
+import type { RebuildErrorCode } from "@scvs/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { MaterializedSource } from "./fetch-source.js";
@@ -13,7 +14,7 @@ export type SourceHandoff =
       schema: typeof HANDOFF_SCHEMA;
       job_id: string;
       /** Machine-readable, and passed straight through to the `cli_failure` the runner emits. */
-      reason: string;
+      reason: RebuildErrorCode;
       status: string;
       detail: string;
     };

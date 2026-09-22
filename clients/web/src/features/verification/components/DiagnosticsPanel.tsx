@@ -8,7 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import { copyValue } from "../utils/clipboard.util";
 import { diagnosticsText } from "../utils/diagnostics.util";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 const preClass =
   "m-0 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface-alt p-3 font-mono text-[12px] leading-[1.55] text-ink-value";
@@ -28,7 +28,7 @@ const CopyBlock = ({
 }: CopyBlockProps) => (
   <div>
     <div className="mb-2 flex items-center justify-between gap-3">
-      <MutedLabel>{title}</MutedLabel>
+      <MonoLabel>{title}</MonoLabel>
       <button
         type="button"
         onClick={() => copyValue(text)}
@@ -95,7 +95,7 @@ export const DiagnosticsPanel = ({
           )}
 
           <Collapsible open={rawOpen} onOpenChange={setRawOpen}>
-            <CollapsibleTrigger className="flex w-full select-none items-center gap-1.5 border-0 bg-transparent py-1 text-[0.75rem] font-semibold uppercase tracking-[0.05em] text-ink-warm transition-colors hover:text-ink">
+            <CollapsibleTrigger className="flex w-full select-none items-center gap-1.5 border-0 bg-transparent py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-mute transition-colors hover:text-ink">
               <ChevronDown
                 size={12}
                 aria-hidden

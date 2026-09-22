@@ -2,7 +2,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { preflightBlockedCopy, toneBadge, toneGlyph, toneSurface, toneText } from "../constants";
 import type { PreflightState, ResultTone } from "../types";
-import { MutedLabel } from "./MutedLabel";
+import { MonoLabel } from "./MonoLabel";
 
 type PreflightCardProps = {
   state: PreflightState;
@@ -95,11 +95,11 @@ const Banner = ({ tone, title, description, note, detail }: BannerProps) => (
       </span>
       {title}
     </h3>
-    <p className="mb-0 mt-2 text-[0.9rem] leading-relaxed text-ink-muted">{description}</p>
-    {detail && <p className="mb-0 mt-2 break-words text-[0.85rem] text-ink-muted">{detail}</p>}
+    <p className="mb-0 mt-2 text-[0.9rem] leading-relaxed text-ink-body">{description}</p>
+    {detail && <p className="mb-0 mt-2 break-words text-[0.85rem] text-ink-body">{detail}</p>}
     {note && (
       <div className="mt-3">
-        <MutedLabel>{note}</MutedLabel>
+        <MonoLabel>{note}</MonoLabel>
       </div>
     )}
   </div>
