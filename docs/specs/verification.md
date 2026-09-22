@@ -148,4 +148,4 @@ Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/failur
 Only digest-pinned images are accepted; a mutable tag cannot support a reproducible verdict. The
 image-acceptance policy is compile-time code, never operator-supplied runtime data.
 
-Verified by: `services/orchestrator-svc/src/modules/verification-pipeline/policy.ts`
+Verified by: `packages/core/src/image-policy.ts`, `packages/core/src/image-policy-test.ts`

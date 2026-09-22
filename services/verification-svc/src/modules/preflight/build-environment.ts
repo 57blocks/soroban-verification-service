@@ -1,10 +1,10 @@
 import {
-  classifyBuildEnvironment,
   type BuildEnvironmentResolution,
+  classifyBuildEnvironment,
+  evaluateBuildImage,
   type RecordedToolchainPair,
   type Sep58Metadata,
 } from "@scvs/core";
-import { evaluateBuildImage } from "./policy.js";
 
 /** `BuildEnvironmentResolution` plus the two diagnostics that only make sense at preflight time: */
 export type PreflightBuildEnvironment =

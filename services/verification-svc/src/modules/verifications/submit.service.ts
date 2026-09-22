@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { hashBuildLogToken, mintBuildLogToken } from "@scvs/core";
+import { evaluateBuildImage, hashBuildLogToken, imagePolicyErrorCode, mintBuildLogToken } from "@scvs/core";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JobsRepository, UploadJobReferencesRepository, UploadsRepository } from "@scvs/db";
@@ -13,10 +13,8 @@ import {
   type VerificationTarget,
 } from "@scvs/core";
 import {
-  evaluateBuildImage,
   compareSourceAgainstChain,
   getWasmMetadata,
-  imagePolicyErrorCode,
   runPreflight,
   validateSubmittedManifest,
   type ChainReaderConfig,

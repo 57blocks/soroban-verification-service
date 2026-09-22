@@ -8,28 +8,28 @@ import {
   type RebuildRecord,
 } from "@scvs/db";
 import {
-  ScvsLogger,
-  ScvsMetrics,
-  composedEnvironmentImageReference,
-  computeIdempotencyKey,
-  isPermanentCompositionFailure,
-  isRetryableFailure,
-  parseRebuildEnvironmentIdentity,
-  redactAll,
-  SandboxDiagnostics as SandboxDiagnosticsDto,
-  safeParseDto,
-  terminalJobStatuses,
-  toWireVerificationStatus,
   type BuildArchitecture,
   type BuildMode,
+  composedEnvironmentImageReference,
+  computeIdempotencyKey,
+  evaluateBuildImage,
   type FailureReason,
+  isPermanentCompositionFailure,
+  isRetryableFailure,
   type JobStatus,
   type LogFields,
+  parseRebuildEnvironmentIdentity,
+  redactAll,
+  safeParseDto,
+  SandboxDiagnostics as SandboxDiagnosticsDto,
+  ScvsLogger,
+  ScvsMetrics,
   type SourceReference,
+  terminalJobStatuses,
+  toWireVerificationStatus,
 } from "@scvs/core";
 import { BuildEnvironmentMaterializer } from "../build-environments/build-environment-materializer.js";
 import { BuildEnvironmentResolver } from "../build-environments/build-environment-resolver.js";
-import { evaluateBuildImage } from "./policy.js";
 import {
   configurationFailure,
   rebuildFailureDetail,

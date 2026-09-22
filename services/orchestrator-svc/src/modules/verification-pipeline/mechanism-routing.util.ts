@@ -1,5 +1,4 @@
-import type { BuildMode, MechanismReason, Sep58Metadata } from "@scvs/core";
-import { evaluateBuildImage } from "./policy.js";
+import { type BuildMode, evaluateBuildImage, type MechanismReason, type Sep58Metadata } from "@scvs/core";
 
 /**
  * The provenance question "is this the chain's own recipe?" is unchanged and still answered here; only its
