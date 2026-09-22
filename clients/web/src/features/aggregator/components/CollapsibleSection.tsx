@@ -39,7 +39,7 @@ export const CollapsibleSection = ({
         <span>{title}</span>
         <span
           data-testid={`${testId}-badge`}
-          className="ml-1 inline-flex min-w-6 items-center justify-center rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[0.7rem] font-medium text-ink-muted"
+          className="ml-1 inline-flex min-w-6 items-center justify-center rounded-full bg-surface-alt px-2 py-0.5 font-mono text-[0.7rem] font-medium text-ink-mute"
         >
           {count ?? "…"}
         </span>
