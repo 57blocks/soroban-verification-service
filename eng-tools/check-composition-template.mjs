@@ -123,7 +123,9 @@ async function main() {
   } finally {
     await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     if (!process.argv.includes("--keep-image")) {
-      const { runCommand } = await import(`${composer}/process-utils.js`);
+      // The runner moved out of `services/composer` and into `@scvs/core`; both reach this script through
+      // built output, so the path follows it rather than the package specifier.
+      const { runCommand } = await import("../packages/core/dist/src/process.js");
       await runCommand(["docker", "image", "rm", "-f", `scvs-composed:${environmentId}`], {
         timeout_ms: 60_000,
         mirrorOutput: false,
