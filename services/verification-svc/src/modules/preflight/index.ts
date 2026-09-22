@@ -5,7 +5,6 @@ import { getWasmMetadata, type ChainReaderConfig } from "./chain-reader.js";
 export * from "./build-environment.js";
 export * from "./chain-reader.js";
 export * from "./manifest.js";
-export * from "./policy.js";
 
 export type PreflightResult =
   | {

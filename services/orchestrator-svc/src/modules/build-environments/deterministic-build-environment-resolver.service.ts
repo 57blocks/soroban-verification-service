@@ -1,11 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import {
+  type BuildEnvironmentResolution,
   classifyBuildEnvironment,
   CURRENT_COMPOSE_TEMPLATE_VERSION,
-  type BuildEnvironmentResolution,
+  evaluateBuildImage,
   type RecordedToolchainPair,
 } from "@scvs/core";
-import { evaluateBuildImage } from "../verification-pipeline/policy.js";
 import { BuildEnvironmentResolver } from "./build-environment-resolver.js";
 
 export { CURRENT_COMPOSE_TEMPLATE_VERSION };
