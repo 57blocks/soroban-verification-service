@@ -11,13 +11,13 @@ import {
 } from "@scvs/core";
 import { FetchPolicyError, ResponseTooLargeError, checkUrl, normalizePolicy } from "@scvs/core/fetch-policy";
 import { fetchedSourceKey } from "../../common/staging-keys.util.js";
-import { MAX_ARCHIVE_BYTES } from "../publish/fetch-source-bytes.util.js";
-import { fetchThroughDestinationPolicy } from "../publish/policy-bound-fetch.util.js";
+import { MAX_ARCHIVE_BYTES } from "./fetch-source-bytes.util.js";
+import { fetchThroughDestinationPolicy } from "@scvs/core/policy-bound-fetch";
 import type { AppConfigService } from "../../config/configuration.js";
 
 /**
  * The destination policy for the dispatch-path fetch: deliberately the same shape as
- * `publish/fetch-source-bytes.util.ts`'s, down to sharing its `MAX_ARCHIVE_BYTES`, because two policies over
+ * `fetch-source-bytes.util.ts`'s, down to sharing its `MAX_ARCHIVE_BYTES`, because two policies over
  * one destination set is how one of them quietly stops matching the other.
  */
 const DISPATCH_SOURCE_POLICY = normalizePolicy({

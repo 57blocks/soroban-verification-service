@@ -1,7 +1,7 @@
 import type { SourceReference } from "@scvs/core";
 import { normalizePolicy } from "@scvs/core/fetch-policy";
-import { fetchThroughDestinationPolicy } from "./policy-bound-fetch.util.js";
-import type { SourceResolutionService } from "../source-resolution/source-resolution.service.js";
+import { fetchThroughDestinationPolicy } from "@scvs/core/policy-bound-fetch";
+import type { SourceResolutionService } from "./source-resolution.service.js";
 
 const FETCH_TIMEOUT_MS = 120_000;
 /** How many bytes of submitter-controlled source archive this service will hold at once. */

@@ -7,7 +7,7 @@ import { parseDto, SandboxDiagnostics } from "@scvs/core";
 import {
   describeWasmMismatch,
   inferMismatchCauses,
-} from "../src/modules/publish/wasm-compare.util.js";
+} from "../src/modules/verification-pipeline/wasm-compare.util.js";
 import type { AppConfigService } from "../src/config/configuration.js";
 
 /** Why a mismatch happened. */

@@ -6,7 +6,7 @@ import { ScvsLogger, type BuildMode, type SandboxDiagnostics } from "@scvs/core"
 import {
   describeWasmMismatch,
   inferMismatchCauses,
-} from "../publish/wasm-compare.util.js";
+} from "./wasm-compare.util.js";
 import { rebuiltWasmKey } from "../../common/staging-keys.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 

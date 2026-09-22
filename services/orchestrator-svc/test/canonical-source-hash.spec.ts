@@ -28,6 +28,12 @@ jest.unstable_mockModule("@scvs/aws", () => ({
   describeJob: async () => undefined,
   presignPutUrl: async () => "https://example.invalid/put",
   submitJob: async () => "batch-job-1",
+  // Reached through `source-resolution`'s surface: this service now imports the module rather than one
+  // file inside it, so the stub covers what that module uses too.
+  deleteObject: async () => undefined,
+  getObjectBytes: async () => undefined,
+  presignGetUrl: async () => "https://example.invalid/get",
+  putObjectBytes: async () => undefined,
 }));
 
 const { RebuildOutcomeService } = await import(

@@ -9,7 +9,7 @@ import {
   pinningLookup,
   type AddressResolver,
   type HopResponse,
-} from "../src/modules/publish/policy-bound-fetch.util.js";
+} from "@scvs/core/policy-bound-fetch";
 
 /**
  * ── What each half of this file is for ───────────────────────────────────────────────────────────── The

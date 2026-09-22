@@ -39,6 +39,7 @@ not its scratch directory.
 | `check-vocabulary.mjs` | `check:vocabulary` | `ci.yml` | no instructing document uses a superseded term |
 | [`check-test-row-cleanup.mjs`](check-test-row-cleanup.mjs) | `check:test-row-cleanup` | `ci.yml` | a suite deletes only rows it created, scoped by an `in:` on a column it owns |
 | [`check-builder-isolation.mjs`](check-builder-isolation.mjs) | `check:builder-isolation` | `ci.yml` | no builder entrypoint reaches both container-execution capability and attacker-controlled input |
+| [`check-module-surfaces.mjs`](check-module-surfaces.mjs) | `check:module-surfaces` | `ci.yml` | every cross-module import in `orchestrator-svc` goes through the target module's `index.ts`, Nest's own `*.module.ts` wiring aside |
 | [`check-http-timeouts.mjs`](check-http-timeouts.mjs) | `check:http-timeouts` | `ci.yml` | every entrypoint that binds a port also applies the HTTP server deadlines, which lives past `listen()` where no test reaches it |
 | [`check-fixture-tables.mjs`](check-fixture-tables.mjs) | `check:fixture-tables` | `ci.yml` | the compose-built fixtures' `(cliver, rsver)` pairs agree across the three places that record them |
 | [`check-mount-paths.mjs`](check-mount-paths.mjs) | `check:mount-paths` | `deploy-builder.yml`, `deploy-composer.yml` | every declared bind mount is host-visible at its own path |

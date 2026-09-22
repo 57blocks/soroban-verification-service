@@ -4,7 +4,7 @@ import { SchedulerRegistry } from "@nestjs/schedule";
 import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
-import { ArweaveArchiveService } from "../publish/arweave-archive.service.js";
+import { ArweaveArchiveService } from "../publish/index.js";
 
 @Injectable()
 export class SourceArchiveRecoveryScheduler implements OnModuleInit {

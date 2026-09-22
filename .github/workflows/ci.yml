@@ -103,6 +103,11 @@ jobs:
       - name: Check the builder's capability split
         run: pnpm run check:builder-isolation
 
+      # A module's directory is its own business: another module reaches it through index.ts and nothing else,
+      # so a file inside can be renamed or split without a search across the service.
+      - name: Check the orchestrator's module surfaces
+        run: pnpm run check:module-surfaces
+
       # A server that binds a port without setting its deadlines takes Node's, whose keep-alive is shorter than
       # the balancer's idle timeout. That call sits past `listen()`, where no test runs.
       - name: Check the HTTP server timeouts are applied

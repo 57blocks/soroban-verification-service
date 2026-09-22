@@ -13,7 +13,7 @@ import {
   safeParseDto,
 } from "@scvs/core";
 import { buildLogKey, canonicalSourceKey, rebuiltWasmKey, recipeArtifactKey } from "../../common/staging-keys.util.js";
-import { MAX_ARCHIVE_BYTES } from "../publish/fetch-source-bytes.util.js";
+import { MAX_ARCHIVE_BYTES } from "../source-resolution/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 /** The ceiling on `recipe.json`. */
