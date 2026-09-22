@@ -36,8 +36,8 @@ src/
   components/              site-nav + site-footer (the console and legal pages),
                              legal-links (the two legal documents, linked from both footers
                              and from the submission control), not-found (what an unrouted
-                             path renders), and the three shared visual devices —
-                             hash-compare, mono-chip, sealed-box — see "Shared devices" below
+                             path renders), and the two shared visual devices —
+                             mono-chip, sealed-box — see "Shared devices" below
   config/site.ts           links used by more than one feature (outbound, and the legal routes)
   hooks/use-legal-documents  the operator's legal bundle — shared, because the legal pages render it
                              and the console binds its version to a submission
@@ -140,19 +140,24 @@ Rules that keep this from drifting:
 
 ## Shared devices
 
-Three components in `src/components/` are the visual language both the landing page and the console
+Two components in `src/components/` are the visual language both the landing page and the console
 speak. They live at the root rather than in `features/landing/`, where they started, because a second
 feature uses them — the same promote-on-second-use rule as everything else here:
 
 | Device | What it says | Landing | Console |
 | --- | --- | --- | --- |
-| `hash-compare` | two digests, chunk by chunk, with the differing chunks marked in tone *and* glyph | illustrative digests on the trust-model cards | the real deployed-vs-rebuilt digests, via `DigestCompare` |
 | `mono-chip` | one concrete value, set apart from the prose around it | a sample under a card | the real evidence: recipe, source, timings, comparison values |
 | `sealed-box` | *this happened inside the sealed environment* | the hero diagram's rebuild lane | the whole `RebuildCard` — the inputs a real rebuild ran on |
 
 **Colour marks a verdict, and nothing else.** That is why a `mono-chip` span takes a tone only for an
 outcome, and why the console's selection controls are neutral: a chosen lookup mode is not a verdict.
 The accent belongs to a verdict or a highlight, never to a selection or an eyebrow.
+
+**`HashCompare` is deliberately not here.** It draws two digests chunk by chunk and marks the chunks
+that disagree, which reads as *where* they disagree. On the landing page that is honest — the digests
+are illustrative and `content/trust-model.ts` says so. On a real result it is not: SHA-256 avalanches,
+so two digests that differ at all differ in every chunk, and the device would promise a locality that
+does not exist. The console states the verdict and leaves both digests in the raw diagnostics.
 
 ## Routing
 

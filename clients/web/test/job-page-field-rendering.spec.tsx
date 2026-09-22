@@ -7,7 +7,6 @@ import {
   rebuildProvenance,
   wasmStatusUrlFromReportUrl,
 } from "@/features/verification/utils/rebuild-provenance.util";
-import { hashChunks } from "@/features/verification/utils/format.util";
 import { resultSummaryEntries } from "@/features/verification/utils/result.util";
 
 const WASM = "7944a96d512f6e51532687811cc0c932505b0c051be9d351f5332739d70f753c";
@@ -104,14 +103,6 @@ const VERIFIED_RESULT = {
   artifact_url: REPORT_URL,
   artifact_sha256: ARTIFACT_SHA,
   sandbox_diagnostics: DIAGNOSTICS,
-};
-
-/** The same job, had the rebuild produced different bytes: one chunk of the digest differs. */
-const MISMATCH_RESULT = {
-  ...VERIFIED_RESULT,
-  status_summary: "mismatch",
-  rebuilt_wasm_hash: `${WASM.slice(0, 40)}ffffffff${WASM.slice(48)}`,
-  matched: false,
 };
 
 const groupsFor = (recipe: ArtifactRecipeFacts = RECIPE) =>
@@ -214,71 +205,6 @@ describe("parameters are grouped by who chose them", () => {
   test("the card renders nothing when the report carried no recipe", () => {
     const { container } = render(<RebuildCard groups={[]} />);
     expect(container).toBeEmptyDOMElement();
-  });
-});
-
-/**
- * The verdict is a claim about two digests, and the landing page already has the device for showing that claim:
- * the comparison chunk by chunk. A reader should be able to see *which* chunk differs, not be told it did.
- */
-describe("the verdict shows the two digests it is about", () => {
-  const differingChunk = (result: Record<string, unknown>) =>
-    hashChunks(result.wasm_hash)!.findIndex(
-      (chunk, index) => chunk !== hashChunks(result.rebuilt_wasm_hash)![index],
-    );
-
-  test("splits a digest into the chunks the comparison is read in", () => {
-    expect(hashChunks(WASM)).toEqual([
-      "7944a96d",
-      "512f6e51",
-      "53268781",
-      "1cc0c932",
-      "505b0c05",
-      "1be9d351",
-      "f5332739",
-      "d70f753c",
-    ]);
-  });
-
-  // Hex case is not significant, so two spellings of one digest must not read as a mismatch.
-  test("a digest that differs only in case is the same digest", () => {
-    expect(hashChunks(WASM.toUpperCase())).toEqual(hashChunks(WASM));
-  });
-
-  // A malformed hash compared chunk by chunk would mark chunks as differing for a reason that is not the
-  // rebuild, so there is nothing to render.
-  test("refuses anything that is not a digest", () => {
-    expect(hashChunks("not a hash")).toBeNull();
-    expect(hashChunks(WASM.slice(0, 63))).toBeNull();
-    expect(hashChunks(undefined)).toBeNull();
-  });
-
-  test("a verified result shows both digests, agreeing", () => {
-    render(<ResultPanel state="verified" result={VERIFIED_RESULT} />);
-
-    const compare = screen.getByTestId("digest-compare");
-    expect(compare.textContent).toContain("7944a96d");
-    expect(compare.textContent).toContain("d70f753c");
-  });
-
-  test("a mismatch marks the chunk that differs, and not the ones that agree", () => {
-    render(<ResultPanel state="mismatch" result={MISMATCH_RESULT} />);
-
-    const index = differingChunk(MISMATCH_RESULT);
-    expect(index).toBeGreaterThanOrEqual(0);
-
-    const deployed = hashChunks(MISMATCH_RESULT.wasm_hash)!;
-    expect(screen.getAllByText(deployed[index]!)[0]).toHaveClass("text-danger-fg");
-    expect(screen.getAllByText(deployed[0]!)[0]).not.toHaveClass("text-danger-fg");
-  });
-
-  // A job that never rebuilt has one digest, and one digest is not a comparison.
-  test("renders nothing without both digests", () => {
-    const noRebuild: Record<string, unknown> = { ...MISMATCH_RESULT };
-    delete noRebuild.rebuilt_wasm_hash;
-    render(<ResultPanel state="build_failed" result={noRebuild} />);
-
-    expect(screen.queryByTestId("digest-compare")).not.toBeInTheDocument();
   });
 });
 

@@ -16,7 +16,6 @@ import {
   troubleshootingMessage,
 } from "../utils/result.util";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
-import { DigestCompare } from "./DigestCompare";
 import { MonoLabel } from "./MonoLabel";
 import { ValueStrip } from "./ValueStrip";
 import { WasmCompareGrid } from "./WasmCompareGrid";
@@ -151,15 +150,8 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
         Verification result
       </h2>
 
-      {/* What the verdict is a verdict about: the two digests, chunk by chunk, before any prose about
-          them. */}
-      <DigestCompare
-        deployed={result.wasm_hash}
-        rebuilt={result.rebuilt_wasm_hash}
-      />
-
       {(reason || detail) && (
-        <div className="mt-4 rounded-md bg-warning-surface p-3.5">
+        <div className="mb-4 rounded-md bg-warning-surface p-3.5">
           {reason && (
             <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-warning-fg">
               {reason}
@@ -174,22 +166,20 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
       )}
 
       {showTroubleshooting && (
-        <AdviceBox title="Troubleshooting" className="mt-4">
+        <AdviceBox title="Troubleshooting" className="mb-4">
           <p className="m-0 mt-1.5 text-[0.875rem] leading-[1.5] text-ink-value">
             {troubleshooting}
           </p>
         </AdviceBox>
       )}
 
-      {/* The published documents next: a reader who has just been told the verdict wants what it
+      {/* The published documents first: a reader who has just been told the verdict wants what it
           was published as, before the fields the comparison produced. */}
-      <div className="mt-4">
-        <PublishedResults
-          {...(artifactUrl ? { reportUrl: artifactUrl } : {})}
-          {...(artifactSha ? { reportSha256: artifactSha } : {})}
-          {...(wasmStatusUrl ? { wasmStatusUrl } : {})}
-        />
-      </div>
+      <PublishedResults
+        {...(artifactUrl ? { reportUrl: artifactUrl } : {})}
+        {...(artifactSha ? { reportSha256: artifactSha } : {})}
+        {...(wasmStatusUrl ? { wasmStatusUrl } : {})}
+      />
 
       {summary.length > 0 && (
         <div
