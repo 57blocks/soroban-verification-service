@@ -1,9 +1,9 @@
 import type { VerificationTarget } from "@scvs/core";
 import { classifyPreflightBuildEnvironment, type PreflightBuildEnvironment } from "./build-environment.js";
-import { getWasmMetadata, type ChainReaderConfig } from "./chain-reader.js";
+import { getWasmMetadata, type ChainReaderConfig } from "@scvs/core/chain-reader";
 
 export * from "./build-environment.js";
-export * from "./chain-reader.js";
+export * from "@scvs/core/chain-reader";
 export * from "./manifest.js";
 
 export type PreflightResult =
