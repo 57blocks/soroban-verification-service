@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { parseBatchJobStateChangeEvent } from "@scvs/aws";
 import { ScvsLogger } from "@scvs/core";
 import { EnvironmentsRepository, RebuildsRepository } from "@scvs/db";
-import { EnvironmentOutcomeService } from "../build-environments/environment-outcome.service.js";
+import { EnvironmentOutcomeService } from "../build-environments/index.js";
 import { RebuildOutcomeService } from "./rebuild-outcome.service.js";
 
 /**

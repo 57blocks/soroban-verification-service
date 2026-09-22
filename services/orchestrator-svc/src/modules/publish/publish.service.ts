@@ -45,10 +45,10 @@ import {
   declareSourceFileName,
   fetchSourceBytesForPublishing,
   type CanonicalSource,
-} from "./fetch-source-bytes.util.js";
+} from "../source-resolution/index.js";
 import { buildResultStorage as buildResultStorageFromConfig } from "./result-storage.util.js";
 import { toStatusLinkOutcome } from "./status-link-outcome.util.js";
-import { SourceResolutionService } from "../source-resolution/source-resolution.service.js";
+import { SourceResolutionService } from "../source-resolution/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { ConfigurationError } from "../../config/configuration-error.js";
 

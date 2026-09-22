@@ -3,8 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { ScvsLogger, startInterval } from "@scvs/core";
 import { RebuildsRepository, type RebuildRecord } from "@scvs/db";
-import { RebuildOutcomeService } from "../batch-events/rebuild-outcome.service.js";
-import { BatchDispatchService } from "../verification-pipeline/batch-dispatch.service.js";
+import { RebuildOutcomeService } from "../batch-events/index.js";
+import { BatchDispatchService } from "../verification-pipeline/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 /**

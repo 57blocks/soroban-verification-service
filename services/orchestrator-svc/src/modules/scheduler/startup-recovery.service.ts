@@ -1,6 +1,6 @@
 import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ScvsLogger } from "@scvs/core";
-import { BatchDispatchService } from "../verification-pipeline/batch-dispatch.service.js";
+import { BatchDispatchService } from "../verification-pipeline/index.js";
 
 /** Runs `BatchDispatchService.recoverJobsOnStartup` once, replacing main.ts's old top-level await. */
 @Injectable()

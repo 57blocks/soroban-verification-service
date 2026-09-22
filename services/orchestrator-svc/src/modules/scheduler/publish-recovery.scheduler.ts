@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { ScvsLogger, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
-import { PublishService } from "../publish/publish.service.js";
+import { PublishService } from "../publish/index.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 

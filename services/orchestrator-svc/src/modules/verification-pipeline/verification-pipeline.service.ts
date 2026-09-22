@@ -28,8 +28,8 @@ import {
   terminalJobStatuses,
   toWireVerificationStatus,
 } from "@scvs/core";
-import { BuildEnvironmentMaterializer } from "../build-environments/build-environment-materializer.js";
-import { BuildEnvironmentResolver } from "../build-environments/build-environment-resolver.js";
+import { BuildEnvironmentMaterializer } from "../build-environments/index.js";
+import { BuildEnvironmentResolver } from "../build-environments/index.js";
 import {
   configurationFailure,
   rebuildFailureDetail,
@@ -39,9 +39,9 @@ import {
   ChainReaderService,
   type WasmMetadata,
 } from "./chain-reader.service.js";
-import { SourceResolutionService } from "../source-resolution/source-resolution.service.js";
+import { SourceResolutionService } from "../source-resolution/index.js";
 import { BatchDispatchService } from "./batch-dispatch.service.js";
-import { PublishService } from "../publish/publish.service.js";
+import { PublishService } from "../publish/index.js";
 import { MismatchDiagnosticsService } from "./mismatch-diagnostics.service.js";
 import { selectBuildMechanism } from "./mechanism-routing.util.js";
 import { resolveJobVerdict } from "./verdict.util.js";

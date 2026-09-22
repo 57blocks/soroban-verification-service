@@ -5,7 +5,7 @@ import {
   declareSourceFileName,
   deriveExtension,
   fetchSourceBytesForPublishing,
-} from "../src/modules/publish/fetch-source-bytes.util.js";
+} from "../src/modules/source-resolution/fetch-source-bytes.util.js";
 import type { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
 /** Falls back to `.tar.gz`. */

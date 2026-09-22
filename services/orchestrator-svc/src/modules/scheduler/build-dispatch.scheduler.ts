@@ -4,7 +4,7 @@ import { SchedulerRegistry } from "@nestjs/schedule";
 import { DrainState, ScvsLogger, ScvsMetrics, runWithLogContext, startInterval, type Network } from "@scvs/core";
 import { JobsRepository, type JobRecord } from "@scvs/db";
 import { WorkerTickState } from "../../common/worker-tick.module.js";
-import { VerificationPipelineService } from "../verification-pipeline/verification-pipeline.service.js";
+import { VerificationPipelineService } from "../verification-pipeline/index.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 

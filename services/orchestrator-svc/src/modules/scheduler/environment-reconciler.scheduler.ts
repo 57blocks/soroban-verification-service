@@ -3,8 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { EnvironmentsRepository, type EnvironmentRecord } from "@scvs/db";
-import { ComposerDispatchService } from "../build-environments/composer-dispatch.service.js";
-import { EnvironmentOutcomeService } from "../build-environments/environment-outcome.service.js";
+import { ComposerDispatchService } from "../build-environments/index.js";
+import { EnvironmentOutcomeService } from "../build-environments/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 /** Same sets as the rebuild reconciler — Batch's vocabulary, not ours. */

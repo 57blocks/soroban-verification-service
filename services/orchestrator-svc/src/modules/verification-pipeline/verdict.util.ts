@@ -1,6 +1,6 @@
 import type { RebuildRecord } from "@scvs/db";
 import type { VerificationResultSummary as VerificationResultSummaryDto } from "@scvs/core";
-import { recipeSourceFor } from "../publish/artifact-builder.util.js";
+import { recipeSourceFor } from "../publish/index.js";
 
 /**
  * Pure and stateless on purpose: it takes the already-fetched deployed hash rather than a `ChainReaderService`,
