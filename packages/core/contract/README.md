@@ -27,6 +27,19 @@ change to that document's shape visible and versioned instead of a runtime surpr
   backward-compatibility guarantee, and this corpus is the assertion of it. Making a tolerated field
   required, or narrowing an `@IsIn`, fails here.
 
+- **`rebuild-error-codes.json`** — the other half of the same contract: every failure code the sandbox
+  may write into `BuildArtifact.reason`, and the class `rebuildFailureReason` reads to decide
+  retryability. Derived from `src/rebuild-error-code.ts`, never hand-edited:
+
+  ```bash
+  pnpm --filter @scvs/core run generate:error-code-snapshot
+  ```
+
+  Unlike the shape snapshots this one is **not** frozen per version — codes are added as the builder
+  grows them. It exists so that adding, renaming or reclassifying one is a reviewable line in a diff
+  rather than a silent change to whether a failure is retried. Checked by
+  `src/rebuild-error-code-test.ts`.
+
 ## Provenance of the corpus
 
 `v0.0` is real: four documents pulled from `sv-dev-scratch`'s `staging/` prefix (2026-08-25 rebuilds),

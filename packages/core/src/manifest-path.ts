@@ -1,5 +1,6 @@
 import { isAbsolute, posix } from "node:path";
 import { unescapeShellWord } from "./shell-words.js";
+import type { RebuildErrorCode } from "./rebuild-error-code.js";
 
 /** The `--manifest-path` a `bldopt` array records, as written. */
 export function extractManifestPath(bldopt?: string[]): string | undefined {
@@ -26,7 +27,7 @@ export function extractManifestPath(bldopt?: string[]): string | undefined {
 /** The manifest path as it will be passed **inside** the sandbox, under `/source`. */
 export function resolveContainerManifestPath(
   workspacePath: string,
-): { ok: true; path: string } | { ok: false; reason: string; detail: string } {
+): { ok: true; path: string } | { ok: false; reason: RebuildErrorCode; detail: string } {
   const raw = workspacePath || ".";
   if (isAbsolute(raw)) {
     return {

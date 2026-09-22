@@ -1,13 +1,13 @@
 // Diagnostics and failure-result builders.
 
-import type { SandboxDiagnostics } from "@scvs/core";
+import type { RebuildErrorCode, SandboxDiagnostics } from "@scvs/core";
 import type { CommandResult } from "./process-utils.js";
 import { excerpt, redactCommand, redactLocalPath, redactSecrets, redactUnknown, summarizeGenericCommand } from "./redact.js";
 import { referenceAlignment } from "./reference-alignment.js";
 import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPolicyOk, PrefetchEgressPolicyRejected, RunCliInput, RunCliResult } from "./run-cli.types.js";
 
 export function cliFailure(
-  reason: string,
+  reason: RebuildErrorCode,
   runner: RunCliResult["runner"],
   exit_code: number | null,
   diagnostics: Record<string, unknown>,
