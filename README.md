@@ -88,8 +88,8 @@ docker ps
 
 ### 2. Install the Stellar CLI
 
-`verification-svc`'s `preflight/chain-reader.ts` and `orchestrator-svc`'s
-`verification-pipeline/chain-reader.service.ts` both run the Stellar CLI locally, but only for
+The shared chain reader (`packages/core/src/chain-reader.ts`), which both `verification-svc` and
+`orchestrator-svc` call, runs the Stellar CLI locally, but only for
 read-only on-chain lookups — `stellar contract fetch` and `stellar contract info meta` — which have
 been stable, released commands for a long time. A standard install is enough:
 
