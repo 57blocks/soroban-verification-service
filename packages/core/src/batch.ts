@@ -5,6 +5,7 @@ import { buildModes, type BuildMode } from "./enums.js";
 import { SandboxDiagnostics } from "./result.js";
 import { BuildRecipe, sourceReferenceDiscriminator, type SourceReference } from "./source.js";
 import { VerificationTarget } from "./target.js";
+import { HEX_SHA256 } from "./digest.js";
 
 // The orchestrator↔builder wire contract.
 
@@ -37,7 +38,7 @@ export class MaterialiseJobParams {
   source_ref!: SourceReference;
   @IsIn(buildModes) mode!: BuildMode;
   /** The `source_sha256` the deployed Wasm's `contractmetav0` records, when it records one. */
-  @IsOptional() @Matches(/^[0-9a-f]{64}$/) expected_source_sha256?: string;
+  @IsOptional() @Matches(HEX_SHA256) expected_source_sha256?: string;
   /**
    * Presigned PUT for the canonical source archive's bytes — used only when they are not the bytes the trusted
    * side already holds, i.e. a container was peeled or a rebuilt archive was adopted.
@@ -54,9 +55,9 @@ export class SourceCanonicalisation {
   @IsNumber() depth!: number;
   @IsString() outer_format!: string;
   @IsString() canonical_format!: string;
-  @IsOptional() @Matches(/^[0-9a-f]{64}$/) canonical_sha256?: string;
+  @IsOptional() @Matches(HEX_SHA256) canonical_sha256?: string;
   /** `MaterialiseJobParams.expected_source_sha256` echoed back. */
-  @IsOptional() @Matches(/^[0-9a-f]{64}$/) expected_source_sha256?: string;
+  @IsOptional() @Matches(HEX_SHA256) expected_source_sha256?: string;
   /** `no_oracle` — the contract records no `source_sha256`, so nothing could be checked against. */
   @IsIn(["not_attempted", "no_oracle", "adopted", "hash_mismatch", "failed"])
   reconstruction!: "not_attempted" | "no_oracle" | "adopted" | "hash_mismatch" | "failed";
