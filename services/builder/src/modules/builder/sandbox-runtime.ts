@@ -4,8 +4,8 @@ import type { RebuildErrorCode } from "@scvs/core";
 import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCommand } from "./process-utils.js";
-import type { CommandResult } from "./process-utils.js";
+import { runCommand } from "@scvs/core/process";
+import type { CommandResult } from "@scvs/core/process";
 import { cliTimeoutMs, dependencyPrefetchTimeoutMs, dockerCheckTimeoutMs } from "./run-cli.config.js";
 import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPolicyOk, RunCliInput, RunCliRuntimeConfig } from "./run-cli.types.js";
 
@@ -43,7 +43,7 @@ export async function authenticateForImage(
     // Everything else in this file mirrors to CloudWatch on purpose — its output is build logs — which is
     // exactly why the one command whose stdout *is* a registry credential has to opt out.
     mirrorOutput: false,
-    // `mirrorOutput` only governs this process's own stdout; the sink in `process-utils.ts` is what becomes the
+    // `mirrorOutput` only governs this process's own stdout; the sink in `@scvs/core/process` is what becomes the
     // public log.
     record: false,
   });

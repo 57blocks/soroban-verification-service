@@ -26,7 +26,7 @@ import {
   type MaterializeSourceInput,
 } from "../builder/fetch-source.js";
 import { handoffPath, writeHandoff, HANDOFF_SCHEMA, type SourceHandoff } from "../builder/handoff.js";
-import { sha256File } from "../builder/process-utils.js";
+import { sha256File } from "@scvs/core/process";
 import { uploadArtifact } from "../builder/upload.js";
 import { jobParamsInput, readJobParams } from "../builder/job-params.js";
 import { toMaterializeSourceInput } from "../builder/materialize-input.js";

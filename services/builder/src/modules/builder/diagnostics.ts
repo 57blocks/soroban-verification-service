@@ -1,7 +1,7 @@
 // Diagnostics and failure-result builders.
 
 import type { RebuildErrorCode, SandboxDiagnostics } from "@scvs/core";
-import type { CommandResult } from "./process-utils.js";
+import type { CommandResult } from "@scvs/core/process";
 import { excerpt, redactCommand, redactLocalPath, redactSecrets, redactUnknown, summarizeGenericCommand } from "./redact.js";
 import { referenceAlignment } from "./reference-alignment.js";
 import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPolicyOk, PrefetchEgressPolicyRejected, RunCliInput, RunCliResult } from "./run-cli.types.js";

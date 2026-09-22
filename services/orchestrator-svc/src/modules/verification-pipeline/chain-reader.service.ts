@@ -16,7 +16,7 @@ import {
   runCommand,
   sha256File,
   type CommandResult,
-} from "./process-utils.js";
+} from "@scvs/core/process";
 import type { AppConfigService } from "../../config/configuration.js";
 
 // Resolves the expected Wasm hash and SEP-58 build metadata *before* dispatching a build — same call made by
@@ -77,7 +77,13 @@ export class ChainReaderService {
       "--out-file",
       wasmPath,
     ];
-    const fetch = await runCommand(fetchCommand, { timeout_ms: cliTimeoutMs });
+    // This service never mirrored the CLI's output to its own stdout and never retained the command, and the
+    // shared runner defaults to doing both for `builder`'s sake. Opting out keeps this call what it was.
+    const fetch = await runCommand(fetchCommand, {
+      timeout_ms: cliTimeoutMs,
+      mirrorOutput: false,
+      record: false,
+    });
     if (fetch.exit_code !== 0) {
       return {
         ok: false,

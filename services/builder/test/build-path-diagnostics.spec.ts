@@ -1,6 +1,6 @@
 import { dockerBuildDiagnostics, dockerUnavailableDiagnostics } from "../src/modules/builder/diagnostics.js";
 import { dockerFinalSandboxOptions, dockerResourceLimits } from "../src/modules/builder/run-cli.config.js";
-import type { CommandResult } from "../src/modules/builder/process-utils.js";
+import type { CommandResult } from "@scvs/core/process";
 import type { RunCliInput } from "../src/modules/builder/run-cli.types.js";
 
 const command = (over: Partial<CommandResult> = {}): CommandResult =>

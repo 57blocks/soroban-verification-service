@@ -1,5 +1,5 @@
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR } from "./artifact-selection.js";
-import { runCommand, type CommandResult } from "./process-utils.js";
+import { runCommand, type CommandResult } from "@scvs/core/process";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
 import { dockerCheckTimeoutMs } from "./run-cli.config.js";
 

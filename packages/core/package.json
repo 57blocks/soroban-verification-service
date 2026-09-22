@@ -47,7 +47,11 @@
       "types": "./dist/src/policy-bound-fetch.d.ts",
       "default": "./dist/src/policy-bound-fetch.js"
     },
-    "./pinned-fetch": {
+    "./process": {
+      "types": "./dist/src/process.d.ts",
+      "default": "./dist/src/process.js"
+    },
+  "./pinned-fetch": {
       "types": "./dist/src/pinned-fetch.d.ts",
       "default": "./dist/src/pinned-fetch.js"
     },

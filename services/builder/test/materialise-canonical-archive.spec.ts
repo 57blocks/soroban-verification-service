@@ -6,7 +6,7 @@ import { ConfigModule } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import configuration from "../src/config/configuration.js";
 import { handoffPath, readHandoff } from "../src/modules/builder/handoff.js";
-import { runCommand } from "../src/modules/builder/process-utils.js";
+import { runCommand } from "@scvs/core/process";
 import { MaterialiseService } from "../src/modules/materialise/materialise.service.js";
 import { zipArchive } from "./malicious-corpus.js";
 

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ScvsLogger, resolveContainerManifestPath, stderrOnlySink } from "@scvs/core";
-import { runCommand, sha256File } from "./process-utils.js";
+import { runCommand, sha256File } from "@scvs/core/process";
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR, parseBuildArtifactReports, selectArtifactFromOutput, snapshotWasmPaths } from "./artifact-selection.js";
 import { CONTAINER_CLI_ENTRYPOINT, assembleBuildCommand, rejectedBuildArgument, resolveAddedEnvironment } from "./argument-policy.js";
 import { dockerEnvOptions, leadingBuildArgs, replayableBuildOptions, resolveManifestPath } from "./build-options.js";

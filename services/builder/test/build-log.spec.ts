@@ -6,7 +6,7 @@ import {
   recordedCommands,
   resetRecordedCommands,
   runCommand,
-} from "../src/modules/builder/process-utils.js";
+} from "@scvs/core/process";
 
 /** Two properties carry the whole feature and neither is obvious from the type: */
 beforeEach(() => resetRecordedCommands());

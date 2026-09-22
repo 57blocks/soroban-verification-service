@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { referenceAlignment } from "../../src/modules/builder/reference-alignment.js";
 import { CONTAINER_OUT_DIR, parseBuildArtifactReports } from "../../src/modules/builder/artifact-selection.js";
 import { dockerEnvOptions, extractBuildPackage, leadingBuildArgs, replayableBuildOptions } from "../../src/modules/builder/build-options.js";
-import { runCommand, sha256File } from "../../src/modules/builder/process-utils.js";
+import { runCommand, sha256File } from "@scvs/core/process";
 import { runCli } from "../../src/modules/builder/run-cli.js";
 import { unescapeShellWord } from "@scvs/core";
 import type { Deviation, DifferentialFixture } from "./fixtures.js";

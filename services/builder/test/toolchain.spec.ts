@@ -4,14 +4,14 @@ import { join } from "node:path";
 import { jest } from "@jest/globals";
 
 const runCommand = jest.fn<(...args: unknown[]) => Promise<unknown>>();
-jest.unstable_mockModule("../src/modules/builder/process-utils.js", () => ({
+jest.unstable_mockModule("@scvs/core/process", () => ({
   runCommand,
   sha256File: jest.fn(),
   byteSize: jest.fn(),
 }));
 
 // Both symbols come from the dynamic import: a static one would load the real module — and its real
-// `process-utils` — before the mock is registered.
+// `@scvs/core/process` — before the mock is registered.
 const { detectRustToolchainFile, resolveTrustedToolchain } = await import(
   "../src/modules/builder/toolchain.js"
 );

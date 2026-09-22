@@ -2,7 +2,7 @@ import { deflateRawSync } from "node:zlib";
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCommand } from "../src/modules/builder/process-utils.js";
+import { runCommand } from "@scvs/core/process";
 
 /** **T5's adversarial corpus** — one archive per attack, each with the reason code the extractor owes it. */
 export type MaliciousArchive = {

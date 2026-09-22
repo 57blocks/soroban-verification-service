@@ -3,8 +3,8 @@ import type { RebuildErrorCode } from "@scvs/core";
 
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runCommand } from "./process-utils.js";
-import type { CommandResult } from "./process-utils.js";
+import { runCommand } from "@scvs/core/process";
+import type { CommandResult } from "@scvs/core/process";
 import { dependencyPrefetchTimeoutMs } from "./run-cli.config.js";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
 

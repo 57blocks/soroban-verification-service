@@ -3,7 +3,7 @@ import type { RebuildErrorCode } from "@scvs/core";
 
 import { readdir, rm, stat } from "node:fs/promises";
 import { join, posix, resolve, sep } from "node:path";
-import type { CommandResult } from "./process-utils.js";
+import type { CommandResult } from "@scvs/core/process";
 
 /** The build container's scratch mount: `target/`, `tmp/`, `cargo-home/`, `vendor/`. Compiler-visible paths — moving one is byte-affecting. */
 export const CONTAINER_OUT_DIR = "/out";

@@ -88,7 +88,7 @@ describe("T5 — the corpus is not vacuously red", () => {
     const dest = await scratch("corpus-ok-dest");
     const { mkdir, writeFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
-    const { runCommand } = await import("../src/modules/builder/process-utils.js");
+    const { runCommand } = await import("@scvs/core/process");
 
     const source = join(root, "pkg");
     await mkdir(join(source, "src"), { recursive: true });

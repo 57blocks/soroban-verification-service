@@ -9,7 +9,7 @@ import {
   type Sep58Metadata,
   type VerificationTarget,
 } from "@scvs/core";
-import { byteSize, runCommand, sha256File, type CommandResult } from "./process-utils.js";
+import { byteSize, runCommand, sha256File, type CommandResult } from "@scvs/core/process";
 
 export type WasmMetadata = {
   wasm_hash: string;
@@ -80,7 +80,12 @@ export async function getWasmMetadata(
   const wasmPath = join(workdir, "target.wasm");
 
   const fetchCommand = buildFetchCommand(target, config, wasmPath);
-  const fetch = await runCommand(fetchCommand, { timeout_ms: config.cliTimeoutMs });
+  // Neither mirrored nor recorded here, as before: the shared runner defaults to both for `builder`'s sake.
+  const fetch = await runCommand(fetchCommand, {
+    timeout_ms: config.cliTimeoutMs,
+    mirrorOutput: false,
+    record: false,
+  });
   if (fetch.exit_code !== 0) {
     return {
       ok: false,

@@ -1,6 +1,14 @@
-// Copied as-is from apps/api/src/process-utils.ts. No workspace imports — pure Node built-ins only — so it
-// carries zero risk to services/builder's "minimal dependency footprint" rule.
-
+/**
+ * Running a child process and reading a file's digest — the one implementation.
+ *
+ * Four services carried a copy of this, and the copies had drifted into a superset and two subsets: `builder`
+ * had output mirroring, stdin with its EPIPE guard, and command recording; `composer` had the first two;
+ * `orchestrator-svc` and `verification-svc` had neither. This is `builder`'s, which is the superset, so the
+ * two richer callers keep their behaviour unchanged and the two plainer ones opt out explicitly.
+ *
+ * Node-only, and therefore **not exported from this package's barrel** — see `pinned-fetch.ts`, which is kept
+ * out for the same reason. Reach it at `@scvs/core/process`.
+ */
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -49,7 +57,7 @@ export async function runCommand(
   } = {}
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
-    const child = spawn(command[0], command.slice(1), {
+    const child = spawn(command[0]!, command.slice(1), {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
       stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],

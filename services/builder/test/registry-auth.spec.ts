@@ -1,5 +1,5 @@
 import { authenticateForImage, ecrRegistryRegion } from "../src/modules/builder/sandbox-runtime.js";
-import type { CommandResult } from "../src/modules/builder/process-utils.js";
+import type { CommandResult } from "@scvs/core/process";
 
 /** Authenticating to ECR before pulling a composed environment — and *not* authenticating for anything else. */
 
@@ -95,7 +95,7 @@ describe("authenticateForImage", () => {
 
   it("never records the credential-producing command into the build-log sink", async () => {
     // `mirrorOutput: false` governs this process's own stdout; the published log is assembled from the sink in
-    // `process-utils.ts`.
+    // `@scvs/core/process`.
     const { calls, runner } = recordingRunner([{ stdout: `${TOKEN}\n` }, {}]);
     await authenticateForImage(ECR_IMAGE, undefined, runner);
 
