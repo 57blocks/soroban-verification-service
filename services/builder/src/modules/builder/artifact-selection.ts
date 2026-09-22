@@ -1,3 +1,4 @@
+import type { RebuildErrorCode } from "@scvs/core";
 // Which file is the rebuilt artifact.
 
 import { readdir, rm, stat } from "node:fs/promises";
@@ -51,7 +52,7 @@ export function selectArtifactFromOutput(input: {
   artifactDir: string;
 }):
   | { ok: true; hostPath: string; containerPath: string; sha256: string }
-  | { ok: false; reason: string; detail: string } {
+  | { ok: false; reason: RebuildErrorCode; detail: string } {
   if (input.reports.length === 0) {
     return {
       ok: false,
@@ -81,7 +82,7 @@ export function selectArtifactFromOutput(input: {
   }
 
   const candidate = input.candidates[0];
-  let outsideMount: { reason: string; detail: string } | undefined;
+  let outsideMount: { reason: RebuildErrorCode; detail: string } | undefined;
   // Reverse order: the tool prints its own summary last, after anything the compile emitted.
   for (let index = input.reports.length - 1; index >= 0; index -= 1) {
     const report = input.reports[index];
@@ -164,7 +165,7 @@ async function collectExistingWasm(dir: string, found: Set<string>): Promise<voi
 export function resolveReportedArtifact(
   containerPath: string,
   outDir: string,
-): { ok: true; hostPath: string } | { ok: false; reason: string; detail: string } {
+): { ok: true; hostPath: string } | { ok: false; reason: RebuildErrorCode; detail: string } {
   const normalized = posix.normalize(containerPath);
   if (normalized !== `${CONTAINER_ARTIFACT_DIR}` && !normalized.startsWith(`${CONTAINER_ARTIFACT_DIR}/`)) {
     return {

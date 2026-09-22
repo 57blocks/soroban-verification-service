@@ -1,3 +1,4 @@
+import type { RebuildErrorCode } from "@scvs/core";
 // Container invocation: availability, source staging, dependency prefetch.
 
 import { mkdir, mkdtemp, stat } from "node:fs/promises";
@@ -32,7 +33,7 @@ export async function authenticateForImage(
   config?: RunCliRuntimeConfig,
   /** Injected for tests; production omits it and gets `runCommand`. Same seam as the composer's `fetchImpl`. */
   runner: typeof runCommand = runCommand,
-): Promise<{ ok: true; skipped: boolean } | { ok: false; reason: string; detail: string }> {
+): Promise<{ ok: true; skipped: boolean } | { ok: false; reason: RebuildErrorCode; detail: string }> {
   const registry = image.split("/")[0] ?? "";
   const region = ecrRegistryRegion(registry);
   if (!region) return { ok: true, skipped: true };
@@ -112,7 +113,7 @@ export function summarizeDockerCommand(input: {
 
 export async function stageSourceForOfflineBuild(sourceRoot: string, config?: RunCliRuntimeConfig): Promise<
   | { ok: true; source_root: string }
-  | { ok: false; reason: string; detail: string; copy?: CommandResult }
+  | { ok: false; reason: RebuildErrorCode; detail: string; copy?: CommandResult }
 > {
   const stagedParent = await mkdtemp(join(tmpdir(), "scvs-offline-src-"));
   const stagedRoot = join(stagedParent, "source");
@@ -194,7 +195,7 @@ export async function prefetchCargoDependencies(input: {
 
 export async function requireExtractedSourceRoot(sourcePath: string): Promise<
   | { ok: true; source_root: string; extraction_normalisation?: string }
-  | { ok: false; reason: string; detail: string }
+  | { ok: false; reason: RebuildErrorCode; detail: string }
 > {
   const info = await stat(sourcePath).catch(() => undefined);
   if (!info) {

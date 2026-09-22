@@ -1,3 +1,4 @@
+import type { RebuildErrorCode } from "@scvs/core";
 // Toolchain pinning and the vendored-offline cargo config.
 
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -81,7 +82,7 @@ export async function probeActiveToolchain(
 
 export type TrustedToolchain =
   | { ok: true; toolchain?: string; probe: CommandResult; sourceToolchainFile?: string }
-  | { ok: false; reason: string; detail: string; probe: CommandResult; sourceToolchainFile?: string };
+  | { ok: false; reason: RebuildErrorCode; detail: string; probe: CommandResult; sourceToolchainFile?: string };
 
 /** Today that is the digest-pinned image's own active toolchain, probed. */
 export async function resolveTrustedToolchain(

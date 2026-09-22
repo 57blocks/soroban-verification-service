@@ -1,3 +1,4 @@
+import type { RebuildErrorCode } from "@scvs/core";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,7 +50,7 @@ function positiveOr(value: number | undefined, fallback: number): number {
  */
 function chainSourceRefusal(hashes: { expected: string; canonical: string; depth: number }): {
   ok: false;
-  reason: string;
+  reason: RebuildErrorCode;
   status: string;
   detail: string;
 } {
@@ -161,7 +162,7 @@ export class MaterialiseService {
     job: MaterialiseJobParams,
   ): Promise<
     | { ok: true; source: MaterializedSource }
-    | { ok: false; reason: string; detail: string; status?: string }
+    | { ok: false; reason: RebuildErrorCode; detail: string; status?: string }
   > {
     const info = await stat(source.workspace_path).catch(() => undefined);
     if (!info) {
