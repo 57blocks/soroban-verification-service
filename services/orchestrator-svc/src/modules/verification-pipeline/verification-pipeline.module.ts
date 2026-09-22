@@ -3,6 +3,7 @@ import { BuildEnvironmentsModule } from "../build-environments/build-environment
 import { PublishModule } from "../publish/publish.module.js";
 import { SourceResolutionModule } from "../source-resolution/source-resolution.module.js";
 import { BatchDispatchService } from "./batch-dispatch.service.js";
+import { BuildEnvironmentIdentityService } from "./build-environment-identity.service.js";
 import { ChainReaderService } from "./chain-reader.service.js";
 import { ImagePlatformService } from "./image-platform.service.js";
 import { MismatchDiagnosticsService } from "./mismatch-diagnostics.service.js";
@@ -16,6 +17,8 @@ import { VerificationPipelineService } from "./verification-pipeline.service.js"
   imports: [PublishModule, BuildEnvironmentsModule, SourceResolutionModule],
   providers: [
     ChainReaderService,
+    // Not exported: it answers a question only the pipeline asks, about a rebuild only the pipeline keys.
+    BuildEnvironmentIdentityService,
     // Not exported: `BatchDispatchService` is its only consumer, and its per-process cache is only sound
     // because there is exactly one instance of it.
     ImagePlatformService,

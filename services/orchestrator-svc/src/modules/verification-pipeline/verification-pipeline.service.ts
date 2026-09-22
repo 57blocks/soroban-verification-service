@@ -8,17 +8,12 @@ import {
   type RebuildRecord,
 } from "@scvs/db";
 import {
-  type BuildArchitecture,
   type BuildMode,
-  composedEnvironmentImageReference,
   computeIdempotencyKey,
-  evaluateBuildImage,
   type FailureReason,
-  isPermanentCompositionFailure,
   isRetryableFailure,
   type JobStatus,
   type LogFields,
-  parseRebuildEnvironmentIdentity,
   redactAll,
   safeParseDto,
   SandboxDiagnostics as SandboxDiagnosticsDto,
@@ -28,8 +23,6 @@ import {
   terminalJobStatuses,
   toWireVerificationStatus,
 } from "@scvs/core";
-import { BuildEnvironmentMaterializer } from "../build-environments/index.js";
-import { BuildEnvironmentResolver } from "../build-environments/index.js";
 import {
   configurationFailure,
   rebuildFailureDetail,
@@ -39,6 +32,7 @@ import {
   ChainReaderService,
   type WasmMetadata,
 } from "./chain-reader.service.js";
+import { BuildEnvironmentIdentityService } from "./build-environment-identity.service.js";
 import { SourceResolutionService } from "../source-resolution/index.js";
 import { BatchDispatchService } from "./batch-dispatch.service.js";
 import { PublishService } from "../publish/index.js";
@@ -46,8 +40,8 @@ import { MismatchDiagnosticsService } from "./mismatch-diagnostics.service.js";
 import { selectBuildMechanism } from "./mechanism-routing.util.js";
 import { resolveJobVerdict } from "./verdict.util.js";
 import type { BuilderInvocationParams } from "./builder-invocation.util.js";
+import { builderParams, readRecipeBuildOptions } from "./builder-params.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
-import { ConfigurationError } from "../../config/configuration-error.js";
 
 /**
  * `publish_pending` is deliberately absent: the verdict exists and is never recomputed there, but publication
@@ -87,12 +81,8 @@ export class VerificationPipelineService {
     private readonly mismatchDiagnostics: MismatchDiagnosticsService,
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
     @Inject(RebuildsRepository) private readonly rebuilds: RebuildsRepository,
-    // Injected as the abstract tokens, so the e2e suite substitutes a resolver/materializer that never reaches
-    // Batch or ECR.
-    @Inject(BuildEnvironmentResolver)
-    private readonly environmentResolver: BuildEnvironmentResolver,
-    @Inject(BuildEnvironmentMaterializer)
-    private readonly environmentMaterializer: BuildEnvironmentMaterializer
+    @Inject(BuildEnvironmentIdentityService)
+    private readonly environmentIdentity: BuildEnvironmentIdentityService
   ) {}
 
   /**
@@ -294,7 +284,7 @@ export class VerificationPipelineService {
     // --- Find or create the shared rebuild. -------------------------------------------------
     // Keyed off the *persisted* sourceRef, not the resolved one: resolution only fills in `source_uri` (a
     // presigned URL for private uploads), and the key covers the source's content hash, never its location.
-    const recipeBuildOptions = this.recipeBuildOptions(
+    const recipeBuildOptions = readRecipeBuildOptions(
       job.buildOptions,
       chainLookup.metadata.metadata_replay?.entries
     );
@@ -409,8 +399,9 @@ export class VerificationPipelineService {
   }
 
   /**
-   * Returns the immutable identity the rebuild should be keyed on, or `undefined` when this tick cannot produce
-   * one — the job was failed with a reason, or its environment is still composing.
+   * Returns the immutable identity the rebuild should be keyed on, or `undefined` when this tick cannot
+   * produce one. Which of the two reasons it was is `BuildEnvironmentIdentityService`'s answer; acting on it —
+   * failing the job, or saying out loud that it is waiting — is this service's.
    */
   private async resolveEnvironmentIdentity(
     job: JobRecord,
@@ -422,105 +413,25 @@ export class VerificationPipelineService {
       "Deriving the build environment from on-chain metadata."
     );
 
-    const pair = metadata.toolchain_pair;
-
-    // The chain decides the build class, not the submission: `bldimg` present in the chain-injected section
-    // means the CLI recorded an image and this is cli-58.
-    const chainNamedImage = metadata.sep58.bldimg;
-    if (chainNamedImage) {
-      const imagePolicy = evaluateBuildImage(chainNamedImage);
-      if (!imagePolicy.ok) {
-        // `submit-flow` already answers `4xx unsupported` for the submitter-named arm.
-        await this.failJob(
-          job,
-          "unsupported",
-          imagePolicy.reason,
-          imagePolicy.detail
-        );
-        return undefined;
-      }
-      this.logger.log(
-        "cli-58 target: using the chain-named, policy-accepted image",
-        {
-          image: imagePolicy.image,
-          trust_level: imagePolicy.trust_level,
-        }
-      );
-      return imagePolicy.image;
-    }
-
-    const resolution = await this.environmentResolver.resolve({
-      ...(pair ? { pair } : {}),
-    });
-    if (resolution.kind === "unsupported") {
-      // A missing or unserviceable chain-recorded toolchain is a preparation failure, not a submitter policy
-      // violation.
-      this.logger.warn("target's recorded toolchain cannot be served", {
-        reason: resolution.reason,
-        cliver: pair?.cliver,
-        rsver: pair?.rsver,
-      });
-      await this.failJob(
-        job,
-        "unsupported",
-        resolution.reason,
-        "The toolchain this contract records cannot be reproduced from official, released components, " +
-          "so no verification was attempted."
-      );
-      return undefined;
-    }
-
-    // `chain_named` is unreachable here — the resolver only returns it for a `sep58Image` input, and this
-    // branch is only reached when the chain recorded none.
-    if (resolution.kind === "chain_named") {
-      return resolution.image;
-    }
-
-    const materialized = await this.environmentMaterializer.materialize(
-      resolution.intent,
-      job.jobId
-    );
-    switch (materialized.kind) {
-      case "ready":
-        this.logger.log("cli-legacy target: composed environment is ready", {
-          environment_id: materialized.environmentId,
-          cliver: resolution.intent.pair.cliver,
-          rsver: resolution.intent.pair.rsver,
-          recipe_sha256: materialized.environment.recipeSha256,
-        });
-        return materialized.environment.recipeSha256;
+    const outcome = await this.environmentIdentity.resolve(job.jobId, metadata);
+    switch (outcome.kind) {
+      case "resolved":
+        return outcome.identity;
       case "composing":
-        // Off the request path by construction: say so honestly and come back next tick.
         await this.setProgress(
           job,
           "composing_environment",
           "Composing the build environment this contract records, from official pinned components."
         );
-        this.logger.log(
-          "cli-legacy target: waiting on environment composition",
-          {
-            environment_id: materialized.environmentId,
-            cliver: resolution.intent.pair.cliver,
-            rsver: resolution.intent.pair.rsver,
-          }
-        );
         return undefined;
-      case "failed": {
-        // Half of the composer's reason codes are permanent properties of the pair, and `internal_error` is
-        // *retryable* (`isRetryableFailure`).
-        const permanent = isPermanentCompositionFailure(materialized.errorCode);
+      case "failed":
         await this.failJob(
           job,
-          permanent ? "policy_rejected" : "build_failed",
-          materialized.errorCode,
-          permanent
-            ? "The build environment this contract records cannot be composed from official, released " +
-                "components, so no verification was attempted."
-            : "The build environment this contract records could not be composed. This is a problem on " +
-                "the verifier's side, not with the submission."
+          outcome.reason,
+          outcome.reasonCode,
+          outcome.detail
         );
         return undefined;
-      }
     }
   }
 
@@ -651,7 +562,7 @@ export class VerificationPipelineService {
     }
 
     // Resolve it to the ECR coordinate here, at submit time, and only here.
-    const environmentImage = await this.resolveImageReference(
+    const environmentImage = await this.environmentIdentity.resolveImageReference(
       rebuild.imageDigest
     );
     if (!environmentImage) {
@@ -666,7 +577,7 @@ export class VerificationPipelineService {
       return;
     }
 
-    const params = this.builderParams(
+    const params = builderParams(
       rebuild,
       job,
       resolved.sourceRef,
@@ -890,47 +801,6 @@ export class VerificationPipelineService {
     }
   }
 
-  /** Turns a rebuild's persisted environment identity into something Batch can pull. */
-  private async resolveImageReference(
-    persistedIdentity: string
-  ): Promise<{ pullReference: string; arch?: BuildArchitecture } | undefined> {
-    const identity = parseRebuildEnvironmentIdentity(persistedIdentity);
-    if (identity.kind === "chain_named") {
-      // A public, digest-pinned registry reference. Its architecture is genuinely something only the registry
-      // knows, so no `arch` travels and dispatch probes as it always has.
-      return { pullReference: identity.image };
-    }
-    const environment =
-      await this.environmentMaterializer.findReadyByRecipeSha256(
-        identity.recipeSha256
-      );
-    if (!environment) return undefined;
-    return {
-      // `Environment.imageDigest` is always a bare `sha256:<64 hex>` — `ComposerArtifact.image_digest`
-      // validates exactly that shape, so there is no already-qualified case to handle here.
-      pullReference: composedEnvironmentImageReference(
-        this.composedEnvironmentRepositoryUri(),
-        environment.imageDigest
-      ),
-      // By the time `batch-dispatch.service.ts` sees the resolved `<repo>@sha256:…` there is nothing left in it
-      // to say the environment was composed, and this is the one function that already holds both facts.
-      ...(environment.arch ? { arch: environment.arch } : {}),
-    };
-  }
-
-  private composedEnvironmentRepositoryUri(): string {
-    const uri = this.configService.get("composedEnvironmentRepositoryUri", {
-      infer: true,
-    });
-    if (!uri) {
-      throw new ConfigurationError(
-        "SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI",
-        "SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI is required to dispatch a rebuild against a composed " +
-          "build environment (ADR-017)."
-      );
-    }
-    return uri;
-  }
 
   /** One lookup for both: they differ only in which verdict the prior job carries. */
   private async adoptPublishedVerdict(
@@ -984,84 +854,6 @@ export class VerificationPipelineService {
     return true;
   }
 
-  private builderParams(
-    rebuild: RebuildRecord,
-    job: JobRecord,
-    sourceRef: SourceReference,
-    pinnedHash: string,
-    // Both halves of what `resolveImageReference` established, together: the pull coordinate the builder needs,
-    // and.
-    environmentImage: { pullReference: string; arch?: BuildArchitecture }
-  ): BuilderInvocationParams {
-    const storedBuildOptions = this.parseRecipeBuildOptions(
-      rebuild.buildOptions
-    );
-    return {
-      rebuildId: rebuild.rebuildId,
-      // Carries the resolved hash, not the bare persisted target: `services/builder`'s verify path requires a
-      // pinned `wasm_hash` and refuses to fall back to `--id`, and a "submitted"-mode job may have been created
-      // from a target that only had a contract_id.
-      target: { ...job.target, wasm_hash: pinnedHash },
-      sourceRef,
-      // The resolved pull reference: for cli-legacy the environment is the verifier's own composed one.
-      imageDigest: environmentImage.pullReference,
-      // Present only for a composed environment that recorded it.
-      imageArchitecture: environmentImage.arch,
-      // `mainnetRpcUrl` stays configured — `ChainReaderService` reads the chain with it on this same service.
-      ...(rebuild.chainSourceSha256
-        ? { expectedSourceSha256: rebuild.chainSourceSha256 }
-        : {}),
-      buildOptions: storedBuildOptions.bldopt,
-      buildArgs: storedBuildOptions.bldarg,
-      metadataReplay: storedBuildOptions.metadata_replay,
-    };
-  }
-
-  private recipeBuildOptions(
-    stored: unknown,
-    metadataReplay?: string[]
-  ): { bldarg?: string[]; bldopt?: string[]; metadata_replay?: string[] } {
-    const parsed = this.parseRecipeBuildOptions(stored);
-    return {
-      ...parsed,
-      ...(metadataReplay?.length ? { metadata_replay: metadataReplay } : {}),
-    };
-  }
-
-  private parseRecipeBuildOptions(stored: unknown): {
-    bldarg?: string[];
-    bldopt?: string[];
-    metadata_replay?: string[];
-  } {
-    if (!stored || typeof stored !== "object") {
-      return {};
-    }
-    const value = stored as {
-      bldarg?: unknown;
-      bldopt?: unknown;
-      metadata_replay?: unknown;
-    };
-    return {
-      ...(Array.isArray(value.bldarg) &&
-      value.bldarg.every((entry) => typeof entry === "string")
-        ? { bldarg: value.bldarg }
-        : {}),
-      ...(Array.isArray(value.bldopt) &&
-      value.bldopt.every((entry) => typeof entry === "string")
-        ? { bldopt: value.bldopt }
-        : {}),
-      ...(Array.isArray(value.metadata_replay) &&
-      value.metadata_replay.every((entry) => typeof entry === "string")
-        ? { metadata_replay: value.metadata_replay }
-        : {}),
-    };
-  }
-
-  /**
-   * The job's target as log *fields*. `job_id` is deliberately absent: `BuildDispatchScheduler` entered the
-   * ambient scope with it before calling in, so every record here already carries it (O2).
-   */
-  /** O4's "job duration by path and outcome". */
   private emitJobDuration(
     job: JobRecord,
     outcome: string,
