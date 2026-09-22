@@ -38,19 +38,22 @@ describe("error envelope", () => {
     expect(res.body.schema_version).toBe("1.0");
   });
 
-  // The arm that answers before any controller runs, and the only one reached from middleware.
-  it("carries schema_version on a body the upload middleware refuses outright", async () => {
-    const oversized = Buffer.alloc(Number(process.env.SCVS_MAX_SOURCE_ARCHIVE_BYTES ?? 50 * 1024 * 1024) + 1);
+  // The arm that answers before any controller runs, and the only one reached from middleware — so it is also
+  // the only arm whose envelope the exception filter never gets to repair. The size is declared rather than
+  // sent: the middleware refuses on Content-Length alone, and a client still writing a body when the server
+  // destroys the socket loses the response to EPIPE before it can read it.
+  it("carries schema_version on an upload the middleware refuses outright", async () => {
+    const max = Number(process.env.SCVS_MAX_SOURCE_ARCHIVE_BYTES ?? 50 * 1024 * 1024);
     const res = await request(server)
       .post("/api/verification/v1/uploads/source")
       .set("content-type", "application/gzip")
-      .send(oversized)
-      .catch((error) => error.response ?? { status: 413, body: {} });
-    expect([413, 400]).toContain(res.status);
-    if (res.status === 413) {
-      expect(res.body.error).toBe("source_archive_too_large");
-      expect(res.body.schema_version).toBe("1.0");
-    }
+      .set("content-length", String(max + 1))
+      .send(Buffer.alloc(8));
+
+    expect(res.status).toBe(413);
+    expect(res.body.error).toBe("source_archive_too_large");
+    expect(res.body.schema_version).toBe("1.0");
+    expect(() => parseDto(ApiErrorResponse, res.body)).not.toThrow();
   });
 });
 
