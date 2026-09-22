@@ -54,3 +54,27 @@ test("the tick runs on the interval", async () => {
   clearInterval(registry.registered[0]![1]);
   assert.ok(calls > 0, "the tick should have run at least once");
 });
+
+// Node turns an unhandled rejection into a fatal error. A sweep that throws must cost its own tick, not the
+// process — and a test harness that builds the app must not be killed by one after its last assertion.
+test("a rejecting tick is caught, and the schedule survives it", async () => {
+  const registry = fakeRegistry();
+  let calls = 0;
+  startInterval(registry, "job-retry", 1, () => {
+    calls += 1;
+    return Promise.reject(new Error("the tick blew up"));
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  clearInterval(registry.registered[0]![1]);
+  assert.ok(calls > 1, "a rejection must not stop the following ticks");
+});
+
+// The service's HTTP listener keeps the process alive. A sweep timer that also did would hold a finished
+// test runner open — which is exactly what reached CI.
+test("the handle does not hold the process open", () => {
+  const registry = fakeRegistry();
+  startInterval(registry, "upload-cleanup", 60_000, () => undefined);
+  const ref = registry.registered[0]![1] as NodeJS.Timeout & { hasRef(): boolean };
+  assert.equal(ref.hasRef(), false);
+  clearInterval(ref);
+});
