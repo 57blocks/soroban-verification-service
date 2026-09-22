@@ -32,7 +32,7 @@ export const TrustedVerifiers = () => {
 
   return (
     <div>
-      <p className="m-0 max-w-[62ch] text-[0.8rem] text-ink-muted">
+      <p className="m-0 max-w-[62ch] text-[0.8rem] text-ink-body">
         Who this deployment aggregates across. A verifier that is not <code>active</code> is skipped
         when an answer is assembled — that is the operator&apos;s own decision, not a claim about the
         verifier.
@@ -72,7 +72,7 @@ export const TrustedVerifiers = () => {
                 both would print one string twice. This survives the column being added, and an entry
                 carrying no id at all has nothing to add here. */}
             {verifier.id !== undefined && verifier.id !== heading && (
-              <p className="mb-0 mt-1 break-all font-mono text-[0.75rem] text-ink-muted">{verifier.id}</p>
+              <p className="mb-0 mt-1 break-all font-mono text-[0.75rem] text-ink-mute">{verifier.id}</p>
             )}
             <div className="mt-3 space-y-1">
               {/* Either spelling of the result root, and an entry naming neither says so rather than
@@ -80,7 +80,7 @@ export const TrustedVerifiers = () => {
               {root ? (
                 <PeerLink url={root} label="url" />
               ) : (
-                <p className="m-0 text-[0.75rem] text-ink-muted" data-testid="tvl-no-result-root">
+                <p className="m-0 text-[0.75rem] text-ink-mute" data-testid="tvl-no-result-root">
                   Names no result root, so nothing of this verifier&apos;s can be read.
                 </p>
               )}
@@ -93,7 +93,7 @@ export const TrustedVerifiers = () => {
               {verifier.bulk_load_url ? (
                 <PeerLink url={verifier.bulk_load_url} label="bulk_load_url" />
               ) : (
-                <p className="m-0 text-[0.75rem] text-ink-muted" data-testid="tvl-not-enumerable">
+                <p className="m-0 text-[0.75rem] text-ink-mute" data-testid="tvl-not-enumerable">
                   Serves no bulk-load route — asked per hash from hashes already known here, so a
                   result only this verifier holds stays unseen until someone looks it up.
                 </p>
@@ -103,7 +103,7 @@ export const TrustedVerifiers = () => {
           );
         })}
         {verifiers.length === 0 && (
-          <li className="list-none text-[0.9rem] text-ink-muted">
+          <li className="list-none text-[0.9rem] text-ink-body">
             The list is empty — this deployment aggregates across nobody, so it can answer nothing.
           </li>
         )}

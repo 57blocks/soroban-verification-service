@@ -56,7 +56,7 @@ export const HashLookup = ({ additionalRoots = [] }: { additionalRoots?: readonl
               <h2 className="m-0 text-xs font-bold uppercase tracking-[0.03em] text-ink">
                 Trusted verifiers
               </h2>
-              <p className="mb-4 mt-1 text-[0.75rem] text-ink-muted">
+              <p className="mb-4 mt-1 text-[0.75rem] text-ink-mute">
                 This deployment&apos;s aggregate, assembled from the roots it syncs.
               </p>
             </>
@@ -82,7 +82,7 @@ export const HashLookup = ({ additionalRoots = [] }: { additionalRoots?: readonl
           >
             Additional result roots
           </h2>
-          <p className="mb-4 mt-1 text-[0.75rem] text-ink-muted">
+          <p className="mb-4 mt-1 text-[0.75rem] text-ink-mute">
             Fetched by your browser, one at a time, straight from each root. Not part of the
             aggregate above.
           </p>

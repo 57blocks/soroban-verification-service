@@ -18,7 +18,7 @@ export const AdditionalRootsPanel = ({ roots, onAdd, onRemove }: AdditionalRoots
 
   return (
     <div>
-      <p className="m-0 max-w-[62ch] text-[0.8rem] text-ink-muted">
+      <p className="m-0 max-w-[62ch] text-[0.8rem] text-ink-body">
         Roots this deployment does not aggregate across. The browser fetches them directly and their
         answers are reported separately below — never merged into the aggregate, which is a claim
         only this deployment can make. <strong>They are gone on reload.</strong>
@@ -46,7 +46,7 @@ export const AdditionalRootsPanel = ({ roots, onAdd, onRemove }: AdditionalRoots
       </form>
 
       {error && (
-        <p className="mb-0 mt-2 text-[0.8rem] text-ink-muted" data-testid="additional-root-error">
+        <p className="mb-0 mt-2 text-[0.8rem] text-ink-body" data-testid="additional-root-error">
           {error}
         </p>
       )}
@@ -64,7 +64,7 @@ export const AdditionalRootsPanel = ({ roots, onAdd, onRemove }: AdditionalRoots
               type="button"
               aria-label={`Remove ${root.url}`}
               onClick={() => onRemove(root.id)}
-              className="ml-auto inline-flex items-center gap-1 border-0 bg-transparent p-0 text-[0.75rem] text-ink-muted hover:text-ink"
+              className="ml-auto inline-flex items-center gap-1 border-0 bg-transparent p-0 text-[0.75rem] text-ink-body hover:text-ink"
             >
               <X size={12} aria-hidden />
               Remove
@@ -72,7 +72,7 @@ export const AdditionalRootsPanel = ({ roots, onAdd, onRemove }: AdditionalRoots
           </li>
         ))}
         {roots.length === 0 && (
-          <li className="list-none text-[0.8rem] text-ink-muted">
+          <li className="list-none text-[0.8rem] text-ink-body">
             None added. Answers below come from the Trusted Verifiers List alone.
           </li>
         )}

@@ -36,14 +36,14 @@ type AggregatedStatusViewProps = {
 export const AggregatedStatusView = ({ status, source, showHash }: AggregatedStatusViewProps) => (
   <div data-testid="explorer-results">
     {showHash && (
-      <p className="m-0 mb-1 break-all font-mono text-[0.8rem] text-ink-muted">
+      <p className="m-0 mb-1 break-all font-mono text-[0.8rem] text-ink-mute">
         wasm_hash {status.wasm_hash}
       </p>
     )}
     <p className="m-0 text-[0.95rem] font-medium text-ink">
       {agreementCopy[status.agreement] ?? status.agreement}
     </p>
-    <p className="mb-0 mt-1 text-[0.75rem] text-ink-muted">
+    <p className="mb-0 mt-1 text-[0.75rem] text-ink-mute">
       Assembled {status.updated_at} — this is {assembledNote[source]}
     </p>
 

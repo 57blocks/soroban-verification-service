@@ -18,7 +18,7 @@ export const PeerLink = ({ url, label }: PeerLinkProps) => {
 
   if (!destination) {
     return (
-      <span className="break-all font-mono text-[0.75rem] text-ink-muted" data-testid="peer-link-refused">
+      <span className="break-all font-mono text-[0.75rem] text-ink-mute" data-testid="peer-link-refused">
         {label}: refused — not an http(s) destination
       </span>
     );
@@ -28,7 +28,7 @@ export const PeerLink = ({ url, label }: PeerLinkProps) => {
     return (
       <span className="inline-flex flex-wrap items-baseline gap-2">
         {/* Text, not an anchor: nothing is navigable before the origin has been shown. */}
-        <span className="break-all font-mono text-[0.75rem] text-ink-muted" data-testid="peer-link-pending">
+        <span className="break-all font-mono text-[0.75rem] text-ink-mute" data-testid="peer-link-pending">
           {label}: {destination.origin}
         </span>
         <button

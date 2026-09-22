@@ -42,7 +42,7 @@ export const LookupResult = ({
           <p className="m-0 text-[0.95rem] font-medium text-ink">
             No result in this deployment&apos;s aggregate.
           </p>
-          <p className="mb-0 mt-1 max-w-[58ch] text-[0.8rem] text-ink-muted">
+          <p className="mb-0 mt-1 max-w-[58ch] text-[0.8rem] text-ink-body">
             This says what <em>this deployment</em> holds, not what any verifier has published — a
             result may exist and not have been retained here yet.
           </p>
