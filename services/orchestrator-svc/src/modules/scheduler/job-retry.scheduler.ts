@@ -1,13 +1,9 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import { DrainState, RETRY_ELIGIBILITY_WINDOW_MS, ScvsLogger } from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { DrainState, RETRY_ELIGIBILITY_WINDOW_MS, ScvsLogger, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
-
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const JOB_RETRY_INTERVAL_MS = Number(process.env.SCVS_JOB_RETRY_INTERVAL_MS || 60_000);
 
 /** How far back a failure still counts as *live*. */
 const ELIGIBILITY_WINDOW_MS = RETRY_ELIGIBILITY_WINDOW_MS;
@@ -21,16 +17,25 @@ const LOGGED_ID_LIMIT = 20;
  * resubmit.
  */
 @Injectable()
-export class JobRetryScheduler {
+export class JobRetryScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("job-retry");
 
   constructor(
     @Inject(DrainState) private readonly drain: DrainState,
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(JOB_RETRY_INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "job-retry",
+      this.configService.get("jobRetryIntervalMs", { infer: true }),
+      () => this.requeueRetryable(),
+    );
+  }
+
   async requeueRetryable(): Promise<void> {
     // O9: re-queueing is claiming new work, which a draining node must not do.
     if (this.drain.isDraining) return;

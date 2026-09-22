@@ -1,17 +1,11 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics } from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { EnvironmentsRepository, type EnvironmentRecord } from "@scvs/db";
 import { ComposerDispatchService } from "../build-environments/composer-dispatch.service.js";
 import { EnvironmentOutcomeService } from "../build-environments/environment-outcome.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
-
-// Reads `process.env` directly for the same reason `rebuild-reconciler.scheduler.ts` does: `@Interval` is a
-// decorator argument, evaluated at class-definition time, before Nest's container exists.
-const RECONCILER_INTERVAL_MS = Number(
-  process.env.SCVS_ENVIRONMENT_RECONCILER_INTERVAL_MS || 60_000
-);
 
 /** Same sets as the rebuild reconciler — Batch's vocabulary, not ours. */
 const BATCH_NON_TERMINAL = new Set(["SUBMITTED", "PENDING", "RUNNABLE", "STARTING", "RUNNING"]);
@@ -22,7 +16,7 @@ const BATCH_TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
  * necessary for a strictly worse version of the same reason.
  */
 @Injectable()
-export class EnvironmentReconcilerScheduler {
+export class EnvironmentReconcilerScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("environment-reconciler");
   private readonly metrics = new ScvsMetrics("environment-reconciler", { logger: this.logger });
   private reconciling = false;
@@ -32,10 +26,19 @@ export class EnvironmentReconcilerScheduler {
     @Inject(EnvironmentsRepository) private readonly environments: EnvironmentsRepository,
     @Inject(ComposerDispatchService) private readonly composer: ComposerDispatchService,
     @Inject(EnvironmentOutcomeService)
-    private readonly outcomes: EnvironmentOutcomeService
+    private readonly outcomes: EnvironmentOutcomeService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(RECONCILER_INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "environment-reconciler",
+      this.configService.get("environmentReconcilerIntervalMs", { infer: true }),
+      () => this.reconcileStuckEnvironments(),
+    );
+  }
+
   async reconcileStuckEnvironments(): Promise<void> {
     // A scan that outruns its own interval would issue the same resets twice.
     if (this.reconciling) return;

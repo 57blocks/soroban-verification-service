@@ -1,13 +1,10 @@
 import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics } from "@scvs/core";
+import { ConfigService } from "@nestjs/config";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { ArweaveArchiveService } from "../publish/arweave-archive.service.js";
-
-// Deliberately unbounded in time, unlike the source-publish scan: that one gives up after 24 hours because
-// its input is a staged upload that can be permanently gone, while every input this replay needs — the report
-// URL and the tx ids — is durable.
-const STATUS_LINK_RECOVERY_INTERVAL_MS = Number(process.env.SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS || 60_000);
+import type { AppConfigService } from "../../config/configuration.js";
 
 @Injectable()
 export class StatusLinkRecoveryScheduler implements OnModuleInit {
@@ -19,13 +16,20 @@ export class StatusLinkRecoveryScheduler implements OnModuleInit {
   constructor(
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
     @Inject(ArweaveArchiveService) private readonly arweaveArchive: ArweaveArchiveService,
+    @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
   onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "status-link-recovery",
+      this.configService.get("statusLinkRecoveryIntervalMs", { infer: true }),
+      () => this.recoverPendingStatusLinks(),
+    );
     void this.recoverPendingStatusLinks();
   }
 
-  @Interval(STATUS_LINK_RECOVERY_INTERVAL_MS)
   async recoverPendingStatusLinks(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingStatusLink();

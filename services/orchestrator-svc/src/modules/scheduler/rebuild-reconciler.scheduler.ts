@@ -1,17 +1,11 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger } from "@scvs/core";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, startInterval } from "@scvs/core";
 import { RebuildsRepository, type RebuildRecord } from "@scvs/db";
 import { RebuildOutcomeService } from "../batch-events/rebuild-outcome.service.js";
 import { BatchDispatchService } from "../verification-pipeline/batch-dispatch.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
-
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const RECONCILER_INTERVAL_MS = Number(
-  process.env.SCVS_REBUILD_REAPER_INTERVAL_MS || 60_000
-);
 
 /**
  * AWS Batch job states that mean "still working on it". Anything outside this set and outside SUCCEEDED/FAILED
@@ -31,7 +25,7 @@ const BATCH_TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
  * correct on the happy path, permanent on a lost event.
  */
 @Injectable()
-export class RebuildReconcilerScheduler {
+export class RebuildReconcilerScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("rebuild-reconciler");
   private reconciling = false;
 
@@ -40,10 +34,19 @@ export class RebuildReconcilerScheduler {
     @Inject(RebuildsRepository) private readonly rebuilds: RebuildsRepository,
     @Inject(BatchDispatchService) private readonly batch: BatchDispatchService,
     @Inject(RebuildOutcomeService)
-    private readonly outcomes: RebuildOutcomeService
+    private readonly outcomes: RebuildOutcomeService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(RECONCILER_INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "rebuild-reconciler",
+      this.configService.get("rebuildReaperIntervalMs", { infer: true }),
+      () => this.reconcileStuckRebuilds(),
+    );
+  }
+
   async reconcileStuckRebuilds(): Promise<void> {
     // A scan that outruns its own interval would issue the same resets twice.
     if (this.reconciling) return;

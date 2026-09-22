@@ -19,6 +19,7 @@ export * from "./build-log-token.js";
 export * from "./sanitize-terminal.js";
 export * from "./rebuild-key.js";
 export * from "./rebuild-error-code.js";
+export * from "./interval-schedule.js";
 export * from "./wasm-metadata.js";
 export * from "./cliver.js";
 export * from "./stellar-network.js";

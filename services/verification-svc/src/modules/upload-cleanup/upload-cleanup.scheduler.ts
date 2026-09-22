@@ -1,23 +1,31 @@
-import { Inject, Injectable } from "@nestjs/common";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger } from "@scvs/core";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, startInterval } from "@scvs/core";
 import { UploadCleanupService } from "../../common/upload-cleanup.js";
+import type { AppConfigService } from "../../config/configuration.js";
 
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const INTERVAL_MS = Number(process.env.SCVS_UPLOAD_CLEANUP_INTERVAL_MS || 60_000);
-
-/** Replaces the pre-Nest `setInterval` in server.ts with `@nestjs/schedule`'s `@Interval` decorator. */
+/** Replaces the pre-Nest `setInterval` in server.ts with one `@nestjs/schedule` owns and clears. */
 @Injectable()
-export class UploadCleanupScheduler {
+export class UploadCleanupScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("upload-cleanup");
 
   // Explicit `@Inject()` — see preflight.controller.ts's comment.
   constructor(
     @Inject(UploadCleanupService) private readonly uploadCleanup: UploadCleanupService,
+    @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "upload-cleanup",
+      this.configService.get("uploadCleanupIntervalMs", { infer: true }),
+      () => this.handleCleanup(),
+    );
+  }
+
   async handleCleanup(): Promise<void> {
     try {
       await this.uploadCleanup.cleanupExpiredUploads();

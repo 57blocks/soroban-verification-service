@@ -1,14 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
+import { SchedulerRegistry } from "@nestjs/schedule";
 import { createS3Client, deleteObject } from "@scvs/aws";
-import { ScvsLogger, ScvsMetrics } from "@scvs/core";
+import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
-
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const SWEEP_INTERVAL_MS = Number(process.env.SCVS_BUILD_LOG_SWEEP_INTERVAL_MS || 60 * 60_000);
 
 /**
  * Removes raw build logs past their retention period (build-log-access design.md BL-2).
@@ -17,16 +13,25 @@ const SWEEP_INTERVAL_MS = Number(process.env.SCVS_BUILD_LOG_SWEEP_INTERVAL_MS ||
  * row, so a sweep that is late or wedged cannot extend the promise. This is what removes the bytes.
  */
 @Injectable()
-export class BuildLogExpiryScheduler {
+export class BuildLogExpiryScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("build-log-expiry");
   private readonly metrics = new ScvsMetrics("build-log-expiry", { logger: this.logger });
 
   constructor(
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
     @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(SWEEP_INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "build-log-expiry",
+      this.configService.get("buildLogSweepIntervalMs", { infer: true }),
+      () => this.sweep(),
+    );
+  }
+
   async sweep(now = Date.now()): Promise<number> {
     try {
       // Object keys, not job ids: one rebuild's log serves every job attached to it, and `listExpiredBuildLogs`

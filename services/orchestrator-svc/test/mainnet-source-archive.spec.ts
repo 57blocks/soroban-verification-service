@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { DbModule, JobsRepository, PRISMA_CLIENT, RebuildsRepository, type JobRecord, type PrismaClient } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 import { createResultStorage, readWasmStatus, sourceKeyFromFileName } from "@scvs/storage-layout";
@@ -42,6 +43,9 @@ beforeAll(async () => {
   moduleRef = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
+      // needs the module that provides it.
+      ScheduleModule.forRoot(),
       DbModule.forRootAsync({
         inject: [ConfigService],
         useFactory: (configService: AppConfigService) => configService.get("postgres", { infer: true }),
@@ -346,6 +350,9 @@ describe("PublishService.retryPendingSourcePublish — SCVS_SOURCE_ARCHIVE_ENABL
       disabledModuleRef = await Test.createTestingModule({
         imports: [
           ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+          // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
+          // needs the module that provides it.
+          ScheduleModule.forRoot(),
           DbModule.forRootAsync({
             inject: [ConfigService],
             useFactory: (configService: AppConfigService) => configService.get("postgres", { infer: true }),

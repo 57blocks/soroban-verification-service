@@ -1,14 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Interval } from "@nestjs/schedule";
+import { SchedulerRegistry } from "@nestjs/schedule";
 import { createS3Client, deleteObject } from "@scvs/aws";
-import { ScvsLogger, ScvsMetrics } from "@scvs/core";
+import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
-
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const RETENTION_SWEEP_INTERVAL_MS = Number(process.env.SCVS_JOB_RETENTION_SWEEP_INTERVAL_MS || 60 * 60_000);
 
 /**
  * Prunes job records that never reached publication (retention-and-pseudonymisation design.md RP-3). A job
@@ -16,16 +12,25 @@ const RETENTION_SWEEP_INTERVAL_MS = Number(process.env.SCVS_JOB_RETENTION_SWEEP_
  * consumer's incremental sync reads through `listPublished`.
  */
 @Injectable()
-export class JobRetentionScheduler {
+export class JobRetentionScheduler implements OnModuleInit {
   private readonly logger = new ScvsLogger("job-retention");
   private readonly metrics = new ScvsMetrics("job-retention", { logger: this.logger });
 
   constructor(
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
     @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
-  @Interval(RETENTION_SWEEP_INTERVAL_MS)
+  onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "job-retention",
+      this.configService.get("jobRetentionSweepIntervalMs", { infer: true }),
+      () => this.sweep(),
+    );
+  }
+
   async sweep(now = Date.now()): Promise<number> {
     try {
       const retentionMs = this.configService.get("jobRetentionMs", { infer: true });

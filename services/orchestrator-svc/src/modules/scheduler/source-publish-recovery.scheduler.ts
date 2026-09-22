@@ -1,14 +1,10 @@
 import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
-import { Interval } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics } from "@scvs/core";
+import { ConfigService } from "@nestjs/config";
+import { SchedulerRegistry } from "@nestjs/schedule";
+import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { PublishService } from "../publish/publish.service.js";
-
-// Reads `process.env` directly rather than through `ConfigService`: `@Interval(...)` is a decorator argument,
-// evaluated at class-definition time (module load), before Nest's DI container exists.
-const SOURCE_PUBLISH_RECOVERY_INTERVAL_MS = Number(
-  process.env.SCVS_PUBLISH_RECOVERY_INTERVAL_MS || 60_000,
-);
+import type { AppConfigService } from "../../config/configuration.js";
 
 @Injectable()
 export class SourcePublishRecoveryScheduler implements OnModuleInit {
@@ -20,9 +16,17 @@ export class SourcePublishRecoveryScheduler implements OnModuleInit {
   constructor(
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
     @Inject(PublishService) private readonly publish: PublishService,
+    @Inject(ConfigService) private readonly configService: AppConfigService,
+    @Inject(SchedulerRegistry) private readonly schedule: SchedulerRegistry,
   ) {}
 
   onModuleInit(): void {
+    startInterval(
+      this.schedule,
+      "source-publish-recovery",
+      this.configService.get("publishRecoveryIntervalMs", { infer: true }),
+      () => this.recoverPendingSourcePublishes(),
+    );
     void this.recoverPendingSourcePublishes();
   }
 
@@ -30,7 +34,6 @@ export class SourcePublishRecoveryScheduler implements OnModuleInit {
    * The 24-hour give-up bound lives in `listJobsPendingSourcePublish`'s own query (it excludes rows older than
    * that from what it returns), not here.
    */
-  @Interval(SOURCE_PUBLISH_RECOVERY_INTERVAL_MS)
   async recoverPendingSourcePublishes(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingSourcePublish(
