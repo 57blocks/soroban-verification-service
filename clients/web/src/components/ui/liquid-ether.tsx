@@ -10,7 +10,7 @@ import * as THREE from "three";
  * the flow speed, so a still region is fully transparent and whatever sits under the component shows
  * through. That is what lets it sit on the hero's white wash and stay a wash itself.
  *
- * Three departures from upstream, each for a reason this app cares about:
+ * Four departures from upstream, each for a reason this app cares about:
  *
  * - `backgroundColor` is not accepted. Upstream takes the prop and then hard-codes a transparent clear
  *   and a transparent `bgColor` uniform, so the only thing it could do here is mislead the next reader.
@@ -23,6 +23,8 @@ import * as THREE from "three";
  *   them, so a caller passing an inline `colors={[...]}` — or nudging `mouseForce` — tears down the
  *   renderer and its render targets and builds them again on each render. Rebuilding on a real palette
  *   change is still correct and is all this needs.
+ * - Auto mode can drive several pointers (`autoPointers`) on spiralling paths (`autoCurl`). Upstream
+ *   drives one in straight lines, which leaves a wide canvas with a single straight band across it.
  *
  * `lightMode` answers the same question for a light page: the palette stops are normalised to their own
  * chroma before they are drawn, so a near-white stop cannot wash out against white and the flow keeps a
@@ -77,6 +79,8 @@ interface AutoDriverHandle {
   resumeDelay: number;
   rampDurationMs: number;
   mouse: { autoIntensity: number; takeoverDuration: number };
+  curl: number;
+  setPointers: (count: number) => void;
 }
 
 interface LiquidEtherHandle {
@@ -111,6 +115,10 @@ export interface LiquidEtherProps {
   className?: string;
   /** Drives the pointer itself while nobody is interacting, so an unattended hero still moves. */
   autoDemo?: boolean;
+  /** How many pointers auto mode drives at once, each stirring its own trail at its own pace. */
+  autoPointers?: number;
+  /** How hard the auto pointers curl: 0 steers in plain arcs, 1 spirals into each target. */
+  autoCurl?: number;
   autoSpeed?: number;
   autoIntensity?: number;
   /** Seconds to hand control from the auto pointer to the real one, once the mouse moves. */
@@ -153,6 +161,8 @@ export const LiquidEther = ({
   style,
   className,
   autoDemo = true,
+  autoPointers = 1,
+  autoCurl = 1,
   autoSpeed = 0.5,
   autoIntensity = 2.2,
   takeoverDuration = 0.25,
@@ -384,6 +394,82 @@ export const LiquidEther = ({
       lastUserInteraction: number;
     }
 
+    /** A force brush: where it is and how far it moved this frame, both in clip space. */
+    interface Brush {
+      coords: THREE.Vector2;
+      diff: THREE.Vector2;
+    }
+
+    /** The auto driver's pointers beyond the first, refilled each frame and read by the force pass. */
+    const autoBrushes: Brush[] = [];
+
+    // Targets stay inside ±TARGET_BOX in clip space; past ±SAFE a pointer turns hard back toward its target.
+    const TARGET_BOX = 0.7;
+    const SAFE = 0.85;
+    const randomInside = () => (Math.random() * 2 - 1) * TARGET_BOX;
+    const clampInside = (v: number) => Math.min(Math.max(v, -TARGET_BOX), TARGET_BOX);
+    const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+    // Path geometry is in "square" units, clip space rescaled by √aspect per axis, so a loop is round on
+    // screen rather than squashed to the canvas's shape.
+    const HOP_MIN = 0.5;
+    const HOP_MAX = 1.1;
+    const ARRIVE = 0.15;
+    /** Heading turn per unit travelled, per radian the heading is off its target. */
+    const PULL = 3;
+    /** Per-run spin. Against PULL it holds the heading 30–75° off the target, so every run spirals in. */
+    const SPIN_MIN = 1.5;
+    const SPIN_MAX = 4;
+    /** Curvature cap: the tightest loop has a radius of 1/7. */
+    const MAX_TURN = 7;
+
+    /** One auto pointer, spiralling from one nearby target to the next. */
+    class Wanderer implements Brush {
+      coords = new THREE.Vector2(randomInside(), randomInside());
+      diff = new THREE.Vector2();
+      target = new THREE.Vector2();
+      heading = Math.random() * Math.PI * 2;
+      pace: number;
+      private spin = 0;
+      /** Path length left before the run is abandoned: a spin the pull cannot beat would orbit forever. */
+      private budget = 0;
+      constructor(pace: number) {
+        this.pace = pace;
+      }
+      /** The offset to the target in square units, written into `diff` as scratch. */
+      private toTarget(s: number) {
+        return this.diff.set((this.target.x - this.coords.x) * s, (this.target.y - this.coords.y) / s);
+      }
+      private retarget(s: number) {
+        const angle = Math.random() * Math.PI * 2;
+        const hop = HOP_MIN + Math.random() * (HOP_MAX - HOP_MIN);
+        this.target.set(
+          clampInside(this.coords.x + (Math.cos(angle) * hop) / s),
+          clampInside(this.coords.y + Math.sin(angle) * hop * s),
+        );
+        this.spin = (Math.random() < 0.5 ? -1 : 1) * (SPIN_MIN + Math.random() * (SPIN_MAX - SPIN_MIN));
+        this.budget = hop * 4;
+      }
+      /** Travels `distance * pace` along the path and leaves the move, scaled by `intensity`, in `diff`. */
+      step(distance: number, intensity: number, curl: number, aspect: number) {
+        const s = Math.sqrt(aspect);
+        let to = this.toTarget(s);
+        if (this.budget <= 0 || to.length() < ARRIVE) {
+          this.retarget(s);
+          to = this.toTarget(s);
+        }
+        const move = distance * this.pace;
+        const error = wrapAngle(Math.atan2(to.y, to.x) - this.heading);
+        const outside = Math.abs(this.coords.x) > SAFE || Math.abs(this.coords.y) > SAFE;
+        const turn = outside ? Math.sign(error) * MAX_TURN : PULL * error + this.spin * curl;
+        this.heading += Math.min(Math.max(turn, -MAX_TURN), MAX_TURN) * move;
+        this.budget -= move;
+        this.diff.set((Math.cos(this.heading) * move) / s, Math.sin(this.heading) * move * s);
+        this.coords.add(this.diff);
+        this.diff.multiplyScalar(intensity);
+      }
+    }
+
     class AutoDriver {
       mouse: MouseClass;
       manager: InteractionClock;
@@ -391,18 +477,24 @@ export const LiquidEther = ({
       speed: number;
       resumeDelay: number;
       rampDurationMs: number;
+      curl: number;
       active = false;
-      current = new THREE.Vector2(0, 0);
-      target = new THREE.Vector2();
+      /** The first one steers `Mouse`, so a takeover glides from where it is; the rest are `autoBrushes`. */
+      wanderers: Wanderer[] = [];
       lastTime = performance.now();
       activationTime = 0;
-      margin = 0.2;
-      private _tmpDir = new THREE.Vector2();
 
       constructor(
         mouse: MouseClass,
         manager: InteractionClock,
-        opts: { enabled: boolean; speed: number; resumeDelay: number; rampDuration: number },
+        opts: {
+          enabled: boolean;
+          pointers: number;
+          curl: number;
+          speed: number;
+          resumeDelay: number;
+          rampDuration: number;
+        },
       ) {
         this.mouse = mouse;
         this.manager = manager;
@@ -410,18 +502,27 @@ export const LiquidEther = ({
         this.speed = opts.speed;
         this.resumeDelay = opts.resumeDelay || 3000;
         this.rampDurationMs = (opts.rampDuration || 0) * 1000;
-        this.pickNewTarget();
+        this.curl = opts.curl;
+        this.setPointers(opts.pointers);
       }
-      pickNewTarget() {
-        const r = Math.random;
-        this.target.set((r() * 2 - 1) * (1 - this.margin), (r() * 2 - 1) * (1 - this.margin));
+      setPointers(count: number) {
+        const n = Math.max(1, Math.round(count));
+        // Paces differ so the trails drift apart instead of moving as one formation.
+        while (this.wanderers.length < n) {
+          this.wanderers.push(new Wanderer(this.wanderers.length === 0 ? 1 : 0.7 + Math.random() * 0.6));
+        }
+        this.wanderers.length = n;
       }
       forceStop() {
         this.active = false;
         this.mouse.isAutoActive = false;
+        autoBrushes.length = 0;
       }
       update() {
-        if (!this.enabled) return;
+        if (!this.enabled) {
+          if (this.active) this.forceStop();
+          return;
+        }
         const now = performance.now();
         const idle = now - this.manager.lastUserInteraction;
         if (idle < this.resumeDelay) {
@@ -432,9 +533,10 @@ export const LiquidEther = ({
           if (this.active) this.forceStop();
           return;
         }
+        const [lead, ...rest] = this.wanderers;
         if (!this.active) {
           this.active = true;
-          this.current.copy(this.mouse.coords);
+          lead.coords.copy(this.mouse.coords);
           this.lastTime = now;
           this.activationTime = now;
         }
@@ -442,22 +544,21 @@ export const LiquidEther = ({
         let dtSec = (now - this.lastTime) / 1000;
         this.lastTime = now;
         if (dtSec > 0.2) dtSec = 0.016;
-        const dir = this._tmpDir.subVectors(this.target, this.current);
-        const dist = dir.length();
-        if (dist < 0.01) {
-          this.pickNewTarget();
-          return;
-        }
-        dir.normalize();
         let ramp = 1;
         if (this.rampDurationMs > 0) {
           const t = Math.min(1, (now - this.activationTime) / this.rampDurationMs);
           ramp = t * t * (3 - 2 * t);
         }
         const step = this.speed * dtSec * ramp;
-        const move = Math.min(step, dist);
-        this.current.addScaledVector(dir, move);
-        this.mouse.setNormalized(this.current.x, this.current.y);
+        const aspect = Common.width / Common.height;
+        // `Mouse.update` applies `autoIntensity` to the lead, so only the rest take it here.
+        lead.step(step, 1, this.curl, aspect);
+        this.mouse.setNormalized(lead.coords.x, lead.coords.y);
+        autoBrushes.length = 0;
+        for (const wanderer of rest) {
+          wanderer.step(step, this.mouse.autoIntensity, this.curl, aspect);
+          autoBrushes.push(wanderer);
+        }
       }
     }
 
@@ -748,19 +849,22 @@ export const LiquidEther = ({
         cursor_size,
       }: { mouse_force?: number; cellScale?: THREE.Vector2; cursor_size?: number } = {}) {
         if (!this.mouse) return;
-        const forceX = (Mouse.diff.x / 2) * (mouse_force || 0);
-        const forceY = (Mouse.diff.y / 2) * (mouse_force || 0);
         const cell = cellScale ?? new THREE.Vector2(1, 1);
         const cursor = cursor_size || 0;
         const cursorSizeX = cursor * cell.x;
         const cursorSizeY = cursor * cell.y;
-        const centerX = Math.min(Math.max(Mouse.coords.x, -1 + cursorSizeX + cell.x * 2), 1 - cursorSizeX - cell.x * 2);
-        const centerY = Math.min(Math.max(Mouse.coords.y, -1 + cursorSizeY + cell.y * 2), 1 - cursorSizeY - cell.y * 2);
         const uniforms = (this.mouse.material as THREE.RawShaderMaterial).uniforms;
-        uniforms.force.value.set(forceX, forceY);
-        uniforms.center.value.set(centerX, centerY);
         uniforms.scale.value.set(cursor, cursor);
-        super.update();
+        // One draw per brush; the additive blend sums them into the velocity field.
+        for (const brush of [Mouse, ...autoBrushes]) {
+          const forceX = (brush.diff.x / 2) * (mouse_force || 0);
+          const forceY = (brush.diff.y / 2) * (mouse_force || 0);
+          const centerX = Math.min(Math.max(brush.coords.x, -1 + cursorSizeX + cell.x * 2), 1 - cursorSizeX - cell.x * 2);
+          const centerY = Math.min(Math.max(brush.coords.y, -1 + cursorSizeY + cell.y * 2), 1 - cursorSizeY - cell.y * 2);
+          uniforms.force.value.set(forceX, forceY);
+          uniforms.center.value.set(centerX, centerY);
+          super.update();
+        }
       }
     }
 
@@ -1113,6 +1217,8 @@ export const LiquidEther = ({
       constructor(props: {
         $wrapper: HTMLElement;
         autoDemo: boolean;
+        autoPointers: number;
+        autoCurl: number;
         autoSpeed: number;
         autoIntensity: number;
         takeoverDuration: number;
@@ -1131,6 +1237,8 @@ export const LiquidEther = ({
         this.output = new Output();
         this.autoDriver = new AutoDriver(Mouse, this, {
           enabled: props.autoDemo,
+          pointers: props.autoPointers,
+          curl: props.autoCurl,
           speed: props.autoSpeed,
           resumeDelay: props.autoResumeDelay,
           rampDuration: props.autoRampDuration,
@@ -1192,6 +1300,8 @@ export const LiquidEther = ({
     const webgl = new WebGLManager({
       $wrapper: container,
       autoDemo,
+      autoPointers,
+      autoCurl,
       autoSpeed,
       autoIntensity,
       takeoverDuration,
@@ -1260,6 +1370,8 @@ export const LiquidEther = ({
     const driver = webglRef.current?.autoDriver;
     if (driver) {
       driver.enabled = autoDemo;
+      driver.setPointers(autoPointers);
+      driver.curl = autoCurl;
       driver.speed = autoSpeed;
       driver.resumeDelay = autoResumeDelay;
       driver.rampDurationMs = autoRampDuration * 1000;
@@ -1278,6 +1390,8 @@ export const LiquidEther = ({
     resolution,
     isBounce,
     autoDemo,
+    autoPointers,
+    autoCurl,
     autoSpeed,
     autoIntensity,
     takeoverDuration,
