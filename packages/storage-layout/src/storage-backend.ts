@@ -26,7 +26,7 @@ export type StorageVersion = string;
 export type StorageWriteResult = "written" | "conflict";
 
 export type ResultStorage = {
-  kind: "filesystem" | "s3" | "r2" | "gcs";
+  kind: "filesystem" | "s3" | "r2";
   publicRoot: string;
   readText(path: string): Promise<string | undefined>;
   writeText(path: string, content: string, contentType: string): Promise<void>;

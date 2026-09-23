@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { writeVerifierManifest, writeVerifierPolicy } from "@scvs/storage-layout";
-import { buildResultStorage } from "./result-storage.util.js";
+import {
+  createResultStorage,
+  writeVerifierManifest,
+  writeVerifierPolicy,
+} from "@scvs/storage-layout";
 import { ConfigurationError } from "../../config/configuration-error.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -15,7 +18,7 @@ export class VerifierIdentityPublisher implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     const verifier = this.configService.get("verifierIdentity", { infer: true });
     const verifierPolicy = this.configService.get("verifierPolicy", { infer: true });
-    const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
+    const storage = createResultStorage(this.configService.get("resultStorage", { infer: true }));
 
     // Rule 38. A backend that cannot make a conditional write hold across processes is safe for exactly one
     // writer, and nothing here can count the replicas — so the operator states it and this refuses to start

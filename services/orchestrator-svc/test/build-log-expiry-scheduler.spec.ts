@@ -8,9 +8,19 @@ import type { JobsRepository } from "@scvs/db";
  */
 const deleteObject = jest.fn<(...args: unknown[]) => Promise<void>>();
 
+// The rest are `@scvs/storage-layout`'s, reached because `configuration.ts` now reads the result-storage
+// environment. A partial mock of an ESM module is a load-time SyntaxError, not a missing-function error.
 jest.unstable_mockModule("@scvs/aws", () => ({
   createS3Client: () => ({}),
   deleteObject,
+  getObjectBytes: jest.fn(),
+  getObjectText: jest.fn(),
+  getObjectTextVersioned: jest.fn(),
+  listObjectKeys: jest.fn(),
+  objectExists: jest.fn(),
+  putObjectBytes: jest.fn(),
+  putObjectText: jest.fn(),
+  putObjectTextConditional: jest.fn(),
 }));
 
 const { BuildLogExpiryScheduler } = await import(

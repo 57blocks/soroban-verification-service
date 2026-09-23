@@ -17,15 +17,16 @@ import {
 import {
   appendVerifiedSourceCodeUri,
   buildWasmStatus,
+  createResultStorage,
   mutateWasmStatus,
   publishReport,
   publishSource,
   readLegacyCustody,
   reportKey,
+  type ResultStorage,
   sourceFileExtension,
   sourceKeyFromFileName,
   sourceSha256FromFileName,
-  type ResultStorage,
 } from "@scvs/storage-layout";
 import type {
   BuildMode,
@@ -46,7 +47,6 @@ import {
   fetchSourceBytesForPublishing,
   type CanonicalSource,
 } from "../source-resolution/index.js";
-import { buildResultStorage as buildResultStorageFromConfig } from "./result-storage.util.js";
 import { toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import { SourceResolutionService } from "../source-resolution/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
@@ -550,9 +550,9 @@ export class PublishService {
       });
   }
 
-  /** A thin wrapper over the shared `buildResultStorage` (result-storage.util.ts), kept as an instance method. */
+  /** Kept as an instance method: `pipeline-e2e.spec.ts` substitutes it to reach a storage it controls. */
   private buildResultStorage(): ResultStorage {
-    return buildResultStorageFromConfig(this.configService.get("resultStorage", { infer: true }));
+    return createResultStorage(this.configService.get("resultStorage", { infer: true }));
   }
 
   /** Resolves both RA4's isolation and the environment evidence from the shared Rebuild. */

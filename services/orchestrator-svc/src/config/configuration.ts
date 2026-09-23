@@ -10,11 +10,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   getArweaveConfig,
-  getResultStorageConfig,
   getStagingStorageConfig,
   getVerifierIdentity,
   getVerifierPolicyConfig,
 } from "@scvs/config";
+import { resultStorageConfigFromEnv } from "@scvs/storage-layout";
 
 /**
  * A type, not a string union inline at the read site, so `batch-dispatch.service.ts` can branch on it without
@@ -182,7 +182,7 @@ const configuration = () => ({
   jobRetentionSweepIntervalMs: numberEnv("SCVS_JOB_RETENTION_SWEEP_INTERVAL_MS", 60 * 60_000),
   jobRetentionBatchSize: numberEnv("SCVS_JOB_RETENTION_BATCH_SIZE", 500),
   stagingStorage: getStagingStorageConfig(),
-  resultStorage: getResultStorageConfig(),
+  resultStorage: resultStorageConfigFromEnv(),
   verifierIdentity: getVerifierIdentity(),
   verifierPolicy: getVerifierPolicyConfig(),
   arweave: getArweaveConfig(),

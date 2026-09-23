@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsx src/registry-status-test.ts && tsx src/publish-source-test.ts && tsx src/verifier-policy-test.ts && tsx src/trusted-verifier-url-test.ts && tsx src/conditional-write-test.ts && tsx src/read-legacy-report-test.ts && tsx src/mutate-status-test.ts"
+    "test": "for f in src/*-test.ts; do tsx \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@scvs/aws": "workspace:*",

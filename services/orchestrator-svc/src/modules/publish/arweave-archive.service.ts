@@ -12,16 +12,16 @@ import {
 import {
   appendArchiveReference,
   appendVerifiedSourceCodeUri,
-  type WasmStatusWriteResult,
+  createResultStorage,
   readLegacyCustody,
   reportKey,
   sourceFileExtension,
   sourceKeyFromFileName,
   sourceSha256FromFileName,
+  type WasmStatusWriteResult,
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
 import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
-import { buildResultStorage } from "./result-storage.util.js";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -263,7 +263,7 @@ export class ArweaveArchiveService {
       this.logger.error(`job ${job.jobId}: pending archive but missing wasm_hash/artifact_sha256 on the row — skipping`);
       return;
     }
-    const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
+    const storage = createResultStorage(this.configService.get("resultStorage", { infer: true }));
     const reportUrl = `${storage.publicRoot}/${reportKey(reportSha256)}`;
     // reportBytes is not persisted on the job row (only S3 holds the published bytes) — re-read the
     // already-published, immutable report rather than reconstructing it.
@@ -447,7 +447,7 @@ export class ArweaveArchiveService {
       );
       return;
     }
-    const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
+    const storage = createResultStorage(this.configService.get("resultStorage", { infer: true }));
     // sourceBytes is not persisted on the job row (only S3 holds the published bytes) — re-read the
     // already-published, durable source rather than re-fetching from the submitter.
     const sourceBytes = await storage.readBytes(sourceKeyFromFileName(sourceFileName));
@@ -516,7 +516,7 @@ export class ArweaveArchiveService {
       await this.jobs.recordStatusLinkOutcome(job.jobId, { state: "blocked", reason: "manual_hold" });
       return;
     }
-    const storage = buildResultStorage(this.configService.get("resultStorage", { infer: true }));
+    const storage = createResultStorage(this.configService.get("resultStorage", { infer: true }));
     const reportSha256 = reportSha256FromUrl(reportUrl);
     const legacyCustody = reportSha256 ? await readLegacyCustody(storage, reportSha256) : undefined;
     const context = (link: string) => ({ jobId: job.jobId, wasmHash, link, logger: this.logger, metrics: this.metrics });

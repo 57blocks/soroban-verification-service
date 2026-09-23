@@ -1,5 +1,3 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Network } from "@scvs/core";
 
 export type { Network };
@@ -39,65 +37,6 @@ export function getVerifierIdentity(): VerifierIdentity {
     policyId:
       process.env.SCVS_VERIFIER_POLICY_ID ||
       "sdf-trusted-public-and-private-upload-v1",
-  };
-}
-
-export type ResultStorageConfig = {
-  kind: "filesystem" | "s3" | "r2" | "gcs";
-  localRoot?: string;
-  publicRoot: string;
-  bucket?: string;
-  prefix?: string;
-  endpoint?: string;
-  region?: string;
-  accessKeyId?: string;
-  secretAccessKey?: string;
-  forcePathStyle?: boolean;
-};
-
-/** Pure env->object reader for result-storage configuration. */
-export function getResultStorageConfig(): ResultStorageConfig {
-  const kind = (
-    process.env.SCVS_PUBLISHER_STORAGE || "filesystem"
-  ).toLowerCase() as ResultStorageConfig["kind"];
-  const publicRoot = (
-    process.env.SCVS_PUBLIC_RESULT_ROOT || "http://localhost:5000/public"
-  ).replace(/\/+$/, "");
-
-  if (kind === "filesystem") {
-    const localRoot =
-      process.env.SCVS_RESULT_ROOT ||
-      join(
-        process.env.SCVS_ARTIFACT_DIR || join(tmpdir(), "scvs-artifacts"),
-        "public"
-      );
-    return {
-      kind,
-      localRoot,
-      publicRoot,
-    };
-  }
-
-  const endpoint =
-    process.env.SCVS_R2_ENDPOINT ||
-    (process.env.SCVS_R2_ACCOUNT_ID
-      ? `https://${process.env.SCVS_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
-      : undefined);
-  const accessKeyId =
-    process.env.SCVS_R2_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey =
-    process.env.SCVS_R2_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-
-  return {
-    kind,
-    publicRoot,
-    bucket: process.env.SCVS_PUBLISHER_BUCKET,
-    prefix: process.env.SCVS_PUBLISHER_PREFIX || "",
-    endpoint,
-    region: process.env.SCVS_R2_REGION || "auto",
-    accessKeyId,
-    secretAccessKey,
-    forcePathStyle: true,
   };
 }
 
@@ -145,8 +84,8 @@ export type StagingStorageConfig = {
 };
 
 /**
- * Distinct from `getResultStorageConfig()`, which configures the *published* `results/` prefix (or the legacy
- * filesystem/R2 backends).
+ * Distinct from `resultStorageConfigFromEnv()` in `@scvs/storage-layout`, which configures the *published*
+ * `results/` prefix (or the legacy filesystem/R2 backends).
  */
 export function getStagingStorageConfig(): StagingStorageConfig {
   return {

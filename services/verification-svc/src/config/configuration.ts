@@ -1,6 +1,7 @@
 import type { ConfigService } from "@nestjs/config";
 import { HTTP_TIMEOUT_DEFAULTS } from "@scvs/core";
 import { readDbEnv } from "@scvs/db";
+import { resultStorageConfigFromEnv } from "@scvs/storage-layout";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -37,6 +38,9 @@ const configuration = () => ({
   // every other setting instead of @scvs/db reading POSTGRES_* off process.env itself. readDbEnv() deliberately
   // does not validate: this loader also runs where no database environment exists (generate-openapi.ts in CI).
   postgres: readDbEnv(),
+  // The same storage the publisher writes through. Read here, once, so a configuration that cannot serve a
+  // single wasm-status read stops the process at boot rather than answering 503 per request.
+  resultStorage: resultStorageConfigFromEnv(),
   serviceVersion: process.env.npm_package_version || "0.1.0",
   uploadRateLimitPerMinute: numberEnv("SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE", 60),
   // The in-process tier's ceiling — `ThrottlerGuard`, applied globally in app.module.ts.

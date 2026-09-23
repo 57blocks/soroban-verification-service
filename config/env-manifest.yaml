@@ -464,7 +464,7 @@ groups:
     variables:
       SCVS_PUBLISHER_STORAGE:
         type: enum
-        values: [filesystem, s3, r2, gcs]
+        values: [filesystem, s3, r2]
         required: yes
         fail: silent
         source: literal
@@ -473,23 +473,26 @@ groups:
         default: filesystem
         envs: { dev: s3, staging: s3 }
         observable: value
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           Unset publishes into the container's ephemeral disk with no error at all. Validated at boot
           by ResultStorageEnvDto — a typo is rejected, but a legitimately-wrong-for-prod
-          `filesystem` is not, hence `fail: silent`.
+          `filesystem` is not, hence `fail: silent`. `gcs` was accepted here until it was removed: it
+          named a backend nobody wrote, so it passed boot and then failed at first publish.
       SCVS_PUBLISHER_BUCKET:
         type: string
         required: yes # when storage != filesystem
         required_when: SCVS_PUBLISHER_STORAGE != filesystem
-        fail: first-use
+        # `boot` only under that condition: ResultStorageEnvDto's cross-field rule rejects an s3/r2 kind with
+        # no bucket at startup. Unset alongside `filesystem` is not a failure at all.
+        fail: boot
         source: terraform
         value_from_output: buckets.results
         tier: infrastructure
         inject: ecs-secrets
         default: ~
         envs: { dev: sv-dev-results, staging: sv-staging-results }
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           The PUBLISHED bucket, and since the repath it holds NOTHING ELSE. That is what lets
           SCVS_PUBLISHER_PREFIX be empty: the result tree sits at the bucket root, so the CloudFront
@@ -515,7 +518,7 @@ groups:
         inject: ecs-secrets
         default: ""
         envs: { dev: "", staging: "" }
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           **EMPTY in every environment.** The result tree is served at its own host's ROOT
           — `https://results.{env}.sv.example.com/reports/<sha>.json` — so no prefix appears in any
@@ -524,7 +527,7 @@ groups:
           **`required: no` since the value went empty, and that is not a weakening.** `required: yes`
           survived the repath change that emptied `envs:` and became unsatisfiable: the config
           contract reports presence as NON-EMPTY on purpose (`config-contract.ts`'s `isSet`, which
-          names this variable as its example), because `getResultStorageConfig` reads it through
+          names this variable as its example), because `resultStorageConfigFromEnv` reads it through
           `|| ""` and cannot tell unset from empty either. So `required: yes` plus `envs: { dev: "" }`
           asked a correctly-configured orchestrator-svc to report a prefix it must not have, and
           `assert-config-contract.mjs` failed every deploy with "is required … but is not set". What
@@ -589,7 +592,7 @@ groups:
         inject: ecs-secrets
         default: auto
         envs: { dev: ap-southeast-2, staging: ap-southeast-2 }
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           Badly named but real: for ANY non-filesystem backend this is the S3 client's region, and
           the default literal `auto` is rejected outright by real AWS S3. Rename is tracked
@@ -609,7 +612,7 @@ groups:
             dev: "https://results.dev.sv.example.com",
             staging: "https://results.staging.sv.example.com",
           }
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           Baked IMMUTABLY into every published artifact. A wrong value is not correctable by
           redeploying — it is already inside artifacts other verifiers may have aggregated.
@@ -632,7 +635,7 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: "$SCVS_ARTIFACT_DIR/public"
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: filesystem backend only. Unused in dev (storage is s3).
       SCVS_R2_ENDPOINT:
         type: url
@@ -642,7 +645,7 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: R2/custom-endpoint backends only. Unset for AWS S3. NOT in any env DTO. Gap.
       SCVS_R2_ACCOUNT_ID:
         type: string
@@ -652,7 +655,7 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: Derives the R2 endpoint when SCVS_R2_ENDPOINT is unset. NOT in any env DTO. Gap.
       SCVS_R2_ACCESS_KEY_ID:
         type: string
@@ -662,7 +665,7 @@ groups:
         source: secret
         inject: none
         default: falls back to AWS_ACCESS_KEY_ID
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           Must stay unset on ECS. The task role supplies credentials; a static key pair here would
           be a long-lived credential in a task definition. Only for non-AWS backends outside ECS.
@@ -674,7 +677,7 @@ groups:
         source: secret
         inject: none
         default: falls back to AWS_SECRET_ACCESS_KEY
-        code: packages/config/src/index.ts::getResultStorageConfig
+        code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: As above.
       AWS_ACCESS_KEY_ID:
         type: string

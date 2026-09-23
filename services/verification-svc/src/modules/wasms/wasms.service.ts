@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { getResultStorageConfig, getVerifierIdentity } from "@scvs/config";
+import { ConfigService } from "@nestjs/config";
+import { getVerifierIdentity } from "@scvs/config";
 import {
   ERROR_SCHEMA,
   ERROR_SCHEMA_VERSION,
@@ -13,6 +14,7 @@ import {
 } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { createResultStorage, wasmStatusKey, type ResultStorage } from "@scvs/storage-layout";
+import type { AppConfigService } from "../../config/configuration.js";
 
 /**
  * The route's error body: the SEP envelope without `status_code`, which these routes deliberately omit — so
@@ -38,18 +40,25 @@ export type WasmStatusResponse =
   | { statusCode: 404; body: RegistryErrorBody<"not_found"> }
   | { statusCode: 503; body: RegistryErrorBody<"storage_unavailable"> };
 
-/** One sentence for both 503 sites: a client cannot act on the difference, and the log carries which it was. */
+/** The one 503: a read that failed. A configuration that cannot be read is now a boot failure instead. */
 const STORAGE_UNAVAILABLE = registryError("storage_unavailable", "Result storage is temporarily unreadable.");
 
 @Injectable()
 export class WasmsService {
   private readonly logger = new ScvsLogger("wasms-status");
-  private storage: ResultStorage | undefined;
-  private storageUnavailable = false;
+  private readonly storage: ResultStorage;
+  private readonly publicRoot: string;
 
   // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
   // metadata Nest's DI would otherwise infer this parameter's type from).
-  constructor(@Inject(JobsRepository) private readonly jobs: JobsRepository) {}
+  constructor(
+    @Inject(JobsRepository) private readonly jobs: JobsRepository,
+    @Inject(ConfigService) configService: AppConfigService,
+  ) {
+    const config = configService.get("resultStorage", { infer: true });
+    this.storage = createResultStorage(config);
+    this.publicRoot = config.publicRoot;
+  }
 
   async get(wasmHashParam: string): Promise<WasmStatusResponse> {
     // Normalised the way the submit boundary (`@LowercaseHex`) and query-svc's aggregated route both normalise:
@@ -69,16 +78,9 @@ export class WasmsService {
       return { statusCode: 202, body: this.pendingStatusObject(wasmHash, active.updatedAt) };
     }
 
-    const storage = this.resultStorage();
-    if (!storage) {
-      this.logger.error("cannot answer a wasm-status read: result storage is not configured", {
-        wasm_hash: wasmHash,
-      });
-      return { statusCode: 503, body: STORAGE_UNAVAILABLE };
-    }
     let text: string | undefined;
     try {
-      text = await storage.readText(wasmStatusKey(wasmHash));
+      text = await this.storage.readText(wasmStatusKey(wasmHash));
     } catch (error) {
       this.logger.error("result-storage read failed for a wasm-status request", {
         wasm_hash: wasmHash,
@@ -104,50 +106,10 @@ export class WasmsService {
       updated_at: updatedAt,
       source_code_verifications: [
         {
-          verifier: { name: getVerifierIdentity().displayName, url: getResultStorageConfig().publicRoot },
+          verifier: { name: getVerifierIdentity().displayName, url: this.publicRoot },
           status: "unverified",
         },
       ],
     });
-  }
-
-  /**
-   * The same result storage the publisher writes through (`getResultStorageConfig`), built lazily so an
-   * instance with no storage environment.
-   */
-  private resultStorage(): ResultStorage | undefined {
-    if (this.storage) return this.storage;
-    if (this.storageUnavailable) return undefined;
-
-    const config = getResultStorageConfig();
-    if (config.kind === "filesystem") {
-      this.storage = createResultStorage({
-        kind: "filesystem",
-        root: config.localRoot!,
-        publicRoot: config.publicRoot,
-      });
-      return this.storage;
-    }
-    // `gcs` is reserved for a future adapter, and an s3/r2 backend without a bucket can only fail per-object
-    // with a misleading error.
-    if (config.kind === "gcs" || !config.bucket) {
-      this.storageUnavailable = true;
-      this.logger.error("SCVS_PUBLISHER_STORAGE is not a readable result-storage config; wasm-status reads disabled", {
-        storage_kind: config.kind,
-      });
-      return undefined;
-    }
-    this.storage = createResultStorage({
-      kind: config.kind,
-      bucket: config.bucket,
-      publicRoot: config.publicRoot,
-      prefix: config.prefix,
-      endpoint: config.endpoint,
-      region: config.region,
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-      forcePathStyle: config.forcePathStyle,
-    });
-    return this.storage;
   }
 }
