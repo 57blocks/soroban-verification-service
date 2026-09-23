@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import type { Server } from "node:http";
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,9 +12,8 @@ import { parseStrictRegistryStatusObject } from "@scvs/core";
 import { WasmsService } from "../src/modules/wasms/wasms.service.js";
 import { createTestServer } from "./bootstrap.js";
 
-// Filesystem result storage pointing at a per-suite temp dir, set BEFORE the app boots: the service reads
-// `getResultStorageConfig()` lazily on the first request, so the suite owns what the route's 200 half reads
-// from.
+// Filesystem result storage pointing at a per-suite temp dir, set BEFORE the app boots: the config loader
+// reads the storage environment once at startup, so the suite has to own it before `createTestServer()`.
 let resultsRoot: string;
 beforeAll(async () => {
   resultsRoot = await mkdtemp(join(tmpdir(), "wasms-status-"));
@@ -134,25 +134,26 @@ describe("GET /api/verification/v1/wasms/:wasm_hash.json", () => {
     expect(res.body).not.toHaveProperty("status_code");
   });
 
-  it("answers 503 with the error envelope when result storage has no readable backend", async () => {
-    const previous = process.env.SCVS_PUBLISHER_STORAGE;
-    // `gcs` is reserved for a future adapter, so `resultStorage()` has nothing to build — the same arm a
-    // bucket-less s3 config takes. Driven at the service so the suite does not boot a second scheduler.
-    process.env.SCVS_PUBLISHER_STORAGE = "gcs";
-    try {
-      const result = await new WasmsService(jobsRepository).get(hash());
-      expect(result).toEqual({
-        statusCode: 503,
-        body: {
-          schema: "stellar-verification-error",
-          schema_version: "1.0",
-          error: "storage_unavailable",
-          message: expect.any(String),
-        },
-      });
-    } finally {
-      process.env.SCVS_PUBLISHER_STORAGE = previous;
-    }
+  it("answers 503 with the error envelope when the storage read fails", async () => {
+    // The one arm left: the backend exists and the read throws. An *unreadable configuration* no longer
+    // reaches here at all — `resultStorageConfigFromEnv()` throws at boot, which `env-validation.spec.ts`
+    // covers. Driven at the service so the suite does not boot a second scheduler.
+    const service = new WasmsService(jobsRepository, {
+      get: () => ({ kind: "filesystem", root: resultsRoot, publicRoot: "http://localhost:5000/public" }),
+    } as never);
+    jest
+      .spyOn((service as unknown as { storage: { readText: () => Promise<string> } }).storage, "readText")
+      .mockRejectedValue(new Error("connection reset"));
+
+    expect(await service.get(hash())).toEqual({
+      statusCode: 503,
+      body: {
+        schema: "stellar-verification-error",
+        schema_version: "1.0",
+        error: "storage_unavailable",
+        message: expect.any(String),
+      },
+    });
   });
 
   it("normalises uppercase input the way the submit boundary does", async () => {

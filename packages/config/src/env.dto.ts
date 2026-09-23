@@ -1,9 +1,11 @@
-import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, Matches } from "class-validator";
+import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, Matches, ValidateIf } from "class-validator";
 
 /** All three of these fail **silently** without it: */
 
 /** The storage kinds `packages/storage-layout` actually implements. */
-const resultStorageKinds = ["filesystem", "s3", "r2", "gcs"] as const;
+// `gcs` was accepted here for a backend that was never written: it passed boot and then failed at first
+// publish in one service and silently disabled reads in the other. A kind with no backend is a boot error.
+const resultStorageKinds = ["filesystem", "s3", "r2"] as const;
 
 /** Accepted spellings of `SCVS_ARWEAVE_MODE`, matching `getArweaveConfig()`'s own mapping. */
 const arweaveModes = ["disabled", "dry-run", "dry_run", "irys"] as const;
@@ -114,7 +116,7 @@ export class SharedEnvDto {
   SCVS_MAINNET_RPC_URL?: string;
 }
 
-/** The subset of `getResultStorageConfig()`/`getVerifierIdentity()` inputs worth rejecting at boot. */
+/** The subset of `resultStorageConfigFromEnv()`/`getVerifierIdentity()` inputs worth rejecting at boot. */
 export class ResultStorageEnvDto extends SharedEnvDto {
   @IsOptional()
   @IsIn(resultStorageKinds, {
@@ -128,7 +130,16 @@ export class ResultStorageEnvDto extends SharedEnvDto {
   @IsOptional() @IsString()
   SCVS_RESULT_ROOT?: string;
 
-  @IsOptional() @IsNotEmpty({ message: "SCVS_PUBLISHER_BUCKET must not be empty when set" })
+  // The cross-field rule, which used to be checked per-operation inside two services instead: an object
+  // backend with no bucket can only fail one request at a time, each time with a less obvious error.
+  @ValidateIf(
+    (env: ResultStorageEnvDto) =>
+      (env.SCVS_PUBLISHER_STORAGE || "filesystem").toLowerCase() !== "filesystem" ||
+      env.SCVS_PUBLISHER_BUCKET !== undefined,
+  )
+  @IsNotEmpty({
+    message: "SCVS_PUBLISHER_BUCKET is required when SCVS_PUBLISHER_STORAGE is s3 or r2, and must not be empty",
+  })
   SCVS_PUBLISHER_BUCKET?: string;
 
   // `SCVS_R2_REGION` is still the hazardous kind: it defaults to the literal string `auto`, which real AWS S3

@@ -36,6 +36,44 @@ describe("createEnvValidator", () => {
     );
   });
 
+  /**
+   * Result storage used to pass boot in two states it could not serve: a kind with no backend, and an object
+   * kind with no bucket. Each then failed differently at runtime — a throw on the first publish in
+   * orchestrator-svc, a logged error and 503 on every wasm-status read here.
+   */
+  describe("the result-storage backend", () => {
+    it("rejects a kind no backend implements", () => {
+      expect(() => validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "gcs" })).toThrow(
+        /SCVS_PUBLISHER_STORAGE must be one of: filesystem, s3, r2/,
+      );
+    });
+
+    it("requires a bucket when the kind is an object store", () => {
+      expect(() => validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "s3" })).toThrow(
+        /SCVS_PUBLISHER_BUCKET is required/,
+      );
+      expect(() => validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "r2" })).toThrow(
+        /SCVS_PUBLISHER_BUCKET is required/,
+      );
+    });
+
+    it("accepts an object store that names one", () => {
+      expect(() =>
+        validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "s3", SCVS_PUBLISHER_BUCKET: "sv-dev-results" }),
+      ).not.toThrow();
+    });
+
+    // The default, and the one kind that needs nothing else.
+    it("asks for no bucket on filesystem", () => {
+      expect(() => validate({ ...KEY })).not.toThrow();
+      expect(() => validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "filesystem" })).not.toThrow();
+    });
+
+    it("still rejects an empty bucket alongside filesystem", () => {
+      expect(() => validate({ ...KEY, SCVS_PUBLISHER_BUCKET: "" })).toThrow(/SCVS_PUBLISHER_BUCKET/);
+    });
+  });
+
   // The three HTTP deadlines are declared on SharedEnvDto, so every service that extends it inherits these
   // rules; verification-svc's validator is where they are exercised.
   describe("the HTTP server deadlines", () => {
