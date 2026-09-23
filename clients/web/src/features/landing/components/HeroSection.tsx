@@ -62,13 +62,12 @@ const HeroFluid = () => {
       colors={heroFluidColors}
       lightMode
       resolution={0.5}
-      mouseForce={10}
-      cursorSize={150}
+      mouseForce={20}
+      cursorSize={100}
       autoPointers={3}
       autoSpeed={0.22}
-      autoIntensity={2.6}
-      isViscous
-      takeoverDuration={0.6}
+      autoIntensity={1.8}
+      takeoverDuration={0.25}
       autoResumeDelay={2200}
       autoRampDuration={1.2}
     />
