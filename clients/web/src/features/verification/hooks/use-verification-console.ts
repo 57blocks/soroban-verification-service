@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { useSubmitVerification } from "@scvs/verify-api-client";
 import type { SubmitRequestDto } from "@scvs/verify-api-client";
 import { isApiBaseConfigured } from "@/lib/http";
-import { useLegalDocuments } from "@/hooks/use-legal-documents";
 import { defaultValues, evidenceFields, responseCopy } from "../constants";
 import type {
   ConsoleFailure,
@@ -19,26 +18,24 @@ import type {
   VerifyMode,
 } from "../types";
 import { copyValue } from "../utils/clipboard.util";
-import { RESULT_STATES, flowStepIndex, isFailedState } from "../utils/flow.util";
+import { flowStepIndex, isFailedState } from "../utils/flow.util";
 import { validateBuildOptions } from "../utils/build-options.util";
 import { sourceSha256Refusal, sourceUriRefusal } from "../utils/evidence-rules.util";
 import { buildInlineManifest, buildTarget } from "../utils/manifest.util";
-import { rememberBuildLogToken, readBuildLogToken } from "../utils/build-log-tokens.store";
+import { rememberBuildLogToken } from "../utils/build-log-tokens.store";
 import { rememberJob } from "../utils/recent-jobs.store";
 import {
   chainSourceRefusal,
   sourceArchiveNotChainRecorded,
 } from "../utils/source-archive.util";
 import { bannerView, consoleStateToSubmissionState, submitRejection } from "../utils/result.util";
-import { getSandboxDiagnostics } from "../utils/diagnostics.util";
-import { rebuildProvenance } from "../utils/rebuild-provenance.util";
-import { useBuildLog } from "./use-build-log";
 import { useJobEventStream } from "./use-job-event-stream";
-import { useJobTiming } from "./use-job-timing";
-import { usePublishedArtifact } from "./use-published-artifact";
+import { useJobResultView } from "./use-job-result-view";
 import { usePreflight } from "./use-preflight";
 import { useRecentJobs } from "./use-recent-jobs";
 import { useSourceArchive } from "./use-source-archive";
+import { useTermsGate } from "./use-terms-gate";
+import { evidencePrefill } from "../utils/evidence-prefill.util";
 
 const MISSING_API_URL_DETAIL =
   "VITE_VERIFY_API_URL is not configured for this build.";
@@ -72,18 +69,7 @@ export const useVerificationConsole = ({
   const [consoleState, setConsoleState] = useState<ConsoleState>({ phase: "idle" });
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [rejectedOptions, setRejectedOptions] = useState<RejectedBuildOption[]>([]);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  /** Set by a submission the gate turned away, so the refusal is on the page and not only in a toast. */
-  const [termsRefused, setTermsRefused] = useState(false);
-
-  // The operator's bundle: its `version` is what a submission binds, and its absence is what blocks one.
-  const legal = useLegalDocuments();
-  const termsGate = buildTermsGate(legal, termsAccepted);
-
-  const acceptTerms = (accepted: boolean) => {
-    setTermsAccepted(accepted);
-    if (accepted) setTermsRefused(false);
-  };
+  const terms = useTermsGate();
 
   const recentJobs = useRecentJobs();
   const preflight = usePreflight(form);
@@ -226,29 +212,8 @@ export const useVerificationConsole = ({
 
   /** Copies whatever the verifier already resolved into the evidence form. */
   const prefillEvidenceFields = (fields?: Record<string, unknown>) => {
-    if (!fields) return;
-    const joinArgs = (value: unknown) =>
-      typeof value === "string"
-        ? value
-        : Array.isArray(value)
-          ? value.filter((item) => typeof item === "string").join(" ")
-          : undefined;
-
-    const next: Partial<VerifyFormValues> = {
-      source_sha256:
-        typeof fields.source_sha256 === "string"
-          ? fields.source_sha256
-          : undefined,
-      source_uri:
-        typeof fields.source_uri === "string" ? fields.source_uri : undefined,
-      bldarg: joinArgs(fields.bldarg),
-      bldopt: joinArgs(fields.bldopt),
-    };
-
-    for (const [key, value] of Object.entries(next)) {
-      if (value !== undefined) {
-        form.setValue(key as keyof VerifyFormValues, value);
-      }
+    for (const [key, value] of Object.entries(evidencePrefill(fields))) {
+      form.setValue(key as keyof VerifyFormValues, value as string);
     }
   };
 
@@ -264,9 +229,9 @@ export const useVerificationConsole = ({
     }
 
     // Same rule for the terms, and for the same reason: a rule that lives only on the input is not a rule.
-    if (termsGate.blockedReason !== undefined) {
-      setTermsRefused(true);
-      toast.error(termsGate.blockedReason);
+    if (terms.gate.blockedReason !== undefined) {
+      terms.refuse();
+      toast.error(terms.gate.blockedReason);
       return;
     }
 
@@ -290,8 +255,8 @@ export const useVerificationConsole = ({
           target,
           manifest,
           // The version this browser was shown, never anything the user typed. Omitted while no bundle
-          // loaded, which `termsGate` has already refused above.
-          ...(termsGate.version ? { accepted_terms_version: termsGate.version } : {}),
+          // loaded, which the terms gate has already refused above.
+          ...(terms.gate.version ? { accepted_terms_version: terms.gate.version } : {}),
         } as unknown as SubmitRequestDto,
       });
       // No cast and no `normalizeStatus`.
@@ -390,9 +355,9 @@ export const useVerificationConsole = ({
 
     // First, so an unchecked box is what the toast says even when fields are missing too: it is the refusal
     // a submitter is least likely to have noticed, having read the sentence as a notice rather than a control.
-    if (termsGate.blockedReason !== undefined) {
-      setTermsRefused(true);
-      refusals.push({ message: termsGate.blockedReason });
+    if (terms.gate.blockedReason !== undefined) {
+      terms.refuse();
+      refusals.push({ message: terms.gate.blockedReason });
     }
 
     const shaRefusal = sourceSha256Refusal(values.source_sha256);
@@ -456,59 +421,7 @@ export const useVerificationConsole = ({
   const isTerminal =
     submissionState !== "idle" && submissionState !== "submitting";
 
-  /**
-   * The job reached an outcome. Narrower than `isTerminal`, which is "the console has something to show" and
-   * includes `queued`.
-   */
-  const hasJobOutcome = RESULT_STATES.includes(submissionState);
-
-  /** UI2: the log is fetched for every terminal outcome, not only failures. */
-  const buildLog = useBuildLog(currentJobId ?? null, hasJobOutcome);
-
-  // Timestamps live on the job arm only — a submit response has never carried them.
-  const jobRecord = consoleState.phase === "job" ? consoleState.response : undefined;
-  // The instant this job settled, frozen when this browser first saw it settle.
-  const jobFinishedAt = currentJobId
-    ? recentJobs.find((job) => job.job_id === currentJobId)?.finished_at
-    : undefined;
-  // The published document's instant — outranked by `completed_at`; see `useJobTiming`.
-  const jobVerifiedAt =
-    consoleState.phase === "job" && typeof consoleState.response.result?.verified_at === "string"
-      ? consoleState.response.result.verified_at
-      : undefined;
-  const jobTiming = useJobTiming(
-    jobRecord?.created_at,
-    jobRecord?.updated_at,
-    consoleState.phase === "job" && !hasJobOutcome && submissionState !== "error",
-    jobFinishedAt,
-    jobVerifiedAt,
-    jobRecord?.completed_at,
-  );
-
-  // A `result` reaches the console over the job stream and nowhere else — a submit response has never carried
-  // one.
-  const jobResult = consoleState.phase === "job" ? consoleState.response.result : undefined;
-
-  // The job record is authoritative about exactly one thing here, where its own artifact was written, and it
-  // carries the hash to check it against.
-  const publishedArtifact = usePublishedArtifact(
-    typeof jobResult?.artifact_url === "string" ? jobResult.artifact_url : undefined,
-    typeof jobResult?.artifact_sha256 === "string" ? jobResult.artifact_sha256 : undefined,
-  );
-
-  // Resolved here, not in the card: components render, hooks decide (AGENTS.md).
-  const jobDiagnostics = getSandboxDiagnostics(jobResult);
-  const publishedRecipe =
-    publishedArtifact.phase === "published" ? publishedArtifact.recipe : undefined;
-  const provenanceGroups = publishedRecipe
-    ? rebuildProvenance({
-        recipe: publishedRecipe,
-        sourceUri: publishedArtifact.phase === "published" ? publishedArtifact.source.sourceUri : null,
-        sourceSha256:
-          publishedArtifact.phase === "published" ? publishedArtifact.source.sourceSha256 : null,
-        diagnostics: jobDiagnostics,
-      })
-    : [];
+  const resultView = useJobResultView({ consoleState, submissionState, currentJobId, recentJobs });
 
   // The `incomplete` arm is the only submit response carrying either, and only on the race path where the chain
   // changed between preflight and submit.
@@ -525,10 +438,8 @@ export const useVerificationConsole = ({
     submissionState,
     /** Everything the banner renders, already resolved — components do not read raw response fields. */
     banner,
-    /** The published result to render, when there is one. Job stream only. */
-    jobResult,
-    /** `RebuildCard`'s groups, in reading order. Empty until the report has been read. */
-    provenanceGroups,
+    /** The result area: `jobTiming`, `buildLog`, `buildLogToken`, `jobResult`, `publishedArtifact`, `provenanceGroups`. */
+    ...resultView,
     isSubmitting: submissionState === "submitting",
     /** A submission has settled — render the result area. */
     hasResult: isTerminal,
@@ -544,13 +455,7 @@ export const useVerificationConsole = ({
     isFailed: isFailedState(submissionState),
 
     currentJobId,
-    /** When this job was accepted and how long it has taken. `null` until a job record arrives. */
-    jobTiming,
     copyJobLink,
-    buildLog,
-    // Only ever the token this browser already holds — the hook never asks the API for one.
-    buildLogToken: readBuildLogToken(currentJobId ?? null),
-    publishedArtifact,
 
     targetType,
     selectTargetType,
@@ -561,11 +466,8 @@ export const useVerificationConsole = ({
     isPreflightReady:
       preflight.state.phase === "answered" && preflight.state.verdict.gate === "ready",
 
-    // Preflight is the source for both once it has answered; a submit `incomplete` still supplies them on the
-    // race path, which is why the submit response is read first when one exists.
-    missingFields:
-      incomplete?.missing_fields ??
-      (preflight.state.phase === "answered" ? preflight.state.response.missing_fields : []),
+    // Preflight is the source once it has answered; a submit `incomplete` still supplies it on the race path,
+    // which is why the submit response is read first when one exists.
     availableFields:
       incomplete?.available_fields ||
       incomplete?.prefill ||
@@ -574,51 +476,8 @@ export const useVerificationConsole = ({
     sourceArchive,
     submitCompletedManifest,
     rejectedOptions,
-    terms: {
-      accepted: termsAccepted,
-      onAcceptedChange: acceptTerms,
-      ...(termsGate.unavailableReason ? { disabledReason: termsGate.unavailableReason } : {}),
-      // Only after a refused press. The block states what it wants before then; it does not open in red.
-      ...(termsRefused && termsGate.blockedReason ? { error: termsGate.blockedReason } : {}),
-    },
+    terms: terms.props,
   };
 };
-
-type TermsGate = {
-  /** Why a submission is refused, or `undefined` when it is not. */
-  blockedReason?: string;
-  /** Why the acceptance control itself cannot be used — a narrower set than `blockedReason`. */
-  unavailableReason?: string;
-  version?: string;
-};
-
-/**
- * The console requires the affirmative act unconditionally. The operator's `effective_date` governs whether
- * the *server* rejects a submission that carries no accepted version, not whether this browser offers to
- * make one — a control that can be ignored is not the gate TA-1 describes.
- */
-function buildTermsGate(
-  legal: ReturnType<typeof useLegalDocuments>,
-  accepted: boolean,
-): TermsGate {
-  if (legal.isLoading) {
-    const reason = "The terms are still loading.";
-    return { blockedReason: reason, unavailableReason: reason };
-  }
-  if (legal.isError || !legal.bundle) {
-    // Nothing to accept, so nothing may be submitted: a job must never be bound to text nobody was shown.
-    const reason = "The terms could not be loaded, so nothing can be submitted right now.";
-    return { blockedReason: reason, unavailableReason: reason };
-  }
-  const { version } = legal.bundle;
-  if (!accepted) {
-    return {
-      blockedReason:
-        "Accept the Terms of Service and acknowledge the Privacy Notice before submitting.",
-      version,
-    };
-  }
-  return { version };
-}
 
 export type VerificationConsole = ReturnType<typeof useVerificationConsole>;
