@@ -1,13 +1,12 @@
 import type { Network, QueryApiFailure } from "soroban-verification-client";
+import { CONTRACT_ID_SHAPE } from "@/lib/field-shapes";
 import { queryApi } from "./query-api";
 import { useAggregateLookup } from "./use-aggregate-lookup";
 import { lookupFailureCopy } from "./use-hash-lookup";
 import type { LookupState } from "../types";
 
-/** A Stellar contract address: `C` plus 55 base32 characters. */
-const CONTRACT_ID_RE = /^C[A-Z2-7]{55}$/;
-
-export const isContractId = (value: string): boolean => CONTRACT_ID_RE.test(value.trim().toUpperCase());
+/** Uppercased first, because this page sends the uppercased value — see `CONTRACT_ID_SHAPE`. */
+export const isContractId = (value: string): boolean => CONTRACT_ID_SHAPE.test(value.trim().toUpperCase());
 
 /** Every trusted verifier's answer for whatever Wasm a contract address currently holds. */
 export const useContractLookup = (

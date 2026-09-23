@@ -1,11 +1,10 @@
 import type { QueryApiFailure } from "soroban-verification-client";
+import { isHexSha256 } from "@/lib/field-shapes";
 import { queryApi, transportFailureCopy } from "./query-api";
 import { useAggregateLookup } from "./use-aggregate-lookup";
 import type { LookupState } from "../types";
 
-const WASM_HASH_RE = /^[a-fA-F0-9]{64}$/;
-
-export const isWasmHash = (value: string): boolean => WASM_HASH_RE.test(value.trim());
+export const isWasmHash = isHexSha256;
 
 /** Every trusted verifier's answer for one Wasm hash, as *this deployment* has it. */
 export const useHashLookup = (wasmHash: string | null): LookupState & { refresh: () => void } => {
