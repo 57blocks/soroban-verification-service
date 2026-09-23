@@ -64,11 +64,11 @@ const HeroFluid = () => {
       resolution={0.5}
       mouseForce={20}
       cursorSize={100}
-      autoPointers={3}
+      autoPointers={4}
       autoSpeed={0.22}
-      autoIntensity={1.8}
+      autoIntensity={2.2}
       takeoverDuration={0.25}
-      autoResumeDelay={2200}
+      autoResumeDelay={200}
       autoRampDuration={1.2}
     />
   );
