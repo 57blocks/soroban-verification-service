@@ -18,11 +18,14 @@ const submitVerification = vi.fn();
 
 // Same shape as `preflight-gate.spec.tsx`: the point is observable as "no request was made", and asserting on a
 // disabled button would pass against a console that submits anyway.
-vi.mock("@scvs/verify-api-client", () => ({
+vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: () => Promise.resolve(legalBundleFixture()),
   usePreflightVerification: () => ({ mutateAsync: preflightVerification }),
   useSubmitVerification: () => ({ mutateAsync: submitVerification }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
+  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
+  jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
+    .jobEventsPath,
   AXIOS_INSTANCE: { defaults: {} },
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));

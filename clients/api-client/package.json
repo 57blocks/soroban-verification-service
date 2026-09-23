@@ -14,7 +14,8 @@
   },
   "scripts": {
     "generate": "orval",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "for f in src/*-test.ts; do tsx \"$f\" || exit 1; done"
   },
   "dependencies": {
     "axios": "^1.20.0"
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@types/node": "^22.20.1",
     "orval": "^8.31.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3"
   }
 }
