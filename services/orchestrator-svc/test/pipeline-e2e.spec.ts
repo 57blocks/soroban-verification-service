@@ -40,6 +40,12 @@ import { DeterministicBuildEnvironmentResolver } from "../src/modules/build-envi
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
 const REBUILT_HASH = "1".repeat(64);
 const OTHER_HASH = "2".repeat(64);
+/**
+ * The publish path fetches this for `sources/`, and cases below assert that the fetch does not succeed. A
+ * resolvable host would put a live request inside every publishing case's timeout; `localhost` is refused by
+ * the destination policy itself, before a socket is opened.
+ */
+const SUBMITTED_SOURCE_URI = "https://localhost/e2e.tar.gz";
 
 /** Stands in for the chain: per-contract deployed hashes, mutable so a test can "upgrade" one. */
 class StubChainReader {
@@ -241,6 +247,32 @@ class UnreachableMaterializer {
   }
 }
 
+/**
+ * Every outbound request `SourceResolutionService` can make, substituted in one place. `deleteStagedUpload` is
+ * deliberately not one of them: cases here assert on that call, so only the S3 delete under it is replaced.
+ */
+function substituteOutboundRequests(service: SourceResolutionService): void {
+  const internals = service as unknown as {
+    stageRemoteSource: (ref: unknown) => Promise<{ ok: true; sourceRef: unknown }>;
+    presignUploadGet: () => Promise<string>;
+    deleteStagedObject: () => Promise<void>;
+  };
+  jest.spyOn(internals, "stageRemoteSource").mockImplementation(async (ref: unknown) => ({
+    ok: true,
+    sourceRef: { ...(ref as object), source_uri: "https://staging.test/fetched-source?sig=stub" },
+  }));
+  jest.spyOn(internals, "presignUploadGet").mockResolvedValue("https://staging.test/staged-upload?sig=stub");
+  jest.spyOn(internals, "deleteStagedObject").mockResolvedValue(undefined);
+  // Neither read has a case in this suite — no job is public *and* uploaded, and no rebuild records a canonical
+  // source — so a throw keeps it that way instead of letting a later case publish nothing and stay green.
+  jest
+    .spyOn(service, "readStagedUploadBytes")
+    .mockRejectedValue(new Error("pipeline-e2e: readStagedUploadBytes() was called; see substituteOutboundRequests()."));
+  jest
+    .spyOn(service, "readStagingObjectBytes")
+    .mockRejectedValue(new Error("pipeline-e2e: readStagingObjectBytes() was called; see substituteOutboundRequests()."));
+}
+
 let jobs: JobsRepository;
 let rebuilds: RebuildsRepository;
 let uploads: UploadsRepository;
@@ -315,16 +347,7 @@ beforeAll(async () => {
   reconciler = moduleRef.get(RebuildReconcilerScheduler);
   publish = moduleRef.get(PublishService);
   sourceResolution = moduleRef.get(SourceResolutionService);
-  // Substituted suite-wide for the same reason every other AWS touchpoint here is.
-  jest
-    .spyOn(
-      sourceResolution as unknown as {
-        stageRemoteSource: (ref: unknown) => Promise<{ ok: true; sourceRef: unknown }>;
-      },
-      "stageRemoteSource",
-    )
-    .mockImplementation(async (ref: unknown) =>
-      ({ ok: true, sourceRef: { ...(ref as object), source_uri: "https://staging.test/fetched-source?sig=stub" } }));
+  substituteOutboundRequests(sourceResolution);
   prisma = moduleRef.get(PRISMA_CLIENT);
   batch = moduleRef.get(BatchDispatchService) as unknown as StubBatchDispatch;
   outcomes = moduleRef.get(RebuildOutcomeService) as unknown as StubRebuildOutcomes;
@@ -387,7 +410,7 @@ async function createJob(options: {
     sourceRef: {
       type: "source_uri",
       visibility: "public",
-      source_uri: "https://example.com/e2e.tar.gz",
+      source_uri: SUBMITTED_SOURCE_URI,
       source_sha256: options.sourceSha256,
     },
     buildOptions: { bldopt: [], bldarg: [] },
@@ -395,7 +418,7 @@ async function createJob(options: {
       schema: "stellar-submitted-source-verification-manifest-v1",
       bldimg: IMAGE,
       source_sha256: options.sourceSha256,
-      source_uri: "https://example.com/e2e.tar.gz",
+      source_uri: SUBMITTED_SOURCE_URI,
     } as never,
   });
   return (await jobs.getJobById(jobId))!;
@@ -1180,12 +1203,6 @@ describe("ADR-008 pipeline, end to end", () => {
     await uploadJobReferences.recordReference(uploadId, jobId);
 
     // The submission itself is rejected — the oversized-payload shape, before any container starts.
-    const presignSpy = jest
-      .spyOn(
-        sourceResolution as unknown as { presignUploadGet: () => Promise<string> },
-        "presignUploadGet",
-      )
-      .mockResolvedValue("https://presigned.test/staging/source.tar.gz?sig=stub");
     batch.failNextSubmissions = 1;
     const deleteStagedUploadSpy = jest.spyOn(sourceResolution, "deleteStagedUpload");
     try {
@@ -1212,7 +1229,6 @@ describe("ADR-008 pipeline, end to end", () => {
       await pipeline.run(await reload(jobId));
       expect((await reload(jobId)).status).toBe("published");
     } finally {
-      presignSpy.mockRestore();
       deleteStagedUploadSpy.mockRestore();
     }
   });
