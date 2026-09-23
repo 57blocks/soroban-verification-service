@@ -133,6 +133,13 @@ export default {
       },
 
       keyframes: {
+        // The arrow inside a pill button slides out right and re-enters from the left on hover.
+        "arrow-slide": {
+          "0%": { transform: "translateX(0)", opacity: "1" },
+          "45%": { transform: "translateX(150%)", opacity: "0" },
+          "50%": { transform: "translateX(-150%)", opacity: "0" },
+          "100%": { transform: "translateX(0)", opacity: "1" },
+        },
         // The hero diagram's travelling dots: along a straight connector, and along a curved join.
         "flow-x": {
           "0%": { transform: "translateX(0)", opacity: "0" },
@@ -152,6 +159,7 @@ export default {
       },
 
       animation: {
+        "arrow-slide": "arrow-slide 0.4s ease",
         "flow-x": "flow-x 1.5s linear infinite",
         "flow-y": "flow-y 1.5s linear infinite",
         "flow-path": "flow-path 1.5s linear infinite",

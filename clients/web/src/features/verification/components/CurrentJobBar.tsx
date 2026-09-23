@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PillIcon } from "@/components/ui/pill-icon";
 import { MonoLabel } from "./MonoLabel";
 
 type CurrentJobBarProps = {
@@ -20,15 +20,15 @@ export const CurrentJobBar = ({ jobId, onCopyLink }: CurrentJobBarProps) => (
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="pillSm">
           <Link to="/verify">
             Back to verify console
-            <ArrowLeft className="size-4" />
+            <PillIcon size="sm">↩</PillIcon>
           </Link>
         </Button>
-        <Button variant="outline" size="sm" onClick={onCopyLink}>
+        <Button variant="outline" size="pillSm" onClick={onCopyLink}>
           Copy job link
-          <Copy className="size-3.5" />
+          <PillIcon size="sm">⧉</PillIcon>
         </Button>
       </div>
     </div>

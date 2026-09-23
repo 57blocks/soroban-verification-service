@@ -1,6 +1,7 @@
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PillIcon } from "@/components/ui/pill-icon";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -141,11 +142,9 @@ export const TargetCard = ({
             aria-busy={isSubmitting}
           >
             Check this contract
-            {isSubmitting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-            )}
+            <PillIcon animated={!isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "→"}
+            </PillIcon>
           </Button>
         </div>
       </div>

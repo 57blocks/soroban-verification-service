@@ -32,7 +32,10 @@ src/
     router.tsx               assembles the route tree from each feature's exported routes
   components/ui/           shadcn/ui primitives, restyled to the design tokens:
                              button, input, label, select, collapsible, badge,
-                             sonner, fade-up
+                             sonner, fade-up, liquid-ether (the hero's WebGL
+                             fluid — see "The hero background" below),
+                             dot-field (the closing CTA's canvas dot lattice —
+                             see "The dot field" below)
   components/              site-nav + site-footer (the console and legal pages),
                              legal-links (the two legal documents, linked from both footers
                              and from the submission control), not-found (what an unrouted
@@ -158,6 +161,57 @@ that disagree, which reads as *where* they disagree. On the landing page that is
 are illustrative and `content/trust-model.ts` says so. On a real result it is not: SHA-256 avalanches,
 so two digests that differ at all differ in every chunk, and the device would promise a locality that
 does not exist. The console states the verdict and leaves both digests in the raw diagnostics.
+
+## The hero background
+
+`components/ui/liquid-ether.tsx` is the landing hero's fluid: a WebGL Eulerian solve whose velocity
+field is read back as colour, adapted from React Bits' LiquidEther into this app's TypeScript and
+comment conventions. Four things about it are this app's decisions rather than upstream's:
+
+- **It does not mount under `prefers-reduced-motion: reduce`.** The hero's own static wash is the
+  design; the fluid is an enhancement on top of it. That is the same answer `index.css` gives the
+  fade-up transition — switched off, not shortened.
+- **It is imported after mount, not statically.** `three` is 135 kB of gzip, and the landing page is
+  the first thing anyone loads: importing it statically put 58% onto the entry bundle to decorate the
+  top of it. `HeroSection` fetches the module in an effect instead, so a slow or failed chunk costs the
+  hero its background and nothing else. The type import there is deliberate — it is erased, and
+  importing the value would pull the module back into the entry chunk.
+- **The palette is pale yellows** (`HeroSection`'s `heroFluidColors`), which is a narrower choice than
+  it looks. `lightMode` normalises every stop to its own chroma, so saturation is not something a stop
+  can opt out of and only the *hue* survives: a ramp ending on the accent itself renders at 34°, an
+  orange, once it covers a third of the hero. These three land at 47° and up. The accent is then still
+  the accent — "Shared devices" above reserves it for a verdict or a highlight, and an ambient wash
+  painted the same gold would spend it.
+- **The output material sets `premultipliedAlpha: true`.** `color_frag` writes `mix(bgColor, ink, lenv)`
+  against a zero `bgColor`, which is premultiplied for the RGB and `lenv` for the alpha. three's default
+  for a transparent material is straight-alpha blending, which multiplies the colour by alpha a second
+  time — on a white page the layer then darkens its backdrop almost without tinting it, and reads as
+  grey smoke rather than ink.
+
+It pauses when the hero scrolls out of view or the tab is hidden, and it tracks the pointer from a
+window listener with the canvas left `pointer-events-none`, so the CTA and the nav keep their clicks.
+
+## The dot field
+
+`components/ui/dot-field.tsx` is the closing CTA's background: a canvas lattice of accent-coloured dots that
+bulge away from the pointer and spring back. It is the only background the dark band has, and it is
+`pointer-events: none`, so the section is `relative` and the content is lifted above it with `relative` —
+nothing else in the section has to know it is there.
+
+Three things about it are worth knowing:
+
+- **Its positioning lives in `index.css`.** The component renders `.dot-field-container` and expects that
+  class to place it; the rule is in the `@layer components` block beside `.fade-up`. A component whose
+  layout comes from a stylesheet is unusual here, but the canvas is sized from its container's
+  `getBoundingClientRect()`, so the container has to be the positioned element the component is not.
+- **The dot colour is written out, not referenced.** A canvas `fillStyle` takes a colour rather than a
+  utility class, so `dot-field.tsx` holds the accent as one `DOT` constant and derives the three opacities
+  from it. It arrived as `#fdda24` — a different palette's yellow — and is now `yellow.DEFAULT`.
+- **It runs its `requestAnimationFrame` loop unconditionally.** Unlike the hero's fluid it does not pause
+  when it is scrolled out of view or when the tab is hidden, so from page load it redraws its grid — about
+  3,200 arcs a frame at the section's 1440x387 — for a band 4,500px down the page. It holds 60fps with the
+  section on screen, so this is waste rather than jank; an `IntersectionObserver` around `tick()` would
+  remove it.
 
 ## Routing
 

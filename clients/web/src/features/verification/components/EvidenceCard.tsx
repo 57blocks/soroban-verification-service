@@ -1,6 +1,7 @@
 import type { UseFormReturn } from "react-hook-form";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PillIcon } from "@/components/ui/pill-icon";
 import type {
   RejectedBuildOption,
   SourceAccessMode,
@@ -85,11 +86,9 @@ export const EvidenceCard = ({
         <RejectedOptions rejected={rejectedOptions} />
         <Button onClick={onSubmit} disabled={isSubmitting} aria-busy={isSubmitting}>
           Submit completed manifest
-          {isSubmitting ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-          )}
+          <PillIcon animated={!isSubmitting}>
+            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "→"}
+          </PillIcon>
         </Button>
       </div>
     </div>
