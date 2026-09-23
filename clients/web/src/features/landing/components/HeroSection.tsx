@@ -64,6 +64,7 @@ const HeroFluid = () => {
       resolution={0.5}
       mouseForce={10}
       cursorSize={150}
+      autoPointers={3}
       autoSpeed={0.22}
       autoIntensity={2.6}
       isViscous
