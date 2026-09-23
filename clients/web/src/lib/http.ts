@@ -1,8 +1,8 @@
 import axios, { AxiosError } from "axios";
 
 /**
- * The verification API origin, with any trailing slash removed so callers can concatenate
- * `/api/verification/v1/...` onto it.
+ * The verification API origin, with any trailing slash removed so a path from `@scvs/verify-api-client`
+ * (`jobEventsPath`, for the one route that does not go through axios) can be joined onto it.
  */
 export const getApiBase = () => import.meta.env.VITE_VERIFY_API_URL?.replace(/\/+$/, "");
 

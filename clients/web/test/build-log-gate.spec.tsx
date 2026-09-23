@@ -5,14 +5,20 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { legalBundleFixture } from "./legal-bundle.fixture";
 
 /** `useBuildLog` calls the route through the shared axios instance — see the hook for why. */
-const axiosGet = vi.fn();
+const buildLogGet = vi.fn();
 
-vi.mock("@scvs/verify-api-client", () => ({
+vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: () => Promise.resolve(legalBundleFixture()),
   usePreflightVerification: () => ({ mutateAsync: vi.fn() }),
   useSubmitVerification: () => ({ mutateAsync: vi.fn() }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  AXIOS_INSTANCE: { defaults: {}, get: (...args: unknown[]) => axiosGet(...args) },
+  // The route and its header are the generated client's, proved by `clients/api-client/src/client-test.ts`. What
+  // this spec owns is *when* the console asks, and with which job and which token.
+  getBuildLog: (...args: unknown[]) => buildLogGet(...args),
+  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
+  jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
+    .jobEventsPath,
+  AXIOS_INSTANCE: { defaults: {} },
 }));
 
 /** The hook asks for nothing without a token, so the fixture browser holds one. */
@@ -95,14 +101,14 @@ const queuedEvent = {
 };
 
 beforeEach(() => {
-  axiosGet.mockReset();
-  axiosGet.mockResolvedValue({ data: "cargo build --release\nFinished" });
+  buildLogGet.mockReset();
+  buildLogGet.mockResolvedValue({ data: "cargo build --release\nFinished" });
   DrivableEventSource.last = null;
   globalThis.EventSource = DrivableEventSource as unknown as typeof EventSource;
 });
 
 /**
- * `GET /v1/verifications/:id/log` answering 404 for a job that has not built is *correct* — the body carries
+ * `GET /api/verification/v1/verifications/:id/log` answering 404 for a job that has not built is *correct* — the body carries
  * `job_status` and the reason.
  */
 describe("the build log is not requested before the job has an outcome", () => {
@@ -111,14 +117,14 @@ describe("the build log is not requested before the job has an outcome", () => {
     await emit(stream, queuedEvent);
 
     await waitFor(() => expect(result.current.submissionState).toBe("queued"));
-    expect(axiosGet).not.toHaveBeenCalled();
+    expect(buildLogGet).not.toHaveBeenCalled();
     expect(result.current.buildLog.phase).toBe("idle");
   });
 
   test("the request is made once the job reaches an outcome, and gets the log", async () => {
     const { result, stream } = openJob();
     await emit(stream, queuedEvent);
-    expect(axiosGet).not.toHaveBeenCalled();
+    expect(buildLogGet).not.toHaveBeenCalled();
 
     await emit(stream, {
       ...queuedEvent,
@@ -128,9 +134,7 @@ describe("the build log is not requested before the job has an outcome", () => {
     });
 
     await waitFor(() =>
-      expect(axiosGet).toHaveBeenCalledWith(`/api/verification/v1/verifications/${JOB_ID}/log`, {
-        headers: { "X-Build-Log-Token": TOKEN },
-      }),
+      expect(buildLogGet).toHaveBeenCalledWith(JOB_ID, { "x-build-log-token": TOKEN }),
     );
     await waitFor(() =>
       expect(result.current.buildLog).toEqual({
@@ -139,7 +143,7 @@ describe("the build log is not requested before the job has an outcome", () => {
       }),
     );
     // Exactly one: a second request would mean the queued state had also fired one.
-    expect(axiosGet).toHaveBeenCalledTimes(1);
+    expect(buildLogGet).toHaveBeenCalledTimes(1);
   });
 
   // `not_attempted` and `policy_rejected` are reached before any build, so their 404 is the honest answer and
@@ -153,6 +157,6 @@ describe("the build log is not requested before the job has an outcome", () => {
       updated_at: "2026-08-18T05:53:00.000Z",
     });
 
-    await waitFor(() => expect(axiosGet).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(buildLogGet).toHaveBeenCalledTimes(1));
   });
 });

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AXIOS_INSTANCE, type BuildLogUnavailableResponse } from "@scvs/verify-api-client";
+import { getBuildLog, type BuildLogUnavailableResponse } from "@scvs/verify-api-client";
 import { isApiBaseConfigured, isHttpError } from "@/lib/http";
 import { readBuildLogToken } from "../utils/build-log-tokens.store";
 import type { BuildLogState } from "../types";
@@ -8,11 +8,10 @@ import type { BuildLogState } from "../types";
  * The raw redacted build log for a terminal job (UI2), behind this job's token
  * (build-log-access design.md BL-1).
  *
- * Called through `AXIOS_INSTANCE` rather than the generated `getBuildLog`: the header is declared and
- * `required: true` in `openapi.json`, and orval's generated function still takes no way to carry one — the
- * same gap `@scvs/verify-api-client`'s mutator works around for `uploadSource`'s `X-Filename`. That
- * workaround does not fit here, because the token lives in this feature's `localStorage` and the client
- * package is deliberately environment-agnostic.
+ * Through the generated `getBuildLog`, which takes the route's required `x-build-log-token` as a typed argument
+ * (`headers: true` in `clients/api-client/orval.config.ts`). The token is read here, from this feature's
+ * `localStorage`, and handed over — the client package never reads storage, which is what keeps it
+ * environment-agnostic. What this hook owns is the ladder below: which answer means which panel.
  */
 export const useBuildLog = (jobId: string | null, enabled: boolean) => {
   const token = readBuildLogToken(jobId);
@@ -26,10 +25,7 @@ export const useBuildLog = (jobId: string | null, enabled: boolean) => {
     refetchOnWindowFocus: false,
     retry: false,
     queryFn: async () => {
-      const res = await AXIOS_INSTANCE.get<string>(
-        `/api/verification/v1/verifications/${jobId}/log`,
-        { headers: { "X-Build-Log-Token": token as string } },
-      );
+      const res = await getBuildLog(jobId, { "x-build-log-token": token as string });
       return res.data;
     },
   });

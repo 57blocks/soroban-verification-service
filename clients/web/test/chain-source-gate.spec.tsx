@@ -13,8 +13,11 @@ import {
 import { fileToSha256 } from "@/features/verification/utils/format.util";
 import type { VerifyFormValues } from "@/features/verification/types";
 
-vi.mock("@scvs/verify-api-client", () => ({
+vi.mock("@scvs/verify-api-client", async () => ({
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
+  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
+  jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
+    .jobEventsPath,
 }));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },

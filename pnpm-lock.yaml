@@ -58,6 +58,9 @@ importers:
       orval:
         specifier: ^8.31.0
         version: 8.31.0(@tanstack/react-query@5.102.8(react@18.3.1))(effect@3.20.0)(typescript@5.9.3)(zod@4.5.4)
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

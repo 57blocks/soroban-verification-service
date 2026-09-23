@@ -16,8 +16,11 @@ import { renderInRouter } from "./render-in-router";
 import type { LegalBundle, LegalDocument } from "@/lib/legal";
 
 const getLegalDocuments = vi.fn();
-vi.mock("@scvs/verify-api-client", () => ({
+vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: (signal?: AbortSignal) => getLegalDocuments(signal),
+  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
+  jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
+    .jobEventsPath,
 }));
 vi.mock("@/lib/http", () => ({
   isApiBaseConfigured: () => true,

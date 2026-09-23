@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { jobEventsPath } from "@scvs/verify-api-client";
 import { getApiBase } from "@/lib/http";
 import type { JobResponse, TerminalSubmissionState } from "../types";
 
@@ -11,8 +12,8 @@ type JobStreamHandlers = {
 };
 
 /**
- * Server-Sent Events replace the old refetchInterval polling loop: verification-svc's GET /jobs/:id/events
- * pushes a new event on every real status change.
+ * Server-Sent Events replace the old refetchInterval polling loop: verification-svc pushes a new event on
+ * every real status change. The route is `jobEventsPath` — not in `openapi.json`, so not generated.
  */
 export const useJobEventStream = (
   jobId: string | null,
@@ -31,7 +32,7 @@ export const useJobEventStream = (
     const apiBase = getApiBase();
     if (apiBase === undefined) return;
 
-    const eventSource = new EventSource(`${apiBase}/api/verification/v1/verifications/${jobId}/events`);
+    const eventSource = new EventSource(`${apiBase}${jobEventsPath(jobId)}`);
     let closedByClient = false;
     const closeStream = () => {
       closedByClient = true;

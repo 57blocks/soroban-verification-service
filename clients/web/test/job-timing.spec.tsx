@@ -5,12 +5,15 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { legalBundleFixture } from "./legal-bundle.fixture";
 import { JobTimingCard } from "@/features/verification/components/JobTimingCard";
 
-vi.mock("@scvs/verify-api-client", () => ({
+vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: () => Promise.resolve(legalBundleFixture()),
   usePreflightVerification: () => ({ mutateAsync: vi.fn() }),
   useSubmitVerification: () => ({ mutateAsync: vi.fn() }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
   getBuildLog: vi.fn().mockResolvedValue({ data: "" }),
+  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
+  jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
+    .jobEventsPath,
   AXIOS_INSTANCE: { defaults: {} },
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));

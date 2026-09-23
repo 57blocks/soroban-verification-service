@@ -10,12 +10,15 @@ const submitVerification = vi.fn();
 
 // The gate has to be observable as "no request was made", so the generated client's two mutation hooks are
 // replaced with ones that record calls.
-vi.mock("@scvs/verify-api-client", () => ({
+vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: () => getLegalDocumentsMock(),
   usePreflightVerification: () => ({ mutateAsync: preflightVerification }),
   useSubmitVerification: () => ({ mutateAsync: submitVerification }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
   AXIOS_INSTANCE: { defaults: {} },
+  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
+  jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
+    .jobEventsPath,
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
