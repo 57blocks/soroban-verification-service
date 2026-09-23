@@ -20,10 +20,11 @@ import {
   type ChainReaderConfig,
   type ManifestValidation,
 } from "../preflight/index.js";
-import { errorBody } from "../../common/api-error.exception.js";
+
 import { LegalService } from "../legal/legal.service.js";
 import type { SubmitRequestDto } from "./submit.dto.js";
 import type { AppConfigService } from "../../config/configuration.js";
+import { errorBody } from "@scvs/http";
 
 /** A job this submission created, and the one-time secret that reads its raw build log. */
 type CreatedJob = { jobId: string; buildLogToken: string };

@@ -21,6 +21,7 @@
     "@scvs/config": "workspace:*",
     "@scvs/core": "workspace:*",
     "@scvs/db-query": "workspace:*",
+    "@scvs/http": "workspace:*",
     "@scvs/openapi": "workspace:*",
     "@scvs/storage-layout": "workspace:*",
     "@stellar/stellar-base": "^15.0.0",

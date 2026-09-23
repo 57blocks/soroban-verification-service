@@ -1,6 +1,6 @@
 import type { ThrottlerStorage } from "@nestjs/throttler";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { errorBody } from "./api-error.exception.js";
+import { errorBody } from "@scvs/http";
 
 /**
  * The quota for routes Nest's guard chain cannot reach. `SwaggerModule.setup()` registers on the HTTP adapter,

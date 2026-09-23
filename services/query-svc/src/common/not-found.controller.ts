@@ -1,6 +1,6 @@
 import { All, Controller } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
-import { ApiError } from "./api-error.exception.js";
+import { ApiError } from "@scvs/http";
 
 // A catch-all `*path` isn't a real operation and shouldn't appear in the OpenAPI document.
 @ApiExcludeController()

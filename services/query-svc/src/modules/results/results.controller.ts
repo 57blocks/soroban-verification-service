@@ -17,11 +17,11 @@ import {
   type Network,
 } from "@scvs/core";
 import { addressThrottleLimit } from "../../config/configuration.js";
-import { ApiErrorResponse } from "../../common/api-error.dto.js";
-import { ApiError } from "../../common/api-error.exception.js";
+
 import { AggregationReadService } from "../aggregation/aggregation-read.service.js";
 import { AggregationSyncService } from "../aggregation/aggregation-sync.service.js";
 import { ADDRESS_RESOLVER, MalformedContractIdError, type AddressResolver } from "./address-resolver.js";
+import { ApiError, ApiErrorResponse } from "@scvs/http";
 
 /** The aggregated read surface: one entry per verifier, in the Registry's own vocabulary. */
 @Controller()

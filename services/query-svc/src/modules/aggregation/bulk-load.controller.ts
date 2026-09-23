@@ -16,10 +16,10 @@ import {
   parseBulkLimit,
   parseBulkOrder,
 } from "@scvs/core";
-import { ApiErrorResponse } from "../../common/api-error.dto.js";
-import { ApiError } from "../../common/api-error.exception.js";
+
 import { AggregationReadService } from "./aggregation-read.service.js";
 import { AggregationSyncService } from "./aggregation-sync.service.js";
+import { ApiError, ApiErrorResponse } from "@scvs/http";
 
 const bulkQueryDocs = [
   { name: "order", required: false, enum: ["asc", "desc"] },

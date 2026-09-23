@@ -1,6 +1,6 @@
 import { All, Controller } from "@nestjs/common";
 import { ApiExcludeController } from "@nestjs/swagger";
-import { ApiError } from "./api-error.exception.js";
+import { ApiError } from "@scvs/http";
 
 /**
  * Catch-all for unmatched routes, replicating the pre-Nest Express app's final

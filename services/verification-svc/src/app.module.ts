@@ -6,7 +6,7 @@ import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AbuseGuardModule } from "./common/abuse-guard.module.js";
-import { LegacyHttpExceptionFilter } from "./common/legacy-http-exception.filter.js";
+
 import { NotFoundModule } from "./common/not-found.module.js";
 import { RequestIdMiddleware } from "./common/request-id.middleware.js";
 import configuration, { type AppConfigService } from "./config/configuration.js";
@@ -20,6 +20,7 @@ import { UploadCleanupModule } from "./modules/upload-cleanup/upload-cleanup.mod
 import { VerificationsModule } from "./modules/verifications/verifications.module.js";
 import { WasmsModule } from "./modules/wasms/wasms.module.js";
 import { VerificationSvcEnvDto } from "./config/env.dto.js";
+import { LegacyHttpExceptionFilter } from "@scvs/http";
 
 @Module({
   imports: [
