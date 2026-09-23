@@ -43,6 +43,7 @@
     "check:mount-paths": "node eng-tools/check-mount-paths.mjs",
     "check:host-routing": "node eng-tools/check-host-routing.mjs",
     "check:composition-template": "node eng-tools/check-composition-template.mjs",
+    "check:core-exports": "node eng-tools/check-core-exports.mjs",
     "check:composition-matrix": "node eng-tools/check-composition-matrix.mjs",
     "check:tool-index": "node eng-tools/check-tool-index.mjs",
     "check:docs": "node eng-tools/check-docs.mjs",
