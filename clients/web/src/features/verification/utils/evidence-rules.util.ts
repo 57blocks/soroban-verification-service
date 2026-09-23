@@ -1,19 +1,15 @@
 /** The required-evidence rules for stage two, as refusal messages. */
 
+import { HEX_SHA256_ANY_CASE, SOURCE_URI_PATTERN } from "@/lib/field-shapes";
+
 /** Required — nothing else identifies the bytes being claimed. */
 export const sourceSha256Refusal = (value?: string): string | null => {
   const trimmed = value?.trim();
   if (!trimmed) return "Enter the source archive SHA-256";
-  return /^[0-9a-f]{64}$/i.test(trimmed)
+  return HEX_SHA256_ANY_CASE.test(trimmed)
     ? null
     : "Must be a 64-character hex string";
 };
-
-/**
- * `SOURCE_URI_PATTERN` (`packages/core/src/registry.ts`) is the authority and is deliberately copied rather
- * than imported.
- */
-const SOURCE_URI_PATTERN = /^(?:[a-zA-Z][a-zA-Z0-9+.-]*:\S+|\/\S+)$/;
 
 /**
  * Required on the `public_uri` path and only there: `buildInlineManifest` omits `upload_id` on that path, so

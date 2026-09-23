@@ -89,6 +89,11 @@ export {
   RECIPE_SOURCES,
   IMAGE_TRUST_LEVELS,
   RESULT_URL_TYPES,
+  // The two field shapes a submission form has to agree with. The console carried its own copies — one of
+  // them annotated "deliberately copied rather than imported" — because it depends on this package and not on
+  // `@scvs/core`; exporting them here is what removes the reason to copy.
+  SEP58_HEX_SHA256,
+  SOURCE_URI_PATTERN,
 } from "@scvs/core/registry";
 export type { RegistryVerificationStatus, RecipeSource, ImageTrustLevel, ResultUrlType } from "@scvs/core/registry";
 

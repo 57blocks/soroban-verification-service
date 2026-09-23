@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PillIcon } from "@/components/ui/pill-icon";
 import { Input } from "@/components/ui/input";
+import { CONTRACT_ID_SHAPE, isHexSha256 } from "@/lib/field-shapes";
 import {
   Select,
   SelectContent,
@@ -26,7 +27,7 @@ type TargetCardProps = {
 const contractIdRule = {
   validate: (value?: string) => {
     if (!value?.trim()) return "Enter the contract ID to verify";
-    return /^C[A-Z2-7]{55}$/.test(value.trim())
+    return CONTRACT_ID_SHAPE.test(value.trim())
       ? true
       : "Use a valid Soroban contract ID";
   },
@@ -35,7 +36,7 @@ const contractIdRule = {
 const wasmHashRule = {
   validate: (value?: string) => {
     if (!value?.trim()) return "Enter the deployed Wasm hash";
-    return /^[a-fA-F0-9]{64}$/.test(value.trim())
+    return isHexSha256(value)
       ? true
       : "Use a 64-character hex Wasm hash";
   },
