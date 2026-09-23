@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PillIcon } from "@/components/ui/pill-icon";
 import { SiteFooter } from "./site-footer";
 import { SiteNav } from "./site-nav";
 
@@ -30,7 +30,7 @@ export const NotFoundPage = () => (
       <Button asChild>
         <Link to="/verify">
           Go to the console
-          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+          <PillIcon animated>→</PillIcon>
         </Link>
       </Button>
 

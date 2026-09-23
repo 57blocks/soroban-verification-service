@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ArrowRight } from "lucide-react";
 import type { Network } from "soroban-verification-client";
 import { Button } from "@/components/ui/button";
+import { PillIcon } from "@/components/ui/pill-icon";
 import { Input } from "@/components/ui/input";
 import { contractFailureCopy, useContractLookup } from "../hooks/use-contract-lookup";
 import { LookupResult } from "./LookupResult";
@@ -50,7 +50,7 @@ export const ContractLookup = () => {
         />
         <Button type="submit">
           Look up
-          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+          <PillIcon animated>→</PillIcon>
         </Button>
       </form>
 

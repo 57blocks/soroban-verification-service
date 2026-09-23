@@ -35,6 +35,15 @@
 }
 
 @layer components {
+  /* Interactive dot-field background — the canvas sits inside this and is sized from it.
+     `pointer-events: none` lets mouse events pass through to content on top. */
+  .dot-field-container {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
   /* ── Scroll-triggered fade-up (see components/ui/fade-up.tsx) ──
      The hidden/visible pair lives here rather than in inline styles so the
      reduced-motion override below can switch the whole effect off in one place. */
