@@ -282,12 +282,24 @@ export class SourceResolutionService {
       }
       const staging = this.configService.get("stagingStorage", { infer: true });
       const s3 = createS3Client({ region: staging.region });
-      await deleteObject(s3, staging.bucket, upload.path);
+      await this.deleteStagedObject(s3, staging.bucket, upload.path);
     } catch (error) {
       this.logger.warn("failed to delete staged upload at job termination", {
         upload_id: sourceRef.upload_id,
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /**
+   * Isolated for the same reason `presignUploadGet` is: substituting it leaves `deleteStagedUpload` itself real,
+   * so a suite can keep asserting on that call while no request leaves the process.
+   */
+  protected deleteStagedObject(
+    s3: ReturnType<typeof createS3Client>,
+    bucket: string,
+    key: string,
+  ): Promise<void> {
+    return deleteObject(s3, bucket, key);
   }
 }
