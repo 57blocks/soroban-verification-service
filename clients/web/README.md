@@ -313,8 +313,8 @@ Card and control idiom, so a new component matches the ones beside it:
 - a card is `rounded-xl border border-line bg-surface`, lifting on hover with
   `transition-all duration-300 hover:-translate-y-1 hover:shadow-lg`;
 - a floating console panel is the same, plus `shadow-panel`;
-- a button is `rounded-md`, solid `ink` for the primary action, `accent` on the dark band, bordered
-  white otherwise — one shape, no pills;
+- a button is a pill, solid `ink` for the primary action, `accent` on the dark band, bordered white
+  otherwise, ending in a `PillIcon` badge whose glyph slides on hover (`animate-arrow-slide`);
 - a section is `px-4 md:px-20 py-16 md:py-24`, alternating white and `surface-alt` down the page.
 
 ## Run

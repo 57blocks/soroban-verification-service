@@ -3,7 +3,7 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-/** The design has exactly three button shapes, and all three are pills: */
+/** Every button is a pill; a trailing `PillIcon` badge sits in the right padding the pill sizes reserve. */
 const buttonVariants = cva(
   "group relative inline-flex select-none items-center justify-center whitespace-nowrap font-sans font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
