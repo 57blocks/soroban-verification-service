@@ -59,8 +59,6 @@ export type { ResultUrlEntry, VerifiedResultUrl, VerifyResultUrlOptions } from "
 // The Registry API read surface. The document shape comes from `packages/core`.
 export {
   aggregateWasmStatus,
-  computeAgreement,
-  displayStatusOf,
   readStatusObject,
   statusObjectUrl,
   validateStatusObject,
@@ -111,6 +109,9 @@ export {
 export {
   AGGREGATE_SCHEMA,
   AGGREGATE_SCHEMA_MAJOR,
+  AGGREGATE_SCHEMA_VERSION,
+  computeAgreement,
+  displayStatusOf,
   PeerAggregatedWasmStatus,
   PeerUnavailableVerifier,
   agreementSummaries,
