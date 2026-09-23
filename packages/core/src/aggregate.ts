@@ -1,6 +1,6 @@
 import { Type } from "class-transformer";
 import { Equals, IsArray, IsIn, IsOptional, IsString, ValidateNested } from "class-validator";
-import { PeerRegistryVerification, RegistryVerifier } from "./registry.js";
+import { PeerRegistryVerification, registryStatusOrUnverified, RegistryVerifier } from "./registry.js";
 import { SupportedSchemaMajor } from "./validators/schema-version.js";
 
 // They live in the kernel rather than in query-svc because query-svc depends on clients/sdk, which produces the
@@ -48,9 +48,16 @@ export class AggregatedRegistryVerification extends PeerRegistryVerification {
 /** Never a published file — the mapping it rests on is re-read every time. */
 export const AGGREGATE_SCHEMA = "stellar-verification-aggregate" as const;
 
+/**
+ * Ours, not any peer's: the version of the aggregate **we** emit. It does not move because a contributing
+ * peer declared a higher MINOR. A constant because it was spelled as a literal in both writers and in the
+ * validator below — three copies of one number, which is how `schema_version` drifted the last time.
+ */
+export const AGGREGATE_SCHEMA_VERSION = "1.0" as const;
+
 export class AggregatedWasmStatus {
   @Equals(AGGREGATE_SCHEMA) schema!: typeof AGGREGATE_SCHEMA;
-  @IsIn(["1.0"]) schema_version!: "1.0";
+  @IsIn([AGGREGATE_SCHEMA_VERSION]) schema_version!: typeof AGGREGATE_SCHEMA_VERSION;
   @IsString() wasm_hash!: string;
   /** When *we* assembled this view — never a verifier's own publication time (AB5). */
   @IsString() updated_at!: string;
@@ -70,6 +77,47 @@ export class AggregatedWasmStatus {
 }
 
 export const AGGREGATE_SCHEMA_MAJOR = 1;
+
+/** CV10: a status we do not recognise is shown as `unverified`, never passed through. */
+export function displayStatusOf(
+  entry: PeerRegistryVerification,
+): ReturnType<typeof registryStatusOrUnverified> {
+  return registryStatusOrUnverified(entry.status);
+}
+
+/** How the entries relate, over the entries we actually have. */
+export function computeAgreement(entries: readonly PeerRegistryVerification[]): AgreementSummary {
+  if (entries.length === 0) return "no_data";
+  if (entries.length === 1) return "single";
+
+  const statuses = new Set(entries.map((entry) => displayStatusOf(entry)));
+  if (statuses.has("verified") && statuses.has("mismatched")) return "disputed";
+  if (statuses.size === 1 && statuses.has("verified")) return "unanimous_verified";
+  if (statuses.size === 1 && statuses.has("mismatched")) return "unanimous_mismatched";
+  return "unverified_only";
+}
+
+/**
+ * The envelope, from the two things that vary. Both writers — the SDK aggregating live reads and query-svc
+ * assembling what its sync retained — built this by hand, which is why `agreement` could have been computed
+ * one way in one and another way in the other.
+ */
+export function aggregateEnvelope(input: {
+  wasmHash: string;
+  entries: readonly AggregatedRegistryVerification[];
+  unavailableVerifiers: readonly UnavailableVerifier[];
+}): AggregatedWasmStatus {
+  return {
+    schema: AGGREGATE_SCHEMA,
+    schema_version: AGGREGATE_SCHEMA_VERSION,
+    wasm_hash: input.wasmHash,
+    // When *we* assembled this view — never a verifier's own publication time (AB5).
+    updated_at: new Date().toISOString(),
+    source_code_verifications: [...input.entries],
+    unavailable_verifiers: [...input.unavailableVerifiers],
+    agreement: computeAgreement(input.entries),
+  };
+}
 
 /**
  * CONSUMER: one unavailable-verifier entry as a hosted aggregate reports it. `reason` is a plain string —

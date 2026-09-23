@@ -12,7 +12,9 @@ import {
 } from "@scvs/core/registry";
 import type { ResolvedVerifier } from "@scvs/storage-layout/shapes";
 import {
-  AGGREGATE_SCHEMA,
+  aggregateEnvelope,
+  computeAgreement,
+  displayStatusOf,
   type AggregatedRegistryVerification,
   type AggregatedWasmStatus,
   type AgreementSummary,
@@ -20,8 +22,8 @@ import {
 } from "@scvs/core/aggregate";
 import { wasmStatusKey } from "@scvs/storage-layout/keys";
 
-// Reads and aggregates the Registry API status object. The document shape itself lives in
-// `@scvs/core/registry`; this file is the reading, the validation modes and the aggregation.
+// Reads and aggregates the Registry API status object. The document shape and the aggregation arithmetic
+// both live in `@scvs/core`; this file is the reading, the validation modes and the fetch fan-out.
 
 /** How strictly a peer's document is validated. */
 export type RegistryValidationMode =
@@ -117,10 +119,6 @@ function parseRegistry<T extends object>(cls: ClassConstructor<T>, value: unknow
  * An unrecognised `status` displays as `unverified`. Presentation only — an aggregate forwards what the
  * verifier actually said, so we never become the source of a claim it did not make.
  */
-export function displayStatusOf(entry: PeerRegistryVerification): ReturnType<typeof registryStatusOrUnverified> {
-  return registryStatusOrUnverified(entry.status);
-}
-
 export type AggregateWasmStatusInput = {
   /**
    * Resolved consumer entries, not the producer `TrustedVerifier`: this aggregates over peers' lists, where
@@ -160,33 +158,13 @@ export async function aggregateWasmStatus(input: AggregateWasmStatusInput): Prom
     }),
   );
 
-  const entries = outcomes.flatMap((outcome) => ("entries" in outcome ? outcome.entries : []));
-
-  return {
-    schema: AGGREGATE_SCHEMA,
-    // Ours, not any peer's: this is the version of the aggregate WE emit, and it does not move because a
-    // contributing peer declared a higher MINOR.
-    schema_version: "1.0",
-    wasm_hash: input.wasmHash,
-    updated_at: new Date().toISOString(),
-    source_code_verifications: entries,
-    unavailable_verifiers: outcomes.flatMap((outcome) =>
+  return aggregateEnvelope({
+    wasmHash: input.wasmHash,
+    entries: outcomes.flatMap((outcome) => ("entries" in outcome ? outcome.entries : [])),
+    unavailableVerifiers: outcomes.flatMap((outcome) =>
       "unavailable" in outcome ? [outcome.unavailable] : [],
     ),
-    agreement: computeAgreement(entries),
-  };
-}
-
-/** How the entries relate, over the entries we actually have. */
-export function computeAgreement(entries: readonly PeerRegistryVerification[]): AgreementSummary {
-  if (entries.length === 0) return "no_data";
-  if (entries.length === 1) return "single";
-
-  const statuses = new Set(entries.map((entry) => displayStatusOf(entry)));
-  if (statuses.has("verified") && statuses.has("mismatched")) return "disputed";
-  if (statuses.size === 1 && statuses.has("verified")) return "unanimous_verified";
-  if (statuses.size === 1 && statuses.has("mismatched")) return "unanimous_mismatched";
-  return "unverified_only";
+  });
 }
 
 /**

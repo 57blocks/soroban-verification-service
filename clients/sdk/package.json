@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsup && tsc -p tsconfig.decl.json && api-extractor run --local -c api-extractor.json && node -e \"require('fs').rmSync('dist-types', { recursive: true, force: true })\"",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/sdk-test.ts && tsx test/registry-read-test.ts && tsx test/hosted-test.ts && tsx test/browser-graph-test.ts && tsx test/browser-bundle-test.ts",
+    "test": "for f in test/*-test.ts; do tsx \"$f\" || exit 1; done",
     "check:packaging": "publint --strict && attw --pack . --ignore-rules cjs-resolves-to-esm && node ../../eng-tools/check-sdk-pack-install.mjs",
     "check:registry-install": "node ../../eng-tools/check-sdk-registry-install.mjs"
   },

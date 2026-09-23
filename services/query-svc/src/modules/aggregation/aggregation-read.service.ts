@@ -6,14 +6,13 @@ import {
   type VerifierSyncCursorRecord,
 } from "@scvs/db-query";
 import {
-  AGGREGATE_SCHEMA,
+  aggregateEnvelope,
   registryStatusOrUnverified,
   type AggregatedRegistryVerification,
   type AggregatedWasmStatus,
   type BulkOrder,
   type UnavailableVerifier,
 } from "@scvs/core";
-import { computeAgreement } from "soroban-verification-client";
 
 /**
  * Assembles an aggregate from what the sync retained. Never fetches: a bulk-load page must not be delayed by a
@@ -124,16 +123,13 @@ function assemble(
   unavailable: readonly UnavailableVerifier[],
   context: AssemblyContext,
 ): AggregatedWasmStatus {
-  const entries = cached.map((record) => toEntry(record, context.resultRoots.get(record.verifierId) ?? record.verifierId));
-  return {
-    schema: AGGREGATE_SCHEMA,
-    schema_version: "1.0",
-    wasm_hash: wasmHash,
-    updated_at: new Date().toISOString(),
-    source_code_verifications: entries,
-    unavailable_verifiers: [...unavailable],
-    agreement: computeAgreement(entries),
-  };
+  return aggregateEnvelope({
+    wasmHash,
+    entries: cached.map((record) =>
+      toEntry(record, context.resultRoots.get(record.verifierId) ?? record.verifierId),
+    ),
+    unavailableVerifiers: unavailable,
+  });
 }
 
 /** One retained entry, relayed. Every retained entry carries its retrieval time; a live one never does (AB5). */
