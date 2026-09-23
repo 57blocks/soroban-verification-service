@@ -28,6 +28,7 @@ import { MismatchDiagnosticsService } from "../src/modules/verification-pipeline
 import { VerificationPipelineService } from "../src/modules/verification-pipeline/verification-pipeline.service.js";
 import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.service.js";
+import { BuildEnvironmentIdentityService } from "../src/modules/verification-pipeline/build-environment-identity.service.js";
 import { BuildEnvironmentResolver } from "../src/modules/build-environments/build-environment-resolver.js";
 import { BuildEnvironmentMaterializer } from "../src/modules/build-environments/build-environment-materializer.js";
 import { DeterministicBuildEnvironmentResolver } from "../src/modules/build-environments/deterministic-build-environment-resolver.service.js";
@@ -285,6 +286,7 @@ beforeAll(async () => {
       ArweaveArchiveService,
       PublishService,
       VerificationPipelineService,
+      BuildEnvironmentIdentityService,
       RebuildReconcilerScheduler,
       { provide: ChainReaderService, useValue: chain },
       {
