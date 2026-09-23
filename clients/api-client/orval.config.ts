@@ -13,6 +13,10 @@ export default defineConfig({
       client: "react-query",
       httpClient: "axios",
       clean: true,
+      // Generate `in: header` parameters as a typed argument. Off by default in orval, which is why
+      // `getBuildLog` used to have no way to send its required `x-build-log-token` — and why the console
+      // hand-wrote that request instead. It was never a limitation, only this default.
+      headers: true,
       override: {
         mutator: {
           path: "./src/http.ts",

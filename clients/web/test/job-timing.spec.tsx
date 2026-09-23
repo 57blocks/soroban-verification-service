@@ -10,8 +10,7 @@ vi.mock("@scvs/verify-api-client", async () => ({
   usePreflightVerification: () => ({ mutateAsync: vi.fn() }),
   useSubmitVerification: () => ({ mutateAsync: vi.fn() }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  // What the build-log hook calls. This entry used to stub the generated `getBuildLog`, which nothing calls.
-  getBuildLogWithToken: vi.fn().mockResolvedValue({ data: "" }),
+  getBuildLog: vi.fn().mockResolvedValue({ data: "" }),
   // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,

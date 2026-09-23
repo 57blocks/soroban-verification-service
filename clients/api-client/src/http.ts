@@ -17,11 +17,13 @@ export const verifyApiClient = <T>(config: AxiosRequestConfig): Promise<AxiosRes
 };
 
 /**
- * `uploadSource`'s generated function (see src/generated/verify-api.ts) has no way to carry a per-call
- * `X-Filename` header.
+ * Fills `uploadSource`'s `X-Filename` from the `File` being sent, so no caller has to. The generated function can
+ * take the header itself (`headers: true` in `orval.config.ts`); this only supplies it when none was passed, and
+ * matches the name case-insensitively because the spec spells it `x-filename` — a passed one is never doubled.
  */
 function withFileNameHeader(config: AxiosRequestConfig): AxiosRequestConfig["headers"] {
-  if (typeof File !== "undefined" && config.data instanceof File && !config.headers?.["X-Filename"]) {
+  const passed = Object.keys(config.headers ?? {}).some((name) => name.toLowerCase() === "x-filename");
+  if (typeof File !== "undefined" && config.data instanceof File && !passed) {
     return { ...config.headers, "X-Filename": config.data.name };
   }
   return config.headers;

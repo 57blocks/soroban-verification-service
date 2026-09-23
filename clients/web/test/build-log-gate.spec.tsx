@@ -12,9 +12,9 @@ vi.mock("@scvs/verify-api-client", async () => ({
   usePreflightVerification: () => ({ mutateAsync: vi.fn() }),
   useSubmitVerification: () => ({ mutateAsync: vi.fn() }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  // The route and its header are the client package's to get right, and `clients/api-client/src/routes-test.ts`
-  // proves them. What this spec owns is *when* the console asks, and with which job and which token.
-  getBuildLogWithToken: (...args: unknown[]) => buildLogGet(...args),
+  // The route and its header are the generated client's, proved by `clients/api-client/src/client-test.ts`. What
+  // this spec owns is *when* the console asks, and with which job and which token.
+  getBuildLog: (...args: unknown[]) => buildLogGet(...args),
   // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
@@ -134,7 +134,7 @@ describe("the build log is not requested before the job has an outcome", () => {
     });
 
     await waitFor(() =>
-      expect(buildLogGet).toHaveBeenCalledWith(JOB_ID, TOKEN),
+      expect(buildLogGet).toHaveBeenCalledWith(JOB_ID, { "x-build-log-token": TOKEN }),
     );
     await waitFor(() =>
       expect(result.current.buildLog).toEqual({

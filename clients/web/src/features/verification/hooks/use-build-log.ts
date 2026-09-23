@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getBuildLogWithToken, type BuildLogUnavailableResponse } from "@scvs/verify-api-client";
+import { getBuildLog, type BuildLogUnavailableResponse } from "@scvs/verify-api-client";
 import { isApiBaseConfigured, isHttpError } from "@/lib/http";
 import { readBuildLogToken } from "../utils/build-log-tokens.store";
 import type { BuildLogState } from "../types";
@@ -8,10 +8,10 @@ import type { BuildLogState } from "../types";
  * The raw redacted build log for a terminal job (UI2), behind this job's token
  * (build-log-access design.md BL-1).
  *
- * Through `getBuildLogWithToken`, not the generated `getBuildLog`, which has no way to send the header the
- * route requires. The token is read here, from this feature's `localStorage`, and handed over as an argument
- * — the client package never reads storage, which is what keeps it environment-agnostic. What this hook owns
- * is the ladder below: which answer means which panel.
+ * Through the generated `getBuildLog`, which takes the route's required `x-build-log-token` as a typed argument
+ * (`headers: true` in `clients/api-client/orval.config.ts`). The token is read here, from this feature's
+ * `localStorage`, and handed over — the client package never reads storage, which is what keeps it
+ * environment-agnostic. What this hook owns is the ladder below: which answer means which panel.
  */
 export const useBuildLog = (jobId: string | null, enabled: boolean) => {
   const token = readBuildLogToken(jobId);
@@ -25,7 +25,7 @@ export const useBuildLog = (jobId: string | null, enabled: boolean) => {
     refetchOnWindowFocus: false,
     retry: false,
     queryFn: async () => {
-      const res = await getBuildLogWithToken(jobId as string, token as string);
+      const res = await getBuildLog(jobId, { "x-build-log-token": token as string });
       return res.data;
     },
   });
