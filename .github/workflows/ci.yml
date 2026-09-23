@@ -103,6 +103,11 @@ jobs:
       - name: Check the builder's capability split
         run: pnpm run check:builder-isolation
 
+      # A module left out of both the barrel and the exports map still compiles and passes every test; nobody
+      # learns it is unreachable until a consumer imports it. This is the check that makes that visible.
+      - name: Check every core module is reachable
+        run: pnpm run check:core-exports
+
       # A module's directory is its own business: another module reaches it through index.ts and nothing else,
       # so a file inside can be renamed or split without a search across the service.
       - name: Check the orchestrator's module surfaces
