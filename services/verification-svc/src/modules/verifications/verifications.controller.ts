@@ -44,13 +44,13 @@ import type { Observable } from "rxjs";
 import { AbuseGuard } from "../../common/abuse.guard.js";
 import { fingerprintIp } from "../../common/abuse-guard.js";
 import { DrainGuard } from "../../common/drain.guard.js";
-import { ApiError } from "../../common/api-error.exception.js";
-import { ApiErrorResponse } from "../../common/api-error.dto.js";
+
 import { JobsService } from "./jobs.service.js";
 import { mapSubmitIssues, SubmitRequestDto } from "./submit.dto.js";
 import { SubmitService } from "./submit.service.js";
 import { UploadsService } from "./uploads.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
+import { ApiError, ApiErrorResponse } from "@scvs/http";
 
 @Controller()
 export class VerificationsController {

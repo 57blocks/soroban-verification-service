@@ -1,6 +1,6 @@
 import { CanActivate, Inject, Injectable } from "@nestjs/common";
 import { DrainState } from "@scvs/core";
-import { ApiError } from "./api-error.exception.js";
+import { ApiError } from "@scvs/http";
 
 /**
  * Refuses **new work** while the task is draining, and nothing else — O9's "stop accepting new jobs while

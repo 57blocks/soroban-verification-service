@@ -2,7 +2,7 @@ import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { parseDto, submissionStatuses } from "@scvs/core";
-import { ApiErrorResponse } from "../src/common/api-error.dto.js";
+import { ApiErrorResponse } from "@scvs/http";
 import { SubmitIncompleteResponse, SubmitQueuedResponse } from "../src/modules/verifications/submit.dto.js";
 import { createTestServer } from "./bootstrap.js";
 

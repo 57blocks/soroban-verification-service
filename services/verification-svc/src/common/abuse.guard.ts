@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { ScvsLogger } from "@scvs/core";
 import type { Request } from "express";
 import { abuseCheckError, AbuseGuardService } from "./abuse-guard.js";
-import { ApiError } from "./api-error.exception.js";
+
 import type { AppConfigService } from "../config/configuration.js";
+import { ApiError } from "@scvs/http";
 
 /**
  * Exported so `raw-archive-body.middleware.ts` can key its own abuse check on the exact same string this

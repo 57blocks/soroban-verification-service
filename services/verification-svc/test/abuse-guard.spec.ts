@@ -8,7 +8,7 @@ import {
 } from "@scvs/db";
 import { AbuseGuardService, fingerprintIp, fingerprintRequest } from "../src/common/abuse-guard.js";
 import { AbuseGuard } from "../src/common/abuse.guard.js";
-import type { ApiError } from "../src/common/api-error.exception.js";
+import type { ApiError } from "@scvs/http";
 
 /**
  * The Postgres-backed sliding window's own behaviour — untested until now, which is how it came to break every

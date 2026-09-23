@@ -1,0 +1,34 @@
+{
+  "name": "@scvs/http",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "for f in src/*-test.ts; do tsx \"$f\" || exit 1; done"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.2.3",
+    "@nestjs/swagger": "^11.4.7",
+    "@scvs/core": "workspace:*",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "express": "^5.2.1",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

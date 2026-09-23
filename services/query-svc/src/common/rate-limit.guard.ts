@@ -1,6 +1,6 @@
 import { Injectable, type ExecutionContext } from "@nestjs/common";
 import { ThrottlerGuard, type ThrottlerLimitDetail } from "@nestjs/throttler";
-import { ApiError } from "./api-error.exception.js";
+import { ApiError } from "@scvs/http";
 
 /**
  * The in-process throttler, reshaped to answer in this service's error envelope: a bare `ThrottlerException`

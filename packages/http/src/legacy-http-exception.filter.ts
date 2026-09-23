@@ -1,11 +1,11 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from "@nestjs/common";
 import { ScvsLogger } from "@scvs/core";
 import type { Request, Response } from "express";
-import { errorBody, ERROR_SCHEMA, ERROR_SCHEMA_VERSION } from "./api-error.exception.js";
+import { errorBody, ERROR_SCHEMA, ERROR_SCHEMA_VERSION } from "./api-error.js";
 
 /**
  * Global fallback so every response — including the ones Nest itself generates (an unmatched route, a
- * `ValidationPipe` rejection, an uncaught error) — comes back in the one error shape.
+ * `ValidationPipe` rejection, a guard rejection, an uncaught error) — comes back in the one error shape.
  */
 @Catch()
 export class LegacyHttpExceptionFilter implements ExceptionFilter {
@@ -18,7 +18,8 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const body = exception.getResponse();
       if (typeof body === "object" && body !== null && "status_code" in body) {
-        // An `ApiError` body already carries both identifiers.
+        // An `ApiError` body already carries both identifiers; a hand-built `HttpException` that carries
+        // `status_code` without them still has to come out with both, and this is the last point that can.
         response.status(status).json({ schema: ERROR_SCHEMA, schema_version: ERROR_SCHEMA_VERSION, ...body });
         return;
       }
@@ -32,8 +33,8 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    // `method` and `route` rather than the full URL: a query-string value is submitter-controlled text, and
-    // this is the one log call site every unhandled error in the read path reaches.
+    // `method` and `route` rather than the full URL: a query string or path segment is submitter-controlled
+    // text, and this is the catch-all every unhandled error reaches.
     const request = host.switchToHttp().getRequest<Request>();
     this.logger.error("unhandled error", {
       error: exception instanceof Error ? exception : String(exception),

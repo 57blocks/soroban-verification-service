@@ -12,7 +12,7 @@ import {
   parseBulkLimit,
   parseBulkOrder,
 } from "@scvs/core";
-import { ApiError } from "../../common/api-error.exception.js";
+import { ApiError } from "@scvs/http";
 
 const bulkQueryDocs = [
   { name: "order", required: false, enum: ["asc", "desc"] },

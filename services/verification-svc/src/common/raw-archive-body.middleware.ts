@@ -4,8 +4,9 @@ import { DrainState, ScvsLogger } from "@scvs/core";
 import type { NextFunction, Request, Response } from "express";
 import { abuseCheckError, AbuseGuardService } from "./abuse-guard.js";
 import { UPLOAD_SOURCE_ROUTE } from "./abuse.guard.js";
-import { errorBody } from "./api-error.exception.js";
+
 import type { AppConfigService } from "../config/configuration.js";
+import { errorBody } from "@scvs/http";
 
 /**
  * Starting allocation for a body with no Content-Length to size it by. Small on purpose: a client can omit

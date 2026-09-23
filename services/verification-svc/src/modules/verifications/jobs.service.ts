@@ -13,9 +13,10 @@ import {
 import { createS3Client, deleteObject, getObjectText } from "@scvs/aws";
 import { getStagingStorageConfig } from "@scvs/config";
 import { Observable } from "rxjs";
-import { errorBody } from "../../common/api-error.exception.js";
+
 import type { ApiResponse } from "./submit.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
+import { errorBody } from "@scvs/http";
 
 /** Where a job's build log may live. Anything else is not this route's to serve. */
 const BUILD_LOG_KEY_PREFIX = "build-logs/";

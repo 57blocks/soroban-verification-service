@@ -3,9 +3,10 @@ import { ApiBadRequestResponse, ApiBody, ApiOkResponse, ApiOperation, ApiTooMany
 import { PreflightResponse } from "./preflight.dto.js";
 import type { Response } from "express";
 import { AbuseGuard } from "../../common/abuse.guard.js";
-import { ApiError, errorBody } from "../../common/api-error.exception.js";
+
 import { mapPreflightIssues, PreflightRequestDto } from "./preflight.dto.js";
 import { PreflightService } from "./preflight.service.js";
+import { ApiError, errorBody } from "@scvs/http";
 
 @Controller("api/verification/v1/preflight")
 @UseGuards(AbuseGuard)

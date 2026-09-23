@@ -12,10 +12,11 @@ import {
   uploadArchiveFormat,
 } from "@scvs/core";
 import { UploadsRepository } from "@scvs/db";
-import { errorBody } from "../../common/api-error.exception.js";
+
 import { stagingUploadKey } from "../../common/upload-cleanup.js";
 import type { ApiResponse } from "./submit.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
+import { errorBody } from "@scvs/http";
 
 @Injectable()
 export class UploadsService {
