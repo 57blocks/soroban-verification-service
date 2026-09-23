@@ -10,6 +10,7 @@ import {
   putObjectText,
   submitJob,
   type RegisteredTaskProperties,
+  type SubmitJobParams,
 } from "@scvs/aws";
 import type { StagingStorageConfig } from "@scvs/config";
 import { JobsRepository, RebuildsRepository } from "@scvs/db";
@@ -151,7 +152,7 @@ export class BatchDispatchService {
     });
 
     const batch = createBatchClient(staging.region);
-    const { jobId: batchJobId } = await submitJob(batch, {
+    const { jobId: batchJobId } = await this.submitToBatch(batch, {
       jobName: `scvs-${mode}-${params.rebuildId}`,
       jobQueueArn: queue.jobQueueArn,
       jobDefinitionArn,
@@ -202,8 +203,8 @@ export class BatchDispatchService {
     const materialiseKey = paramsDocumentKey(rebuildId, mode, "materialise");
     const runnerKey = paramsDocumentKey(rebuildId, mode, "runner");
     await Promise.all([
-      putObjectText(s3, bucket, materialiseKey, JSON.stringify(containerParams.materialise), "application/json"),
-      putObjectText(s3, bucket, runnerKey, JSON.stringify(containerParams.runner), "application/json"),
+      this.putParamsDocument(s3, bucket, materialiseKey, JSON.stringify(containerParams.materialise)),
+      this.putParamsDocument(s3, bucket, runnerKey, JSON.stringify(containerParams.runner)),
     ]);
     // The fetch window starts when the container starts, which is the same clock the materialiser's
     // source-archive GET has always been on.
@@ -238,7 +239,7 @@ export class BatchDispatchService {
           ? held
           : undefined;
       if (!registered) {
-        const described = await describeActiveJobDefinition(batch, jobDefinition);
+        const described = await this.describeRegisteredDefinition(batch, jobDefinition);
         if (!described) {
           this.logger.warn(
             "no ACTIVE ecsProperties job definition to measure the payload against",
@@ -267,6 +268,34 @@ export class BatchDispatchService {
       });
       return undefined;
     }
+  }
+
+  /**
+   * The outbound requests `submitBatchJob` can send, isolated as methods so a suite can substitute them
+   * (`jest.spyOn`) while the dispatch around them stays real. Presigning is not among them: it signs locally
+   * and sends nothing.
+   */
+  protected putParamsDocument(
+    s3: ReturnType<typeof createS3Client>,
+    bucket: string,
+    key: string,
+    body: string,
+  ): Promise<void> {
+    return putObjectText(s3, bucket, key, body, "application/json");
+  }
+
+  protected describeRegisteredDefinition(
+    batch: ReturnType<typeof createBatchClient>,
+    familyOrArn: string,
+  ): Promise<RegisteredTaskProperties | undefined> {
+    return describeActiveJobDefinition(batch, familyOrArn);
+  }
+
+  protected submitToBatch(
+    batch: ReturnType<typeof createBatchClient>,
+    params: SubmitJobParams,
+  ): Promise<{ jobId: string }> {
+    return submitJob(batch, params);
   }
 
   /**
