@@ -25,6 +25,14 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
+      # Packages that peer on each other's exact major, so one moved alone breaks the build. A dependency
+      # joins the first group it matches, so these sit above the risk classes below.
+      nestjs:
+        patterns: ["@nestjs/*"]
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+      eslint:
+        patterns: ["eslint", "@eslint/js"]
       # One pull request per risk class rather than per package: a patch bump nobody reads is noise,
       # and a major that arrives inside a group of thirty is a major nobody reviewed.
       production-patch-and-minor:
@@ -33,6 +41,10 @@ updates:
       development:
         dependency-type: development
         update-types: ["minor", "patch"]
+    ignore:
+      # Types track the runtime's Node major, which moves by hand with the pins listed under `docker` below.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # The base images the sandbox and the services are built from. A stale base image is the most
   # common way a fixed CVE stays unfixed.
@@ -49,9 +61,10 @@ updates:
       # while 26 released 2026-05-05 and is Current — it does not become LTS until **2026-10-28**.
       #
       # This is a deferral with a date, not a standing refusal. Take the bump after 2026-10-28, when
-      # 26 is LTS and 24 has just gone to maintenance, and move all four pins in the same change:
-      # `.nvmrc`, `node-version` in `ci.yml`, the nine `FROM node:` lines under `docker/`, and
-      # `clients/sdk/package.json`'s `engines`. Bumping only the images — which is all Dependabot
-      # can do here — would leave CI testing on one major while the containers run another.
+      # 26 is LTS and 24 has just gone to maintenance, and move all five pins in the same change:
+      # `.nvmrc`, `node-version` in `ci.yml`, the nine `FROM node:` lines under `docker/`,
+      # `clients/sdk/package.json`'s `engines`, and every `@types/node`. Bumping only the images —
+      # which is all Dependabot can do here — would leave CI testing on one major while the
+      # containers run another.
       - dependency-name: node
         update-types: ["version-update:semver-major"]
