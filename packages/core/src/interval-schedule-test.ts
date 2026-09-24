@@ -22,6 +22,10 @@ async function until(condition: () => boolean, what: string, deadlineMs = 2_000)
   }
 }
 
+function detachedWork(): DetachedWork {
+  return new DetachedWork(new ScvsLogger("interval-schedule-test"));
+}
+
 function fakeRegistry(): IntervalRegistry & { readonly registered: Array<[string, NodeJS.Timeout]> } {
   const registered: Array<[string, NodeJS.Timeout]> = [];
   return {
@@ -34,7 +38,7 @@ function fakeRegistry(): IntervalRegistry & { readonly registered: Array<[string
 
 test("the registry owns the handle, under the name given", () => {
   const registry = fakeRegistry();
-  startInterval(registry, "job-retry", 60_000, () => undefined);
+  startInterval(registry, "job-retry", 60_000, () => undefined, detachedWork());
   assert.equal(registry.registered.length, 1);
   assert.equal(registry.registered[0]?.[0], "job-retry");
   clearInterval(registry.registered[0]![1]);
@@ -46,7 +50,7 @@ test("a non-positive or unparsable interval fails at startup, naming the schedul
   for (const bad of [Number.NaN, 0, -1, Number.POSITIVE_INFINITY]) {
     const registry = fakeRegistry();
     assert.throws(
-      () => startInterval(registry, "job-retry", bad, () => undefined),
+      () => startInterval(registry, "job-retry", bad, () => undefined, detachedWork()),
       /job-retry needs a positive interval/,
       `${String(bad)} must be refused`,
     );
@@ -57,10 +61,16 @@ test("a non-positive or unparsable interval fails at startup, naming the schedul
 test("the tick runs on the interval", async () => {
   const registry = fakeRegistry();
   let calls = 0;
-  startInterval(registry, "build-dispatch", 1, () => {
-    calls += 1;
-    return Promise.resolve();
-  });
+  startInterval(
+    registry,
+    "build-dispatch",
+    1,
+    () => {
+      calls += 1;
+      return Promise.resolve();
+    },
+    detachedWork(),
+  );
   await until(() => calls > 0, "the first tick");
   clearInterval(registry.registered[0]![1]);
 });
@@ -70,10 +80,16 @@ test("the tick runs on the interval", async () => {
 test("a rejecting tick is caught, and the schedule survives it", async () => {
   const registry = fakeRegistry();
   let calls = 0;
-  startInterval(registry, "job-retry", 1, () => {
-    calls += 1;
-    return Promise.reject(new Error("the tick blew up"));
-  });
+  startInterval(
+    registry,
+    "job-retry",
+    1,
+    () => {
+      calls += 1;
+      return Promise.reject(new Error("the tick blew up"));
+    },
+    detachedWork(),
+  );
   // Waited for, not slept through: a 1 ms interval is not guaranteed two ticks inside a fixed 20 ms window
   // on a loaded runner, which is how this failed in CI while passing everywhere else.
   await until(() => calls > 1, "a second tick after the first one rejected");
@@ -84,7 +100,7 @@ test("a rejecting tick is caught, and the schedule survives it", async () => {
 // test runner open — which is exactly what reached CI.
 test("the handle does not hold the process open", () => {
   const registry = fakeRegistry();
-  startInterval(registry, "upload-cleanup", 60_000, () => undefined);
+  startInterval(registry, "upload-cleanup", 60_000, () => undefined, detachedWork());
   const ref = registry.registered[0]![1] as NodeJS.Timeout & { hasRef(): boolean };
   assert.equal(ref.hasRef(), false);
   clearInterval(ref);
