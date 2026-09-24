@@ -5,24 +5,27 @@ type JobModule = typeof import("../../support/job.js");
 
 const RETRY_INTERVAL_MS = 600;
 
-/** Each job's published statuses, in order, with how long each is held; the last is held forever. */
-const TIMELINES: Record<string, readonly (readonly [status: string, heldMs: number])[]> = {
-  // A retryable failure the scan re-queues well inside one interval, then the verdict.
-  retried: [["queued", 60], ["build_failed", 260], ["queued", 90], ["verified", 0]],
-  permanent: [["queued", 60], ["build_failed", 0]],
+/**
+ * Each job's published statuses, in order, with how many reads each answers; the last answers every read after.
+ * Counting reads rather than time keeps the sequence independent of how fast the poll loop is scheduled.
+ */
+const TIMELINES: Record<string, readonly (readonly [status: string, reads: number])[]> = {
+  // A retryable failure the scan re-queues inside one settle window, then the verdict.
+  retried: [["queued", 1], ["build_failed", 2], ["queued", 1], ["verified", 0]],
+  permanent: [["queued", 1], ["build_failed", 0]],
 };
 
-function statusAt(timeline: (typeof TIMELINES)[string], elapsedMs: number): string {
+function statusAt(timeline: (typeof TIMELINES)[string], read: number): string {
   let until = 0;
-  for (const [status, heldMs] of timeline) {
-    until += heldMs;
-    if (elapsedMs < until || heldMs === 0) return status;
+  for (const [status, reads] of timeline) {
+    until += reads;
+    if (read < until || reads === 0) return status;
   }
   return timeline[timeline.length - 1][0];
 }
 
 describe("E2E harness waiting for a terminal state", () => {
-  const submittedAt = new Map<string, { timeline: string; at: number }>();
+  const submitted = new Map<string, { timeline: string; reads: number }>();
   let server: Server;
   let job: JobModule;
 
@@ -37,16 +40,16 @@ describe("E2E harness waiting for a terminal state", () => {
         request.on("data", (chunk) => (raw += chunk));
         request.on("end", () => {
           const timeline = JSON.parse(raw).target.contract_id as string;
-          const jobId = `${timeline}-${submittedAt.size}`;
-          submittedAt.set(jobId, { timeline, at: Date.now() });
+          const jobId = `${timeline}-${submitted.size}`;
+          submitted.set(jobId, { timeline, reads: 0 });
           send(202, { status: "queued", job_id: jobId });
         });
         return;
       }
       const jobId = request.url!.split("/").pop()!;
-      const submitted = submittedAt.get(jobId);
-      if (!submitted) return send(404, { error: "not_found" });
-      send(200, { job_id: jobId, status: statusAt(TIMELINES[submitted.timeline], Date.now() - submitted.at) });
+      const entry = submitted.get(jobId);
+      if (!entry) return send(404, { error: "not_found" });
+      send(200, { job_id: jobId, status: statusAt(TIMELINES[entry.timeline], entry.reads++) });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 
