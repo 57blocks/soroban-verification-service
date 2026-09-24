@@ -437,7 +437,8 @@ export class JobsService {
         unsubscribeNotify = unsubscribe;
 
         const done = await emitCurrent();
-        if (done) return;
+        // The client can disconnect during the first read, after cleanup() had nothing to clear.
+        if (done || closed) return;
 
         this.logger.log("stream open, waiting for status changes", { job_id: jobId });
         safetyInterval = setInterval(() => void emitCurrent(), safetyPollMs);
