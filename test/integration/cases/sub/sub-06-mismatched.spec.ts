@@ -90,13 +90,10 @@ caseBlock(
         const run = await submitAndWait(await submissionFor("F-LEG-3"));
         expect(run.body.status).toBe("mismatch");
 
-        // HA1/HA2, as far as the public surface can express them.
-        const terminalIndex = run.statusSequence.findIndex((status) =>
-          ["mismatch", "verified", "build_failed", "source_unavailable", "policy_rejected", "not_attempted"].includes(
-            status
-          )
-        );
-        expect(terminalIndex).toBe(run.statusSequence.length - 1);
+        // HA1/HA2, as far as the public surface can express them. A retried `build_failed` may precede the
+        // verdict; nothing may follow it.
+        const verdictIndex = run.statusSequence.findIndex((status) => ["mismatch", "verified"].includes(status));
+        expect(verdictIndex).toBe(run.statusSequence.length - 1);
 
         // Only one rebuilt hash is ever reported — two attempts producing two different hashes would surface
         // here.

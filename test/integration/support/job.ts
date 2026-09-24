@@ -1,6 +1,6 @@
 /** Submitting, and waiting. */
 import { buildLogTokenFor } from "./build-log-token.js";
-import { env } from "./env.js";
+import { deploymentParameters, env } from "./env.js";
 import { expectStatus, http, postJson, sleep, type HttpResult } from "./http.js";
 import { jobLogUrl, jobUrl, submitUrl, preflightUrl, uploadSourceUrl } from "./routes.js";
 import {
@@ -74,24 +74,24 @@ export interface TerminalJob {
 }
 
 /**
- * `build_failed` is the only published status a job can leave again: `requeueRetryableFailures` scans
- * internal `failed` rows whose reason is `build_timeout` or `internal_error`, and both publish as
- * `build_failed`. The published body never says which reason it was, so outlasting one scan is the only way
- * to tell a final failure from one about to be retried — which is why this is a caller's choice. A case
- * asserting *that* a build failed wants the first terminal state; a case that needs the job's final answer
- * passes `settleMs`.
+ * The one published status a job can leave again: the retry scan re-queues `build_timeout` and
+ * `internal_error`, both publish as `build_failed`, and the body never says which reason it was.
  */
 const REQUEUEABLE_STATUS = "build_failed";
 
-/** One `SCVS_JOB_RETRY_INTERVAL_MS` scan plus a poll, so a re-queue that is going to happen has happened. */
-export const RETRYABLE_SETTLE_MS = Number(process.env.SCVS_JOB_RETRY_INTERVAL_MS || 60_000) + 2_000;
+/** One `SCVS_JOB_RETRY_INTERVAL_MS` scan plus a margin, so a re-queue that is going to happen has happened. */
+export const RETRYABLE_SETTLE_MS = (deploymentParameters.jobRetryIntervalMs ?? 60_000) + 2_000;
 
+/**
+ * Holds a `build_failed` for `settleMs` before returning it, so a retried job is read at its final answer.
+ * `settleMs: 0` returns the first terminal state, for a case whose subject is that state.
+ */
 export async function waitForTerminal(
   jobId: string,
   options: { timeoutMs?: number; startedAt?: number; settleMs?: number } = {}
 ): Promise<TerminalJob> {
   const timeoutMs = options.timeoutMs ?? env.jobTimeoutMs;
-  const settleMs = options.settleMs ?? 0;
+  const settleMs = options.settleMs ?? RETRYABLE_SETTLE_MS;
   const startedAt = options.startedAt ?? Date.now();
   const deadline = startedAt + timeoutMs;
   const statusSequence: string[] = [];

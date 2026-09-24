@@ -81,6 +81,8 @@ for (const row of cases) {
           // A reused target-level job can have a different source and failure class, making its log a false
           // substitute for this row's state-specific evidence.
           requireFreshTargetJob: row.suffix === "build_timeout",
+          // `build_timeout` is retryable, so settling would follow the retry instead of reading this timeout.
+          settleMs: row.suffix === "build_timeout" ? 0 : undefined,
         });
         expect(run.body.status).toBe(row.expectedStatus);
 

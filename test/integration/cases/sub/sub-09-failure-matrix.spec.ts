@@ -136,6 +136,8 @@ caseBlock(
       }), {
         timeoutMs: Math.max(env.jobTimeoutMs, limit * 2),
         requireFreshTargetJob: true,
+        // `build_timeout` is retryable, so settling would follow the retry instead of reading this timeout.
+        settleMs: 0,
       });
 
       expect(run.body.status).toBe("build_failed");
