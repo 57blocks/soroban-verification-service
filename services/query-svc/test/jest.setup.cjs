@@ -38,3 +38,7 @@ process.env.NODE_ENV = "test";
 
 // A drain grace period of 0 for tests.
 process.env.SCVS_DRAIN_GRACE_MS ||= "0";
+
+// Throttler is CommonJS; loading Nest first keeps its require(esm) of @nestjs/common out of a cycle.
+require("@nestjs/common");
+require("@nestjs/core");

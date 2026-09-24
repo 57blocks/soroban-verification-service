@@ -51,6 +51,8 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
     AbuseGuardModule,
     // The cheap in-process tier in front of the Postgres-backed `AbuseGuard`.
     ThrottlerModule.forRootAsync({
+      // Throttler 6.7's options type cannot resolve Nest 12's `@nestjs/common/interfaces`, which makes `imports` required.
+      imports: [],
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) => [
         { ttl: 60_000, limit: configService.get("throttleLimit", { infer: true }) },

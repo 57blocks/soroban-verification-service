@@ -26,3 +26,7 @@ process.env.SCVS_ABUSE_FINGERPRINT_KEY ||= "test-fingerprint-key";
 // Boot-required, and it must resolve: the legal module loads and validates the bundle at init. The
 // example is placeholder text with no effective date, so acceptance is optional unless a spec overrides it.
 process.env.SCVS_LEGAL_DOCUMENTS_SOURCE ||= "config/legal-documents.example.json";
+
+// Throttler is CommonJS; loading Nest first keeps its require(esm) of @nestjs/common out of a cycle.
+require("@nestjs/common");
+require("@nestjs/core");
