@@ -17,7 +17,7 @@ const copyBySelection = (text: string) => {
     selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
   textarea.select();
-  let copied = false;
+  let copied: boolean;
   try {
     copied = document.execCommand("copy");
   } catch {
