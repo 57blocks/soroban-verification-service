@@ -25,7 +25,8 @@ caseBlock(
         // Connect immediately, then poll in parallel — the case compares the two sequences, so they have to be
         // observed over the same interval.
         const streamPromise = readJobStreamToClose(jobId);
-        const polled = await waitForTerminal(jobId);
+        // The server closes the stream at the first terminal status, so polling stops there too.
+        const polled = await waitForTerminal(jobId, { settleMs: 0 });
         const frames = await streamPromise;
 
         expect(frames.length).toBeGreaterThan(0);
