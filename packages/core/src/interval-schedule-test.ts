@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { DetachedWork } from "./detached-work.js";
 import { startInterval, type IntervalRegistry } from "./interval-schedule.js";
+import { ScvsLogger } from "./logging.js";
 
 function test(name: string, fn: () => void): void {
   try {
@@ -86,4 +88,40 @@ test("the handle does not hold the process open", () => {
   const ref = registry.registered[0]![1] as NodeJS.Timeout & { hasRef(): boolean };
   assert.equal(ref.hasRef(), false);
   clearInterval(ref);
+});
+
+// A module's shutdown closes the database next, so a tick still running at that point would query a closed pool.
+test("draining the work waits for the tick in flight, and no tick starts after it", async () => {
+  const registry = fakeRegistry();
+  const work = new DetachedWork(new ScvsLogger("archive-recovery"));
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let started = 0;
+  let finished = 0;
+  startInterval(
+    registry,
+    "archive-recovery",
+    1,
+    async () => {
+      started += 1;
+      await held;
+      finished += 1;
+    },
+    work,
+  );
+  await until(() => started > 0, "the first tick");
+
+  let drained = false;
+  const draining = work.drain().then(() => (drained = true));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(drained, false, "drain resolved while a tick was still running");
+  const startedBeforeRelease = started;
+
+  release();
+  await draining;
+  assert.equal(finished, started);
+  // Twenty 1 ms periods: every one of them must have been refused.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(started, startedBeforeRelease);
+  clearInterval(registry.registered[0]![1]);
 });
