@@ -1,7 +1,7 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, startInterval } from "@scvs/core";
 import { RebuildsRepository, type RebuildRecord } from "@scvs/db";
 import { RebuildOutcomeService } from "../batch-events/index.js";
 import { BatchDispatchService } from "../verification-pipeline/index.js";
@@ -25,8 +25,9 @@ const BATCH_TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
  * correct on the happy path, permanent on a lost event.
  */
 @Injectable()
-export class RebuildReconcilerScheduler implements OnModuleInit {
+export class RebuildReconcilerScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("rebuild-reconciler");
+  private readonly detached = new DetachedWork(this.logger);
   private reconciling = false;
 
   constructor(
@@ -44,7 +45,12 @@ export class RebuildReconcilerScheduler implements OnModuleInit {
       "rebuild-reconciler",
       this.configService.get("rebuildReaperIntervalMs", { infer: true }),
       () => this.reconcileStuckRebuilds(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async reconcileStuckRebuilds(): Promise<void> {

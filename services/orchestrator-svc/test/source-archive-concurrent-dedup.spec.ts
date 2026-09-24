@@ -72,6 +72,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
+    // Scheduled archives write to the rows cleanup deletes, so they finish first.
+    if (arweaveArchive) await arweaveArchive.onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
     if (moduleRef) await moduleRef.close();

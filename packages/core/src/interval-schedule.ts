@@ -1,3 +1,4 @@
+import { DetachedWork } from "./detached-work.js";
 import { ScvsLogger } from "./logging.js";
 
 /**
@@ -16,13 +17,14 @@ export type IntervalRegistry = {
 
 /**
  * Registers `tick` to run every `everyMs`. The registry owns the handle, so Nest clears it on shutdown the
- * same way it clears a decorated one.
+ * same way it clears a decorated one. Ticks run through `work`, so draining it stops them and awaits the last.
  */
 export function startInterval(
   registry: IntervalRegistry,
   name: string,
   everyMs: number,
   tick: () => unknown,
+  work: DetachedWork = new DetachedWork(new ScvsLogger(name)),
 ): void {
   // `Number(process.env.X || default)` answered `NaN` for a non-numeric value, and an interval of `NaN` fires
   // on every tick of the event loop. Failing at startup is the only honest answer.
@@ -36,13 +38,15 @@ export function startInterval(
     // A tick that rejects would otherwise be an unhandled rejection, which Node turns into a fatal error —
     // taking down a service over one failed sweep. Every scheduler already catches and logs its own failures,
     // so reaching here is a bug in the tick, and the honest thing is to record it and keep the schedule.
-    void Promise.resolve()
-      .then(tick)
-      .catch((error: unknown) => {
-        new ScvsLogger(name).error("scheduled tick rejected; the schedule continues", {
-          error: error instanceof Error ? error : String(error),
-        });
-      });
+    work.start(() =>
+      Promise.resolve()
+        .then(tick)
+        .catch((error: unknown) => {
+          new ScvsLogger(name).error("scheduled tick rejected; the schedule continues", {
+            error: error instanceof Error ? error : String(error),
+          });
+        }),
+    );
   }, everyMs);
 
   // The service's HTTP listener is what keeps the process alive; a sweep timer must never be the reason it

@@ -1,7 +1,7 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { EnvironmentsRepository, type EnvironmentRecord } from "@scvs/db";
 import { ComposerDispatchService } from "../build-environments/index.js";
 import { EnvironmentOutcomeService } from "../build-environments/index.js";
@@ -16,9 +16,10 @@ const BATCH_TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
  * necessary for a strictly worse version of the same reason.
  */
 @Injectable()
-export class EnvironmentReconcilerScheduler implements OnModuleInit {
+export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("environment-reconciler");
   private readonly metrics = new ScvsMetrics("environment-reconciler", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
   private reconciling = false;
 
   constructor(
@@ -36,7 +37,12 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit {
       "environment-reconciler",
       this.configService.get("environmentReconcilerIntervalMs", { infer: true }),
       () => this.reconcileStuckEnvironments(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async reconcileStuckEnvironments(): Promise<void> {

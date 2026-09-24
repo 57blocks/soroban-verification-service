@@ -360,6 +360,8 @@ beforeAll(async () => {
 afterAll(async () => {
   // `prisma` is unset when `beforeAll` threw; cleaning up then would bury the real error under a TypeError.
   try {
+    // Scheduled archives write to the rows cleanup deletes, so they finish first.
+    if (moduleRef) await moduleRef.get(ArweaveArchiveService).onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
     if (moduleRef) await moduleRef.close();
