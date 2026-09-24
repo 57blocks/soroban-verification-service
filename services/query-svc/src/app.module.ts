@@ -45,6 +45,8 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
     // per (caller, route handler), not one bucket per caller, so each route carries this ceiling
     // independently — which is what keeps the tight address tier out of reach of traffic to any other route.
     ThrottlerModule.forRootAsync({
+      // Throttler 6.7's options type cannot resolve Nest 12's `@nestjs/common/interfaces`, which makes `imports` required.
+      imports: [],
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) => ({
         throttlers: [{ ttl: 60_000, limit: configService.get("queryThrottleLimit", { infer: true }) }],

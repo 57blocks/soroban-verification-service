@@ -20,7 +20,7 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@nestjs/common": "^11.2.3",
+    "@nestjs/common": "^12.1.0",
     "@scvs/core": "workspace:*",
     "class-validator": "^0.14.4",
     "dotenv": "^16.6.1"
