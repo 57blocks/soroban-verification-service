@@ -120,7 +120,7 @@ export const useSourceArchive = (
       const res = await uploadSourceMutation.mutateAsync({ data: file });
       data = res.data;
     } catch (cause) {
-      throw new Error(errorMessage(cause, "Source archive upload failed."));
+      throw new Error(errorMessage(cause, "Source archive upload failed."), { cause });
     }
 
     if (!data.upload_id || !data.source_sha256) {
