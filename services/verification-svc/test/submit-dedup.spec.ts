@@ -1,10 +1,11 @@
 import type { Server } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 import { submissionStatuses, type SourceReference } from "@scvs/core";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 const prisma = createPrismaClient(readDbEnv());
 const jobsRepository = new JobsRepository(prisma);
@@ -19,15 +20,18 @@ async function backdateJob(jobId: string, ageMs: number): Promise<void> {
   );
 }
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 // A suite removes what it created, and only what it created. The disconnect is in a `finally` so a failed
 // cleanup leaves one red signal, not two.
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();

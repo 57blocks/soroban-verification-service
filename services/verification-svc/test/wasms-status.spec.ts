@@ -5,15 +5,16 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes, randomUUID } from "node:crypto";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 import { getVerifierIdentity } from "@scvs/config";
 import { parseStrictRegistryStatusObject } from "@scvs/core";
 import { WasmsService } from "../src/modules/wasms/wasms.service.js";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 // Filesystem result storage pointing at a per-suite temp dir, set BEFORE the app boots: the config loader
-// reads the storage environment once at startup, so the suite has to own it before `createTestServer()`.
+// reads the storage environment once at startup, so the suite has to own it before `createTestApp()`.
 let resultsRoot: string;
 beforeAll(async () => {
   resultsRoot = await mkdtemp(join(tmpdir(), "wasms-status-"));
@@ -25,13 +26,16 @@ const prisma = createPrismaClient(readDbEnv());
 const jobsRepository = new JobsRepository(prisma);
 const createdRows = new CreatedRows();
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();

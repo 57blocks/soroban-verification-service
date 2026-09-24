@@ -1,22 +1,26 @@
 import type { Server } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 import { hashBuildLogToken, mintBuildLogToken } from "@scvs/core";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 const prisma = createPrismaClient(readDbEnv());
 const jobsRepository = new JobsRepository(prisma);
 const createdRows = new CreatedRows();
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();

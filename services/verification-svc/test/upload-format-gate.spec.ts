@@ -1,12 +1,19 @@
 import type { Server } from "node:http";
 import { gzipSync } from "node:zlib";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ACCEPTED_UPLOAD_ARCHIVE_SUFFIXES, uploadArchiveFormat } from "@scvs/core";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
+});
+
+afterAll(async () => {
+  await app?.close();
 });
 
 const upload = (body: Buffer, filename = "source.tar.gz") =>

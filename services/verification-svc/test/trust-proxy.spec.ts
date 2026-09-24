@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { Request } from "express";
 import type { Server } from "node:http";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AbuseControlRepository, createPrismaClient, readDbEnv } from "@scvs/db";
 import { fingerprintRequest } from "../src/common/abuse-guard.js";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 /** What `main.ts`'s `trust proxy` setting is worth, measured through the guard that depends on it. */
 const prisma = createPrismaClient(readDbEnv());
@@ -60,6 +61,7 @@ async function withinOneWindow<T>(attempt: () => Promise<T>): Promise<T> {
   }
 }
 
+let app: NestExpressApplication;
 let server: Server;
 let savedLimit: string | undefined;
 let suiteStartedAt: number;
@@ -70,13 +72,15 @@ beforeAll(async () => {
   // come back down.
   savedLimit = process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW;
   process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW = String(SUBMIT_LIMIT);
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 afterAll(async () => {
   if (savedLimit === undefined) delete process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW;
   else process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW = savedLimit;
   try {
+    await app?.close();
     // Every window this run touched, so a burst that straddled a boundary still cleans up both of its rows.
     const windows: number[] = [];
     for (let at = windowStartOf(suiteStartedAt); at <= windowStartOf(); at += WINDOW_MS) windows.push(at);

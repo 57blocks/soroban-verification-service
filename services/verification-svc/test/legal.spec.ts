@@ -4,16 +4,23 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { findWorkspaceRoot } from "@scvs/config";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 import { LegalService } from "../src/modules/legal/legal.service.js";
 import { loadLegalDocumentsSource } from "../src/modules/legal/legal.source.js";
 
 const examplePath = join(findWorkspaceRoot() as string, "config/legal-documents.example.json");
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
+});
+
+afterAll(async () => {
+  await app?.close();
 });
 
 /** A `LegalService` with no database behind it — every case here is about loading, not about TA-5. */

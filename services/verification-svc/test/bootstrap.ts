@@ -1,11 +1,10 @@
-import type { Server } from "node:http";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { bootstrap } from "../src/main.js";
 
 /**
- * Boots the real Nest `AppModule` (same one main.ts uses in production) without binding a port, and hands back
- * the underlying HTTP server for supertest.
+ * Boots the real Nest `AppModule` (same one main.ts uses in production) without binding a port. A suite closes it
+ * in `afterAll`, before deleting its rows: closing stops the interval sweeps and waits out the one running.
  */
-export async function createTestServer(): Promise<Server> {
-  const app = await bootstrap();
-  return app.getHttpServer();
+export function createTestApp(): Promise<NestExpressApplication> {
+  return bootstrap();
 }

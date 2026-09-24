@@ -1,10 +1,11 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 import { hashBuildLogToken, mintBuildLogToken } from "@scvs/core";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 /**
  * The response ladder of build-log-access design.md BL-1, and the two properties that make it worth having:
@@ -26,13 +27,16 @@ const LOG_KEY = "build-logs/fixture-rebuild/build.log";
  */
 const UNREADABLE_KEY = "staging/uploads/not-a-build-log.txt";
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();

@@ -1,14 +1,21 @@
 import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { parseDto, submissionStatuses } from "@scvs/core";
 import { ApiErrorResponse } from "@scvs/http";
 import { SubmitIncompleteResponse, SubmitQueuedResponse } from "../src/modules/verifications/submit.dto.js";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
+});
+
+afterAll(async () => {
+  await app?.close();
 });
 
 // Every arm below reaches the envelope by a different route: a controller `res.json()`, a thrown `ApiError`,
