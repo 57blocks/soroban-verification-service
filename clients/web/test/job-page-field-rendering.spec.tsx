@@ -254,6 +254,22 @@ describe("both published documents are offered", () => {
     );
     expect(container.textContent).not.toMatch(/Rebuilt Wasm hash/);
   });
+
+  test("a mismatch shows the rebuilt hash, full width", () => {
+    const rebuilt = "0f3a5c7e9b1d2f4a6c8e0b2d4f6a8c0e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a";
+    const mismatch = {
+      ...VERIFIED_RESULT,
+      status_summary: "mismatch",
+      rebuilt_wasm_hash: rebuilt,
+      matched: false,
+      sandbox_diagnostics: { ...DIAGNOSTICS, rebuilt_wasm_hash: rebuilt },
+    };
+    render(<ResultPanel state="mismatch" result={mismatch} />);
+
+    expect(resultSummaryEntries(mismatch).map(([key]) => key)).toEqual(["rebuilt_wasm_hash", "matched"]);
+    expect(screen.getByText("Rebuilt Wasm hash")).toBeInTheDocument();
+    expect(screen.getByText(rebuilt).parentElement).toHaveClass("md:col-span-2");
+  });
 });
 
 /**

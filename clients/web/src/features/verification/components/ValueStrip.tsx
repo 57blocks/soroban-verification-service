@@ -10,6 +10,7 @@ type ValueStripProps = {
   detail?: ReactNode;
   /** Comparison strips colour the value by verdict — and nothing else here does. */
   valueClassName?: string;
+  className?: string;
 };
 
 /**
@@ -22,8 +23,9 @@ export const ValueStrip = ({
   value,
   detail,
   valueClassName,
+  className,
 }: ValueStripProps) => (
-  <div className="min-w-0">
+  <div className={cn("min-w-0", className)}>
     <MonoLabel>{label}</MonoLabel>
     <MonoChip className={cn("mt-1.5 text-[12px] text-ink", valueClassName)}>
       {value}
