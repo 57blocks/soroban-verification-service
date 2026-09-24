@@ -191,6 +191,8 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
               key={key}
               label={resultLabel(key)}
               value={formatValue(value)}
+              // A 64-character digest must not wrap mid-digest in a half-width column.
+              {...(key === "rebuilt_wasm_hash" ? { className: "md:col-span-2" } : {})}
             />
           ))}
         </div>

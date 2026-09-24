@@ -118,10 +118,12 @@ export const getRecentJobTone = (status: RecentJob["status"]): ResultTone => {
  */
 export const resultSummaryEntries = (result?: Record<string, unknown>) => {
   if (!result) return [];
-  const keys = ["matched", "arweave_tx_id"];
+  const keys = ["rebuilt_wasm_hash", "matched", "arweave_tx_id"];
   return keys
     .filter((key) => {
       const value = result[key];
+      // Only a mismatch shows the rebuilt hash: there it is the one value the verdict cannot state.
+      if (key === "rebuilt_wasm_hash" && result.matched !== false) return false;
       if (
         key === "matched" &&
         value === true &&

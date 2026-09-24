@@ -88,7 +88,8 @@ matters most, and it never fails the job — the suite step already reported the
 variable locally and run the renderer with no arguments to print the same Markdown to stdout.
 
 `test:auto` runs every functional `AUTO` E2E case whose fixture is already provisioned, plus
-Playwright's `BROWSER` cases. `E2E-UPG-01/normal_upgrade_lifecycle` is the exception: its fresh
+Playwright's `BROWSER` cases. The browser leg runs whether or not the Jest leg passed, and the
+command fails if either leg does; the `slow` scope runs no browser leg. `E2E-UPG-01/normal_upgrade_lifecycle` is the exception: its fresh
 address and signer are deliberately supplied only by its explicitly selected provisioner, so CI
 runs it as a separate targeted Jest step after `test:auto`. The two Docker-hosted Locust workloads are
 `test:perf:locust` for PERF-01 closed-loop traffic and
