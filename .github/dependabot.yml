@@ -11,9 +11,14 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(actions)"
+    # GitHub's default made explicit: a release is not proposed until it is 3 days old.
+    cooldown:
+      default-days: 3
     groups:
+      # Majors stay out, so each one arrives as its own pull request.
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The lockfile is fully registry.npmjs.org, so these resolve for anyone — including a fork.
   - package-ecosystem: npm
@@ -24,6 +29,12 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "chore(deps)"
+    # Every pull request here rewrites the one pnpm-lock.yaml, so each lockfile merge would rebase and re-run CI
+    # on all of them. Ask with `@dependabot rebase` just before merging instead.
+    rebase-strategy: disabled
+    # A hand-written bump bypasses this: keep its floors at releases at least 3 days old too.
+    cooldown:
+      default-days: 3
     groups:
       # Packages that peer on each other's exact major, so one moved alone breaks the build. A dependency
       # joins the first group it matches, so these sit above the risk classes below.
@@ -56,7 +67,14 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(docker)"
+    # A floating tag's age is its last push, so a re-pushed maintained line can wait a week; the nginx
+    # ignore below is what stops the wait from picking a dead line instead.
+    cooldown:
+      default-days: 3
     ignore:
+      # nginx's even minors are stable and its odd minors are mainline; we stay on stable.
+      - dependency-name: nginx
+        versions: ["~> 1.31.0", "~> 1.33.0", "~> 1.35.0"]
       # We track Node's LTS line, and a major bump leaves it: 24 is Active LTS until 2026-10-20,
       # while 26 released 2026-05-05 and is Current — it does not become LTS until **2026-10-28**.
       #

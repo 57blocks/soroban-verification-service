@@ -13,8 +13,9 @@ import { renderSpaRoutesConf } from "../clients/web/spa-routes.ts";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-/** The base `docker/web.Dockerfile` builds on, so this tests the config on the runtime that serves it. */
-const IMAGE = "nginx:1.27-alpine";
+/** Read from `docker/web.Dockerfile`, so this tests the config on the runtime that serves it. */
+const IMAGE = readFileSync(join(repoRoot, "docker/web.Dockerfile"), "utf8").match(/^FROM (nginx:\S+)$/m)?.[1];
+if (!IMAGE) throw new Error("docker/web.Dockerfile has no `FROM nginx:<tag>` line to test against");
 
 /** Recognisable enough that a body assertion cannot pass on nginx's own error page. */
 const SHELL_MARKER = "<title>scvs-host-routing-probe</title>";

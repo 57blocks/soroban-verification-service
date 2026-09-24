@@ -49,7 +49,7 @@ RUN stamp=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/w
       exit 1; \
     fi
 
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
 COPY docker/web-nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/clients/web/dist /usr/share/nginx/html
 
