@@ -20,7 +20,7 @@
     "@nestjs/swagger": "^11.4.7",
     "@scvs/core": "workspace:*",
     "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.4",
+    "class-validator": "^0.15.1",
     "class-validator-jsonschema": "^5.1.0",
     "reflect-metadata": "^0.2.2"
   },
