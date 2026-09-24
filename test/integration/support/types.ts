@@ -91,7 +91,7 @@ export interface JobStatusBody {
   result?: VerificationResultSummary;
   error?: string;
   progress?: { step: string; detail?: string };
-  /** Present only on the final frame of a connection that hit `SCVS_JOB_STREAM_WINDOW_MS`. */
+  /** Present only on the final frame of a response the server ended for the client to reconnect. */
   stream_timeout?: boolean;
 }
 

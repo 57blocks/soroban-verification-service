@@ -347,6 +347,7 @@ export class JobsService {
       let safetyInterval: ReturnType<typeof setInterval> | undefined;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       let released = false;
+      let lastBody: JobStatusBody | undefined;
 
       const cleanup = () => {
         closed = true;
@@ -370,6 +371,7 @@ export class JobsService {
           cleanup();
           return true;
         }
+        lastBody = body;
         subscriber.next({ data: body });
         if (TERMINAL_STATUSES.has(body.status)) {
           this.logger.log("stream closing on terminal status", {
@@ -424,11 +426,25 @@ export class JobsService {
         cleanup();
       };
 
+      // Ends the response the way an elapsed window does, so the client reconnects instead of seeing an error.
+      const onReadFailed = (error: unknown) => {
+        if (closed) return;
+        this.logger.error("stream read failed, ending the response for the client to reconnect", {
+          job_id: jobId,
+          error: error instanceof Error ? error : String(error),
+        });
+        // Until a first body is out, the setup read owns the stream and settles it either way.
+        if (!lastBody) return;
+        subscriber.next({ data: { ...lastBody, stream_timeout: true } });
+        subscriber.complete();
+        cleanup();
+      };
+
       void (async () => {
         // Subscribe to NOTIFY *before* the first fetch: a status change landing between "we checked" and "we
         // started listening" would otherwise be silently missed.
         const unsubscribe = await this.jobEvents.subscribeToJobUpdates((notifiedJobId) => {
-          if (notifiedJobId === jobId) void emitCurrent();
+          if (notifiedJobId === jobId) void emitCurrent().catch(onReadFailed);
         });
         if (closed) {
           unsubscribe();
@@ -437,11 +453,12 @@ export class JobsService {
         unsubscribeNotify = unsubscribe;
 
         const done = await emitCurrent();
-        if (done) return;
+        // The client can disconnect during the first read, after cleanup() had nothing to clear.
+        if (done || closed) return;
 
         this.logger.log("stream open, waiting for status changes", { job_id: jobId });
-        safetyInterval = setInterval(() => void emitCurrent(), safetyPollMs);
-        timeout = setTimeout(() => void onWindowExpired(), streamWindowMs);
+        safetyInterval = setInterval(() => void emitCurrent().catch(onReadFailed), safetyPollMs);
+        timeout = setTimeout(() => void onWindowExpired().catch(onReadFailed), streamWindowMs);
       })().catch((error) => {
         if (closed) return;
         this.logger.error("stream setup failed", { job_id: jobId, error: error instanceof Error ? error : String(error) });

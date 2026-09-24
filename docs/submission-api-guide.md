@@ -97,6 +97,10 @@ copy of the job's state on every event, never patch it incrementally — there i
 "what changed" event type to consume instead. One event per status transition; the stream ends once the
 job reaches a terminal state.
 
+A stream can also end on a non-terminal event carrying `stream_timeout: true`: the connection window
+elapsed, or the server could not read the job. Reconnect to keep following it; a browser `EventSource`
+does this on its own.
+
 Use this instead of polling whenever your integration can hold an open connection — it's strictly less
 work for both sides than a polling loop tight enough to feel responsive.
 
