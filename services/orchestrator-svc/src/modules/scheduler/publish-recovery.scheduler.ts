@@ -1,7 +1,7 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { PublishService } from "../publish/index.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
@@ -14,8 +14,9 @@ const LOGGED_ID_LIMIT = 20;
 const PUBLISH_STALE_MS = Number(process.env.SCVS_PUBLISH_STALE_MS || 600_000);
 
 @Injectable()
-export class PublishRecoveryScheduler implements OnModuleInit {
+export class PublishRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("publish-recovery");
+  private readonly detached = new DetachedWork(this.logger);
 
   constructor(
     @Inject(StartupRecoveryService) private readonly startupRecovery: StartupRecoveryService,
@@ -31,8 +32,13 @@ export class PublishRecoveryScheduler implements OnModuleInit {
       "publish-recovery",
       this.configService.get("publishRecoveryIntervalMs", { infer: true }),
       () => this.recoverStuckPublishes(),
+      this.detached,
     );
-    void this.recoverStuckPublishes();
+    this.detached.start(() => this.recoverStuckPublishes());
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async recoverStuckPublishes(): Promise<void> {
@@ -61,12 +67,14 @@ export class PublishRecoveryScheduler implements OnModuleInit {
         if (job.publishAttempts >= maxAttempts) continue;
         // No in-process `Set` guarding this loop any more: `publishJobResult` claims `publish_pending ->
         // publishing` itself, so two replicas scanning in the same second produce exactly one publish.
-        void this.publish.publishJobResult(job.jobId).catch((error) => {
-          this.logger.error("recovery failed to publish job", {
-            job_id: job.jobId,
-            error: error instanceof Error ? error : String(error),
-          });
-        });
+        this.detached.start(() =>
+          this.publish.publishJobResult(job.jobId).catch((error) => {
+            this.logger.error("recovery failed to publish job", {
+              job_id: job.jobId,
+              error: error instanceof Error ? error : String(error),
+            });
+          }),
+        );
       }
     } catch (error) {
       this.logger.error("publish-recovery scan failed", {

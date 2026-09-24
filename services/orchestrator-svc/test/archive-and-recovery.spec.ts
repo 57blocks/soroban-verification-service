@@ -82,31 +82,16 @@ beforeAll(async () => {
 
 // A suite removes what it created, and only what it created.
 afterAll(async () => {
-  // Locally that is invisible.
-  if (scheduler) await waitForScanIdle();
-
   // `prisma` is unset when `beforeAll` threw; cleaning up then would bury the real error under a TypeError.
   try {
+    // Scan retries and scheduled archives write to the rows cleanup deletes, so they finish first.
+    if (scheduler) await scheduler.onModuleDestroy();
+    if (arweaveArchive) await arweaveArchive.onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
     if (moduleRef) await moduleRef.close();
   }
 });
-
-/** Blocks until no `retryPendingArchive` dispatched by a scan tick is still running. */
-async function waitForScanIdle(): Promise<void> {
-  const inFlight = (scheduler as unknown as { retryingJobIds: Set<string> }).retryingJobIds;
-  const deadline = Date.now() + 10_000;
-  while (inFlight.size > 0) {
-    if (Date.now() > deadline) {
-      throw new Error(
-        `archive retries still in flight at teardown after 10s: ${[...inFlight].join(", ")}. ` +
-          "Their prisma writes would land after Jest tears the environment down.",
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-}
 
 /**
  * Polls until `condition` holds. `scheduleArweaveBackfill` and `recoverPendingArchives` both dispatch the

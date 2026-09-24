@@ -43,6 +43,9 @@ class HoldingPipeline {
     this.pending.get(jobId)?.();
     this.pending.delete(jobId);
   }
+  releaseAll(): void {
+    for (const jobId of [...this.pending.keys()]) this.release(jobId);
+  }
 }
 
 /** `StartupRecoveryService`'s real onModuleInit would reach for AWS Batch; it is not under test. */
@@ -53,9 +56,8 @@ class NoopStartupRecovery {
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
 
 /**
- * Lets the fire-and-forget dispatch in `pollOnce` settle. The loop starts a job with `void
- * runWithLogContext(...)` and frees its concurrency slot in a `.finally`, so the slot is only observably free
- * one macrotask later.
+ * Lets the fire-and-forget dispatch in `pollOnce` settle. The loop starts a job without awaiting it and frees
+ * its concurrency slot in a `.finally`, so the slot is only observably free one macrotask later.
  */
 function flushDispatch(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
@@ -67,6 +69,7 @@ function flushDispatch(): Promise<void> {
  */
 async function buildSchedulerHarness(pipeline: {
   run: VerificationPipelineService["run"];
+  releaseAll?: () => void;
 }): Promise<{
   jobs: JobsRepository;
   scheduler: BuildDispatchScheduler;
@@ -145,6 +148,8 @@ async function buildSchedulerHarness(pipeline: {
     try {
       await createdRows.cleanup(prisma);
     } finally {
+      // Closing waits for every dispatched step, so a case that failed before releasing its jobs must not hang it.
+      pipeline.releaseAll?.();
       await moduleRef.close();
     }
   }

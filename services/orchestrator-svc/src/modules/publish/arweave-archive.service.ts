@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Uploader } from "@irys/upload";
 import { Ethereum } from "@irys/upload-ethereum";
@@ -21,7 +21,7 @@ import {
   type WasmStatusWriteResult,
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
-import { IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
+import { DetachedWork, IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -74,9 +74,10 @@ const SOURCE_CONTENT_TYPES: Record<string, string> = {
 };
 
 @Injectable()
-export class ArweaveArchiveService {
+export class ArweaveArchiveService implements OnModuleDestroy {
   private readonly logger = new ScvsLogger("arweave-archive");
   private readonly metrics = new ScvsMetrics("arweave-archive", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
   private uploaderPromise: Promise<IrysUploader> | undefined;
 
   constructor(
@@ -87,6 +88,11 @@ export class ArweaveArchiveService {
     @Inject(ReportArchiveUploadsRepository)
     private readonly reportArchiveUploads: ReportArchiveUploadsRepository,
   ) {}
+
+  /** Waits for scheduled archives. One refused from here on keeps its pending-since flag for the recovery scan. */
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
+  }
 
   /**
    * Lazily builds and caches the Irys uploader for this process's lifetime — constructing one calls out to
@@ -242,15 +248,17 @@ export class ArweaveArchiveService {
     reportBytes: string;
     verifierId: string;
   }): void {
-    void this.backfill(params).catch((error) => {
-      // Not the only trace this attempt failed: `archive_pending_since` (set durably by `publish.service.ts`
-      // before this was ever scheduled) already survives past this log line, and `ArchiveRecoveryScheduler`
-      // retries from it.
-      this.logger.error("arweave backfill failed", {
-        report_sha256: params.reportSha256,
-        error: error instanceof Error ? error : String(error),
-      });
-    });
+    this.detached.start(() =>
+      this.backfill(params).catch((error) => {
+        // Not the only trace this attempt failed: `archive_pending_since` (set durably by `publish.service.ts`
+        // before this was ever scheduled) already survives past this log line, and `ArchiveRecoveryScheduler`
+        // retries from it.
+        this.logger.error("arweave backfill failed", {
+          report_sha256: params.reportSha256,
+          error: error instanceof Error ? error : String(error),
+        });
+      }),
+    );
   }
 
   /** The reconciliation scan's entry point (`ArchiveRecoveryScheduler`). */
@@ -425,12 +433,14 @@ export class ArweaveArchiveService {
     sourceExtension: string;
     verifierId: string;
   }): void {
-    void this.sourceBackfill(params).catch((error) => {
-      this.logger.error("arweave source backfill failed", {
-        source_sha256: params.sourceSha256,
-        error: error instanceof Error ? error : String(error),
-      });
-    });
+    this.detached.start(() =>
+      this.sourceBackfill(params).catch((error) => {
+        this.logger.error("arweave source backfill failed", {
+          source_sha256: params.sourceSha256,
+          error: error instanceof Error ? error : String(error),
+        });
+      }),
+    );
   }
 
   /** The source-archive reconciliation scan's entry point (`SourceArchiveRecoveryScheduler`). */

@@ -1,8 +1,8 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { createS3Client, deleteObject } from "@scvs/aws";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -13,9 +13,10 @@ import type { AppConfigService } from "../../config/configuration.js";
  * row, so a sweep that is late or wedged cannot extend the promise. This is what removes the bytes.
  */
 @Injectable()
-export class BuildLogExpiryScheduler implements OnModuleInit {
+export class BuildLogExpiryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("build-log-expiry");
   private readonly metrics = new ScvsMetrics("build-log-expiry", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
 
   constructor(
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
@@ -29,7 +30,12 @@ export class BuildLogExpiryScheduler implements OnModuleInit {
       "build-log-expiry",
       this.configService.get("buildLogSweepIntervalMs", { infer: true }),
       () => this.sweep(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async sweep(now = Date.now()): Promise<number> {

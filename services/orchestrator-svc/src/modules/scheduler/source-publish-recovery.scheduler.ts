@@ -1,15 +1,16 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { PublishService } from "../publish/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 @Injectable()
-export class SourcePublishRecoveryScheduler implements OnModuleInit {
+export class SourcePublishRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("source-publish-recovery");
   private readonly metrics = new ScvsMetrics("source-publish-recovery", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
   // Same-process, in-flight guard as `ArchiveRecoveryScheduler`'s `retryingJobIds`.
   private readonly retryingJobIds = new Set<string>();
 
@@ -26,8 +27,13 @@ export class SourcePublishRecoveryScheduler implements OnModuleInit {
       "source-publish-recovery",
       this.configService.get("publishRecoveryIntervalMs", { infer: true }),
       () => this.recoverPendingSourcePublishes(),
+      this.detached,
     );
-    void this.recoverPendingSourcePublishes();
+    this.detached.start(() => this.recoverPendingSourcePublishes());
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   /**
@@ -43,17 +49,19 @@ export class SourcePublishRecoveryScheduler implements OnModuleInit {
       for (const job of pending) {
         if (this.retryingJobIds.has(job.jobId)) continue;
         this.retryingJobIds.add(job.jobId);
-        void this.publish
-          .retryPendingSourcePublish(job)
-          .catch((error) => {
-            this.logger.error("source-publish recovery: failed to retry job", {
-              job_id: job.jobId,
-              error: error instanceof Error ? error : String(error),
-            });
-          })
-          .finally(() => {
-            this.retryingJobIds.delete(job.jobId);
-          });
+        this.detached.start(() =>
+          this.publish
+            .retryPendingSourcePublish(job)
+            .catch((error) => {
+              this.logger.error("source-publish recovery: failed to retry job", {
+                job_id: job.jobId,
+                error: error instanceof Error ? error : String(error),
+              });
+            })
+            .finally(() => {
+              this.retryingJobIds.delete(job.jobId);
+            }),
+        );
       }
     } catch (error) {
       this.logger.error("source-publish-recovery scan failed", {

@@ -1,15 +1,16 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 import { ArweaveArchiveService } from "../publish/index.js";
 
 @Injectable()
-export class SourceArchiveRecoveryScheduler implements OnModuleInit {
+export class SourceArchiveRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("source-archive-recovery");
   private readonly metrics = new ScvsMetrics("source-archive-recovery", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
   // Same-process, in-flight guard as `ArchiveRecoveryScheduler`'s `retryingJobIds`.
   private readonly retryingJobIds = new Set<string>();
 
@@ -26,6 +27,7 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit {
       "source-archive-recovery",
       this.configService.get("archiveRecoveryIntervalMs", { infer: true }),
       () => this.recoverPendingSourceArchives(),
+      this.detached,
     );
     const config = this.configService.get("arweave", { infer: true });
     if (config.sourceArchiveEnabled && config.mode === "disabled") {
@@ -34,7 +36,11 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit {
           "pending and be retried here indefinitely, since the upload itself can never succeed",
       );
     }
-    void this.recoverPendingSourceArchives();
+    this.detached.start(() => this.recoverPendingSourceArchives());
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async recoverPendingSourceArchives(): Promise<void> {
@@ -50,17 +56,19 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit {
       for (const job of pending) {
         if (this.retryingJobIds.has(job.jobId)) continue;
         this.retryingJobIds.add(job.jobId);
-        void this.arweaveArchive
-          .retryPendingSourceArchive(job)
-          .catch((error) => {
-            this.logger.error("source-archive recovery: failed to retry job", {
-              job_id: job.jobId,
-              error: error instanceof Error ? error : String(error),
-            });
-          })
-          .finally(() => {
-            this.retryingJobIds.delete(job.jobId);
-          });
+        this.detached.start(() =>
+          this.arweaveArchive
+            .retryPendingSourceArchive(job)
+            .catch((error) => {
+              this.logger.error("source-archive recovery: failed to retry job", {
+                job_id: job.jobId,
+                error: error instanceof Error ? error : String(error),
+              });
+            })
+            .finally(() => {
+              this.retryingJobIds.delete(job.jobId);
+            }),
+        );
       }
     } catch (error) {
       this.logger.error("source-archive-recovery scan failed", {

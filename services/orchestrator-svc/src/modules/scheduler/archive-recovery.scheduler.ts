@@ -1,15 +1,16 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { ArweaveArchiveService } from "../publish/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 @Injectable()
-export class ArchiveRecoveryScheduler implements OnModuleInit {
+export class ArchiveRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("archive-recovery");
   private readonly metrics = new ScvsMetrics("archive-recovery", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
   private readonly retryingJobIds = new Set<string>();
 
   constructor(
@@ -25,8 +26,13 @@ export class ArchiveRecoveryScheduler implements OnModuleInit {
       "archive-recovery",
       this.configService.get("archiveRecoveryIntervalMs", { infer: true }),
       () => this.recoverPendingArchives(),
+      this.detached,
     );
-    void this.recoverPendingArchives();
+    this.detached.start(() => this.recoverPendingArchives());
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   /**
@@ -40,17 +46,19 @@ export class ArchiveRecoveryScheduler implements OnModuleInit {
       for (const job of pending) {
         if (this.retryingJobIds.has(job.jobId)) continue;
         this.retryingJobIds.add(job.jobId);
-        void this.arweaveArchive
-          .retryPendingArchive(job)
-          .catch((error) => {
-            this.logger.error("archive recovery: failed to retry job", {
-              job_id: job.jobId,
-              error: error instanceof Error ? error : String(error),
-            });
-          })
-          .finally(() => {
-            this.retryingJobIds.delete(job.jobId);
-          });
+        this.detached.start(() =>
+          this.arweaveArchive
+            .retryPendingArchive(job)
+            .catch((error) => {
+              this.logger.error("archive recovery: failed to retry job", {
+                job_id: job.jobId,
+                error: error instanceof Error ? error : String(error),
+              });
+            })
+            .finally(() => {
+              this.retryingJobIds.delete(job.jobId);
+            }),
+        );
       }
     } catch (error) {
       this.logger.error("archive-recovery scan failed", {

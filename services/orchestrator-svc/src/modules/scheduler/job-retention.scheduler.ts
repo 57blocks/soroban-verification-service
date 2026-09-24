@@ -1,8 +1,8 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { createS3Client, deleteObject } from "@scvs/aws";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -12,9 +12,10 @@ import type { AppConfigService } from "../../config/configuration.js";
  * consumer's incremental sync reads through `listPublished`.
  */
 @Injectable()
-export class JobRetentionScheduler implements OnModuleInit {
+export class JobRetentionScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("job-retention");
   private readonly metrics = new ScvsMetrics("job-retention", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
 
   constructor(
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
@@ -28,7 +29,12 @@ export class JobRetentionScheduler implements OnModuleInit {
       "job-retention",
       this.configService.get("jobRetentionSweepIntervalMs", { infer: true }),
       () => this.sweep(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async sweep(now = Date.now()): Promise<number> {

@@ -1,15 +1,16 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import { ArweaveArchiveService } from "../publish/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 @Injectable()
-export class StatusLinkRecoveryScheduler implements OnModuleInit {
+export class StatusLinkRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("status-link-recovery");
   private readonly metrics = new ScvsMetrics("status-link-recovery", { logger: this.logger });
+  private readonly detached = new DetachedWork(this.logger);
   // Same-process, in-flight guard as the sibling recovery schedulers'.
   private readonly retryingJobIds = new Set<string>();
 
@@ -26,8 +27,13 @@ export class StatusLinkRecoveryScheduler implements OnModuleInit {
       "status-link-recovery",
       this.configService.get("statusLinkRecoveryIntervalMs", { infer: true }),
       () => this.recoverPendingStatusLinks(),
+      this.detached,
     );
-    void this.recoverPendingStatusLinks();
+    this.detached.start(() => this.recoverPendingStatusLinks());
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async recoverPendingStatusLinks(): Promise<void> {
@@ -56,17 +62,19 @@ export class StatusLinkRecoveryScheduler implements OnModuleInit {
       for (const job of pending) {
         if (this.retryingJobIds.has(job.jobId)) continue;
         this.retryingJobIds.add(job.jobId);
-        void this.arweaveArchive
-          .retryPendingStatusLinks(job)
-          .catch((error) => {
-            this.logger.error("status-link recovery: failed to retry job", {
-              job_id: job.jobId,
-              error: error instanceof Error ? error : String(error),
-            });
-          })
-          .finally(() => {
-            this.retryingJobIds.delete(job.jobId);
-          });
+        this.detached.start(() =>
+          this.arweaveArchive
+            .retryPendingStatusLinks(job)
+            .catch((error) => {
+              this.logger.error("status-link recovery: failed to retry job", {
+                job_id: job.jobId,
+                error: error instanceof Error ? error : String(error),
+              });
+            })
+            .finally(() => {
+              this.retryingJobIds.delete(job.jobId);
+            }),
+        );
       }
     } catch (error) {
       this.logger.error("status-link recovery tick failed", {

@@ -1,7 +1,7 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { DrainState, RETRY_ELIGIBILITY_WINDOW_MS, ScvsLogger, startInterval } from "@scvs/core";
+import { DetachedWork, DrainState, RETRY_ELIGIBILITY_WINDOW_MS, ScvsLogger, startInterval } from "@scvs/core";
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -17,8 +17,9 @@ const LOGGED_ID_LIMIT = 20;
  * resubmit.
  */
 @Injectable()
-export class JobRetryScheduler implements OnModuleInit {
+export class JobRetryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("job-retry");
+  private readonly detached = new DetachedWork(this.logger);
 
   constructor(
     @Inject(DrainState) private readonly drain: DrainState,
@@ -33,7 +34,12 @@ export class JobRetryScheduler implements OnModuleInit {
       "job-retry",
       this.configService.get("jobRetryIntervalMs", { infer: true }),
       () => this.requeueRetryable(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async requeueRetryable(): Promise<void> {

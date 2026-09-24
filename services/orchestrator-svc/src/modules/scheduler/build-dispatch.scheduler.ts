@@ -1,7 +1,7 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { DrainState, ScvsLogger, ScvsMetrics, runWithLogContext, startInterval, type Network } from "@scvs/core";
+import { DetachedWork, DrainState, ScvsLogger, ScvsMetrics, runWithLogContext, startInterval, type Network } from "@scvs/core";
 import { JobsRepository, type JobRecord } from "@scvs/db";
 import { WorkerTickState } from "../../common/worker-tick.module.js";
 import { VerificationPipelineService } from "../verification-pipeline/index.js";
@@ -10,11 +10,12 @@ import type { AppConfigService } from "../../config/configuration.js";
 
 /** Replaces main.ts's old `setInterval` poll loop with one `@nestjs/schedule` owns. */
 @Injectable()
-export class BuildDispatchScheduler implements OnModuleInit {
+export class BuildDispatchScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("build-dispatch");
   private readonly metrics = new ScvsMetrics("build-dispatch", {
     logger: this.logger,
   });
+  private readonly detached = new DetachedWork(this.logger);
   private readonly runningJobIds = new Map<string, Network>();
   private polling = false;
   /** Where the next tick starts its slice of `pending` — see `rotateForFairness`. */
@@ -40,11 +41,16 @@ export class BuildDispatchScheduler implements OnModuleInit {
   // pollOnce()` right after `main()`'s startup logging.
   onModuleInit(): void {
     const intervalMs = this.configService.get("workerPollIntervalMs", { infer: true });
-    startInterval(this.schedule, "build-dispatch", intervalMs, () => this.pollOnce());
+    startInterval(this.schedule, "build-dispatch", intervalMs, () => this.pollOnce(), this.detached);
     this.logger.log("polling @scvs/db for queued jobs", {
       interval_ms: intervalMs,
     });
-    void this.pollOnce();
+    this.detached.start(() => this.pollOnce());
+  }
+
+  // In-flight pipeline steps finish; a job refused here is still in its status and the next process claims it.
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async pollOnce(): Promise<void> {
@@ -117,10 +123,12 @@ export class BuildDispatchScheduler implements OnModuleInit {
         }
         this.runningJobIds.set(job.jobId, job.target.network);
         // Entering the scope here — once, around the whole step.
-        void runWithLogContext({ job_id: job.jobId }, () =>
-          this.pipeline.run(job).finally(() => {
-            this.runningJobIds.delete(job.jobId);
-          })
+        this.detached.start(() =>
+          runWithLogContext({ job_id: job.jobId }, () =>
+            this.pipeline.run(job).finally(() => {
+              this.runningJobIds.delete(job.jobId);
+            })
+          )
         );
       }
     } catch (error) {
