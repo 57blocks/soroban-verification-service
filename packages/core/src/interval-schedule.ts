@@ -1,4 +1,4 @@
-import { DetachedWork } from "./detached-work.js";
+import type { DetachedWork } from "./detached-work.js";
 import { ScvsLogger } from "./logging.js";
 
 /**
@@ -17,14 +17,15 @@ export type IntervalRegistry = {
 
 /**
  * Registers `tick` to run every `everyMs`. The registry owns the handle, so Nest clears it on shutdown the
- * same way it clears a decorated one. Ticks run through `work`, so draining it stops them and awaits the last.
+ * same way it clears a decorated one. Ticks run through `work`, so the owner's shutdown drains it to stop them
+ * and await the last.
  */
 export function startInterval(
   registry: IntervalRegistry,
   name: string,
   everyMs: number,
   tick: () => unknown,
-  work: DetachedWork = new DetachedWork(new ScvsLogger(name)),
+  work: DetachedWork,
 ): void {
   // `Number(process.env.X || default)` answered `NaN` for a non-numeric value, and an interval of `NaN` fires
   // on every tick of the event loop. Failing at startup is the only honest answer.

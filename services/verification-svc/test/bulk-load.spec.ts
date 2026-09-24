@@ -1,9 +1,10 @@
 import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 // Same pattern as jobs.spec.ts: this route does nothing but a keyset read over `jobs`, so it is exercised
 // against the real local Postgres rather than a mocked JobsRepository.
@@ -15,13 +16,16 @@ const createdRows = new CreatedRows();
 // not: null }` in `listPublished` never picks up unrelated jobs sharing this process's Postgres.
 const HASHES = ["1", "2"].map((prefix) => prefix.repeat(64));
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();

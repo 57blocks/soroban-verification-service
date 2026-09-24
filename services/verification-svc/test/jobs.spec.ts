@@ -1,23 +1,27 @@
 import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
 const prisma = createPrismaClient(readDbEnv());
 const jobsRepository = new JobsRepository(prisma);
 const createdRows = new CreatedRows();
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
 });
 
 // This fixture pins a fixed contract_id, so a leaked `queued` row would sit in the dedup path of every later
 // submission naming that contract.
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();

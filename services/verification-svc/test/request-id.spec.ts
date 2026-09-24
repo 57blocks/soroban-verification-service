@@ -1,11 +1,18 @@
 import type { Server } from "node:http";
 import request from "supertest";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { sanitizeRequestId } from "../src/common/request-id.middleware.js";
-import { createTestServer } from "./bootstrap.js";
+import { createTestApp } from "./bootstrap.js";
 
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
+});
+
+afterAll(async () => {
+  await app?.close();
 });
 
 /** O2's pre-job leg. `job_id` covers submission → build → publication on its own. */

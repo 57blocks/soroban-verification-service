@@ -1,14 +1,15 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, startInterval } from "@scvs/core";
 import { AbuseControlRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
 /** Keeps `abuse_control` inside its retention window (retention-and-pseudonymisation design.md RP-2). */
 @Injectable()
-export class AbuseControlSweepScheduler implements OnModuleInit {
+export class AbuseControlSweepScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("abuse-control-sweep");
+  private readonly detached = new DetachedWork(this.logger);
 
   // Explicit `@Inject()` — see preflight.controller.ts's comment.
   constructor(
@@ -23,7 +24,12 @@ export class AbuseControlSweepScheduler implements OnModuleInit {
       "abuse-control-sweep",
       this.configService.get("abuseSweepIntervalMs", { infer: true }),
       () => this.handleSweep(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async handleSweep(): Promise<void> {

@@ -1,14 +1,15 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
-import { ScvsLogger, startInterval } from "@scvs/core";
+import { DetachedWork, ScvsLogger, startInterval } from "@scvs/core";
 import { UploadCleanupService } from "../../common/upload-cleanup.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 /** Replaces the pre-Nest `setInterval` in server.ts with one `@nestjs/schedule` owns and clears. */
 @Injectable()
-export class UploadCleanupScheduler implements OnModuleInit {
+export class UploadCleanupScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("upload-cleanup");
+  private readonly detached = new DetachedWork(this.logger);
 
   // Explicit `@Inject()` — see preflight.controller.ts's comment.
   constructor(
@@ -23,7 +24,12 @@ export class UploadCleanupScheduler implements OnModuleInit {
       "upload-cleanup",
       this.configService.get("uploadCleanupIntervalMs", { infer: true }),
       () => this.handleCleanup(),
+      this.detached,
     );
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.detached.drain();
   }
 
   async handleCleanup(): Promise<void> {

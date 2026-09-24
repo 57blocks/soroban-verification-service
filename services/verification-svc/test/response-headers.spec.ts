@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import request from "supertest";
-import { createTestServer } from "./bootstrap.js";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { createTestApp } from "./bootstrap.js";
 
 /**
  * RP-5: job and log content is not cached by intermediaries, indexed, or leaked through the referrer.
@@ -9,9 +10,15 @@ import { createTestServer } from "./bootstrap.js";
  * `Referrer-Policy` is helmet's default rather than anything this repository sets — which is exactly why it is
  * asserted here: configuring helmet for some other reason would drop it silently.
  */
+let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  server = await createTestServer();
+  app = await createTestApp();
+  server = app.getHttpServer();
+});
+
+afterAll(async () => {
+  await app?.close();
 });
 
 const JOB_ROUTE = `/api/verification/v1/verifications/${randomUUID()}`;

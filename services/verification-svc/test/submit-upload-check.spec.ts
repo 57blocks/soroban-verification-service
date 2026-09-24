@@ -11,7 +11,7 @@ import {
   readDbEnv,
 } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
-import { bootstrap } from "../src/main.js";
+import { createTestApp } from "./bootstrap.js";
 
 /**
  * Seeds `uploads` rows directly via the repository rather than going through `POST
@@ -24,15 +24,13 @@ const createdRows = new CreatedRows();
 let app: NestExpressApplication;
 let server: Server;
 beforeAll(async () => {
-  // Full `bootstrap()`, not `createTestServer()`'s http-server-only wrapper: this suite's new
-  // recordReference-failure case needs `app.get(...)` to reach the real `UploadJobReferencesRepository`
-  // instance the DI container constructed, so it can be spied on.
-  app = await bootstrap();
+  app = await createTestApp();
   server = app.getHttpServer();
 });
 
 afterAll(async () => {
   try {
+    await app?.close();
     await createdRows.cleanup(prisma);
   } finally {
     await prisma.$disconnect();
