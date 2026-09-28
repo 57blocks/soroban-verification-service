@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toneBadge, toneGlyph, toneSurface, toneText } from "../constants";
+import { toneBadge, toneBorder, toneGlyph, toneSurface, toneText } from "../constants";
 import type { BannerView, ResultTone, SubmissionState } from "../types";
 import { CopyableField } from "./CopyableField";
 import { MonoLabel } from "./MonoLabel";
@@ -26,7 +26,7 @@ export const StatusBanner = ({
   return (
     <div
       data-tone={meta.tone}
-      className={cn("rounded-lg p-4", toneSurface[meta.tone])}
+      className={cn("rounded-lg border-[1.5px] p-4", toneBorder[meta.tone], toneSurface[meta.tone])}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex-1">

@@ -101,16 +101,19 @@ const VERIFIED_RESULT = {
   sandbox_diagnostics: DIAGNOSTICS,
 };
 
-const groupsFor = (recipe: ArtifactRecipeFacts = RECIPE) =>
+const inputsFor = (recipe: ArtifactRecipeFacts = RECIPE, sourceSha256: string | null = SOURCE_SHA) =>
   rebuildProvenance({
     recipe,
     sourceUri: SOURCE_URI,
-    sourceSha256: SOURCE_SHA,
+    sourceSha256,
     diagnostics: DIAGNOSTICS,
   });
 
 const renderRebuild = (recipe: ArtifactRecipeFacts = RECIPE) =>
-  render(<RebuildCard groups={groupsFor(recipe)} />);
+  render(<RebuildCard inputs={inputsFor(recipe)} />);
+
+const keysOf = (recipe: ArtifactRecipeFacts = RECIPE) =>
+  inputsFor(recipe)?.fields.map((field) => field.key);
 
 describe("the CLI shown is the one that built the contract", () => {
   test("names the declared cliver, and never the verifier's reference pin", () => {
@@ -130,52 +133,77 @@ describe("the CLI shown is the one that built the contract", () => {
   });
 });
 
-describe("parameters are grouped by who chose them", () => {
-  test("the pair and the chain-recorded metadata are the contract's own", () => {
-    const declared = groupsFor().find((group) => group.key === "declared");
+describe("the rebuild inputs are one deduplicated list", () => {
+  const ON_CHAIN_RECIPE: ArtifactRecipeFacts = {
+    ...RECIPE,
+    recipeSource: "on_chain_metadata",
+    pair: null,
+    buildOptions: ["--locked", "--package=counter-contract", "--optimize"],
+    metadataReplay: [
+      "bldimg=docker.io/stellar/stellar-cli@sha256:a8a41b70",
+      `source_sha256=${SOURCE_SHA}`,
+      "bldopt=--optimize",
+      "home_domain=example.org",
+    ],
+  };
 
-    expect(declared?.title).toBe("Declared by the contract");
-    expect(declared?.fields.map((field) => field.key)).toEqual([
+  test("holds only the parameters a rebuild needs, in a fixed order", () => {
+    expect(keysOf()).toEqual([
+      "source_repo",
+      "source_uri",
+      "source_sha256",
       "cliver",
       "rsver",
-      "meta_source_repo",
+      "bldopt",
+      "manifest",
     ]);
-    expect(declared?.origin).toMatch(/on-chain contractmetav0/);
   });
 
-  test("the card holds only the contract's declaration and the recipe", () => {
-    expect(groupsFor().map((group) => group.key)).toEqual(["declared", "recipe"]);
+  test("a value the contract also declares appears once, tagged on-chain", () => {
+    const fields = inputsFor(ON_CHAIN_RECIPE)?.fields ?? [];
+
+    expect(fields.filter((field) => field.key === "source_sha256")).toHaveLength(1);
+    expect(fields.find((field) => field.key === "source_sha256")?.onChain).toBe(true);
+    expect(fields.find((field) => field.key === "bldimg")?.onChain).toBe(true);
+    expect(fields.map((field) => field.key)).not.toContain("meta_home_domain");
+    expect(fields.map((field) => field.value)).not.toContain("example.org");
   });
 
-  test("the source repository is a link", () => {
+  test("declared and effective build options merge without repeats", () => {
+    const bldopt = inputsFor(ON_CHAIN_RECIPE)?.fields.find((field) => field.key === "bldopt");
+
+    expect(bldopt?.value).toBe("--locked --package=counter-contract --optimize");
+    expect(bldopt?.onChain).toBe(false);
+  });
+
+  test("the source SHA-256 falls back to the contract's declaration", () => {
+    const sha = rebuildProvenance({
+      recipe: ON_CHAIN_RECIPE,
+      sourceUri: null,
+      sourceSha256: null,
+    })?.fields.find((field) => field.key === "source_sha256");
+
+    expect(sha?.value).toBe(SOURCE_SHA);
+  });
+
+  test("the source repository is a link, tagged on-chain", () => {
     renderRebuild();
 
     expect(
       screen.getByRole("link", { name: /reflector-network\/reflector-contract$/ }),
     ).toHaveAttribute("href", "https://github.com/reflector-network/reflector-contract");
+    expect(screen.getAllByText("on-chain").length).toBeGreaterThan(0);
   });
 
-  test("the recipe group's heading follows recipe_source", () => {
-    expect(groupsFor().find((group) => group.key === "recipe")?.title).toBe(
-      "Supplied with the submission",
+  test("the subtitle follows recipe_source", () => {
+    expect(inputsFor()?.origin).toMatch(/supplied with the submission/i);
+    expect(inputsFor(ON_CHAIN_RECIPE)?.origin).toMatch(/contract's own on-chain recipe/);
+    expect(inputsFor({ ...RECIPE, recipeSource: null })?.origin).toMatch(
+      /did not state where the recipe came from/,
     );
-    expect(
-      groupsFor({ ...RECIPE, recipeSource: "on_chain_metadata" }).find(
-        (group) => group.key === "recipe",
-      )?.title,
-    ).toBe("Reproduced from the contract's own recipe");
   });
 
-  test("an unstated recipe_source claims no provenance for those fields", () => {
-    const recipeGroup = groupsFor({ ...RECIPE, recipeSource: null }).find(
-      (group) => group.key === "recipe",
-    );
-
-    expect(recipeGroup?.title).toBe("Build inputs");
-    expect(recipeGroup?.origin).toMatch(/did not state where the recipe came from/);
-  });
-
-  test("a group with nothing to show is dropped, not rendered empty", () => {
+  test("nothing to show is null, not an empty card", () => {
     expect(
       rebuildProvenance({
         recipe: EMPTY_RECIPE,
@@ -183,11 +211,11 @@ describe("parameters are grouped by who chose them", () => {
         sourceSha256: null,
         diagnostics: undefined,
       }),
-    ).toEqual([]);
+    ).toBeNull();
   });
 
   test("the card renders nothing when the report carried no recipe", () => {
-    const { container } = render(<RebuildCard groups={[]} />);
+    const { container } = render(<RebuildCard inputs={null} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

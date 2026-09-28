@@ -1,11 +1,10 @@
 import { ExternalLink } from "lucide-react";
 import { SealedBox } from "@/components/sealed-box";
 import { cn } from "@/lib/utils";
-import { MonoLabel } from "./MonoLabel";
 import { ValueStrip } from "./ValueStrip";
 import type {
   ProvenanceField,
-  ProvenanceGroup,
+  RebuildInputs,
 } from "../utils/rebuild-provenance.util";
 
 const FieldValue = ({ field }: { field: ProvenanceField }) => {
@@ -28,12 +27,21 @@ const FieldValue = ({ field }: { field: ProvenanceField }) => {
   );
 };
 
+const OnChainTag = () => (
+  <span
+    title="Read from the contract's on-chain contractmetav0 — a submitter cannot choose it."
+    className="ml-2 rounded-[4px] bg-yellow-soft px-1.5 py-px normal-case tracking-normal text-ink"
+  >
+    on-chain
+  </span>
+);
+
 type RebuildCardProps = {
-  groups: ProvenanceGroup[];
+  inputs: RebuildInputs | null;
 };
 
-export const RebuildCard = ({ groups }: RebuildCardProps) => {
-  if (!groups.length) return null;
+export const RebuildCard = ({ inputs }: RebuildCardProps) => {
+  if (!inputs) return null;
 
   return (
     <section data-testid="rebuild-provenance">
@@ -42,26 +50,21 @@ export const RebuildCard = ({ groups }: RebuildCardProps) => {
           How this was rebuilt
         </h2>
         <p className="m-0 mb-5 text-[0.85rem] leading-[1.5] text-ink/[0.66]">
-          Grouped by who chose each value.
+          {inputs.origin}
         </p>
 
-        <div className="space-y-5">
-          {groups.map((group) => (
-            <div key={group.key} data-testid={`provenance-${group.key}`}>
-              <MonoLabel className="text-ink-label">{group.title}</MonoLabel>
-              <p className="m-0 mb-3 mt-1 text-[0.78rem] leading-[1.45] text-ink/[0.6]">
-                {group.origin}
-              </p>
-              <div className="grid gap-3 md:grid-cols-2">
-                {group.fields.map((field) => (
-                  <ValueStrip
-                    key={field.key}
-                    label={field.label}
-                    value={<FieldValue field={field} />}
-                  />
-                ))}
-              </div>
-            </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {inputs.fields.map((field) => (
+            <ValueStrip
+              key={field.key}
+              label={
+                <>
+                  {field.label}
+                  {field.onChain && <OnChainTag />}
+                </>
+              }
+              value={<FieldValue field={field} />}
+            />
           ))}
         </div>
       </SealedBox>
