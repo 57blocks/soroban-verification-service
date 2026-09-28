@@ -142,7 +142,7 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: localhost
-        terraform: module.rds.address
+        terraform: module.rds_verify.address
         code: packages/db/src/connection.ts::readDbEnv
         note: >-
           `.address` (hostname), **not** `.endpoint` — corrected 2026-08-21. This line said
@@ -177,7 +177,7 @@ groups:
         envs: { dev: stellar, staging: stellar }
         code: packages/db/src/connection.ts::toConnectionString (throws)
         note: >-
-          `stellar` is module.rds's actual default database. The `scvs` name used in local dev was
+          `stellar` is module.rds_verify's actual default database. The `scvs` name used in local dev was
           never created on either RDS instance.
       POSTGRES_USER:
         type: string
@@ -307,22 +307,17 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: localhost
-        terraform: module.rds-1.address
+        terraform: module.rds_query.address
         code: packages/db-query/src/index.ts (re-exports @scvs/db's readDbEnv)
         note: >-
           MUST resolve to `sv-<env>-postgres-query` (dev: `sv-dev-postgres-query`, renamed from
-          `stellar-dev-1-postgres` in the account rebuild) — NOT `module.rds.address`, which is
+          `stellar-dev-1-postgres` in the account rebuild) — NOT `module.rds_verify.address`, which is
           `postgres`'s output above.
 
-          Two corrections, 2026-08-21. **`.address`, not `.endpoint`**: `endpoint` is `host:port` and
-          `POSTGRES_PORT` is separate — same fix as the `postgres` group's own note. **And the module
-          label is `rds-1`, not `query_rds`**: this line named a module that does not exist, so it
-          could not be checked against the infrastructure at all. `rds-1` violates the infra repo's
-          own naming rules (no sequence numbers for instances; Terraform identifiers use underscores)
-          and should become `rds_query`, but renaming a module label moves state, so it is tracked
-          rather than done — this contract names what exists today. The two groups declaring the same variable name is what makes
-          pointing this at the wrong output a config typo rather than a schema error, so this is the
-          one line worth double-checking on apply.
+          **`.address`, not `.endpoint`**: `endpoint` is `host:port` and `POSTGRES_PORT` is separate —
+          same fix as the `postgres` group's own note. The two groups declaring the same variable name
+          is what makes pointing this at the wrong output a config typo rather than a schema error, so
+          this is the one line worth double-checking on apply.
 
           ✅ **In dev it resolves there, verified 2026-08-25.** The running `sv-dev-query-svc`
           revision takes this value from `/scvs/dev/query-svc/POSTGRES_HOST` (whose value names
@@ -1462,7 +1457,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        terraform: aws_sqs_queue.batch_job_state_change.url
+        terraform: module.batch.job_state_change_queue_url
         resource: scvs-<env>-batch-job-state-change # name, not the URL — it embeds the account id
         note: >-
           Without it no build result is ever consumed — jobs queue and dispatch normally and then
