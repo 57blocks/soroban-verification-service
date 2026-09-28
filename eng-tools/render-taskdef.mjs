@@ -5,9 +5,9 @@
  *   node eng-tools/render-taskdef.mjs --env dev --service query-svc \
  *     --image <digest-or-ref> [--descriptor @file] [--baseline @file] > /tmp/td.json
  *
- * ADR-025's write half. It takes the RUNNING task definition as its baseline and replaces only the
- * two things this repository owns — the container image, and every environment variable — leaving
- * everything else byte-for-byte.
+ * ADR-025's write half. It takes the family's newest ACTIVE revision as its baseline (not necessarily
+ * the running one; see `baseline` below) and replaces only the two things this repository owns — the
+ * container image, and every environment variable — leaving everything else byte-for-byte.
  *
  * **Baseline-and-replace, not render-from-scratch, and that is the load-bearing decision here.** A
  * task definition carries cpu, memory, the port mapping, the health check command, the log group, the
@@ -92,8 +92,10 @@ const family = descriptor?.task_definition_families?.[service.replaceAll("-", "_
 if (!family) die(`the ${targetEnv} descriptor names no task_definition_families entry for ${service}`);
 
 
-// The running definition, not the family's newest: the newest could be one nothing adopted, and this
-// tool's whole premise is that it edits what is actually serving traffic.
+// A bare family resolves to its newest ACTIVE revision, deliberately not the running one: Terraform
+// never moves a service onto a revision it mints (cpu, memory, a role, a renamed family's revision 1
+// and its credential secrets), so those reach tasks only as this baseline. The one other gap, a CI
+// revision whose rollout failed, is harmless: copied fields are identical between two CI revisions.
 const baseline =
   loadJson(flag("baseline"), "baseline") ??
   JSON.parse(aws(["ecs", "describe-task-definition", "--task-definition", family, "--query", "taskDefinition", "--output", "json"]));
