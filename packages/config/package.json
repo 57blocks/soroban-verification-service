@@ -23,7 +23,7 @@
     "@nestjs/common": "^12.1.0",
     "@scvs/core": "workspace:*",
     "class-validator": "^0.15.1",
-    "dotenv": "^16.6.1"
+    "dotenv": "^18.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
