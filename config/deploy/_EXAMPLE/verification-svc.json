@@ -57,7 +57,7 @@
         "fail": "first-use",
         "source": "terraform",
         "value_from_output": "rds.verify_host",
-        "terraform_output": "module.rds.address",
+        "terraform_output": "module.rds_verify.address",
         "store": "config",
         "json_key": "POSTGRES_HOST"
       },
