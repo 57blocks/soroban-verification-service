@@ -7,9 +7,7 @@ ACCEPTED_SCHEMAS="${2:-1}"
 PARAM="/scvs/${ENV}/ci/descriptor"
 
 RAW="$(aws ssm get-parameter --name "$PARAM" --query 'Parameter.Value' --output text 2>&1)" || {
-  # Diagnostics go to STDERR, never stdout: callers capture stdout in a command substitution (`DESC=$(bash
-  # scripts/ci/load-ci-descriptor.sh ...)`), and a message swallowed by that capture is a failure with no
-  # explanation in the log.
+  # Diagnostics go to stderr only: callers capture stdout.
   case "$RAW" in
     *ParameterNotFound*)
       echo "::notice::no CI descriptor at $PARAM — the infrastructure has not been applied to $ENV yet" >&2
@@ -27,8 +25,7 @@ RAW="$(aws ssm get-parameter --name "$PARAM" --query 'Parameter.Value' --output 
 }
 
 SCHEMA="$(jq -r '.schema_version' <<<"$RAW")"
-# Comma-delimited membership, done by pattern rather than by splitting: both sides are wrapped in commas so `1`
-# cannot match inside `11`, and there is no loop whose exit status `set -e` has to be reasoned about.
+# Commas on both sides, so `1` cannot match inside `11`.
 case ",${ACCEPTED_SCHEMAS}," in
   *",${SCHEMA},"*) ;;
   *)
@@ -38,7 +35,6 @@ case ",${ACCEPTED_SCHEMAS}," in
 esac
 
 echo "CI_DESCRIPTOR_JSON=$(jq -c . <<<"$RAW")" >> "$GITHUB_ENV"
-# Flat top-level scalars become uppercase env vars; nested objects are read via CI_DESCRIPTOR_JSON.
 jq -r 'to_entries[] | select(.value | type == "string" or type == "number") | "\(.key | ascii_upcase)=\(.value)"' <<<"$RAW" >> "$GITHUB_ENV"
 
 echo "ci descriptor v${SCHEMA} loaded from $PARAM (accepted: v${ACCEPTED_SCHEMAS})" >&2

@@ -7,24 +7,13 @@ import { CreatedRows } from "@scvs/db/testing";
 import { hashBuildLogToken, mintBuildLogToken } from "@scvs/core";
 import { createTestApp } from "./bootstrap.js";
 
-/**
- * The response ladder of build-log-access design.md BL-1, and the two properties that make it worth having:
- * a wrong token is indistinguishable from a job that does not exist, and expiry is enforced on read.
- *
- * The S3 read itself is not exercised — there is no staging bucket in the suite — so every case here stops
- * at or before the authorisation decision, which is the part this ticket changed.
- */
 const prisma = createPrismaClient(readDbEnv());
 const jobs = new JobsRepository(prisma);
 const createdRows = new CreatedRows();
 
 const LOG_KEY = "build-logs/fixture-rebuild/build.log";
 
-/**
- * A key outside the `build-logs/` prefix, which `jobs.service.ts` refuses **before** it opens an S3 client.
- * Used wherever a case needs to prove a request got past every authorisation gate: it lands on a
- * deterministic 502 with no network, where a real key would make the suite depend on a live bucket.
- */
+/** Outside `build-logs/`, so the read is refused with a deterministic 502 before any S3 client exists. */
 const UNREADABLE_KEY = "staging/uploads/not-a-build-log.txt";
 
 let app: NestExpressApplication;
@@ -95,7 +84,6 @@ describe("raw build-log access (BL-1)", () => {
 
     expect(real.status).toBe(401);
     expect(real.body.error).toBe("build_log_token_required");
-    // Identical answers: an unauthenticated caller learns nothing about which job ids are real.
     expect(invented.status).toBe(401);
     expect(invented.body.error).toBe(real.body.error);
   });
@@ -123,7 +111,6 @@ describe("raw build-log access (BL-1)", () => {
 
   it("a job created before tokens existed has no token, so nothing unlocks its log", async () => {
     const { jobId } = await createJobWithToken();
-    // What every row written before the token migration looks like: a log key, and no token hash.
     await prisma.job.update({ where: { id: jobId }, data: { buildLogTokenHash: null } });
 
     expect((await getLog(jobId, mintBuildLogToken())).status).toBe(404);
@@ -135,8 +122,6 @@ describe("raw build-log access (BL-1)", () => {
 
     const res = await getLog(jobId, token);
 
-    // 502 is the prefix guard, which sits on the far side of every gate this ticket added — so reaching it
-    // is the proof, and it costs no network.
     expect(res.status).toBe(502);
     expect(res.body.error).toBe("build_log_unavailable");
   });
@@ -157,7 +142,6 @@ describe("raw build-log expiry (BL-2)", () => {
 
     const res = await getLog(jobId, token);
 
-    // The object is still in the bucket; the row is what makes it unreadable.
     expect(res.status).toBe(410);
     expect(res.body.error).toBe("build_log_expired");
     expect(res.body.expired_at).toBeDefined();
@@ -175,7 +159,6 @@ describe("raw build-log expiry (BL-2)", () => {
   it("an expired log answers the same to a wrong token as to a right one — 404 wins", async () => {
     const { jobId } = await createJobWithToken({ expiresAt: new Date(Date.now() - 1000) });
 
-    // Authorisation is decided before expiry, so an unauthorised caller cannot learn that a log existed.
     expect((await getLog(jobId, mintBuildLogToken())).status).toBe(404);
   });
 });
@@ -197,9 +180,7 @@ describe("early deletion by the token holder (BL-3)", () => {
     const { jobId, token } = await createJobWithToken();
 
     expect((await deleteLog(jobId, token)).status).toBe(204);
-    // Expired the moment it was deleted, whatever happened to the bytes.
     expect((await getLog(jobId, token)).status).toBe(410);
-    // Asking again is a success: the caller wanted it gone and it is.
     expect((await deleteLog(jobId, token)).status).toBe(204);
   });
 
@@ -211,7 +192,6 @@ describe("early deletion by the token holder (BL-3)", () => {
 });
 
 describe("the minimized diagnostic layer (BL-6)", () => {
-  /** Every field name that could carry a slice of what the compiler printed. */
   const CAPTURED_OUTPUT = /excerpt|stdout|stderr|log_text|build_log_token/i;
 
   it("★ the job-status body says whether a log exists without carrying any of it", async () => {
@@ -225,7 +205,6 @@ describe("the minimized diagnostic layer (BL-6)", () => {
       requires_token: true,
       expires_at: expect.any(String),
     });
-    // No token, and nothing captured, anywhere in the body a shared link reaches.
     expect(JSON.stringify(res.body)).not.toMatch(CAPTURED_OUTPUT);
   });
 

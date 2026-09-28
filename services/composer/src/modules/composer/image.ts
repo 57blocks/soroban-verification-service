@@ -3,11 +3,6 @@ import type { BuildArchitecture, ComposerSmokeTest, RecordedToolchainPair } from
 import { runCommand, type CommandResult } from "@scvs/core/process";
 import type { CompositionTemplate } from "./template.js";
 
-/**
- * Docker-out-of-docker, same arrangement the builder fleet already uses (`XDG_DATA_HOME=/tmp`, a mounted
- * socket).
- */
-
 export class ImageError extends Error {
   readonly reason: string;
   readonly context: Record<string, unknown>;
@@ -20,12 +15,10 @@ export class ImageError extends Error {
   }
 }
 
-/** The local tag the image carries between build and push. Never pushed, never published. */
 function localTag(environmentId: string): string {
   return `scvs-composed:${environmentId}`;
 }
 
-/** Whether a tool's `--version` line reports exactly `expected`. */
 export function reportsExpectedVersion(reported: string, expected: string): boolean {
   if (expected.length === 0) return false;
   let from = 0;
@@ -35,18 +28,13 @@ export function reportsExpectedVersion(reported: string, expected: string): bool
     const before = at === 0 ? "" : reported[at - 1]!;
     const after = reported[at + expected.length] ?? "";
     const boundedLeft = before === "" || !/[0-9.]/.test(before);
-    // `-`/`+` are excluded on the right so a prerelease or build-metadata suffix (semver's own separators) is
-    // never read as the release it is a candidate for.
+    // `-`/`+` are excluded on the right so a prerelease or build-metadata suffix never reads as its release.
     const boundedRight = after === "" || !/[0-9.\-+]/.test(after);
     if (boundedLeft && boundedRight) return true;
     from = at + 1;
   }
 }
 
-/**
- * Whether `reported` — the raw output of `stellar version` inside the built image — names the exact stellar-cli
- * commit `rev`.
- */
 export function reportsExpectedRev(reported: string, rev: string): boolean {
   if (rev.length === 0) return false;
   let from = 0;
@@ -71,8 +59,6 @@ export async function buildComposedImage(input: {
   timeoutMs: number;
   dockerHost?: string;
 }): Promise<void> {
-  // The stellar-cli release ships a tar.gz; unpack the single `stellar` binary into the context so the
-  // Dockerfile's COPY stays a plain file copy.
   const extract = await runCommand(
     ["tar", "-xzf", "stellar-cli-archive", "-C", ".", "stellar"],
     { cwd: input.contextDir, timeout_ms: 60_000, env: dockerEnv(input.dockerHost) },
@@ -89,7 +75,6 @@ export async function buildComposedImage(input: {
     [
       "docker",
       "build",
-      // Explicit, never inherited from the build host — see `CompositionTemplate.platform`.
       "--platform",
       input.template.platform,
       "--file",
@@ -104,8 +89,6 @@ export async function buildComposedImage(input: {
       `RUST_PROFILE=${input.template.rust.profile}`,
       "--build-arg",
       `RUST_TARGETS=${input.template.rust.targets.join(",")}`,
-      // No cache: a composition is rare (≤ 99 rows ever) and correctness matters more than the minutes a warm
-      // cache would save.
       "--no-cache",
       "--pull=false",
       "--tag",
@@ -122,10 +105,6 @@ export async function buildComposedImage(input: {
   }
 }
 
-/**
- * The composer is the only place holding both the declared pair and the freshly-built image, so it is the only
- * place this check can live.
- */
 export async function smokeTestComposedImage(input: {
   environmentId: string;
   pair: RecordedToolchainPair;
@@ -135,7 +114,6 @@ export async function smokeTestComposedImage(input: {
   const reportedRsver = await reportedVersion(input, ["rustc", "--version"], "rustc");
   const reportedCliver = await reportedVersion(input, ["stellar", "version"], "stellar");
 
-  // Token-bounded containment rather than equality or a bare substring — see `reportsExpectedVersion()`.
   const recorded = parseCliver(input.pair.cliver);
   const matchesPair =
     recorded !== undefined &&
@@ -162,10 +140,7 @@ export async function reportedVersion(
       "docker",
       "run",
       "--rm",
-      // The smoke test runs no submitted code and needs no network. Dropped anyway, because a container that
-      // does not need the network should not have it.
       "--network=none",
-      // The old form worked only because v1 and v2 inherited no entrypoint from `buildpack-deps`.
       "--entrypoint",
       command[0]!,
       localTag(input.environmentId),
@@ -180,15 +155,10 @@ export async function reportedVersion(
       { tool, detail: excerpt(result) },
     );
   }
-  // Preserve the complete output so the caller can validate both halves of `<version>#<rev>`; one-line
-  // formatting belongs only in progress logs.
+  // The complete output: the caller validates both halves of `<version>#<rev>`.
   return `${result.stdout}`.trim();
 }
 
-/**
- * Tags, pushes, and returns the digest ECR assigned — or, if this recipe's tag is already taken on the
- * immutable repository, the digest already stored under it.
- */
 export async function pushComposedImage(input: {
   environmentId: string;
   recipeSha256: string;
@@ -220,15 +190,13 @@ export async function pushComposedImage(input: {
         detail: excerpt(push),
       });
     }
-    // The tag is `recipe_sha256`, so an occupied tag means this exact recipe is already composed and stored;
-    // the repository being IMMUTABLE is what turns that into a push failure.
+    // The tag is `recipe_sha256`, so an occupied tag on the immutable repository already holds this exact recipe.
     return adoptStoredImage(remote, input);
   }
 
   return readRepoDigest(remote, input, "Could not read back the pushed image's digest.");
 }
 
-/** The digest ECR holds for an already-stored tag. */
 async function adoptStoredImage(
   remote: string,
   input: { timeoutMs: number; dockerHost?: string },
@@ -247,10 +215,6 @@ async function adoptStoredImage(
   return readRepoDigest(remote, input, "Could not read the stored image's digest.");
 }
 
-/**
- * Reads the digest from the registry's own statement about what it stored, rather than parsing `docker push`
- * progress output.
- */
 async function readRepoDigest(
   remote: string,
   input: { dockerHost?: string },
@@ -278,7 +242,6 @@ async function readRepoDigest(
   };
 }
 
-/** Splits `docker inspect --format={{index .RepoDigests 0}}\t{{.Architecture}}` into its two facts. */
 export function parseInspectedImage(stdout: string): {
   repoDigest: string;
   digest?: string;
@@ -297,17 +260,12 @@ export function parseInspectedImage(stdout: string): {
   };
 }
 
-/**
- * Whether a failed `docker push` failed *only* because the tag is already taken on an immutable repository —
- * ECR's `ImageTagAlreadyExistsException`, which the CLI surfaces as prose.
- */
 export function isImmutableTagConflict(push: { stdout: string; stderr: string }): boolean {
   const output = `${push.stdout}\n${push.stderr}`.toLowerCase();
   if (output.includes("imagetagalreadyexists")) return true;
   return output.includes("already exists") && output.includes("immutable");
 }
 
-/** `aws ecr get-login-password | docker login`. */
 async function authenticateToEcr(input: {
   ecrRepositoryUri: string;
   dockerHost?: string;
@@ -317,8 +275,7 @@ async function authenticateToEcr(input: {
 
   const password = await runCommand(
     ["aws", "ecr", "get-login-password", "--region", region],
-    // Not mirrored to stdout: the value is a registry credential. Everything else in this file mirrors freely,
-    // which is exactly why this one has to say no explicitly.
+    // Not mirrored to stdout: the value is a registry credential.
     { timeout_ms: 60_000, mirrorOutput: false },
   );
   if (password.exit_code !== 0 || !password.stdout.trim()) {
@@ -346,7 +303,6 @@ async function authenticateToEcr(input: {
   }
 }
 
-/** `<account>.dkr.ecr.<region>.amazonaws.com` → `<region>`. */
 export function registryRegion(registry: string): string {
   const match = /\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com$/.exec(registry);
   if (!match) {
@@ -364,7 +320,6 @@ function dockerEnv(dockerHost?: string): NodeJS.ProcessEnv | undefined {
   return dockerHost ? { DOCKER_HOST: dockerHost } : undefined;
 }
 
-/** Bounded, and stderr-first — the same shape the builder's diagnostics use. */
 function excerpt(result: CommandResult): string {
   const text = (result.stderr || result.stdout || result.error || "").trim();
   return text.length > 2_000 ? `${text.slice(0, 2_000)}...` : text;

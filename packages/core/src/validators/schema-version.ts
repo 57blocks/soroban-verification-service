@@ -6,7 +6,6 @@ import {
   ValidatorConstraintInterface,
 } from "class-validator";
 
-/** What we publish is `@Equals("1.0")`, which is CV1's evidence. */
 @ValidatorConstraint({ name: "supportedSchemaMajor", async: false })
 class SupportedSchemaMajorConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
@@ -20,10 +19,6 @@ class SupportedSchemaMajorConstraint implements ValidatorConstraintInterface {
   }
 }
 
-/**
- * `MAJOR.MINOR`, both non-negative integers, nothing else — no `v` prefix, no patch component, no pre-release
- * tag.
- */
 export function parseSchemaVersion(value: unknown): { major: number; minor: number } | undefined {
   if (typeof value !== "string") return undefined;
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);

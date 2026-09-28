@@ -1,6 +1,5 @@
 import { brandName } from "../content";
 
-/** The wordmark shown in both the landing nav and the footer. */
 export const BrandLogo = () => (
   <a
     className="flex items-center gap-3 text-[0.95rem] font-semibold text-ink"

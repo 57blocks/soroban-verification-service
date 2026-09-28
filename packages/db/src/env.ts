@@ -16,12 +16,10 @@ export function getPostgresConfig(): PostgresConnectionConfig {
   };
 }
 
-/** .env defines the discrete POSTGRES_* fields. */
 export function getDatabaseUrl(): string {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
   const { host, port, database, user, password } = getPostgresConfig();
-  // `sslmode=require` is treated as `verify-full` by @prisma/adapter-pg, which validates RDS's self-signed
-  // server cert and fails; the libpq-compat flag restores "encrypt but don't validate".
+  // @prisma/adapter-pg treats sslmode=require as verify-full, which rejects RDS's self-signed certificate.
   const sslMode =
     process.env.POSTGRES_SSL === "true" ? "sslmode=require&uselibpqcompat=true" : "sslmode=disable";
   const url = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}?${sslMode}`;

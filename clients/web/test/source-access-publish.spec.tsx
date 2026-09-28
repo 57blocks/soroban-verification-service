@@ -12,7 +12,6 @@ import type {
 
 vi.mock("@scvs/verify-api-client", async () => ({
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
 }));
@@ -38,10 +37,6 @@ const Card = ({ mode }: { mode: SourceAccessMode }) => {
 
 const publishCheckbox = () => screen.queryByRole("checkbox");
 
-/**
- * The declaration was `public_uri`-only, because a "publish this publicly" checkbox under a mode called
- * "Private archive" read as a contradiction of the choice just made.
- */
 describe("the publish declaration is offered on both source-access paths", () => {
   test("a public URI submission is asked whether to publish the source", () => {
     render(<Card mode="public_uri" />);
@@ -72,10 +67,6 @@ describe("the publish declaration is offered on both source-access paths", () =>
   });
 });
 
-/**
- * The checkbox is on both paths now, so the declaration stays on screen and carrying it across the switch
- * reports the submitter's own answer.
- */
 describe("switching to an upload carries the declaration and drops the URI", () => {
   test("keeps is_public, clears source_uri", () => {
     const { result } = renderHook(() => {
@@ -95,8 +86,6 @@ describe("switching to an upload carries the declaration and drops the URI", () 
     expect(result.current.form.getValues("is_public")).toBe(true);
     expect(result.current.form.getValues("source_uri")).toBe("");
 
-    // The submission the API has always accepted, now reachable from the console again: an uploaded archive
-    // declared public.
     const manifest = buildInlineManifest(
       result.current.form.getValues(),
       { upload_id: "u-1", source_sha256: "a".repeat(64) },
@@ -107,8 +96,6 @@ describe("switching to an upload carries the declaration and drops the URI", () 
     expect(manifest.source_uri).toBeUndefined();
   });
 
-  // `is_public` is *declared*, never omitted: the server reads absence as false too, but a manifest that states
-  // the declaration is what was actually submitted.
   test("the field is still sent, not dropped", () => {
     const manifest = buildInlineManifest(
       { ...defaultValues, is_public: false },

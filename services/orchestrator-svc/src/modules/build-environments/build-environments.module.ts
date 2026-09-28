@@ -6,10 +6,6 @@ import { ComposerDispatchService } from "./composer-dispatch.service.js";
 import { DeterministicBuildEnvironmentResolver } from "./deterministic-build-environment-resolver.service.js";
 import { EnvironmentOutcomeService } from "./environment-outcome.service.js";
 
-/**
- * Owns the `Environment` state machine and Batch dispatch to `scvs-composer`, exactly as
- * `verification-pipeline` owns `Rebuild` and dispatch to `scvs-builder`.
- */
 @Module({
   providers: [
     { provide: BuildEnvironmentResolver, useClass: DeterministicBuildEnvironmentResolver },

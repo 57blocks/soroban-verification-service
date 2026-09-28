@@ -66,10 +66,6 @@ export class PublishService {
     @Inject(SourceResolutionService) private readonly sourceResolution: SourceResolutionService,
   ) {}
 
-  /**
-   * The one top-level entry point `batch-events/batch-event-handler.service.ts` and
-   * `scheduler/publish-recovery.scheduler.ts` call.
-   */
   async publishJobResult(jobId: string): Promise<void> {
     const job = await this.jobs.getJobById(jobId);
     if (!job) {
@@ -80,7 +76,6 @@ export class PublishService {
       throw new Error(`publishJobResult: job ${jobId} has no preliminary result to publish.`);
     }
 
-    // Two callers reach this.
     if (!(await this.jobs.claimForPublish(jobId))) {
       this.logger.log("another worker is already publishing this job, skipping", {
         job_id: jobId,
@@ -94,7 +89,6 @@ export class PublishService {
         "build completed but rebuilt_wasm_hash is missing; failing with comparison_not_available",
         { job_id: jobId },
       );
-      // The claim above has already put the row in `publishing`, whichever state the caller found.
       await this.jobs.advanceJob(jobId, "publishing", "failed", {
         failureReason: "internal_error",
         error: "comparison_not_available",
@@ -109,15 +103,12 @@ export class PublishService {
         },
         progress: undefined,
       });
-      // Best-effort; deleteStagedUpload never throws.
       await this.sourceResolution.deleteStagedUpload(job.sourceRef);
       return;
     }
 
     const matched = preliminary.matched;
-    // Same strip `republishStoredResult` does before its own `writePublication` call (RA1/RA2): on a second
-    // pass `preliminary` already carries the first publish's own artifact_url/artifact_sha256/arweave_tx_id,
-    // which would otherwise hash into a different artifact and defeat findExistingUpload's dedup.
+    // Strip the prior publish's own fields, or they hash into a different artifact and defeat upload dedup.
     const { artifact_url: _artifactUrl, artifact_sha256: _artifactSha256, arweave_tx_id: _arweaveTxId, ...priorPublishInput } = preliminary;
     const finalResult: VerificationResultSummaryDto = {
       ...priorPublishInput,
@@ -128,14 +119,11 @@ export class PublishService {
     try {
       await this.writePublication(job, finalResult, matched);
     } catch (error) {
-      // Owning the bookkeeping here.
       await this.recordPublishFailure(job, error);
-      // Rethrown so callers still log and treat it as failed; only the *accounting* moved in here.
       throw error;
     }
   }
 
-  /** Re-writes one already-published job's objects into result storage **without touching the row**. */
   async republishStoredResult(jobId: string): Promise<void> {
     const job = await this.jobs.getJobById(jobId);
     if (!job) throw new Error(`republishStoredResult: job ${jobId} not found.`);
@@ -147,7 +135,6 @@ export class PublishService {
     await this.writePublication(job, reassemblyInput, stored.matched, { ownsRow: false });
   }
 
-  /** Everything that touches result storage. Isolated so exactly one `catch` counts an attempt. */
   private async writePublication(
     job: JobRecord,
     finalResult: VerificationResultSummaryDto,
@@ -187,7 +174,6 @@ export class PublishService {
 
     const now = finalResult.verified_at || new Date().toISOString();
 
-    // The ordering constraint above is relative to `advanceJob`/`deleteStagedUpload`, not to this write.
     const sourceDurable = await this.attemptSourcePublish(
       job,
       storage,
@@ -195,24 +181,16 @@ export class PublishService {
       jobId,
       canonicalSource,
     );
-    // The submitter-facing URL for the copy `sources/` just confirmed durable — our own storage's copy.
     const verifiedSourceCodeUri: RegistrySourceCodeUri | undefined =
       sourceDurable && sourceFileName
         ? { location: "verifier_self_storage", url: verifiedSourceCodeUrl(storage, sourceFileName) }
         : undefined;
 
-    // Scheduling this earlier would race `appendVerifiedSourceCodeUri`'s own "is this still the current entry"
-    // check against a wasms/<hash>.json that may not exist yet on this job's first publish.
     const sourceArchiveEligible = this.isSourceArchiveEligible(job, sourceDurable, sourceFileName);
 
-    // wasms/<hash>.json — the Registry API status object (report-artifact plan.md phase 3).
     const thisVerdict = matched ? "verified" : "mismatched";
-    // Our entry by verifier identity (the result root is the key, AU2) — never by array position, so a document
-    // carrying another verifier's entry is left intact.
     const ownIdentity = { name: verifier.displayName, url: storage.publicRoot };
-    // Rule 20 is decided inside the mutation, against bytes read in the same compare-and-swap that writes
-    // them. Deciding it out here — as this did — reads a snapshot another replica can invalidate before the
-    // write lands, which is how a `mismatched` displaces a `verified`.
+    // Decided inside the mutation, against the bytes this compare-and-swap writes; an outside read can be stale.
     const statusOutcome = await mutateWasmStatus(storage, finalResult.wasm_hash, (existing) => {
       const build = buildWasmStatus({
         existing,
@@ -222,34 +200,23 @@ export class PublishService {
         recipeSource: artifact.provenance.recipe_source,
         imageTrustLevel: buildEnvironment.trustLevel,
         bldimg: buildEnvironment.buildImage,
-        // SEP-58 v0.6.0: order-significant, passed through as recorded.
         bldarg: toBldarg(job.buildOptions),
         bldopt: toBldopt(job.buildOptions),
-        // artifact.source.source_sha256 is already the invariant-checked value (assembleArtifact's
-        // requireSourceSha256) — reusing it means this call site does not need its own copy of that check.
         sourceSha256: artifact.source.source_sha256,
         sourceUri: job.sourceRef.source_uri,
         ...(matched ? {} : { rebuiltHash: finalResult.rebuilt_wasm_hash }),
         processedAt: now,
-        // AU1: the report link carries the hash of the exact bytes just written. Our own storage's copy.
         resultsUrls: [{ type: "report", location: "verifier_self_storage", url: reportUrl, sha256: reportSha256 }],
         ...(verifiedSourceCodeUri ? { verifiedSourceCodeUris: [verifiedSourceCodeUri] } : {}),
       });
       return build.outcome === "write" ? { write: build.document } : { skip: "superseded" };
     });
-    // This job has not published yet, so an unlanded write is not a link obligation — it is a failed
-    // publication. Throwing leaves the row in `publishing` for `releaseStalePublishing` to return to
-    // `publish_pending`, and `recordPublishFailure` counts the attempt.
     if (statusOutcome !== "written" && statusOutcome !== "superseded") {
       throw new Error(
         `publishJobResult: job ${jobId} could not write wasms/${finalResult.wasm_hash}.json (${statusOutcome})`,
       );
     }
     const wasmStatusChanged = statusOutcome === "written";
-
-    // policy.json is no longer written here: it is this verifier's own identity/policy information, unrelated
-    // to any one job's outcome, so it is written once at process startup by VerifierIdentityPublisher
-    // (result-storage.util.ts is what both share) rather than re-derived on every publish.
 
     if (!options.ownsRow) {
       this.logger.log("re-wrote a published job's objects; the row was already correct", {
@@ -260,26 +227,17 @@ export class PublishService {
     }
 
     const recorded = await this.jobs.advanceJob(jobId, "publishing", "published", {
-      // Both outcomes are `published` now; which one it was lives in `verdict`.
       verdict: thisVerdict,
       result: { ...finalResult, artifact_url: reportUrl, artifact_sha256: reportSha256 },
       progress: undefined,
-      // If the process dies on the next line, the row already durably says "an archive is pending since T".
       archivePendingSince: new Date(now),
-      // Set here on first publish; ArweaveArchiveService advances it again on a real archive-backfill write
-      // (see `recordArchiveOutcome`).
       ...(wasmStatusChanged ? { publishedUpdatedAt: new Date(now) } : {}),
-      // `null` for every other case — either there was nothing to publish, or this attempt already succeeded —
-      // so the recovery scheduler's query never sees a row with nothing left to do.
       ...(job.sourceRef.visibility === "public"
         ? { sourcePublishPendingSince: sourceDurable ? null : new Date(now) }
         : {}),
-      // mainnet-source-archive design.md MSA-2: the durable pending flag for THIS job's own source-archive
-      // obligation, set alongside archivePendingSince's own timing.
       ...(sourceArchiveEligible ? { sourceArchivePendingSince: new Date(now) } : {}),
     });
 
-    // Every S3 write above has already happened.
     if (!recorded) {
       throw new Error(
         `publishJobResult: job ${jobId} left "publishing" while its result was being written; ` +
@@ -287,14 +245,11 @@ export class PublishService {
       );
     }
 
-    // Only for a public job; a private one has nothing to publish.
     if (job.sourceRef.visibility === "public") {
       try {
         await this.jobs.recordSourcePublishOutcome(
           jobId,
           sourceDurable && sourceFileName
-            // The status object written moments ago already carries this URI (`verifiedSourceCodeUri` went
-            // into `buildWasmStatus`), so there is nothing for the link scan to do.
             ? { published: true, sourceFileName, owesStatusLink: false }
             : { published: false },
         );
@@ -306,14 +261,11 @@ export class PublishService {
       }
     }
 
-    // Best-effort; deleteStagedUpload never throws. Runs after the sources/ write above, so a crash here never
-    // loses the only copy of a publicly-declared source.
+    // Only after sources/ is durable: the staged upload may be the only copy of the source.
     if (sourceDurable) {
       await this.sourceResolution.deleteStagedUpload(job.sourceRef);
     }
 
-    // Archive backfill: appends a fetchable Irys gateway URL to wasms/<hash>.json's own results_urls
-    // (registry-status-object's document), never the report artifact itself (RA2, AP2).
     this.arweaveArchive.scheduleArweaveBackfill({
       jobId,
       storage,
@@ -324,8 +276,6 @@ export class PublishService {
       verifierId: verifier.id,
     });
 
-    // mainnet-source-archive design.md MSA-1: schedules the actual upload now that wasms/<hash>.json exists
-    // (written above).
     if (sourceArchiveEligible) {
       await this.maybeScheduleSourceArchive(job, storage, sourceFileName, reportUrl);
     }
@@ -335,7 +285,6 @@ export class PublishService {
       report_url: reportUrl,
     });
 
-    // O4. Kept so those rows still publish the path that actually ran.
     const path = buildMode === "verify" ? "cli" : "independent";
     this.metrics.counter("verdict_total", 1, { verdict: thisVerdict, path });
     this.metrics.histogram(
@@ -345,7 +294,6 @@ export class PublishService {
     );
   }
 
-  /** Writes `sources/{sha256}{extension}` for a declared-public job, or confirms it is already there. */
   private async attemptSourcePublish(
     job: JobRecord,
     storage: ResultStorage,
@@ -353,7 +301,7 @@ export class PublishService {
     jobId: string,
     canonicalSource?: CanonicalSource,
   ): Promise<boolean> {
-    if (job.sourceRef.visibility !== "public") return true; // nothing to publish
+    if (job.sourceRef.visibility !== "public") return true;
     if (!job.sourceRef.source_sha256 || !sourceFileName) return false;
 
     const alreadyPublished = await storage.exists(sourceKeyFromFileName(sourceFileName));
@@ -365,9 +313,6 @@ export class PublishService {
       canonicalSource,
     );
     if (!fetched) {
-      // Silent by design in `fetchSourceBytesForPublishing` itself (never throws), but silent all the way to
-      // the logs is a real gap this closes: without this, a declared-public source that never made it into
-      // `sources/` leaves no trace anywhere an operator could find it.
       this.logger.warn("declared-public source could not be fetched for publishing; sources/ was not written", {
         job_id: jobId,
         source_ref_type: job.sourceRef.type,
@@ -377,11 +322,7 @@ export class PublishService {
       return false;
     }
 
-    // `fetched.extension` and `sourceFileName`'s extension can disagree only if the filename/URL genuinely
-    // changed between the two calls (e.g. an edited upload row).
     await publishSource(storage, {
-      // The canonical archive's hash when there is one: `sourceFileName` was built from it, and `E2E-SRC-06`
-      // asserts that hashing the bytes at that key reproduces `source.source_sha256`.
       sourceSha256: canonicalSource?.sha256 ?? job.sourceRef.source_sha256,
       bytes: fetched.bytes,
       extension: fetched.extension,
@@ -402,7 +343,6 @@ export class PublishService {
     );
   }
 
-  /** Reads the just-published source bytes back and schedules the Arweave upload. */
   private async maybeScheduleSourceArchive(
     job: JobRecord,
     storage: ResultStorage,
@@ -411,7 +351,6 @@ export class PublishService {
   ): Promise<void> {
     const sourceBytes = await storage.readBytes(sourceKeyFromFileName(sourceFileName!));
     if (!sourceBytes) {
-      // Just-written key unreadable.
       this.logger.warn("source archive eligible but sources/ was unreadable immediately after publish", {
         job_id: job.jobId,
       });
@@ -430,16 +369,12 @@ export class PublishService {
     });
   }
 
-  /** `job` must already have `sourcePublishPendingSince` set, i.e. come from `listJobsPendingSourcePublish`. */
   async retryPendingSourcePublish(job: JobRecord): Promise<void> {
     if (job.sourceRef.visibility !== "public") {
-      // A bug elsewhere, not a case to paper over: `sourcePublishPendingSince` is only ever set for a public
-      // job (writePublication's own gate above).
       this.logger.error(`job ${job.jobId}: pending source publish but sourceRef is not public — skipping`);
       return;
     }
     const storage = this.buildResultStorage();
-    // Resolved the same way the live path resolves it, from the same row.
     const { canonicalSource } = await this.resolveBuildContext(job);
     const sourceFileName = await declareSourceFileName(
       job.sourceRef,
@@ -454,8 +389,6 @@ export class PublishService {
       canonicalSource,
     );
 
-    // mainnet-source-archive design.md MSA-3: a delayed source-publish success can make a mainnet+public job
-    // archive-eligible for the first time.
     const sourceArchiveEligible =
       !!job.result?.artifact_url && this.isSourceArchiveEligible(job, durable, sourceFileName);
 
@@ -465,7 +398,6 @@ export class PublishService {
         ? {
             published: true,
             sourceFileName,
-            // This job's document was written before the source landed, so its URI is not in it yet.
             owesStatusLink: true,
             ...(sourceArchiveEligible ? { sourceArchivePendingSince: new Date() } : {}),
           }
@@ -474,12 +406,8 @@ export class PublishService {
     if (durable) {
       await this.sourceResolution.deleteStagedUpload(job.sourceRef);
       if (sourceFileName) {
-        // The full recompute, not a lone append: `recordSourcePublishOutcome` above wrote the link
-        // obligation in the same statement that discharged the source-publish one, and only a pass that
-        // rebuilds every link this row owes may discharge it in turn.
+        // Full recompute, not a lone append: only a pass that rebuilds every owed link may discharge the obligation.
         await this.arweaveArchive.retryPendingStatusLinks({ ...job, sourceFileName });
-        // wasms/<hash>.json already exists by construction on this retry path (this job already published
-        // once), so.
         if (sourceArchiveEligible) {
           await this.maybeScheduleSourceArchive(job, storage, sourceFileName, job.result!.artifact_url!);
         }
@@ -487,12 +415,8 @@ export class PublishService {
     }
   }
 
-  /**
-   * `adoptPublishedVerdict`'s archive step: an adopting job's own `visibility`/`network` can obligate archival
-   * its donor never attempted.
-   */
   async completeArchiveObligationsForAdoptedJob(job: JobRecord, prior: JobRecord): Promise<void> {
-    if (job.sourceRef.visibility !== "public") return; // nothing either tier can do
+    if (job.sourceRef.visibility !== "public") return;
     if (!prior.result?.wasm_hash || !prior.result.artifact_url) {
       this.logger.error(
         `job ${job.jobId}: adopted from ${prior.jobId}, which carries no published result — cannot locate its wasms/<hash>.json entry`,
@@ -509,10 +433,6 @@ export class PublishService {
     }
   }
 
-  /**
-   * Counts a failed publication and reports it to the submitter through `progress`, so "we are retrying, and
-   * this is attempt N" is *visible*.
-   */
   private async recordPublishFailure(job: JobRecord, error: unknown): Promise<void> {
     const attempts = job.publishAttempts + 1;
     const max = this.configService.get("maxPublishAttempts", { infer: true });
@@ -530,8 +450,6 @@ export class PublishService {
       },
     );
 
-    // Best-effort: this runs on a path that is already failing, and letting it throw would replace a publish
-    // error with a database error in the caller's `catch`, losing the real cause.
     await this.jobs
       .advanceJob(job.jobId, "publishing", "publish_pending", {
         publishAttempts: attempts,
@@ -550,12 +468,11 @@ export class PublishService {
       });
   }
 
-  /** Kept as an instance method: `pipeline-e2e.spec.ts` substitutes it to reach a storage it controls. */
+  // An instance method so tests can substitute it.
   private buildResultStorage(): ResultStorage {
     return createResultStorage(this.configService.get("resultStorage", { infer: true }));
   }
 
-  /** Resolves both RA4's isolation and the environment evidence from the shared Rebuild. */
   private async resolveBuildContext(job: JobRecord): Promise<{
     buildMode: BuildMode;
     mechanismReason: MechanismReason;
@@ -565,8 +482,6 @@ export class PublishService {
   }> {
     const rebuild = job.rebuildId ? await this.rebuilds.getById(job.rebuildId) : undefined;
 
-    // Confirmed no row in dev or staging ever matched its condition (`verification_mode = 'metadata' AND
-    // rebuild_id IS NULL`).
     if (!rebuild) {
       throw new Error(`publishJobResult: job ${job.jobId} has no rebuild environment identity.`);
     }
@@ -627,12 +542,10 @@ export class PublishService {
   }
 }
 
-/** The submitter-facing URL for a `sources/{sha}{extension}` object this ResultStorage's public root serves. */
 function verifiedSourceCodeUrl(storage: ResultStorage, sourceFileName: string): string {
   return `${storage.publicRoot}/${sourceKeyFromFileName(sourceFileName)}`;
 }
 
-/** The `Rebuild` row's canonical-source facts, as publish consumes them. */
 function canonicalSourceOf(rebuild: RebuildRecord): CanonicalSource {
   const record = rebuild.sourceCanonicalisation as { canonical_format?: string } | undefined;
   return {

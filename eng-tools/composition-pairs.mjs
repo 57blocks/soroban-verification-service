@@ -4,18 +4,14 @@
 
 /**
  * @typedef {object} CompositionPair
- * @property {string} id            kebab-case, stable — it names the row in the ledger and in CI output
- * @property {string} cliver        recorded form, `<version>#<rev>`, exactly as chain metadata carries it
+ * @property {string} id
+ * @property {string} cliver
  * @property {string} rsver
- * @property {Expectation} expect   `composes` = a regression if it fails; `either` = we are measuring
- * @property {string[]} dimensions  which of the three dimensions above this row is here to exercise
+ * @property {Expectation} expect
+ * @property {string[]} dimensions
  * @property {string} why
  */
 
-/**
- * A released cliver whose recorded rev is its own release tag's commit, so the smoke test's rev half is
- * expected to agree.
- */
 export const DEFAULT_PAIR_ID = "baseline-cli23.2.1-rust1.90.0";
 
 /** @type {readonly CompositionPair[]} */
@@ -120,8 +116,6 @@ export const COMPOSITION_PAIRS = [
   },
   {
     id: "rev-mismatch-cli27.0.0",
-    // `registry.yaml`'s `existing_testnet_cli_legacy_27_1_94_1` records exactly this cliver for a live testnet
-    // contract, and `packages/core/src/cliver-test.ts` and `composer.service.spec.ts` both already carry it.
     cliver: "27.0.0#93e1b1671f14830662766c005138b19095fe9307",
     rsver: "1.96.0",
     expect: "either",
@@ -170,10 +164,6 @@ export const COMPOSITION_PAIRS = [
   },
 ];
 
-/**
- * ── Why the probe reads this and not just the matrix rows ───────────────────────────────────────── The rows
- * above name ten pairs, seven of them expected to compose.
- */
 export const CORPUS_STABLE_RSVERS = [
   "1.81.0",
   "1.84.0",
@@ -197,7 +187,6 @@ export const CORPUS_STABLE_RSVERS = [
   "1.97.1",
 ];
 
-/** Every row must carry a `cliver` in **chain form**, `<version>#<rev>`. */
 export function assertChainFormClivers() {
   const bare = COMPOSITION_PAIRS.filter((pair) => !/#.+$/.test(pair.cliver));
   if (bare.length === 0) return;
@@ -211,12 +200,8 @@ export function assertChainFormClivers() {
   );
 }
 
-/** Reasons the composer already defines for "this pair cannot be composed from released components". */
 export const NAMED_COMPOSITION_FAILURES = [
-  // `components.ts`
   "unaddressable_cliver",
-  // The `floor-rsver-1.81.0` row is expected to end here rather than on `image_build_failed`, and that
-  // difference is the point of the row.
   "toolchain_target_unavailable",
   "unreleased_cli",
   "component_unreachable",
@@ -224,11 +209,9 @@ export const NAMED_COMPOSITION_FAILURES = [
   "asset_digest_unavailable",
   "component_too_large",
   "component_checksum_mismatch",
-  // `image.ts`
   "cli_archive_extract_failed",
   "image_build_failed",
   "smoke_test_failed",
-  // raised by the gate itself when `matches_pair` is false, mirroring `ComposerService.compose()`
   "smoke_test_disagreed",
   "runtime_surface_differs",
 ];

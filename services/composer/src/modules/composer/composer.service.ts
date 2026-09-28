@@ -19,26 +19,19 @@ import { CompositionTemplateError, loadCompositionTemplate, templateDirFor } fro
 import { uploadComposerArtifact } from "./upload.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** What `entrypoint.ts` turns into the stdout line and the exit code. */
 export type ComposerRunResult = {
   line: Record<string, unknown>;
   exitCode: number;
 };
 
-/**
- * Exit codes, mirroring `services/builder`'s contract in spirit: 0 for a composition that produced a usable
- * environment, 1 for one that legitimately could not, 3 for "we could not even report".
- */
 const EXIT_CODES = { reported: 0, receipt_undeliverable: 1, fatal: 3 } as const;
 
 const SCHEMA = "scvs-composer-artifact-v1" as const;
 
-/** Builds the `failure_context` for a `ComponentError`/`ImageError`. */
 export function contextWithMessage(error: ComponentError | ImageError): Record<string, unknown> {
   return { ...error.context, message: error.message };
 }
 
-/** Whether a composed image may be pushed, and — when it may not — what the receipt should say. */
 export type SmokeTestVerdict =
   | { readonly agreed: true }
   | {
@@ -47,7 +40,6 @@ export type SmokeTestVerdict =
       readonly context: Record<string, unknown>;
     };
 
-/** The push gate: does the finished image report the toolchain the contract recorded? */
 export function evaluateSmokeTest(
   pair: RecordedToolchainPair,
   smokeTest: ComposerSmokeTest,
@@ -65,10 +57,6 @@ export function evaluateSmokeTest(
   };
 }
 
-/**
- * Its entire input is one `ComposerJobParams` — a chain-derived `(cliver, rsver)`, a verifier-owned
- * `template_version`, our own ECR repository, and a presigned URL to report to.
- */
 @Injectable()
 export class ComposerService {
   constructor(@Inject(ConfigService) private readonly configService: AppConfigService) {}
@@ -78,7 +66,6 @@ export class ComposerService {
     try {
       params = this.readParams();
     } catch (error) {
-      // No `environment_id` means no receipt key, so there is nowhere to report *to*.
       return {
         exitCode: EXIT_CODES.fatal,
         line: {
@@ -98,7 +85,6 @@ export class ComposerService {
       const artifact = await this.compose(params, contextDir);
       const upload = await uploadComposerArtifact(params.upload_url, artifact);
       if (!upload.ok) {
-        // The composition may well have succeeded and been pushed.
         return {
           exitCode: EXIT_CODES.receipt_undeliverable,
           line: {
@@ -122,13 +108,10 @@ export class ComposerService {
         },
       };
     } finally {
-      // The context holds verified component bytes and an extracted binary — nothing secret, but nothing worth
-      // keeping either.
       await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 
-  /** Produces the receipt, whatever the outcome. Never throws for an expected failure. */
   private async compose(
     params: ComposerJobParams,
     contextDir: string,
@@ -193,8 +176,6 @@ export class ComposerService {
         composed_at: composedAt,
         recipe_sha256: recipeSha256,
         image_digest: pushed.digest,
-        // Absent when the image declares an architecture we have no queue for — the composition is still a
-        // success; routing simply falls back to the probe-and-default path.
         ...(pushed.architecture ? { image_architecture: pushed.architecture } : {}),
         recipe,
         smoke_test: smokeTest,
@@ -207,14 +188,11 @@ export class ComposerService {
         return this.failure(params, composedAt, error.reason, contextWithMessage(error));
       }
       if (error instanceof CompositionTemplateError) {
-        // `error.reason`, not a literal: `composition_template_missing`.
         return this.failure(params, composedAt, error.reason, {
           template_version: params.template_version,
           detail: error.message,
         });
       }
-      // Genuinely unexpected. Still reported through the receipt — an unexplained `failed` row is worse than an
-      // ugly one, and this is the only channel out.
       return this.failure(params, composedAt, "composer_internal_error", {
         detail: error instanceof Error ? error.message : String(error),
       });
@@ -239,7 +217,6 @@ export class ComposerService {
     };
   }
 
-  /** Reads and validates `SCVS_COMPOSER_PARAMS_JSON`. */
   private readParams(): ComposerJobParams {
     const raw = this.configService.get("composerParamsJson", { infer: true });
     if (!raw) {

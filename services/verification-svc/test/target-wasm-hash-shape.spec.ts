@@ -2,10 +2,6 @@ import { safeParseDto } from "@scvs/core";
 import { PreflightRequestDto, mapPreflightIssues } from "../src/modules/preflight/preflight.dto.js";
 import { SubmitTargetDto, mapSubmitIssues } from "../src/modules/verifications/submit.dto.js";
 
-/**
- * `target.wasm_hash` at the submit and preflight boundaries — normalised to lowercase, and refused outright
- * when it is not a 64-character hex digest.
- */
 const UPPERCASE = "A2E60E0FB85C39AFA7930FC889CF55B93CFDA930F16D2D419B4E18EEEA7B4957";
 const LOWERCASE = UPPERCASE.toLowerCase();
 

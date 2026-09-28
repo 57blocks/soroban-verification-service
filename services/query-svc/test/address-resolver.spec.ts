@@ -2,13 +2,10 @@ import { Address, StrKey, xdr } from "@stellar/stellar-base";
 import { MalformedContractIdError } from "../src/modules/results/address-resolver.js";
 import { StellarRpcAddressResolver } from "../src/modules/results/stellar-rpc.resolver.js";
 
-// The decode path, against XDR built by the same library that reads it.
-
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 7));
 const WASM_HASH = "ab".repeat(32);
 const RPC_URL = "https://rpc.example/testnet";
 
-/** One `getLedgerEntries` entry, as the RPC would serialize it. */
 function ledgerEntry(executable: xdr.ContractExecutable): string {
   return xdr.LedgerEntryData.contractData(
     new xdr.ContractDataEntry({
@@ -48,8 +45,6 @@ describe("StellarRpcAddressResolver", () => {
   });
 
   it("resolves a Stellar Asset Contract to nothing rather than to an error", async () => {
-    // The address is real and holds a contract; there is simply no Wasm to verify against, which is a 404 to
-    // the caller rather than a failure.
     const resolver = resolverAnswering({
       result: { entries: [{ xdr: ledgerEntry(xdr.ContractExecutable.contractExecutableStellarAsset()) }] },
     });
@@ -71,8 +66,6 @@ describe("StellarRpcAddressResolver", () => {
 
     const resolver = new StellarRpcAddressResolver(config as never);
     await expect(resolver.resolve("testnet", "not-a-contract")).rejects.toThrow(MalformedContractIdError);
-    // The caller's mistake must not be reported as a failure to reach the ledger, and must not cost an upstream
-    // request either.
     expect(requested).toBe(false);
   });
 

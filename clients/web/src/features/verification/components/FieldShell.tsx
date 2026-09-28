@@ -4,9 +4,7 @@ import { cn } from "@/lib/utils";
 
 type FieldShellProps = {
   label: ReactNode;
-  /** The short line the design sets to the right of the label. */
   hint?: ReactNode;
-  /** Longer help under the input. Rendered red when the field is required or has an error. */
   help?: ReactNode;
   error?: string;
   required?: boolean;
@@ -14,7 +12,6 @@ type FieldShellProps = {
   children: ReactNode;
 };
 
-/** The one field layout used by every input in the console: label row, control, help line. */
 export const FieldShell = ({
   label,
   hint,

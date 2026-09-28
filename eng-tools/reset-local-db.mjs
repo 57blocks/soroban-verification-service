@@ -18,13 +18,8 @@ if (!LOCAL_HOSTS.has(host)) {
   process.exit(2);
 }
 
-/**
- * `rebuilds` after `jobs`: a job's `rebuild_id` is `ON DELETE SET NULL`, so removing rebuilds first would do
- * pointless per-row updates on jobs that are about to be deleted anyway.
- */
 const TABLES = ["jobs", "rebuilds", "uploads", "abuse_control"];
 
-/** Prefers a local `psql`, falls back to the one inside the compose container. */
 const CONTAINER = process.env.SCVS_POSTGRES_CONTAINER ?? "scvs-postgres";
 let transport;
 

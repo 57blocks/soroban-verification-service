@@ -9,7 +9,6 @@ type CopyableFieldProps = {
   copyable?: boolean;
 };
 
-/** A label over its value, with the inline copy button the design puts beside every hash and id. */
 export const CopyableField = ({
   label,
   value,

@@ -1,7 +1,5 @@
 import { rejectedBuildArgument } from "../src/modules/builder/argument-policy.js";
 
-/** The submitter sees 'your contract does not build' about a contract that built fine at the time."* */
-
 const ARGV = [
   "docker",
   "run",
@@ -16,7 +14,6 @@ const ARGV = [
   "/out",
 ];
 
-/** The CLI's real output, verbatim. */
 const CLAP4_STDERR = [
   "error: unexpected argument '--locked' found",
   "",
@@ -58,8 +55,6 @@ describe("rejectedBuildArgument — the incident", () => {
 });
 
 describe("rejectedBuildArgument — never guesses", () => {
-  // Ordinary compile failures are the overwhelming majority of build failures, and not one of them may be
-  // relabelled as a rejected build option.
   it("says nothing about an ordinary compile failure", () => {
     const compileError = [
       "error[E0425]: cannot find value `foo` in this scope",
@@ -73,8 +68,6 @@ describe("rejectedBuildArgument — never guesses", () => {
   });
 
   it("★ says nothing about a flag we did not issue, however clearly the text names one", () => {
-    // Compare against what is actually there, never against what we expect — the same discipline the
-    // composition gate's `assertRuntimeSurfaceMatchesOfficial` follows.
     expect(
       rejectedBuildArgument({
         stderr: "error: unexpected argument '--frobnicate' found",
@@ -103,7 +96,6 @@ describe("rejectedBuildArgument — never guesses", () => {
 
 describe("rejectedBuildArgument — origin decides who owns the failure", () => {
   it("calls a flag we added ours, not the recipe's", () => {
-    // `--out-dir` is in ADDED_ARGUMENTS, not in the recorded recipe.
     expect(
       rejectedBuildArgument({
         stderr: "error: unexpected argument '--out-dir' found",
@@ -125,8 +117,6 @@ describe("rejectedBuildArgument — origin decides who owns the failure", () => 
 });
 
 describe("rejectedBuildArgument — the value never travels", () => {
-  // This flag reaches SandboxDiagnostics and, through `rebuildFailureDetail`, the public job-status endpoint
-  // and SSE.
   it("strips everything after the first `=`", () => {
     const rejected = rejectedBuildArgument({
       stderr: "error: unexpected argument '--env=TOKEN=abc123' found",

@@ -1,19 +1,16 @@
-/** Adversarial source archives, built in memory and delivered through the public upload endpoint. */
 import { once } from "node:events";
 import { createGzip, gzipSync } from "node:zlib";
 
-/** A tar member as raw ustar bytes. `type` is the ustar typeflag: "0" file, "2" symlink, "5" dir. */
+/** `type` is the ustar typeflag: "0" file, "2" symlink, "5" dir. */
 export interface TarMember {
   name: string;
   body?: string | Uint8Array;
-  /** A body of `bytes` copies of one byte, emitted in chunks instead of held whole. */
   fill?: { byte: number; bytes: number };
   type?: "0" | "2" | "5";
   link?: string;
   mode?: number;
 }
 
-/** Bytes a member's body occupies, and the size its header declares. Links and dirs declare zero. */
 function declaredSize(member: TarMember): number {
   if (member.type === "2" || member.type === "5") return 0;
   if (member.fill) return member.fill.bytes;
@@ -69,21 +66,16 @@ export function ustar(members: readonly TarMember[]): Buffer {
     }
   }
 
-  // Two zero blocks terminate the archive.
   blocks.push(Buffer.alloc(1024, 0));
   return Buffer.concat(blocks);
 }
 
 export function targz(members: readonly TarMember[]): Buffer {
-  // Fixed mtime so the same member list always produces the same bytes — a case that submits the "same" archive
-  // twice (E2E-DEDUP-01) must not accidentally change its own `source_sha256`.
   return gzipSync(ustar(members), { level: 9 });
 }
 
-/** One megabyte: large enough that a 512 MiB body is ~512 writes, small enough to be free. */
 const FILL_CHUNK_BYTES = 1024 * 1024;
 
-/** `targz` for a member list that may contain a `fill`, without ever holding the archive uncompressed. */
 export async function targzStream(members: readonly TarMember[]): Promise<Buffer> {
   const gzip = createGzip({ level: 9 });
   const out: Buffer[] = [];
@@ -126,14 +118,11 @@ export async function targzStream(members: readonly TarMember[]): Promise<Buffer
   return Buffer.concat(out);
 }
 
-/** How many entries survive `--strip-components 1`, and whether any of them escapes. */
 function strippedPath(raw: string): { escapes: true } | { escapes: false; path?: string } {
   if (raw.startsWith("/") || raw.includes("\0")) return { escapes: true };
   const parts = raw.split("/").filter((part) => part.length > 0 && part !== ".");
   if (parts.some((part) => part === "..")) return { escapes: true };
   const stripped = parts.slice(1);
-  // A single-component member vanishes under `--strip-components 1` and is not counted, which is why `TOP`
-  // exists: without it `Cargo.toml` would be one of these.
   return { escapes: false, path: stripped.length === 0 ? undefined : stripped.join("/") };
 }
 
@@ -162,13 +151,8 @@ crate-type = ["cdylib"]
 
 const PLACEHOLDER_LIB = "// placeholder\n";
 
-/** The one directory every conformant member sits under — see the header on `stripComponents`. */
 const TOP = "advtar";
 
-/**
- * The conformant part of every variant: what a real archive would carry, so the only thing a refusal can be
- * about is the member appended after it.
- */
 function baseMembers(): TarMember[] {
   return [
     { name: `${TOP}/`, type: "5", mode: 0o755 },
@@ -177,25 +161,15 @@ function baseMembers(): TarMember[] {
   ];
 }
 
-/** Materialised entries contributed by `baseMembers()` — the directory strips to nothing. */
 const BASE_ENTRIES = 2;
 
 export interface AdversarialArchive {
-  /** The `F-ADV-*` ID, or a sub-case suffix from the case file. */
   readonly id: string;
-  /** What it is trying to do, in the attacker's terms. */
   readonly attack: string;
-  /**
-   * The `source_archive_*` code `archive-extraction.ts` owes this archive — a **pointer, not an expectation
-   * this file's consumers assert**.
-   */
   readonly expectedReason: string;
   readonly bytes: Buffer;
-  /** What goes over the wire — must stay under `LIMIT_ARCHIVE_BYTES` or the wrong control fires. */
   readonly compressedBytes: number;
-  /** The sum of the header-declared sizes, which is what `totalUncompressedBytes` reads off `-tvf`. */
   readonly declaredUncompressedBytes: number;
-  /** Entries left after `--strip-components 1`, which is what the entry bound counts. */
   readonly materialisedEntries: number;
 }
 
@@ -220,8 +194,6 @@ function describeArchive(
 export async function pathTraversalArchive(): Promise<AdversarialArchive> {
   const members: TarMember[] = [
     ...baseMembers(),
-    // Left outside `TOP` deliberately: the escape has to survive `--strip-components 1`, and this one does —
-    // `..` in any component is refused before the strip is applied.
     { name: "../../etc/scvs-e2e-escaped", body: "escaped\n" },
   ];
   return describeArchive(
@@ -236,8 +208,6 @@ export async function pathTraversalArchive(): Promise<AdversarialArchive> {
 export async function symlinkEscapeArchive(): Promise<AdversarialArchive> {
   const members: TarMember[] = [
     ...baseMembers(),
-    // Under `TOP`, so the *path* check passes and the refusal is attributable to the link check —
-    // `firstUnsafeVerboseEntry` refuses any entry that is not a plain file or a directory.
     { name: `${TOP}/escape`, type: "2", link: "../../tmp", mode: 0o777 },
     { name: `${TOP}/escape/scvs-e2e-written-through-symlink`, body: "written\n" },
   ];
@@ -250,7 +220,6 @@ export async function symlinkEscapeArchive(): Promise<AdversarialArchive> {
   );
 }
 
-/** Exactly `LIMIT_TAR_ENTRIES + 1` materialised entries, and nothing else out of bounds. */
 export async function entryCountBombArchive(limitTarEntries: number): Promise<AdversarialArchive> {
   if (!Number.isInteger(limitTarEntries) || limitTarEntries <= BASE_ENTRIES) {
     throw new Error(
@@ -259,7 +228,6 @@ export async function entryCountBombArchive(limitTarEntries: number): Promise<Ad
   }
 
   const members = baseMembers();
-  // `BASE_ENTRIES` already count, so this many fillers land the total on exactly limit + 1.
   for (let index = 0; index < limitTarEntries + 1 - BASE_ENTRIES; index += 1) {
     members.push({ name: `${TOP}/filler/${index}.txt`, body: "x" });
   }
@@ -273,7 +241,6 @@ export async function entryCountBombArchive(limitTarEntries: number): Promise<Ad
   );
 }
 
-/** A declared expansion of exactly `LIMIT_UNCOMPRESSED_BYTES + 1`, in three materialised entries. */
 export async function sizeBombArchive(limitUncompressedBytes: number): Promise<AdversarialArchive> {
   const base = baseMembers();
   const conformantBytes = declaredUncompressedBytes(base);
@@ -301,7 +268,6 @@ export async function sizeBombArchive(limitUncompressedBytes: number): Promise<A
   );
 }
 
-/** A perfectly ordinary archive — the control, and the payload for `F-ADV-SHA`. */
 export function benignArchive(marker = "scvs-e2e"): AdversarialArchive {
   const members: TarMember[] = [
     { name: `${TOP}/`, type: "5", mode: 0o755 },
@@ -311,7 +277,6 @@ export function benignArchive(marker = "scvs-e2e"): AdversarialArchive {
   return describeArchive(
     "control/benign",
     "none — the negative control",
-    // Nothing is owed: this one is meant to get past every archive check.
     "",
     members,
     targz(members)

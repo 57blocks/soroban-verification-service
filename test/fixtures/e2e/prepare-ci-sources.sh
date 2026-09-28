@@ -143,8 +143,6 @@ package_multi_package() {
   assert_hash "$output" "$expected_hash"
 }
 
-# A ZIP made from the source directory itself, as Finder's Compress produces when pointed at a
-# project folder. It has no nested archive.
 package_source_tree_zip() {
   local output="$1"
   local canary="$2"
@@ -152,8 +150,7 @@ package_source_tree_zip() {
 
   cp -R "$work_root/base" "$tree"
   printf '%s\n' "$canary" > "$tree/source/fixture-zip-canary.txt"
-  # source_sha256 is recorded in the fixture's immutable on-chain recipe, so the ZIP's byte layout
-  # must not inherit this machine's extraction time or directory enumeration order.
+  # source_sha256 is recorded on chain, so the ZIP must not depend on local mtimes or enumeration order.
   find "$tree/source" -exec touch -t 202001010000 {} +
   mkdir -p "$(dirname "$output")"
   if [[ "$(basename "$zip_bin")" == "bsdtar" ]]; then

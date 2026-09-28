@@ -1,11 +1,6 @@
 import { jest } from "@jest/globals";
 import type { JobsRepository, PrunableJobRecord } from "@scvs/db";
 
-/**
- * RP-3's scheduler half, with no database: the sweep is table-wide by design and ADR-015 forbids a suite to
- * run one against the shared Postgres. What is left to prove is its own logic — the cutoff it computes, the
- * batch it asks for, and the ordering that keeps a build log from outliving the row pointing at it.
- */
 const deleteObject = jest.fn<(...args: unknown[]) => Promise<void>>();
 
 jest.unstable_mockModule("@scvs/aws", () => ({
@@ -70,8 +65,6 @@ describe("JobRetentionScheduler", () => {
     expect(pruneJobs).toHaveBeenCalledWith(["job-with-log", "job-without-log"]);
   });
 
-  // `build_log_object_key` is the only pointer to that object: deleting the row first would retain the log
-  // forever AND lose every way to reach it.
   it("keeps the row when its build log could not be deleted, and prunes the rest", async () => {
     deleteObject.mockRejectedValueOnce(new Error("AccessDenied"));
     const { scheduler, pruneJobs } = schedulerOver([

@@ -22,15 +22,9 @@ import {
 } from "@scvs/core/aggregate";
 import { wasmStatusKey } from "@scvs/storage-layout/keys";
 
-// Reads and aggregates the Registry API status object. The document shape and the aggregation arithmetic
-// both live in `@scvs/core`; this file is the reading, the validation modes and the fetch fan-out.
-
 /** How strictly a peer's document is validated. */
 export type RegistryValidationMode =
-  /**
-   * Base shape with unknown fields tolerated — the published 1.0 schema is closed, so any real document
-   * carrying extensions fails strict validation against it.
-   */
+  /** Base shape with unknown fields tolerated. */
   | "default"
   /** Validate the base projection instead: unknown fields are dropped before validating, not rejected. */
   | "strict-base";
@@ -40,10 +34,6 @@ export type StatusObjectReadOptions = {
   validation?: RegistryValidationMode;
 };
 
-/**
- * One verifier that could not contribute. Identity comes from the TVL, never the peer document — this is
- * exactly the case where the document may be missing or unparseable.
- */
 export type { AggregatedWasmStatus, UnavailableVerifier, AgreementSummary };
 
 /** A peer served something that is not a conformant status object. */
@@ -59,7 +49,6 @@ export function statusObjectUrl(resultRoot: string, wasmHash: string): string {
   return new URL(wasmStatusKey(wasmHash.toLowerCase()), resultRootBase(resultRoot)).toString();
 }
 
-/** A result root as a joinable base. */
 function resultRootBase(resultRoot: string): string {
   const base = new URL(resultRoot);
   base.search = "";
@@ -93,7 +82,6 @@ export function validateStatusObject(
   if (Array.isArray(verifications) && verifications.some((entry) => typeof entry !== "object" || entry === null)) {
     throw new RegistryDocumentError(source, "source_code_verifications holds a non-object entry");
   }
-  // Projection happens before validation: the point is a document that passes, not a report.
   const candidate = mode === "strict-base" ? baseProjection(record) : document;
   return parseRegistry(PeerRegistryStatusObject, candidate, source);
 }
@@ -115,19 +103,11 @@ function parseRegistry<T extends object>(cls: ClassConstructor<T>, value: unknow
   }
 }
 
-/**
- * An unrecognised `status` displays as `unverified`. Presentation only — an aggregate forwards what the
- * verifier actually said, so we never become the source of a claim it did not make.
- */
 export type AggregateWasmStatusInput = {
-  /**
-   * Resolved consumer entries, not the producer `TrustedVerifier`: this aggregates over peers' lists, where
-   * `manifest_url` and `bulk_load_url` may be absent and only the result root is guaranteed.
-   */
   verifiers: readonly ResolvedVerifier[];
   wasmHash: string;
   getJson: (url: string) => Promise<unknown>;
-  /** Distinguishes an absent document from an unreachable verifier — see the call site in client.ts. */
+  /** Distinguishes an absent document from an unreachable verifier. */
   isNotFound: (error: unknown) => boolean;
   /** Anything that is neither absence nor a schema failure; `undefined` falls through to `fetch_failed`. */
   classifyError?: (error: unknown) => UnavailableVerifier["reason"] | undefined;
@@ -167,10 +147,6 @@ export async function aggregateWasmStatus(input: AggregateWasmStatusInput): Prom
   });
 }
 
-/**
- * The `verifier` block passes through untouched — the peer's `url` is the identity, so there is nothing for
- * this layer to assert and nothing to attach beside it.
- */
 function relayed(
   document: { schema_version: string; source_code_verifications: readonly PeerRegistryVerification[] },
   resultRoot: string,
@@ -189,8 +165,6 @@ function unavailable(
 ): { unavailable: UnavailableVerifier } {
   return {
     unavailable: {
-      // The result root identifies here exactly as it does on a contributing entry, so a consumer lines the two
-      // lists up on one field rather than two vocabularies.
       url: verifier.url,
       ...(verifier.display_name !== undefined ? { name: verifier.display_name } : {}),
       reason,

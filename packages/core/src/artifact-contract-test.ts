@@ -1,4 +1,4 @@
-// Required before any decorated class is evaluated — see `composer-test.ts`'s own note.
+// Must load before any decorated class is evaluated.
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -15,7 +15,6 @@ import { BuildArtifact } from "./batch.js";
 import { parseSchemaVersion } from "./validators/schema-version.js";
 import { safeParseDto, flattenValidationErrors } from "./validate.js";
 
-// `--update` writes the snapshot for the CURRENT version instead of asserting it.
 const update = process.argv.includes("--update");
 const CONTRACT_DIR = new URL("../contract/", import.meta.url).pathname;
 const CORPUS_DIR = join(CONTRACT_DIR, "corpus");
@@ -63,9 +62,6 @@ function corpusDocuments(version: string): Array<{ name: string; text: string }>
     .map((name) => ({ name: `v${version}/${name}`, text: readFileSync(join(dir, name), "utf8") }));
 }
 
-// ── The permanent guarantee: a newer reader reads every older builder's artifact ────────────────────
-// Every document any builder has written is frozen under `contract/corpus/v<version>/`, and this parses all of
-// them with today's DTO.
 test("every corpus document, at every version, parses under the current contract", () => {
   const versions = corpusVersions();
   assert.ok(versions.includes(PRE_VERSIONED_BUILD_ARTIFACT_SCHEMA_VERSION), "the pre-versioning corpus must exist");
@@ -95,17 +91,14 @@ test("every corpus document, at every version, parses under the current contract
   console.log(`  (${parsed} documents across ${versions.length} versions)`);
 });
 
-// ── The probe's own behaviour ───────────────────────────────────────────────────────────────────────
 test("a document from a builder ahead of this reader is unsupported, not invalid", () => {
   const ahead = probeBuildArtifactDocument(JSON.stringify({ schema_version: "2.0" }));
   assert.equal(ahead.kind, "unsupported");
   assert.equal(ahead.kind === "unsupported" && ahead.supported, BUILD_ARTIFACT_SCHEMA_VERSION);
 
-  // A higher MINOR is additive by construction, so it stays readable.
   const minor = probeBuildArtifactDocument(JSON.stringify({ schema_version: "1.7" }));
   assert.equal(minor.kind, "readable");
 
-  // Absent means pre-versioning, and pre-versioning is readable forever.
   const absent = probeBuildArtifactDocument(JSON.stringify({}));
   assert.equal(absent.kind, "readable");
   assert.equal(absent.kind === "readable" && absent.declared, PRE_VERSIONED_BUILD_ARTIFACT_SCHEMA_VERSION);
@@ -126,7 +119,6 @@ test("the two terminal error codes are the ones the orchestrator records", () =>
   assert.equal(ARTIFACT_UNREADABLE, "artifact_unreadable");
 });
 
-// ── The frozen snapshots: what changed, and did the version move with it ────────────────────────────
 test("the current version's snapshot describes the contract as it is now", () => {
   const derived = deriveArtifactContractSnapshot();
   const path = snapshotPath(BUILD_ARTIFACT_SCHEMA_VERSION);

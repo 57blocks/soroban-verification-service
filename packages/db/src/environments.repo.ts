@@ -6,9 +6,6 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { EnvironmentModel as PrismaEnvironment } from "../generated/prisma/models.js";
 
-// Consumed by orchestrator-svc's `build-environments` module.
-
-/** An environment's lifecycle. */
 export const environmentStatuses = ["pending", "composing", "ready", "failed"] as const;
 export type EnvironmentStatus = (typeof environmentStatuses)[number];
 
@@ -39,14 +36,9 @@ export type MarkEnvironmentReadyInput = {
   recipeSha256: string;
   imageDigest: string;
   recipe: ComposedEnvironmentRecipe;
-  /** See `ComposerArtifact.image_architecture`. */
   arch?: BuildArchitecture;
 };
 
-/**
- * CRUD over the `environments` table — one row per distinct `(cliver, rsver, template_version)`, shared by
- * every `Rebuild` whose cli-legacy recipe happens to need that composed environment.
- */
 @Injectable()
 export class EnvironmentsRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
@@ -67,16 +59,11 @@ export class EnvironmentsRepository {
     return row ? rowToEnvironment(row) : undefined;
   }
 
-  /**
-   * `findUnique`, because `recipe_sha256` carries a unique index — see `schema.prisma`'s note on why it is
-   * genuinely unique by construction.
-   */
   async findByRecipeSha256(recipeSha256: string): Promise<EnvironmentRecord | undefined> {
     const row = await this.prisma.environment.findUnique({ where: { recipeSha256 } });
     return row ? rowToEnvironment(row) : undefined;
   }
 
-  /** The lookup a Batch terminal event arrives with — mirrors `RebuildsRepository.getByBatchJobId`. */
   async getByBatchJobId(batchJobId: string): Promise<EnvironmentRecord | undefined> {
     const row = await this.prisma.environment.findFirst({ where: { batchJobId } });
     return row ? rowToEnvironment(row) : undefined;
@@ -95,7 +82,6 @@ export class EnvironmentsRepository {
     return rowToEnvironment(row);
   }
 
-  /** Find-or-create, safe against two jobs discovering the same missing pair in the same poll tick. */
   async findOrCreate(input: CreateEnvironmentInput): Promise<EnvironmentRecord> {
     const existing = await this.findByPair(input.cliver, input.rsver, input.templateVersion);
     if (existing) return existing;
@@ -110,7 +96,6 @@ export class EnvironmentsRepository {
     }
   }
 
-  /** Compare-and-set claim on the right to compose: `pending -> composing`. */
   async claimForComposing(environmentId: string): Promise<boolean> {
     const { count } = await this.prisma.environment.updateMany({
       where: { id: environmentId, status: "pending" satisfies EnvironmentStatus },
@@ -119,7 +104,6 @@ export class EnvironmentsRepository {
     return count === 1;
   }
 
-  /** Records the `scvs-composer` Batch job id once submitted — mirrors `Rebuild`'s own dispatch record. */
   async markComposing(environmentId: string, batchJobId: string): Promise<void> {
     await this.prisma.environment.update({
       where: { id: environmentId },
@@ -127,10 +111,6 @@ export class EnvironmentsRepository {
     });
   }
 
-  /**
-   * Releases a claim that could not be turned into a dispatch (Batch `SubmitJob` threw), so the next poll tick
-   * retries it rather than leaving the pair.
-   */
   async releaseClaim(environmentId: string): Promise<void> {
     await this.prisma.environment.updateMany({
       where: { id: environmentId, status: "composing" satisfies EnvironmentStatus },
@@ -138,7 +118,6 @@ export class EnvironmentsRepository {
     });
   }
 
-  /** `composing -> ready`. */
   async markReady(environmentId: string, input: MarkEnvironmentReadyInput): Promise<void> {
     await this.prisma.environment.update({
       where: { id: environmentId },
@@ -153,7 +132,6 @@ export class EnvironmentsRepository {
     });
   }
 
-  /** `composing -> failed`. */
   async markFailed(environmentId: string, errorCode: string): Promise<void> {
     await this.prisma.environment.update({
       where: { id: environmentId },
@@ -161,7 +139,6 @@ export class EnvironmentsRepository {
     });
   }
 
-  /** Every `failed` row carrying `errorCode` — the input to a deliberate recovery, never to a timer. */
   async listFailedByErrorCode(errorCode: string): Promise<EnvironmentRecord[]> {
     const rows = await this.prisma.environment.findMany({
       where: { status: "failed" satisfies EnvironmentStatus, errorCode },
@@ -170,7 +147,6 @@ export class EnvironmentsRepository {
     return rows.map(rowToEnvironment);
   }
 
-  /** `failed -> pending`, so the poll loop composes the pair again from scratch. */
   async resetFailedToPending(environmentId: string, expectedErrorCode: string): Promise<boolean> {
     const result = await this.prisma.environment.updateMany({
       where: { id: environmentId, status: "failed" satisfies EnvironmentStatus, errorCode: expectedErrorCode },
@@ -179,7 +155,6 @@ export class EnvironmentsRepository {
     return result.count === 1;
   }
 
-  /** Environments sitting in one status since before `olderThan` — the input to `EnvironmentReconcilerScheduler`. */
   async listStuckByStatus(status: EnvironmentStatus, olderThan: Date): Promise<EnvironmentRecord[]> {
     const rows = await this.prisma.environment.findMany({
       where: { status, updatedAt: { lt: olderThan } },
@@ -189,8 +164,6 @@ export class EnvironmentsRepository {
   }
 }
 
-// Same contract as rebuilds.repo.ts's rowToRebuild: anything derived from a raw column rather than passed
-// straight through is validated here, because the DB layer has no enum types of its own.
 function rowToEnvironment(row: PrismaEnvironment): EnvironmentRecord {
   return {
     environmentId: row.id,

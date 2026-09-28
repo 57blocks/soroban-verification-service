@@ -1,14 +1,6 @@
-/**
- * DI tokens for what `DbModule.forRootAsync` provides. Kept in their own file so the repositories can import
- * them without importing `db.module.ts`, which imports the repositories.
- */
+// Separate file: the repositories import these, and db.module.ts imports the repositories.
 export const PRISMA_CLIENT = Symbol("SCVS_QUERY_PRISMA_CLIENT");
 
-/** The resolved connection string for this package's own database. */
 export const DB_CONNECTION_STRING = Symbol("SCVS_QUERY_DB_CONNECTION_STRING");
 
-/**
- * The full resolved `DbConnectionInput`, pool-tuning fields included — see `@scvs/db`'s own token for why
- * this is kept separate from `DB_CONNECTION_STRING` rather than replacing it.
- */
 export const DB_CONNECTION_INPUT = Symbol("SCVS_QUERY_DB_CONNECTION_INPUT");

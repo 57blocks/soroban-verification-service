@@ -1,15 +1,12 @@
 import type { RejectedBuildOption } from "../types";
 
-/** Build options this verifier will not replay, checked before a submission is made. */
 const OPTIONS_TAKING_A_PATH = ["--manifest-path", "--target-dir", "--out-dir"] as const;
 
-/** Options that change what the sandbox is, rather than what it builds. */
 const OPTIONS_NOT_REPLAYABLE = ["--offline", "--config", "--env", "--target-dir", "--out-dir"] as const;
 
 export const splitBuildOptions = (raw?: string): string[] =>
   raw ? raw.trim().split(/\s+/).filter(Boolean) : [];
 
-/** SO5: each `bldopt` entry is one complete flag with its value in `=` form. */
 const SEP58_BLDOPT_ENTRY = /^--[A-Za-z][A-Za-z0-9_-]*(=.+)?$/;
 
 export type BuildOptionsCheck =
@@ -25,8 +22,6 @@ export const validateBuildOptions = (raw: string | undefined): BuildOptionsCheck
     const [flag, ...rest] = entry.split("=");
     const value = rest.join("=");
 
-    // SO5 first: an entry that is not a complete flag cannot be judged by the two lists below, and the
-    // paired-token case is the one worth naming precisely.
     if (!SEP58_BLDOPT_ENTRY.test(entry)) {
       const previous = index > 0 ? entries[index - 1] : undefined;
       const detail =
@@ -78,7 +73,6 @@ export const validateBuildOptions = (raw: string | undefined): BuildOptionsCheck
   return rejected.length > 0 ? { ok: false, rejected } : { ok: true, normalized };
 };
 
-/** Normalises a source-relative path, or `null` when the result leaves the tree. */
 const normalizeRelativePath = (value: string): string | null => {
   if (value.startsWith("/")) return null;
   if (/^[a-zA-Z]:[\\/]/.test(value)) return null;

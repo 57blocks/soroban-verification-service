@@ -23,22 +23,19 @@ function retryPolicyProblem(): string | undefined {
   return undefined;
 }
 
-/** One scan plus enough samples to see its public row update. */
 function retryWatchWindowMs(): number {
   return deploymentParameters.jobRetryIntervalMs! + env.pollIntervalMs * 4;
 }
 
 function assertRequeued(watch: Awaited<ReturnType<typeof watchPastTerminal>>): void {
   expect(watch.requeues).toBeGreaterThanOrEqual(1);
-  // `progress.detail` is a current-state snapshot, so dispatch can replace the requeue message before a poll
-  // sees it.
+  // progress.detail is a snapshot; dispatch can replace the requeue message before a poll sees it.
   expect(watch.updatedAtSequence.length).toBeGreaterThanOrEqual(2);
 }
 
 function assertAwaitingRetryDispatch(watch: Awaited<ReturnType<typeof watchPastTerminal>>): void {
   expect(watch.endedTerminal).toBe(false);
-  // The database transition is `failed -> queued`, but the public polling endpoint can observe the next
-  // orchestrator tick already dispatching it.
+  // The next orchestrator tick may already be dispatching it.
   expect(["queued", "running"]).toContain(watch.body.status);
 }
 
@@ -94,7 +91,7 @@ caseBlock(
     it(
       "does not re-queue source_unreachable, then accepts changed source bytes as a new build",
       async () => {
-        // F-BUILD-TIMEOUT shares F-LEG-1's target and can still be retrying after its AUTO row.
+        // Not F-LEG-1: F-BUILD-TIMEOUT shares its target and may still be retrying.
         const unreachable = await submissionFor("F-LEG-3", {
           source_uri: fixtures.unreachable_source_uri!,
         });
@@ -110,17 +107,13 @@ caseBlock(
 
         const corrected = await submissionFor("F-LEG-3", await sourceOf("F-LEG-1"));
 
-        // "Corrected" has to mean corrected: a reachable location AND changed bytes.
         expect(corrected.manifest.source_uri).not.toBe(unreachable.manifest.source_uri);
         expect(corrected.manifest.source_sha256).not.toBe(unreachable.manifest.source_sha256);
 
         const correctedRun = await submitAndWait(corrected);
         expect(correctedRun.jobId).not.toBe(failed.jobId);
-        // F-LEG-1's known-good source cannot reproduce F-LEG-3's deployed Wasm, so a real comparison must
-        // finish with the valid mismatch verdict rather than reusing the failed job.
         expect(correctedRun.body.status).toBe("mismatch");
 
-        // Last: the classified retrieval code for the guaranteed-404 URL.
         expect(failed.body.error).toBe("source_uri_not_materialized");
       },
       retryWatchWindowMs() + 2 * env.jobTimeoutMs + 120_000,

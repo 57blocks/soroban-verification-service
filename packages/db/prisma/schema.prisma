@@ -2,17 +2,13 @@ datasource db {
   provider = "postgresql"
 }
 
-// `importFileExtension = "js"` is load-bearing for anything that runs the *compiled* output.
+// importFileExtension = "js" is required by anything that runs the compiled output.
 generator client {
   provider            = "prisma-client"
   output              = "../generated/prisma"
   importFileExtension = "js"
 }
 
-// The migrations that created them on THIS database (20260806072758_read_and_aggregate_tables,
-// 20260806080519_trusted_verifier_bulk_load_url) are left in this package's migration history untouched.
-
-// One rebuild attempt: "compile this source, with this image, with these build options".
 model Rebuild {
   id             String  @id @db.Uuid
   idempotencyKey String  @unique @map("idempotency_key")
@@ -20,40 +16,22 @@ model Rebuild {
   buildOptions   Json    @map("build_options")
   imageDigest    String  @map("image_digest")
 
-  // "pending".
   status         String  @default("pending")
   batchJobId     String? @map("batch_job_id")
-  // Which attempt `batchJobId` refers to — "verify" (first) or "build" (the fallback retry after a verify-mode
-  // cli_failure).
   buildMode      String? @map("build_mode")
   mechanismReason String @map("mechanism_reason")
 
-  // Set once status is "done". `outcome` mirrors services/builder's own `classifyRunCliOutcome` vocabulary — no
-  // new terms.
   outcome         String? @map("outcome")
   runner          String? @map("runner")
-  // sha256 of the bytes this rebuild actually produced. The one fact every attached job needs and can safely
-  // share; each job compares it to *its own* freshly-fetched deployed hash.
   rebuiltWasmHash String? @map("rebuilt_wasm_hash")
   errorCode       String? @map("error_code")
   diagnostics     Json?   @map("diagnostics")
 
-  // ── The canonical source archive ───────────────────────────────────────────────────────
-  // `source_sha256` on `sourceRef` is the hash of what the submitter handed us.
-
-  // The value this rebuild's chain section records, read once when the row was created.
   chainSourceSha256      String? @map("chain_source_sha256")
   canonicalSourceSha256  String? @map("canonical_source_sha256")
-  // The staging key those bytes were read from. Null when the canonical archive is the submitted one, which is
-  // every rebuild written before this column existed.
   canonicalSourceKey     String? @map("canonical_source_key")
-  // `BuildArtifact.source_canonicalisation` as reported: the peel, and whether a rebuilt archive was adopted.
   sourceCanonicalisation Json?   @map("source_canonicalisation")
 
-  // ── ACN-9: what the burned verify attempt said ──────────────────────────────────────────────────
-  // `requeueForRetry` clears `outcome`/`errorCode`/`diagnostics` so the build-mode retry can write its own,
-  // which is correct and is also how the reason `verification_path` reads `retroactive_manual` stopped existing
-  // anywhere a reader could reach.
   verifyFailureCode String? @map("verify_failure_code")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -65,37 +43,25 @@ model Rebuild {
   @@map("rebuilds")
 }
 
-// Landed now, ahead of ratification, only because the shape itself does not commit to anything beyond storage:
-// no code path writes to this table yet.**
 model Environment {
   id              String   @id @db.Uuid
   cliver          String
   rsver           String
   templateVersion String   @map("template_version")
 
-  // "pending" — this pair has been observed and needs composing — nobody has claimed it yet "composing".
   status          String   @default("pending")
 
-  // The published, immutable identity — a hash over the canonical recipe (`composedEnvironmentRecipeHash()`,
-  // `@scvs/core`).
   recipeSha256    String?  @unique @map("recipe_sha256")
-  // The operational pull coordinate in this verifier's own private ECR repository.
   imageDigest     String?  @map("image_digest")
-  // The full `ComposedEnvironmentRecipe` (schema, pair, template_version, components with real checksums) —
-  // what `recipeSha256` is a hash of.
   recipe          Json?
   errorCode       String?  @map("error_code")
-  // Which scvs-composer Batch job is/was composing this pair — mirrors `Rebuild.batchJobId`.
   batchJobId      String?  @map("batch_job_id")
 
-  // Which host architecture our stored image declares.
   arch            String?
 
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  // One row per pair per template — a template bump changes what composing produces even for an already-`ready`
-  // pair, so it is part of the cache key, not a field on top of it.
   @@unique([cliver, rsver, templateVersion])
   @@index([status])
   @@map("environments")
@@ -103,7 +69,6 @@ model Environment {
 
 model Job {
   id               String    @id @db.Uuid
-  // The shared rebuild this job's verdict is computed from.
   rebuildId        String?   @map("rebuild_id") @db.Uuid
   rebuild          Rebuild?  @relation(fields: [rebuildId], references: [id])
   contractId       String?   @map("contract_id")
@@ -114,76 +79,40 @@ model Job {
   buildOptions     Json      @map("build_options")
   status           String
   failureReason    String?   @map("failure_reason")
-  // Null until `comparing` computes it, and null forever on every job-level failure.
   verdict          String?   @map("verdict")
-  // How many times publishing this job's already-computed verdict has failed.
   publishAttempts  Int       @default(0) @map("publish_attempts")
-  // Persisted rather than held in memory for the same reason `publish_attempts` is: the driver is a scheduler
-  // whose process can restart, and the count is the only thing that lets the scan know when to stop.
   retryAttempts    Int       @default(0) @map("retry_attempts")
 
-  // Set the moment the report publishes successfully — its presence (non-null) IS the durable pending flag AP4
-  // requires; only a successful archive upload or the reconciliation scan may clear it.
+  // Non-null is the durable archive-pending flag; only a successful upload or the reconciliation scan clears it.
   archivePendingSince DateTime? @map("archive_pending_since")
-  // Set once the archive upload succeeds (live attempt or a later reconciliation-scan retry).
   archivedTxId        String?   @map("archived_tx_id")
-  // Failed archive attempts. Mirrors publishAttempts's existing pattern, but unlike it, archival has no
-  // abandonment ceiling — nothing gives up and stops retrying at any count.
   archiveAttempts     Int       @default(0) @map("archive_attempts")
 
-  // Same shape as archivePendingSince/archivedTxId/archiveAttempts above, but with a bounded give-up: unlike
-  // archive retry (whose input, the report artifact, is durably in S3 forever), this retries reading the STAGED
-  // UPLOAD, which can be gone for good.
   sourcePublishPendingSince DateTime? @map("source_publish_pending_since")
-  // Set once this job's source is durably written to sources/{sha256}{ext} — by the live publish attempt or a
-  // later recovery-scheduler retry.
   sourceFileName            String?   @map("source_file_name")
-  // Failed source-publish attempts. Recorded for observability, same as archiveAttempts, but retrying itself is
-  // bounded by sourcePublishPendingSince's 24h window, not by this count.
   sourcePublishAttempts     Int       @default(0) @map("source_publish_attempts")
 
-  // The archive obligation for THIS job's own public, mainnet source (mainnet-source-archive design.md MSA-2).
   sourceArchivePendingSince DateTime? @map("source_archive_pending_since")
-  // Set once the source archive upload succeeds (live attempt or a later reconciliation-scan retry).
   sourceArchivedTxId        String?   @map("source_archived_tx_id")
-  // Failed source-archive attempts. Mirrors archiveAttempts's own pattern — observability only, no abandonment
-  // ceiling.
   sourceArchiveAttempts     Int       @default(0) @map("source_archive_attempts")
 
-  // At least one link this job owes wasms/<hash>.json is missing from the document. One flag for all three
-  // kinds; the recovery scan derives which are owed from the columns above. Distinct from the *PendingSince
-  // columns above, which track the UPLOAD — an upload that happened is recorded even when its link has not.
   statusLinkPendingSince    DateTime? @map("status_link_pending_since")
-  // Automatic recovery has stopped and a human has to look. Blocked REFINES pending rather than replacing
-  // it: the row still owes the link, so the clock above keeps running and clearing the reason alone returns
-  // it to the scan. A CHECK holds the shape.
+  // Refines pending, never replaces it; a CHECK constraint holds the shape.
   statusLinkBlockedSince    DateTime? @map("status_link_blocked_since")
-  // A closed set (`StatusLinkBlockedReason`), never raw error text — which would be derived from stored
-  // bytes we could not read.
+  // A closed set (`StatusLinkBlockedReason`), never raw error text.
   statusLinkBlockedReason   String?   @map("status_link_blocked_reason")
 
-  // Whether the submitter asked for a verdict without publishing one.
   dryRun           Boolean   @default(false) @map("dry_run")
 
-  // Where this job's redacted build output was stored. Written by the sandbox-side work that produces it; null
-  // until then, and null for every job that failed before a build started.
   buildLogObjectKey String?  @map("build_log_object_key")
 
-  // Raw build-log access (build-log-access design.md BL-1..BL-3). sha256 of the token minted for THIS job,
-  // hex — the token
-  // itself is returned once at submission and never stored. Per job, not per rebuild: several jobs share one
-  // log object and each of their submitters holds a different secret.
+  // sha256 (hex) of this job's build-log token; the token itself is returned once and never stored.
   buildLogTokenHash String?   @map("build_log_token_hash")
-  // When the raw log stops being served. Enforced on read as well as by the sweep, so a late sweep cannot
-  // silently extend the promise.
+  // Enforced on read as well as by the sweep.
   buildLogExpiresAt DateTime? @map("build_log_expires_at")
-  // A security hold exempts this job's log from the sweep for an investigation. Set out of band, never by a
-  // request; it does not re-open a `410`.
+  // Set out of band, never by a request.
   buildLogHold      Boolean   @default(false) @map("build_log_hold")
 
-  // The terms version this job's submitter accepted, and the sha256 of the bytes served under it
-  // (versioned-terms-and-assent design.md TA-3). Both null on every job created before assent was
-  // recorded, and on a submission made while the operator's text declared no effective date.
   acceptedTermsVersion String? @map("accepted_terms_version")
   acceptedTermsSha256  String? @map("accepted_terms_sha256")
 
@@ -196,12 +125,9 @@ model Job {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  // NOT `updatedAt`, which is `@updatedAt` and keeps advancing on post-verdict writes (archive and
-  // source-publish outcomes).
+  // The finish time; `updatedAt` keeps advancing on post-verdict writes.
   completedAt      DateTime? @map("completed_at")
 
-  // Written by `publish.service.ts`'s `writePublication` on first publish, and advanced by
-  // `arweave-archive.service.ts`'s `backfill` only on a real archive-backfill write.
   publishedUpdatedAt DateTime? @map("published_updated_at")
 
   @@index([contractId, network])
@@ -213,14 +139,12 @@ model Job {
   @@index([sourceArchivePendingSince])
   @@index([publishedUpdatedAt, wasmHash])
   @@index([buildLogExpiresAt])
-  // For the boot-time check that no job asserts a version whose text changed (design.md TA-5).
   @@index([acceptedTermsVersion])
   @@map("jobs")
 }
 
 model AbuseControl {
   submitterFingerprint String   @map("submitter_fingerprint")
-  // Which route the counter belongs to, so a submission budget and a query budget cannot spend each other.
   route                String   @default("default") @map("route")
   windowStart          DateTime @map("window_start")
   count                Int      @default(0)
@@ -243,9 +167,6 @@ model Upload {
   @@map("uploads")
 }
 
-// Exists so the sweep in upload-cleanup.ts can ask "is at least one referencing job still owed a source
-// publish" without a single overwritable column on Upload silently losing an earlier job's claim when a second
-// job reuses the upload.
 model UploadJobReference {
   uploadId  String   @map("upload_id") @db.Uuid
   jobId     String   @map("job_id") @db.Uuid
@@ -256,12 +177,9 @@ model UploadJobReference {
   @@map("upload_job_references")
 }
 
-// Closes the concurrent half of source-archive dedup: `findExistingUpload` (a read against Irys's indexer) and
-// the paid Irys upload are a check-then-act with no lock keyed on content, so two jobs sharing one
-// `source_sha256`.
 model SourceArchiveUpload {
   sourceSha256 String   @id @map("source_sha256")
-  // "claimed" — findOrCreate's INSERT won; that caller owns the right to upload.
+  // "claimed": the caller whose INSERT won owns the right to upload.
   status       String   @default("claimed")
   txId         String?  @map("tx_id")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -271,13 +189,9 @@ model SourceArchiveUpload {
   @@map("source_archive_uploads")
 }
 
-// Closes the same shape of gap for the report-archive path (backfill's own findExistingUpload/uploadToIrys
-// check-then-act) that SourceArchiveUpload closes for source archiving: the live publish path and
-// ArchiveRecoveryScheduler's reconciliation tick can both pass the check before either uploads, and both pay.
-// See archive-and-recovery/decisions/report-archive-dedup-needs-a-claim-row-too.md.
 model ReportArchiveUpload {
   reportSha256 String   @id @map("report_sha256")
-  // "claimed" — findOrCreate's INSERT won; that caller owns the right to upload.
+  // "claimed": the caller whose INSERT won owns the right to upload.
   status       String   @default("claimed")
   txId         String?  @map("tx_id")
   createdAt    DateTime @default(now()) @map("created_at")

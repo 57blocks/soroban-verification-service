@@ -5,15 +5,10 @@ import { prefetchCargoDependencies } from "../src/modules/builder/sandbox-runtim
 import { dockerFinalSandboxOptions, dockerResourceLimits } from "../src/modules/builder/run-cli.config.js";
 import type { RunCliInput } from "../src/modules/builder/run-cli.types.js";
 
-/**
- * `cargo vendor` runs `build.rs` from submitted source with network access, one stage before the container we
- * harden properly.
- */
 describe("prefetchCargoDependencies — the acquisition container's shape", () => {
   it("carries the same sandbox construction as the build container", async () => {
     const { command } = await runPrefetch();
 
-    // From resourceLimits, which the stage already had.
     expect(command).toContain("--cap-drop");
     expect(command).toContain("ALL");
     expect(command).toContain("--security-opt");
@@ -22,12 +17,10 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
     expect(command).toContain("--cpus");
     expect(command).toContain("--memory");
 
-    // From finalSandbox, which it did not: it ran as root on a writable rootfs.
     expect(command).toContain("--read-only");
     expect(command).toContain("--user");
     expect(command.filter((arg) => arg === "--tmpfs")).toHaveLength(2);
 
-    // The user must be the process's own, not a fixed id.
     const user = command[command.indexOf("--user") + 1];
     expect(user).toBe(`${process.getuid?.()}:${process.getgid?.()}`);
     expect(user).not.toBe("0:0");
@@ -36,14 +29,11 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
   it("keeps the writable mounts the stage exists to produce", async () => {
     const { command, vendorDir, outDir } = await runPrefetch();
 
-    // --read-only bounds the rootfs around these; it does not replace them.
     expect(command).toContain(`${vendorDir}:/vendor`);
     expect(command).toContain(`${outDir}:/out`);
-    // The source stays read-only, as it is on the build stage.
     expect(command.some((arg) => arg.endsWith(":/source:ro"))).toBe(true);
   });
 
-  /** BE3: the stage is driven only by trusted image-class configuration. */
   it("pins RUSTUP_TOOLCHAIN when one was resolved", async () => {
     const { command } = await runPrefetch("1.85.0");
 
@@ -71,8 +61,7 @@ async function runPrefetch(rustupToolchain?: string): Promise<{
     target: { network: "testnet", contract_id: "C".repeat(56) },
     build: { image: "docker.io/stellar/stellar-cli@sha256:" + "a".repeat(64), workspace_path: ".", target: "wasm32v1-none", bldarg: [], bldopt: [] },
     source: { mode: "hosted_tarball", visibility: "public", retained_after_verification: false, workspace_path: sourceRoot, local_path: sourceRoot },
-    // A timeout short enough that the `docker run` this issues cannot succeed or hang the suite: the assertion
-    // is on the command that was assembled, which is returned either way.
+    // 1 ms: the docker run cannot succeed or hang the suite, and the assembled command is returned either way.
     config: { dependencyPrefetchTimeoutMs: 1, dockerCheckTimeoutMs: 1 },
   } as unknown as RunCliInput;
 

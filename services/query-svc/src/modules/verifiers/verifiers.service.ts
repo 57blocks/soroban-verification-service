@@ -11,7 +11,7 @@ import {
 export class VerifiersService {
   private readonly logger = new ScvsLogger("verifiers");
 
-  // Explicit `@Inject()` — see aggregator.service.ts's comment.
+  // Explicit `@Inject()`: tsx/esbuild emits no decorator metadata.
   constructor(
     @Inject(TrustedVerifiersRepository)
     private readonly verifiers: TrustedVerifiersRepository,

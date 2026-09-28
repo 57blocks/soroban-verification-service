@@ -7,30 +7,18 @@ export type TrustedVerifierRecord = {
   verifierId: string;
   manifestUrl: string;
   resultsRoot: string;
-  /** The operator's name for this member. */
   displayName?: string;
-  /** Free-form tier label from the document; absent when it carried none. Nothing here reads it. */
   trustTier?: string;
-  /** Nullable at the column. */
   bulkLoadUrl?: string;
-  /** `active` | `paused` | `disabled`, as a plain string. */
   status: string;
   addedAt: string;
 };
 
-/**
- * CRUD over the `trusted_verifiers` table, seeded from the document `SCVS_TRUSTED_VERIFIERS_SOURCE` names by
- * scripts/seed-tvl.ts.
- */
 @Injectable()
 export class TrustedVerifiersRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
 
-  /**
-   * Every optional field is written `?? null` on update, deliberately: the seeded document is the source of
-   * truth and the table is its projection, so a field the document drops is cleared rather than left behind
-   * (see scripts/seed-tvl.ts's header).
-   */
+  /** Optional fields are written `?? null` so a field the seeded document drops is cleared, not left behind. */
   async upsertTrustedVerifier(input: {
     verifierId: string;
     manifestUrl: string;
@@ -63,10 +51,6 @@ export class TrustedVerifiersRepository {
     return rowToTrustedVerifier(row);
   }
 
-  /**
-   * `activeOnly` is the aggregation callers' filter: `paused` and `disabled` are both "do not query this one
-   * right now", and only a status-reporting caller wants them back.
-   */
   async listTrustedVerifiers(opts?: { activeOnly?: boolean }): Promise<TrustedVerifierRecord[]> {
     const rows = await this.prisma.trustedVerifier.findMany({
       where: opts?.activeOnly ? { status: "active" } : undefined,

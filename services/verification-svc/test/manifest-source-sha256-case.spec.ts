@@ -2,7 +2,6 @@ import { RegistryStatusObject, SEP58_HEX_SHA256, parseDto } from "@scvs/core";
 import { validateSubmittedManifest } from "../src/modules/preflight/manifest.js";
 import type { VerificationTarget } from "@scvs/core";
 
-/** `manifest.source_sha256` at the submit boundary. */
 const TARGET: VerificationTarget = {
   network: "testnet",
   wasm_hash: "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c",
@@ -34,7 +33,6 @@ const rejectionFor = (source_sha256: unknown): string => {
   return result.detail;
 };
 
-/** The published document, as `publish.service.ts` assembles it from the row this manifest becomes. */
 const publishWith = (sourceSha256: string) =>
   parseDto(RegistryStatusObject, {
     schema: "stellar-verification-status",
@@ -75,14 +73,11 @@ describe("manifest.source_sha256 at the submit boundary", () => {
   });
 
   it("stops claiming a lowercase rule it does not enforce", () => {
-    // The message said "must be a 64-character lowercase hex string" while the regex carried `/i`, which is how
-    // a submitter reading the refusal could not learn what actually happens.
     expect(rejectionFor("not-a-hash")).not.toContain("lowercase");
   });
 });
 
 describe("what submit accepts must be publishable", () => {
-  // The assertion whose absence is what makes this defect class recur.
   it("hands the publish validator a value it accepts", () => {
     const normalised = accepted(UPPERCASE);
     expect(SEP58_HEX_SHA256.test(normalised)).toBe(true);
@@ -90,7 +85,6 @@ describe("what submit accepts must be publishable", () => {
   });
 
   it("and the publish validator still refuses uppercase itself", () => {
-    // Normalising is the input boundary's job, not the publish boundary's.
     expect(() => publishWith(UPPERCASE)).toThrow();
   });
 });

@@ -2,7 +2,7 @@ datasource db {
   provider = "postgresql"
 }
 
-// `importFileExtension = "js"` is load-bearing for anything that runs the *compiled* output.
+// importFileExtension = "js" is required by anything that runs the compiled output.
 generator client {
   provider            = "prisma-client"
   output              = "../generated/prisma"
@@ -14,39 +14,27 @@ model TrustedVerifier {
   verifierId  String   @id @map("verifier_id")
   manifestUrl String   @map("manifest_url")
   resultsRoot String   @map("results_root")
-  /// The operator's name for this member, as the seeded document spells it.
   displayName String?  @map("display_name")
-  /// Free-form tier label carried straight from the document.
   trustTier   String?  @map("trust_tier")
-  /// A plain String, matching every other status column in both schemas; the DTO is what validates the
-  /// vocabulary.
   status      String   @default("active")
   addedAt     DateTime @default(now()) @map("added_at")
-  /// Where this verifier serves its own bulk load. Operator-maintained, because the Registry API draft has no
-  /// answered proposal for advertising it.
   bulkLoadUrl String? @map("bulk_load_url")
 
   @@map("trusted_verifiers")
 }
 
-// Derived from that verifier's result root, discardable, rebuildable: nothing here is a store of record.
 model VerificationResult {
   verifierId            String    @map("verifier_id")
   wasmHash              String    @map("wasm_hash")
   status                String
-  // CV11's two relay columns.
   schemaVersion         String?   @map("schema_version")
   verifier              Json?
-  // A peer still on the draft shape publishes `out_of_band`; that field has no column any more and rides
-  // `recipe`, which is where a field we do not emit belongs (CV8).
   recipeSource          String?   @map("recipe_source")
   imageTrustLevel       String?   @map("image_trust_level")
   recipe                Json?
-  // The draft's singular spelling likewise rides `recipe` now.
   verifiedSourceCodeUris Json?    @map("verified_source_code_uris")
   resultsUrls           Json?     @map("results_urls")
   processedAt           DateTime? @map("processed_at")
-  // What lets a stale result be served honestly, labelled with its age (AB5).
   retrievedAt           DateTime  @map("retrieved_at")
 
   @@id([verifierId, wasmHash])
@@ -58,19 +46,16 @@ model VerifierSyncCursor {
   verifierId String    @id @map("verifier_id")
   cursor     String?
   updatedAt  DateTime? @map("updated_at")
-  // `lastErrorReason` is the CLASSIFICATION beside that message — one of UnavailableVerifier's five values.
   lastError  String?   @map("last_error")
   lastErrorReason String? @map("last_error_reason")
 
   @@map("verifier_sync_cursor")
 }
 
-// AB1's ordering.
 model AggregatedWasmIndex {
   wasmHash             String   @id @map("wasm_hash")
   aggregationUpdatedAt DateTime @map("aggregation_updated_at")
-  // sha256 over the canonicalised entry set. AB2 advances the key when an entry appears, changes or is
-  // withdrawn — not when an unchanged one is re-read.
+  // sha256 over the canonicalised entry set; changes only when an entry appears, changes or is withdrawn.
   entriesDigest        String   @map("entries_digest")
 
   @@index([aggregationUpdatedAt, wasmHash])

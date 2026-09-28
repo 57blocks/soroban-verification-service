@@ -12,8 +12,6 @@ import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.service.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/** Two layers, same split `archive-and-recovery.spec.ts` uses for the Arweave equivalent: */
-
 const WASM_HASH = "6".repeat(64);
 const REBUILT_HASH = WASM_HASH;
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
@@ -60,7 +58,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    // Scheduled archives write to the rows cleanup deletes, so they finish first.
+    // Stop background archive work before deleting the rows it writes.
     if (moduleRef) await moduleRef.get(ArweaveArchiveService).onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
@@ -113,7 +111,6 @@ async function createVerifiedJob(): Promise<JobRecord> {
   return (await jobs.getJobById(job.jobId))!;
 }
 
-/** Backdates a job's own pending timestamp. */
 async function setSourcePublishPendingSince(jobId: string, when: Date): Promise<void> {
   await jobs.updateJob(jobId, { sourcePublishPendingSince: when });
 }
@@ -130,9 +127,8 @@ describe("JobsRepository source-publish-pending queries (Decision 2)", () => {
 
   it("excludes a job whose pending timestamp is older than the caller's cutoff — the 24h give-up bound", async () => {
     const job = await createVerifiedJob();
-    await setSourcePublishPendingSince(job.jobId, new Date(Date.now() - 25 * 60 * 60 * 1000)); // 25h ago
+    await setSourcePublishPendingSince(job.jobId, new Date(Date.now() - 25 * 60 * 60 * 1000));
 
-    // Same cutoff the real scheduler passes: now - 24h. A row 25h stale is older than that cutoff.
     const pending = await jobs.listJobsPendingSourcePublish(new Date(Date.now() - 24 * 60 * 60 * 1000));
 
     expect(pending.some((j) => j.jobId === job.jobId)).toBe(false);
@@ -173,7 +169,7 @@ describe("PublishService.retryPendingSourcePublish (Decision 2)", () => {
 
     const reloaded = await jobs.getJobById(job.jobId);
     expect(reloaded?.sourcePublishAttempts).toBe(1);
-    expect(reloaded?.sourcePublishPendingSince).toBeDefined(); // still owed — fetch failed again
+    expect(reloaded?.sourcePublishPendingSince).toBeDefined();
     expect(reloaded?.sourceFileName).toBeUndefined();
   });
 
@@ -184,8 +180,6 @@ describe("PublishService.retryPendingSourcePublish (Decision 2)", () => {
       sourceRef: { ...publicGitSourceRef, visibility: "private" },
     };
 
-    // Confirmed via the method's own doc comment: this is a defensive guard against a caller passing a row
-    // `sourcePublishPendingSince` should never have been set on, not a real path.
     await publish.retryPendingSourcePublish(privateJob);
 
     const reloaded = await jobs.getJobById(job.jobId);
@@ -196,7 +190,6 @@ describe("PublishService.retryPendingSourcePublish (Decision 2)", () => {
 
 describe("PublishService.publishJobResult — recordSourcePublishOutcome failure isolation (code review fix, 2026-08-14)", () => {
   it("a transient error recording the source-publish outcome does not turn an already-successful publish into a reported failure", async () => {
-    // The job IS already durably `published` by the time recordSourcePublishOutcome runs.
     const recordSpy = jest
       .spyOn(jobs, "recordSourcePublishOutcome")
       .mockRejectedValueOnce(new Error("simulated transient DB error"));
@@ -206,8 +199,6 @@ describe("PublishService.publishJobResult — recordSourcePublishOutcome failure
     recordSpy.mockRestore();
 
     const reloaded = await jobs.getJobById(job.jobId);
-    // The real assertion: still `published`, NOT `publish_pending` (which is what recordPublishFailure — the
-    // wrong catch handler for this failure — would have produced).
     expect(reloaded?.status).toBe("published");
     expect(reloaded?.publishAttempts).toBe(0);
   });

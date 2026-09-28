@@ -11,20 +11,7 @@ import {
 import type { RecordedToolchainPair } from "./build-environment.js";
 import type { VerificationTarget } from "./target.js";
 
-/**
- * Reading a deployed contract's Wasm and its SEP-58 build metadata off the chain — the one implementation.
- *
- * `verification-svc` asks before accepting a submission and `orchestrator-svc` asks again before dispatching a
- * build, and each held a copy. The copies were the same reader in two wrappers: plain functions taking a
- * config object on one side, a Nest `@Injectable()` reading the same four values from `ConfigService` on the
- * other. The orchestrator's own header said as much.
- *
- * What made the duplication worth removing is not the line count but what it duplicated: the
- * `stellar contract fetch` argument list, including which network flags a target gets. Only one copy had
- * pulled that out where a test could reach it.
- *
- * Node-only, so **not exported from this package's barrel** — reach it at `@scvs/core/chain-reader`.
- */
+/** Node-only: not exported from the barrel; import `@scvs/core/chain-reader`. */
 
 export type WasmMetadata = {
   wasm_hash: string;
@@ -53,22 +40,14 @@ export type ChainLookupResult =
       diagnostics: Record<string, unknown>;
     };
 
-/** What the reader needs, however the caller's service happens to hold it. */
 export type ChainReaderConfig = {
   stellarCliPath: string;
   artifactDir: string;
   cliTimeoutMs: number;
-  /**
-   * Mainnet RPC endpoint (`SCVS_MAINNET_RPC_URL`). Optional: unset keeps the CLI's built-in mainnet entry,
-   * which is a docs placeholder that fails any mainnet fetch.
-   */
+  /** Unset keeps the CLI's built-in mainnet RPC, a placeholder that fails every mainnet fetch. */
   mainnetRpcUrl?: string;
 };
 
-/**
- * The full `stellar contract fetch` invocation. Exported so the network-argument rules are directly
- * unit-testable without shelling out — which was true of one copy and not the other.
- */
 export function buildFetchCommand(
   target: VerificationTarget,
   config: ChainReaderConfig,
@@ -85,7 +64,6 @@ export function buildFetchCommand(
   ];
 }
 
-/** A fetch that failed because the target is not there, told apart from one that failed for any other reason. */
 export function classifyFetchFailure(result: CommandResult): "not_found" | "chain_lookup_failed" {
   const text = `${result.stdout}\n${result.stderr}\n${result.error || ""}`.toLowerCase();
   if (text.includes("not found") || text.includes("does not exist")) {
@@ -94,7 +72,6 @@ export function classifyFetchFailure(result: CommandResult): "not_found" | "chai
   return "chain_lookup_failed";
 }
 
-/** What the submitter is told. Bounded, because CLI output can be long and reaches an API response. */
 export function summarizeCommandFailure(result: CommandResult): string {
   if (result.error) {
     return result.error;
@@ -112,8 +89,6 @@ export async function getWasmMetadata(
   const wasmPath = join(workdir, "target.wasm");
 
   const fetchCommand = buildFetchCommand(target, config, wasmPath);
-  // Neither service mirrored the CLI's output to its own stdout, nor retained the command; the shared runner
-  // defaults to both for `builder`'s sake, so both are declined here.
   const fetch = await runCommand(fetchCommand, {
     timeout_ms: config.cliTimeoutMs,
     mirrorOutput: false,

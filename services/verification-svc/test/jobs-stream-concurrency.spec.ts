@@ -3,12 +3,6 @@ import type { MessageEvent } from "@nestjs/common";
 import type { JobRecord } from "@scvs/db";
 import { JobsService, StreamConcurrencyLimiter } from "../src/modules/verifications/jobs.service.js";
 
-/**
- * An SSE connection holds a socket, a setInterval, and a subscribeToJobUpdates listener open for up to
- * jobStreamWindowMs without ever issuing a second request, so a rate limit on connection setup cannot bound
- * how many stay open at once. These specs cover the concurrency ceiling that does.
- */
-
 function fakeConfig(overrides: Record<string, number> = {}) {
   const values: Record<string, number> = {
     jobStreamSafetyPollMs: 10_000,
@@ -22,7 +16,6 @@ function fakeConfig(overrides: Record<string, number> = {}) {
   return { get: (key: string) => values[key] } as never;
 }
 
-/** A stand-in IP fingerprint — opaque, never parsed, so a unique string identifies a caller as well as a real one. */
 function fakeIp(): string {
   return `ip-${randomUUID()}`;
 }
@@ -48,19 +41,16 @@ function fakeJobsRepository(jobId: string) {
   return { getJobById: async () => fakeJobRecord(jobId) } as never;
 }
 
-/** Never fires NOTIFY on its own — these specs drive the ceiling, not the push path. */
 function fakeJobEvents() {
   return { subscribeToJobUpdates: async () => () => {} } as never;
 }
 
-/** Lets queued microtasks (the `loadJobBody` await inside `emitCurrent`) settle before assertions run. */
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
 
-/** Subscribes and hands back a handle to read emissions and unsubscribe (closing the SSE connection). */
 function openStream(service: JobsService, jobId: string, ipFingerprint: string = fakeIp()) {
   const events: MessageEvent[] = [];
   let completed = false;
@@ -103,7 +93,6 @@ describe("StreamConcurrencyLimiter", () => {
     for (let i = 0; i < 3; i += 1) {
       expect(limiter.tryAcquire(randomUUID(), fakeIp(), 5, 10, 3)).toBe(true);
     }
-    // A fourth job, well under its own per-job ceiling, still hits the process-wide ceiling.
     expect(limiter.tryAcquire(randomUUID(), fakeIp(), 5, 10, 3)).toBe(false);
   });
 
@@ -111,18 +100,14 @@ describe("StreamConcurrencyLimiter", () => {
     const limiter = new StreamConcurrencyLimiter();
     const jobId = randomUUID();
     limiter.release(jobId, fakeIp());
-    // Still able to fill the full ceiling afterwards — release() never went negative and inflated capacity.
     for (let i = 0; i < 5; i += 1) expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 5)).toBe(true);
     expect(limiter.tryAcquire(jobId, fakeIp(), 5, 10, 5)).toBe(false);
   });
 
-  // The gap SCV-216's review flagged: an IP can spread connections across many distinct job ids, each well
-  // under the per-job ceiling, without ever being stopped — unless connections are also counted per IP.
   it("admits up to the per-IP ceiling across many distinct jobs, and refuses the next one", () => {
     const limiter = new StreamConcurrencyLimiter();
     const ip = fakeIp();
     for (let i = 0; i < 10; i += 1) {
-      // One connection per job — never touches the per-job ceiling of 5.
       expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(true);
     }
     expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
@@ -146,7 +131,6 @@ describe("StreamConcurrencyLimiter", () => {
     const ipB = fakeIp();
     for (let i = 0; i < 10; i += 1) expect(limiter.tryAcquire(randomUUID(), ipA, 5, 10, 500)).toBe(true);
     expect(limiter.tryAcquire(randomUUID(), ipA, 5, 10, 500)).toBe(false);
-    // ipB is untouched by ipA's ceiling.
     expect(limiter.tryAcquire(randomUUID(), ipB, 5, 10, 500)).toBe(true);
   });
 
@@ -158,13 +142,8 @@ describe("StreamConcurrencyLimiter", () => {
     expect(limiter.tryAcquire(randomUUID(), ip, 5, 10, 500)).toBe(false);
   });
 
-  // fingerprintIp returns null when a request has no resolvable address (abuse-guard.ts). Without special
-  // handling that would collapse onto a shared fingerprint, piling up every such caller into one bucket for as
-  // long as any of their connections stayed open. null means "no identity for this dimension", so it must skip
-  // the per-IP ceiling entirely rather than being treated as one more (shared) caller.
   it("skips the per-IP ceiling entirely when the fingerprint is null", () => {
     const limiter = new StreamConcurrencyLimiter();
-    // Far more than maxPerIp (1) — every acquire still succeeds because there is no identity to bill against.
     for (let i = 0; i < 5; i += 1) {
       expect(limiter.tryAcquire(randomUUID(), null, 5, 1, 500)).toBe(true);
     }
@@ -179,7 +158,6 @@ describe("StreamConcurrencyLimiter", () => {
     expect(limiter.tryAcquire(anonymousJobId, null, 5, 1, 500)).toBe(true);
     limiter.release(anonymousJobId, null);
 
-    // ip's own ceiling (1) is still fully held — release(null) must not have decremented it.
     expect(limiter.tryAcquire(randomUUID(), ip, 5, 1, 500)).toBe(false);
   });
 });
@@ -216,7 +194,6 @@ describe("JobsService.streamJob concurrency ceiling", () => {
     expect(rejected.isCompleted()).toBe(true);
     expect(rejected.events[0]?.data).toMatchObject({ error: "stream_connection_limit_reached" });
 
-    // Client disconnects — RxJS teardown must release the slot back to the limiter.
     first.close();
 
     const afterDisconnect = openStream(service, jobId);
@@ -259,7 +236,6 @@ describe("JobsService.streamJob concurrency ceiling", () => {
     const second = openStream(service, randomUUID(), ip);
     await flushMicrotasks();
 
-    // A third job for the same IP — none of these ever touch the per-job ceiling of 5.
     const third = openStream(service, randomUUID(), ip);
     await flushMicrotasks();
 

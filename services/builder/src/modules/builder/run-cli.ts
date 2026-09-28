@@ -15,28 +15,19 @@ import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResu
 import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, requireExtractedSourceRoot, stageSourceForOfflineBuild, summarizeDockerCommand } from "./sandbox-runtime.js";
 import { detectSourceCargoSourceOverride, resolveTrustedToolchain, writeVendorCargoConfig } from "./toolchain.js";
 
-// A plain module-level logger rather than an injected one: this file is a set of functions, not a provider
-// (AGENTS.md's rule for stateless helpers).
 const logger = new ScvsLogger("run-cli", { sink: stderrOnlySink });
 
-/**
- * The branch stays because the type still has the value and rows already written carry it; mapping it to
- * anything else would rewrite their meaning.
- */
 export function classifyRunCliOutcome(outcome: RunCliOutcome): BuildOutcomeClassification {
   if (outcome === "comparison_mismatch") return "comparison_mismatch";
   if (outcome === "cli_failure") return "cli_failure";
   return "success";
 }
 
-/** One `runCli()` call = one attempt, and there is now only one kind of attempt: the sandboxed rebuild. */
 export async function runCli(input: RunCliInput): Promise<RunCliResult> {
   return runManualRebuild(input);
 }
 
 async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
-  // `materializeSource` sets both fields to the *same* value for every archive-shaped source: the downloaded
-  // `.tar.gz`.
   const sourcePath = input.source.workspace_path;
   if (!sourcePath) {
     return cliFailure("source_not_local_for_fallback", "docker_build_image_rebuild", null, {
@@ -56,8 +47,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   }
   const sourceRoot = preparedSource.source_root;
 
-  // Nothing escaped through that ordering (the refusal still happened, one step later), but "stat a path we
-  // have not yet decided is admissible" is the wrong shape for a check whose whole job is containment.
   const containerManifest = resolveContainerManifestPath(input.build.workspace_path);
   if (!containerManifest.ok) {
     return cliFailure(containerManifest.reason, "docker_build_image_rebuild", null, {
@@ -97,8 +86,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     );
   }
 
-  // A no-op for a Docker Hub image; see `authenticateForImage` for why this does not widen what the builder
-  // holds.
   const registryAuth = await authenticateForImage(input.build.image, input.config);
   if (!registryAuth.ok) {
     return cliFailure(registryAuth.reason, "docker_build_image_rebuild", null, {
@@ -122,7 +109,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   const offlineManifestPath = resolveManifestPath(offlineSourceRoot, input.build.workspace_path);
 
   const outDir = await mkdtemp(join(tmpdir(), "scvs-build-"));
-  // Separate from `outDir` so the only `.wasm` here is one the build tool put there (AR1).
+  // Separate from `outDir` so the only `.wasm` here is one the build tool put there.
   const artifactDir = await mkdtemp(join(tmpdir(), "scvs-artifact-"));
   await mkdir(join(outDir, "tmp"), { recursive: true });
   const vendorDir = join(outDir, "vendor");
@@ -185,8 +172,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     finalSandbox,
     vendorDir,
     egressPolicy,
-    // Unconditional, unlike the build stage's pin: BE3 says this stage is driven *only* by trusted image-class
-    // configuration, and a recorded `bldopt --env` is submitted input.
+    // Unconditional: this stage takes only trusted config, and a recorded `bldopt --env` is submitted input.
     rustupToolchain: toolchain.toolchain,
   });
   if (!prefetch.ok) {
@@ -251,11 +237,8 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     );
   }
 
-  // The submitted source may carry its own `.cargo/config.toml` (commonly `[build] rustflags`, which changes
-  // codegen and therefore the Wasm bytes).
   const sourceCargoOverride = await detectSourceCargoSourceOverride(offlineSourceRoot);
   if (sourceCargoOverride) {
-    // Fail here instead, naming the file.
     return cliFailure(
       "source_cargo_source_override_conflict",
       "docker_build_image_rebuild",
@@ -361,23 +344,19 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     entrypoint: CONTAINER_CLI_ENTRYPOINT,
     vendorMount: "/vendor:ro",
   });
-  // AR2, taken **before** the build so it describes what the submission shipped rather than what the build
-  // produced.
+  // Taken before the build, so it describes what the submission shipped rather than what the build produced.
   const preExistingWasm = new Set([
     ...(await snapshotWasmPaths(offlineSourceRoot)),
     ...(await snapshotWasmPaths(outDir)),
     ...(await snapshotWasmPaths(artifactDir)),
   ]);
   if (preExistingWasm.size) {
-    // The submission shipped build output. Not fatal on its own — a conformant archive ships none, but the rule
-    // that acts on this is the eligibility check after the build, not a rejection here.
     logger.warn("source shipped pre-existing Wasm artifacts; they are excluded from selection (AR2)", {
       pre_existing_wasm_count: preExistingWasm.size,
     });
   }
 
   const build = await runCommand(buildCommand, { timeout_ms: cliTimeoutMs(input.config) });
-  // Which recorded (or added) flag the CLI refused, when it named one.
   const rejectedArgument = rejectedBuildArgument({
     stderr: `${build.stdout}\n${build.stderr}`,
     argv: buildCommand,
@@ -410,8 +389,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   });
   if (build.exit_code !== 0) {
     return cliFailure(
-      // Everything this cannot identify stays `rebuild_command_failed`, which is the honest default and covers
-      // ordinary compile failures.
       rejectedArgument
         ? rejectedArgument.origin === "recorded_bldopt"
           ? "recorded_build_option_unsupported"
@@ -434,8 +411,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     );
   }
 
-  // AR1: the candidate is the sole artifact in the output mount, and the build tool's own report must name it.
-  // A report is confirmation, never selection — submitted code executing during the compile can print one.
   const buildOutput = `${build.stdout}\n${build.stderr}`;
   const reports = parseBuildArtifactReports(buildOutput);
   const outputArtifacts = [...(await snapshotWasmPaths(artifactDir))];
@@ -464,7 +439,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   }
   const rebuiltPath = selection.hostPath;
 
-  // AR2's teeth.
   if (preExistingWasm.has(rebuiltPath)) {
     return cliFailure(
       "reported_artifact_was_pre_existing",
@@ -494,12 +468,8 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     );
   }
 
-  // Only this artifact's own hash/size are computed here. Whether it matches the deployed on-chain Wasm is
-  // services/orchestrator-svc/src/publish/compare.ts's job.
   const rebuiltHash = await sha256File(rebuiltPath);
 
-  // Cross-check against the hash the tool itself printed: equal hashes mean the bytes we are about to upload
-  // are the bytes the tool said it produced.
   const reportedHash = selection.sha256;
   if (reportedHash !== rebuiltHash) {
     return cliFailure(
@@ -521,7 +491,6 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     artifact_selection: "output_mount_confirmed_by_report" as const,
     reported_artifact_path: selection.containerPath,
     reported_artifact_hash_verified: true,
-    // Published so a submitter can see that their archive shipped build output and that we ignored it.
     pre_existing_wasm_count: preExistingWasm.size,
   };
 
@@ -584,9 +553,6 @@ export function removeRecordedMetaBldopts(forwarded: string[]): string[] {
   return filtered;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Re-exports. This module's public surface is unchanged by the split: every symbol it exported before still
-// resolves from here, so no caller and no test needed editing.
 export { parseBuildArtifactReports, resolveReportedArtifact, selectArtifactFromOutput } from "./artifact-selection.js";
 export type { BuildArtifactReport } from "./artifact-selection.js";
 export { extractBuildPackage, replayableBuildOptions, withDefaultBuildEnv } from "./build-options.js";

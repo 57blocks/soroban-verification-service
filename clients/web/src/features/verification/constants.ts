@@ -19,22 +19,14 @@ export const defaultValues: VerifyFormValues = {
   is_public: false,
 };
 
-/** What preflight prefills. They describe one target, so they are cleared together when the target changes. */
 export const evidenceFields = ["source_sha256", "source_uri", "bldarg", "bldopt"] as const;
 
-/** Precedes the two legal links under the submission heading. */
 export const submissionAgreementCopy =
   "By submitting a contract for verification you agree to the";
 
-/**
- * The picker's `accept` attribute — a convenience filter, not the rule. `.gz` is listed beside `.tar.gz`
- * because a browser names a re-downloaded tarball `archive.tar(2).gz`, which the longer suffix greys out.
- * What decides is `archiveFormatRefusal`, on the bytes.
- */
 export const sourceArchiveAccept =
   ".tar.gz,.tgz,.gz,.zip,application/gzip,application/zip";
 
-/** What each blocked preflight answer tells the submitter. */
 export const preflightBlockedCopy: Record<string, { title: string; description: string }> = {
   unreleased_cli: {
     title: "This contract cannot be verified",
@@ -68,17 +60,12 @@ export const preflightBlockedCopy: Record<string, { title: string; description: 
   },
 };
 
-/** The three stages the flow rule names. The per-step captions went with the panel that carried them. */
 export const flowSteps = [
   { label: "Submit target" },
   { label: "Queue or resolve" },
   { label: "Rebuild & compare" },
 ];
 
-/**
- * Per-field copy for the evidence form. `hint` is the short line the design sets to the right of the label;
- * `description` is the longer help below the input.
- */
 export const fieldCopy: Record<
   string,
   { label: string; hint: string; description: string }
@@ -165,7 +152,6 @@ export const responseCopy: Record<
   },
 };
 
-/** The result card's fill, text colour, badge fill, and glyph per verdict tone. */
 export const toneSurface: Record<ResultTone, string> = {
   success: "bg-success-surface",
   warning: "bg-warning-surface",

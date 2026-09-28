@@ -14,7 +14,6 @@ vi.mock("@scvs/verify-api-client", async () => ({
   useSubmitVerification: () => ({ mutateAsync: submitVerification }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
   AXIOS_INSTANCE: { defaults: {} },
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
 }));
@@ -62,7 +61,6 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 
-/** Runs preflight once against the first target, leaving its recipe prefilled. */
 const consoleOnFirstTarget = async () => {
   const { result } = renderHook(() => useVerificationConsole({ mode: "submit" }), { wrapper });
   act(() => {
@@ -85,8 +83,6 @@ beforeEach(() => {
 });
 
 describe("changing the target after preflight has answered", () => {
-  // The defect: the prefill is a merge, so a field the next target's chain does not state stayed on
-  // screen — and would be submitted — as the previous contract's.
   test("a second target that states nothing inherits none of the first one's recipe", async () => {
     const result = await consoleOnFirstTarget();
 
@@ -125,7 +121,6 @@ describe("changing the target after preflight has answered", () => {
     expect(result.current.values.bldopt).toBe("");
   });
 
-  // Editing the target is enough — the evidence must not survive to the moment preflight is re-run.
   test("the recipe is gone as soon as the target field is edited", async () => {
     const result = await consoleOnFirstTarget();
 
@@ -150,8 +145,6 @@ describe("changing the target after preflight has answered", () => {
     expect(result.current.values.bldopt).toBe("");
   });
 
-  // The picker mode was chosen for the target being left; leaving it on `upload_archive` asked for an
-  // archive the new target had no reason to need.
   test("the source-access picker returns to its default", async () => {
     const result = await consoleOnFirstTarget();
     act(() => {
@@ -167,14 +160,10 @@ describe("changing the target after preflight has answered", () => {
     expect(result.current.sourceArchive.archive).toBeNull();
   });
 
-  // The `incomplete` round trip is the same target, mid-flow: there the prefill must still merge, or it
-  // would erase what the submitter has just typed.
   test("the incomplete round trip keeps what the submitter typed", async () => {
     const result = await consoleOnFirstTarget();
-    // The chain's own hash, so the console's pre-submit chain-source check has nothing to refuse.
     act(() => {
       result.current.form.setValue("source_uri", "https://example.org/typed-by-hand.tar.gz");
-      // Without the act the console refuses before the endpoint is reached.
       result.current.terms.onAcceptedChange(true);
     });
     submitVerification.mockResolvedValue({

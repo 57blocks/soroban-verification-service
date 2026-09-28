@@ -1,5 +1,3 @@
-// Stage-1 dependency-prefetch egress policy.
-
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { prefetchAllowedHosts } from "./run-cli.config.js";
@@ -56,11 +54,7 @@ export function evaluatePrefetchUrl(
   return { ok: true };
 }
 
-/**
- * A transitive dependency's own `git`/`source` pointer exists on disk only after `cargo vendor` has
- * fetched it, so this re-runs the same allowlist against the vendored output. Rejects the build result;
- * the fetch itself has already happened by the time this runs.
- */
+/** Runs after `cargo vendor` has fetched, so it can reject the result but cannot prevent the fetch. */
 export async function evaluateVendoredEgressPolicy(
   vendorDir: string,
   allowedHosts: string[]
@@ -103,14 +97,9 @@ export async function collectCargoPrefetchUrls(
   return [...urls];
 }
 
-/** The TOML keys whose value cargo actually dereferences over the network. */
 const CARGO_SOURCE_KEY =
   /\b(?:git|registry|index|source|replace-with)\s*=\s*["']([^"']+)["']/g;
 
-/**
- * Cargo writes source provenance as `<kind>+<url>` (`registry+https://…`, `git+https://…`, `sparse+https://…`,
- * `git+ssh://…`).
- */
 export function stripSourceSchemePrefix(value: string): string {
   return value.replace(/^(?:registry|git|sparse)\+/, "");
 }

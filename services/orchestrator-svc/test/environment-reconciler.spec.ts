@@ -5,8 +5,6 @@ import type { ComposerDispatchService } from "../src/modules/build-environments/
 import type { EnvironmentOutcomeService } from "../src/modules/build-environments/environment-outcome.service.js";
 import type { AppConfigService } from "../src/config/configuration.js";
 
-/** The three descending rungs of evidence, and — more importantly — what each rung does *not* do. */
-
 const TIMEOUT_MS = 45 * 60_000;
 
 function stuck(overrides: Partial<EnvironmentRecord> = {}): EnvironmentRecord {
@@ -84,7 +82,6 @@ function schedulerFor(
 
 describe("EnvironmentReconcilerScheduler", () => {
   it("scans only composing rows, and only ones older than the configured timeout", async () => {
-    // `pending`, `ready` and `failed` are deliberately untouched — see the class header.
     const environments = new FakeEnvironments([]);
     await schedulerFor(environments, new FakeComposer(undefined), new FakeOutcomes()).
       reconcileStuckEnvironments();
@@ -97,7 +94,6 @@ describe("EnvironmentReconcilerScheduler", () => {
   });
 
   it("resets a claimed row that never recorded a Batch job id", async () => {
-    // Claimed but no `markComposing` means the submission almost certainly never landed.
     const environments = new FakeEnvironments([stuck({ batchJobId: undefined })]);
     const composer = new FakeComposer(undefined);
 
@@ -108,8 +104,6 @@ describe("EnvironmentReconcilerScheduler", () => {
   });
 
   it("leaves a row alone while Batch still reports it non-terminal", async () => {
-    // A composition legitimately takes tens of minutes — a rustup download, a full `docker build`, an ECR push
-    // — so RUNNING past the timeout is the expected answer for a slow-but-healthy row.
     const environments = new FakeEnvironments([stuck()]);
     const outcomes = new FakeOutcomes();
 
@@ -136,8 +130,6 @@ describe("EnvironmentReconcilerScheduler", () => {
   });
 
   it("falls to the receipt when Batch has forgotten the job entirely", async () => {
-    // Batch retains job records for a bounded window; the receipt in staging outlives it and is still the
-    // composer's own word about what happened.
     const environments = new FakeEnvironments([stuck()]);
     const outcomes = new FakeOutcomes(true);
 
@@ -149,8 +141,6 @@ describe("EnvironmentReconcilerScheduler", () => {
   });
 
   it("resets to pending — never to failed — when there is no Batch record and no receipt", async () => {
-    // Marking it `failed` would record "this pair cannot be composed" on the evidence of a lost message, and
-    // `CachingBuildEnvironmentMaterializer` never retries a `failed` row.
     const environments = new FakeEnvironments([stuck()]);
     const outcomes = new FakeOutcomes(false);
 
@@ -162,8 +152,6 @@ describe("EnvironmentReconcilerScheduler", () => {
   });
 
   it("forfeits the reset when Batch could not be asked at all", async () => {
-    // A failed rung degrades to the next one, but "we could not ask" is not "Batch has no record" — so the row
-    // is left alone rather than reset, and the next interval may reach Batch.
     const environments = new FakeEnvironments([stuck()]);
     const outcomes = new FakeOutcomes(false);
 
@@ -192,7 +180,6 @@ describe("EnvironmentReconcilerScheduler", () => {
   });
 
   it("treats a Batch status outside both vocabularies as unknown, not as terminal", async () => {
-    // Batch's vocabulary is Batch's to change. An unrecognised status must not be read as SUCCEEDED.
     const environments = new FakeEnvironments([stuck()]);
     const outcomes = new FakeOutcomes(false);
 
@@ -201,7 +188,6 @@ describe("EnvironmentReconcilerScheduler", () => {
 
     expect(outcomes.fromBatch).toEqual([]);
     expect(outcomes.fromArtifact).toBe(1);
-    // `couldAskBatch` is true here, so rung 3 is still available.
     expect(environments.released).toEqual(["env-1"]);
   });
 
@@ -224,7 +210,6 @@ describe("EnvironmentReconcilerScheduler", () => {
       outcomes,
     ).reconcileStuckEnvironments();
 
-    // env-1's rung 1 threw, so it forfeits the reset; env-2 gets the full three rungs.
     expect(environments.released).toEqual(["env-2"]);
   });
 
@@ -248,7 +233,7 @@ describe("EnvironmentReconcilerScheduler", () => {
     );
 
     const first = scheduler.reconcileStuckEnvironments();
-    await scheduler.reconcileStuckEnvironments(); // returns immediately, scan still in flight
+    await scheduler.reconcileStuckEnvironments();
     resolveList([]);
     await first;
 

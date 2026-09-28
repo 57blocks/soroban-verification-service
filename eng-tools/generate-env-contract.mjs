@@ -1,15 +1,11 @@
 #!/usr/bin/env node
-/**
- * The short version is that `packages/config` is imported by three services and should not gain a YAML parser
- * to serve a diagnostic, and that the resolver must stay in one place that needs no build.
- */
+/** Generates `packages/config/src/env-contract.generated.ts` from `config/env-manifest.yaml`. */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadManifest, observabilityOf, resolveManifest } from "./env-manifest.mjs";
 
 export const OUTPUT_PATH = "packages/config/src/env-contract.generated.ts";
 
-/** Groups whose members are digested — derived from the invariant, never declared separately. */
 export function digestGroups(manifest) {
   return new Set(
     Object.entries(manifest.groups ?? {})
@@ -18,7 +14,6 @@ export function digestGroups(manifest) {
   );
 }
 
-/** Which services get an endpoint. */
 export function contractServices(resolved) {
   return resolved.services.filter(([, svc]) => svc.config_contract === true);
 }
@@ -36,7 +31,7 @@ export function buildDescriptors(manifest) {
         name: varName,
         observable: observabilityOf(entry),
         group: entry.group,
-        // A secret never contributes to a digest, however stable its group. See check H.
+        // A secret never contributes to a digest.
         digest: Boolean(entry.group && digested.has(entry.group) && entry.secret !== true),
       }));
   }
@@ -92,8 +87,6 @@ export function render(manifest) {
   lines.push("};", "");
   return lines.join("\n");
 }
-
-// ── CLI ─────────────────────────────────────────────────────────────────────────────────────────
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = process.cwd();

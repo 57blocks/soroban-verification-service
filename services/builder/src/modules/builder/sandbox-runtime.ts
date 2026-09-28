@@ -1,5 +1,4 @@
 import type { RebuildErrorCode } from "@scvs/core";
-// Container invocation: availability, source staging, dependency prefetch.
 
 import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,16 +21,13 @@ export async function checkDockerAvailable(config?: RunCliRuntimeConfig): Promis
   return result.exit_code === 0 ? { ok: true, result } : { ok: false, result };
 }
 
-/** `<account>.dkr.ecr.<region>.amazonaws.com` → `<region>`. Exported for tests; it is the pure part. */
 export function ecrRegistryRegion(registry: string): string | undefined {
   return /^[0-9]{12}\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com$/.exec(registry)?.[1];
 }
 
-/** Authenticates the local docker client to ECR when — and only when — the build image lives there. */
 export async function authenticateForImage(
   image: string,
   config?: RunCliRuntimeConfig,
-  /** Injected for tests; production omits it and gets `runCommand`. Same seam as the composer's `fetchImpl`. */
   runner: typeof runCommand = runCommand,
 ): Promise<{ ok: true; skipped: boolean } | { ok: false; reason: RebuildErrorCode; detail: string }> {
   const registry = image.split("/")[0] ?? "";
@@ -40,11 +36,8 @@ export async function authenticateForImage(
 
   const password = await runner(["aws", "ecr", "get-login-password", "--region", region], {
     timeout_ms: dockerCheckTimeoutMs(config),
-    // Everything else in this file mirrors to CloudWatch on purpose — its output is build logs — which is
-    // exactly why the one command whose stdout *is* a registry credential has to opt out.
+    // stdout is a registry credential: never mirrored, and never recorded into the published log.
     mirrorOutput: false,
-    // `mirrorOutput` only governs this process's own stdout; the sink in `@scvs/core/process` is what becomes the
-    // public log.
     record: false,
   });
   if (password.exit_code !== 0 || !password.stdout.trim()) {
@@ -83,7 +76,6 @@ export function summarizeDockerCommand(input: {
   resourceLimits: DockerResourceLimits;
   finalSandbox?: DockerFinalSandboxOptions;
   network?: "none";
-  /** Printed because the build stage now names it rather than inheriting the image's. */
   entrypoint?: string;
   sourceMount?: "/source" | "/source:ro";
   vendorMount?: "/vendor" | "/vendor:ro";
@@ -132,7 +124,6 @@ export async function stageSourceForOfflineBuild(sourceRoot: string, config?: Ru
   return { ok: true, source_root: stagedRoot };
 }
 
-/** Stage one: fetch the dependency set, then hand it to a build stage that has no network at all. */
 export async function prefetchCargoDependencies(input: {
   input: RunCliInput;
   sourceRoot: string;
@@ -207,8 +198,6 @@ export async function requireExtractedSourceRoot(sourcePath: string): Promise<
   }
   if (info.isDirectory()) return { ok: true, source_root: sourcePath };
 
-  // Extraction now happens in the materialiser container, which holds no socket
-  // (modules/materialise/materialise.service.ts).
   return {
     ok: false,
     reason: "source_not_extracted",

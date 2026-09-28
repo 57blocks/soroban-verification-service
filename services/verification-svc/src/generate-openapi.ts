@@ -1,8 +1,6 @@
 import "reflect-metadata";
-// Same side-effect import as main.ts.
 import "@scvs/config/load-env";
-// Must stay above the AppModule import — see the file itself for why, and for the silent `process.exit(1)` it
-// prevents.
+// Must stay above the AppModule import: it plants the variables AppModule requires at boot.
 import "./openapi-placeholder-env.js";
 import { writeFile } from "node:fs/promises";
 import { NestFactory } from "@nestjs/core";
@@ -20,8 +18,7 @@ async function main(): Promise<void> {
 
   await app.close();
   console.log(`[verification-svc] wrote ${outFile.pathname}`);
-  // The interval `@nestjs/schedule` holds (see upload-cleanup.scheduler.ts) keeps a timer alive past
-  // `app.close()` — force the exit rather than waiting on it.
+  // `@nestjs/schedule`'s interval keeps a timer alive past `app.close()`, so exit explicitly.
   process.exit(0);
 }
 

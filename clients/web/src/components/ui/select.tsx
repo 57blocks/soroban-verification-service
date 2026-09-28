@@ -6,7 +6,6 @@ export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;
 export const SelectGroup = SelectPrimitive.Group;
 
-/** The design's dropdown trigger: a 44px white field with a small ▼ glyph, matching the inputs beside it. */
 export const SelectTrigger = forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
@@ -43,7 +42,6 @@ export const SelectContent = forwardRef<
       className={cn(
         "relative z-50 overflow-hidden rounded-lg border border-line-strong bg-surface p-1.5 shadow-dropdown",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-        // Matches the design's dropdown, which spans the full width of its trigger.
         "w-[var(--radix-select-trigger-width)]",
         className,
       )}
@@ -55,7 +53,6 @@ export const SelectContent = forwardRef<
 ));
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 
-/** Selected reads as a solid yellow row in bold; hover/keyboard focus is the pale yellow wash. */
 export const SelectItem = forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>

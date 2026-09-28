@@ -1,8 +1,6 @@
 import "reflect-metadata";
-// Same side-effect import as main.ts, and for the same ESM ordering reason stated there.
 import "@scvs/config/load-env";
-// Must stay above the AppModule import — see the file itself for why, and for the silent `process.exit(1)` it
-// prevents.
+// Must stay above the AppModule import.
 import "./openapi-placeholder-db.js";
 import { writeFile } from "node:fs/promises";
 import { NestFactory } from "@nestjs/core";

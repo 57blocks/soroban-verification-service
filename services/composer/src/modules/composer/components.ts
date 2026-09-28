@@ -6,7 +6,6 @@ import type { OfficialComponent, RecordedToolchainPair } from "@scvs/core";
 import type { CompositionTemplate } from "./template.js";
 
 export class ComponentError extends Error {
-  /** Becomes `ComposerArtifact.reason`, and from there `Environment.errorCode`. */
   readonly reason: string;
   readonly context: Record<string, unknown>;
 
@@ -19,18 +18,14 @@ export class ComponentError extends Error {
 }
 
 export type FetchedComponents = {
-  /** Exactly what goes into the published recipe — see `ComposedEnvironmentRecipe`. */
   components: OfficialComponent[];
-  /** Where each verified file was written inside the build context. */
   contextDir: string;
 };
 
 const GITHUB_API = "https://api.github.com";
 const RUSTUP_ARCHIVE = "https://static.rust-lang.org/rustup/archive";
-/** Same host as the installer archive; rustup's own per-release manifest of what a toolchain ships. */
 const RUSTUP_DIST = "https://static.rust-lang.org/dist";
 
-/** Bounded so a redirect to something enormous cannot fill the composer's disk before we notice. */
 const MAX_COMPONENT_BYTES = 256 * 1024 * 1024;
 
 export async function fetchAndVerifyComponents(input: {
@@ -38,18 +33,13 @@ export async function fetchAndVerifyComponents(input: {
   template: CompositionTemplate;
   contextDir: string;
   timeoutMs: number;
-  /** Injected for tests; production passes the global. */
   fetchImpl?: typeof fetch;
 }): Promise<FetchedComponents> {
   const { pair, template, contextDir, timeoutMs } = input;
   const doFetch = input.fetchImpl ?? fetch;
 
-  // ── 0. Can this toolchain even provide the target the template pins? ──────────────────────────
-  // First, because it is the cheapest question here and the only one that can be answered before ~110 MB is
-  // downloaded and a ~7-minute image build reaches the step that would fail anyway.
   await assertToolchainProvidesTargets({ pair, template, timeoutMs, fetchImpl: doFetch });
 
-  // ── 1. rustup installer: URL derived from the template's own pins, checksum from the template ──
   const rustupUrl = `${RUSTUP_ARCHIVE}/${template.rustup.version}/${template.rustup.targetTriple}/rustup-init`;
   const rustupBytes = await download(doFetch, rustupUrl, timeoutMs, "rustup_installer");
   verifySha256(rustupBytes, template.rustup.installerSha256, {
@@ -59,7 +49,6 @@ export async function fetchAndVerifyComponents(input: {
   });
   await writeFile(join(contextDir, "rustup-init"), rustupBytes);
 
-  // ── 2. stellar-cli release asset: location AND checksum both from the release API ──────────────
   const asset = await resolveStellarCliAsset(doFetch, pair.cliver, template, timeoutMs);
   const cliArchive = await download(doFetch, asset.downloadUrl, timeoutMs, "stellar_cli");
   verifySha256(cliArchive, asset.sha256, {
@@ -67,12 +56,8 @@ export async function fetchAndVerifyComponents(input: {
     component: "stellar_cli",
     source: asset.downloadUrl,
   });
-  // The release ships a tar.gz containing the `stellar` binary; extraction happens in the image build step,
-  // which has tar available.
   await writeFile(join(contextDir, "stellar-cli-archive"), cliArchive);
 
-  // ── 3. Runtime libraries the base image does not supply: URL AND checksum both from the template ──
-  // Deliberately the rustup branch's shape, not the CLI branch's.
   const runtimeLibraries: OfficialComponent[] = [];
   for (const library of template.runtimeLibraries) {
     const component = `runtime_library:${library.name}`;
@@ -82,8 +67,6 @@ export async function fetchAndVerifyComponents(input: {
       component,
       source: library.url,
     });
-    // `<name>.deb` is what the template `COPY`s. The template's own validation constrains `name` to a package
-    // name precisely because it lands in a path here.
     await writeFile(join(contextDir, `${library.name}.deb`), bytes);
     runtimeLibraries.push({
       kind: "runtime_library",
@@ -98,12 +81,9 @@ export async function fetchAndVerifyComponents(input: {
       {
         kind: "base_image",
         source: template.baseImage.reference,
-        // Already a `sha256:`-prefixed OCI digest, unlike the file checksums below.
         sha256: template.baseImage.digest,
       },
       {
-        // The compiler is fetched by rustup during the build and verified against rustup's own signed
-        // manifests.
         kind: "rust_toolchain",
         source: rustupUrl,
         sha256: `sha256:${template.rustup.installerSha256}`,
@@ -120,15 +100,13 @@ export async function fetchAndVerifyComponents(input: {
 
 type StellarCliAsset = { downloadUrl: string; sha256: string; assetName: string };
 
-/** Finds the release asset for `cliver` and the checksum GitHub publishes for it. */
 async function resolveStellarCliAsset(
   doFetch: typeof fetch,
   cliver: string,
   template: CompositionTemplate,
   timeoutMs: number,
 ): Promise<StellarCliAsset> {
-  // `cliver` is chain-derived and interpolated into a URL path — validated rather than trusted, because "it
-  // came from the chain" makes it immutable, not well-formed.
+  // Chain-derived and interpolated into a URL path: validated, not trusted.
   const parsed = parseCliver(cliver);
   if (!parsed) {
     throw new ComponentError(
@@ -153,9 +131,6 @@ async function resolveStellarCliAsset(
   );
 
   if (response.status === 404) {
-    // The distinction that matters: a released version we cannot reach is retryable infrastructure trouble,
-    // whereas a version that does not exist as a release is the `unreleased_cli` case the resolver could not
-    // classify for want of exactly this data source (see `isUndatedNightlyRsver`'s comment in @scvs/core).
     throw new ComponentError(
       "unreleased_cli",
       `stellar-cli has no release tagged v${version}; this toolchain cannot be composed from released ` +
@@ -187,8 +162,7 @@ async function resolveStellarCliAsset(
     );
   }
   if (candidates.length > 1) {
-    // Fail closed rather than pick one. Two matching assets means our matching rule is wrong for this release,
-    // and guessing would silently compose against an asset nobody chose.
+    // Fail closed: two matching assets means the matching rule is wrong for this release.
     throw new ComponentError(
       "ambiguous_release_asset",
       `Release v${version} publishes ${candidates.length} assets matching ${triple}; refusing to guess.`,
@@ -203,7 +177,6 @@ async function resolveStellarCliAsset(
       asset_name: asset.name,
     });
   }
-  // `digest` is `"sha256:<hex>"` when present.
   const digest = asset.digest ?? undefined;
   if (!digest || !/^sha256:[0-9a-f]{64}$/i.test(digest)) {
     throw new ComponentError(
@@ -221,10 +194,6 @@ async function resolveStellarCliAsset(
   };
 }
 
-/**
- * Refuses, before anything is downloaded, a `(rsver, template)` pair whose toolchain does not ship the Rust
- * target the template pins.
- */
 export async function assertToolchainProvidesTargets(input: {
   pair: RecordedToolchainPair;
   template: CompositionTemplate;
@@ -236,7 +205,6 @@ export async function assertToolchainProvidesTargets(input: {
   const targets = template.rust.targets;
   if (targets.length === 0) return;
 
-  // An undated `-nightly` names no single toolchain, so no manifest describes it.
   if (/-(nightly|beta)$/i.test(pair.rsver)) return;
 
   const url = `${RUSTUP_DIST}/channel-rust-${pair.rsver}.toml`;
@@ -250,8 +218,7 @@ export async function assertToolchainProvidesTargets(input: {
     if (!response.ok) return;
     manifest = await response.text();
   } catch {
-    // Includes the `ComponentError` `withTimeout` raises. Swallowed on purpose: a slow mirror must not become a
-    // verdict about the pair. The build will still run and still fail if the target is absent.
+    // Swallowed: a slow mirror must not become a verdict about the pair; the build still fails if the target is absent.
     return;
   }
 
@@ -321,7 +288,6 @@ async function download(
   return bytes;
 }
 
-/** Compares in constant time. */
 function verifySha256(
   bytes: Buffer,
   expectedHex: string,

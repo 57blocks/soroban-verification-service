@@ -1,4 +1,3 @@
-/** E2E-SRC-12 — an adopting job's own `is_public` obligates the source publication its donor skipped */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import {
@@ -23,15 +22,12 @@ import { linkUrls, sourceCodeUriUrls } from "../../support/types.js";
 const CASE_ID = "E2E-SRC-12";
 const FIXTURE_ID = "F-MULTIPKG";
 
-/** How long the adopting job's source publication may take to appear. */
 const SOURCE_PUBLISH_DEADLINE_MS = Number(
   process.env.SCVS_E2E_SOURCE_PUBLISH_DEADLINE_MS ?? 4 * 60_000
 );
 
-/** Between polls of `wasms/{H}.json`. Cheap static GET; no reason to hammer it. */
 const STATUS_POLL_INTERVAL_MS = Math.min(env.pollIntervalMs, 5_000);
 
-/** Polls this hash's own entry until it carries a `verified_source_code_uris`. */
 async function waitForVerifiedSourceCodeUris(
   wasmHash: string,
   identity: OwnVerifierIdentity,
@@ -46,7 +42,6 @@ async function waitForVerifiedSourceCodeUris(
     if (read.found) {
       const entry = ownEntryOf(read.object.source_code_verifications, identity);
       const uris = entry ? sourceCodeUriUrls(entry) : [];
-      // `{type, url, sha256}` links — the anchor is the URL inside each entry.
       const results = entry ? linkUrls(entry) : [];
       if (!results.includes(reportUrl)) {
         throw new Error(
@@ -91,7 +86,6 @@ caseBlock(
     it(
       "★ the adopting job's own is_public obligates the source publication its donor skipped",
       async () => {
-        // One recipe for both submissions — adoption's precondition.
         const scopedBldopt = runScopedBldopt(
           fixtures.contracts[FIXTURE_ID].bldopt ?? [],
           env.runId,
@@ -107,21 +101,14 @@ caseBlock(
         const donorManifest = donorBody.manifest as unknown as Record<string, unknown>;
         const adopterManifest = adopterBody.manifest as unknown as Record<string, unknown>;
 
-        // ── Premise 1: the two submissions differ in the declaration and nothing else ──────────
-        // If they differed in the recipe, the second would build and publish in its own right and this case
-        // would prove nothing about adoption.
         expect(adopterManifest.source_sha256).toBe(donorManifest.source_sha256);
         expect(adopterManifest.bldopt).toEqual(donorManifest.bldopt);
         expect(adopterManifest.bldarg).toEqual(donorManifest.bldarg);
-        // This is the shape a submitter who simply did not ask sends.
         expect(donorManifest.is_public).toBeUndefined();
         expect(adopterManifest.is_public).toBe(true);
-        // Two real submissions, each with its own staging copy. The adopting job's own copy is what the
-        // recovery retry reads, which is why it must survive the adoption path's cleanup.
         expect(adopterManifest.upload_id).toBeDefined();
         expect(adopterManifest.upload_id).not.toBe(donorManifest.upload_id);
 
-        // ── 1. The donor: private, verified, published ─────────────────────────────────────────
         const donor = await submitAndWait(donorBody);
         expect(donor.body.status).toBe("verified");
         const wasmHash = donor.body.result?.wasm_hash;
@@ -130,19 +117,15 @@ caseBlock(
         expect(donorReportUrl).toBeDefined();
 
         const donorReport = (await readReportByUrl(donorReportUrl!)).artifact;
-        // It declared nothing public, so it stored no copy and named no file.
         expect(donorReport.source?.is_public).toBe(false);
         expect(donorReport.source?.source_file_name).toBeUndefined();
         const sourceSha256 = donorReport.source?.source_sha256;
         expect(sourceSha256).toMatch(/^[0-9a-f]{64}$/);
 
-        // ── Premise 2: non-vacuity — this hash carries no source link yet ──────────────────────
         const identity = await ownVerifierIdentity();
         const before = await requireStatusObject(wasmHash!);
         const beforeEntry = ownEntryOf(before.source_code_verifications, identity);
         expect(beforeEntry?.status).toBe("verified");
-        // The anchor `appendVerifiedSourceCodeUri` will look for. Without it the append declines, and the
-        // case's central assertion could never pass.
         expect(beforeEntry ? linkUrls(beforeEntry) : []).toContain(donorReportUrl);
         if ((beforeEntry ? sourceCodeUriUrls(beforeEntry) : []).length > 0) {
           throw new Error(
@@ -159,37 +142,27 @@ caseBlock(
           );
         }
 
-        // ── 2. The adopter: same recipe, declared public ───────────────────────────────────────
         const adopter = await submitAndWait(adopterBody);
         expect(adopter.body.status).toBe("verified");
         expect(adopter.jobId).not.toBe(donor.jobId);
 
-        // HA1 — it adopted rather than republished: the donor's artifact, not a second one minted beside it for
-        // identical inputs.
         expect(adopter.body.result?.artifact_url).toBe(donorReportUrl);
 
-        // ── 3. HA2 — the adopting job's own visibility obligated the publication ───────────────
         const uris = await waitForVerifiedSourceCodeUris(wasmHash!, identity, donorReportUrl!);
-        // Testnet, so S3 is the only eligible tier — Arweave needs `network === "mainnet"`
-        // (`isSourceArchiveEligible`).
+        // Testnet: S3 is the only eligible tier; Arweave is mainnet-only.
         expect(uris).toHaveLength(1);
         expect(uris[0]).toContain("/sources/");
         expect(uris[0]).toContain(sourceSha256!);
 
-        // HA3 — and the link resolves to the bytes this verdict was computed from.
         const published = await http(uris[0]);
         expectStatus(published, 200);
         expect(sha256Hex(published.bytes)).toBe(sourceSha256);
 
-        // ── 4. HA4 — the adopted report still records the donor's declaration ─────────────────
-        // Asserted so the disagreement is recorded and any future change to it is a deliberate one.
         const adoptedReport = (await readReportByUrl(adopter.body.result!.artifact_url!)).artifact;
         expect(adoptedReport.source?.is_public).toBe(false);
         expect(adoptedReport.source?.source_file_name).toBeUndefined();
         expect(adoptedReport.source?.source_sha256).toBe(sourceSha256);
       },
-      // The donor's real build, the adopter's adoption (no build), and the reconciliation tick that publishes
-      // the source — plus margin for the two submissions' own polling.
       env.jobTimeoutMs + SOURCE_PUBLISH_DEADLINE_MS + 120_000
     );
   }

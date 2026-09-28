@@ -2,10 +2,9 @@ import { env } from "./env.js";
 import { http, sleep, type HttpResult } from "./http.js";
 import { staticWasmStatusUrl, verifyWasmStatusUrl } from "./routes.js";
 
-/** 2.5x the 60s cache TTL on mutable `wasms/*.json` status objects. */
+/** 2.5x the 60s cache TTL on mutable `wasms/*.json`. */
 export const STATUS_AGREEMENT_TIMEOUT_MS = 150_000;
 
-/** Reads the static status object and both dynamic hash spellings until all three agree. */
 export async function readStatusFormsUntilAgreed(wasmHash: string): Promise<{
   staticRead: HttpResult;
   dynamicRead: HttpResult;

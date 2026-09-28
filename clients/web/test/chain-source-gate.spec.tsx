@@ -15,7 +15,6 @@ import type { VerifyFormValues } from "@/features/verification/types";
 
 vi.mock("@scvs/verify-api-client", async () => ({
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
 }));
@@ -42,19 +41,12 @@ describe("chainSourceRefusal", () => {
   });
 
   test("stays silent when there is nothing to compare against", () => {
-    // A contract recording no source_sha256, and a preflight that could not read one, are the same case: not a
-    // disagreement, so not a refusal.
     expect(chainSourceRefusal(undefined, "b".repeat(64))).toBeNull();
     expect(chainSourceRefusal("", "b".repeat(64))).toBeNull();
     expect(chainSourceRefusal(CHAIN, "")).toBeNull();
   });
 });
 
-/**
- * The browser's copy of the server's message is deliberate — the web bundle does not depend on `@scvs/core` —
- * so it is pinned here.
- */
-/** verification-svc's rule as text, with adjacent string literals joined and whitespace collapsed. */
 const serverRule = () =>
   readFileSync(
     resolve(process.cwd(), "../../services/verification-svc/src/modules/preflight/manifest.ts"),
@@ -106,8 +98,6 @@ describe("picking an archive the chain does not record", () => {
     const result = await pick(CHAIN, GZIP_BYTES);
 
     expect(result.current.archive.archive).toBeNull();
-    // The form's hash is cleared too: leaving it set would let a submitter proceed with a value no file on this
-    // page produces any more.
     expect(result.current.form.getValues("source_sha256")).toBe("");
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain(CHAIN);

@@ -79,7 +79,6 @@ function deployment(records, fixtureId) {
   return matches[0];
 }
 
-/** For a fixture whose deployment is a scope of its own rather than part of `all`. */
 function optionalDeployment(records, fixtureId) {
   const matches = records.filter(
     (record) =>
@@ -114,8 +113,7 @@ const inventory = readJson(basePath);
 const records = readDeployments(deploymentsPath);
 const buildRecords = fixtureOverlay === "timeout" ? [] : readBuildManifest(buildManifestPath);
 
-// CI creates these archives on the runner. libarchive header bytes vary between releases, so the committed
-// template hash is not authoritative for a run-scoped inventory.
+// libarchive header bytes vary between releases, so a runner-built archive's hash is rebound here.
 function rebindArchiveHash(fixtureId, archivePath) {
   const fixture = inventory.contracts?.[fixtureId];
   if (!fixture) throw new Error(`base inventory is missing ${fixtureId}`);
@@ -124,11 +122,8 @@ function rebindArchiveHash(fixtureId, archivePath) {
   fixture.source_sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-// `generate-fixtures.sh` records every archive it packages, with the same repository-relative path the
-// inventory names, so its manifest is the authority on what this runner generated.
 function generatedArchivePaths() {
-  // The fixed corpus location, not `fixtureOutputRoot`: inventory `source_path`s are relative to it, and
-  // `check-e2e-fixture-inventory.mjs` reads the same manifest from the same place.
+  // The fixed corpus location, not `fixtureOutputRoot`: inventory `source_path`s are relative to it.
   const manifestPath = resolve(repoRoot, "artifacts/e2e-fixtures/manifest.ndjson");
   if (!existsSync(manifestPath)) return new Set();
   return new Set(
@@ -142,7 +137,6 @@ function generatedArchivePaths() {
           throw new Error(`invalid generated fixture record ${manifestPath}:${index + 1}: ${error.message}`);
         }
       })
-      // The declared-hash-mismatch record carries no archive of its own.
       .map((record) => record.path)
       .filter(Boolean)
   );
@@ -156,9 +150,6 @@ if (process.env.SCVS_FIXTURE_ALLOW_PLATFORM_HASH === "1") {
     }
   }
 
-  // Packaged by other scripts, so absent from that manifest and just as platform-dependent:
-  // `prepare-ci-sources.sh` writes the multi-package archive, and `build-purpose-contracts.sh`'s `upgrade`
-  // scope writes F-UPG's v1 source archive.
   for (const [fixtureId, archivePath] of [
     ["F-MULTIPKG", "artifacts/e2e-fixtures/archives/multi-package-source.tar.gz"],
     ["F-UPG", "artifacts/e2e-fixtures/archives/upgrade/f-upg-v1-source.tar.gz"],
@@ -228,7 +219,6 @@ const publicZipCli58Build = buildRecord(buildRecords, "F-58-ZIP-PUBLIC-testnet")
 applyTarget(inventory.contracts?.["F-LEG-1"], verifiedTarget);
 applyTarget(inventory.contracts?.["F-PRIV"], verifiedTarget);
 applyTarget(inventory.contracts?.["F-URI-PRIV"], verifiedTarget);
-// This compiler-error source deliberately fails while rebuilding F-LEG-1's run-scoped target.
 applyTarget(inventory.contracts?.["F-PRIV-BUILDFAILED"], verifiedTarget);
 applyTarget(inventory.contracts?.["F-SUB09-TIMEOUT"], sub09TimeoutTarget);
 applyTarget(inventory.contracts?.["F-SUB10-TIMEOUT"], sub10TimeoutTarget);
@@ -237,8 +227,6 @@ inventory.contracts["F-SUB09-TIMEOUT"].run_scoped_target = true;
 inventory.contracts["F-SUB10-TIMEOUT"].run_scoped_target = true;
 inventory.contracts["F-RULE-D-TIMEOUT"].run_scoped_target = true;
 applyTarget(inventory.contracts?.["F-ADV-TOOLCHAIN"], verifiedTarget);
-// The two adversarial archives plant *F-LEG-1's deployed bytes*, so they must follow F-LEG-1's deployment or
-// the plant would be bytes from a contract nobody is verifying.
 applyTarget(inventory.contracts?.["F-ADV-PLANT"], verifiedTarget);
 applyTarget(inventory.contracts?.["F-ADV-BUILDRS"], verifiedTarget);
 applyTarget(inventory.contracts?.["F-LEG-3"], mismatchTarget);
@@ -251,8 +239,6 @@ applyTarget(privateCli58Fixture, privateCli58Target);
 if (!privateCli58Build.source_archive || !privateCli58Build.source_sha256) {
   throw new Error("F-58-PRIV-testnet build record must name the private source archive and its SHA-256");
 }
-// The CI build runs its outer CLI under the official image UID, so it writes build output beneath a shared /tmp
-// root and the workflow copies it into fixtureOutputRoot afterwards.
 const privateCli58Archive = resolve(fixtureOutputRoot, "archives/private-cli58-canary.tar.gz");
 if (!existsSync(privateCli58Archive)) {
   throw new Error(`F-58-PRIV source archive was not copied to ${privateCli58Archive}`);
@@ -284,7 +270,6 @@ if (!existsSync(publicZipCli58Archive)) {
 publicZipCli58Fixture.source_path = relative(repoRoot, publicZipCli58Archive);
 publicZipCli58Fixture.source_sha256 = publicZipCli58Build.source_sha256;
 
-// The compose-built fixtures, each present only once somebody has composed its image, built it and deployed it.
 const COMPOSE_BUILT_FIXTURES = ["F-COMPOSE-ONLY", "F-DEMAND-01", "F-OLD-END"];
 const composeHashes = new Map([["F-LEG-1", verifiedTarget.wasm_hash]]);
 
@@ -293,8 +278,6 @@ for (const fixtureId of COMPOSE_BUILT_FIXTURES) {
   if (!record || !inventory.contracts?.[fixtureId]) continue;
   applyTarget(inventory.contracts[fixtureId], record);
 
-  // `build-purpose-contracts.sh` guards this at build time; this guards a deployment set assembled across
-  // machines or runs, where that guard never saw both files.
   for (const [otherId, otherHash] of composeHashes) {
     if (record.wasm_hash === otherHash) {
       throw new Error(

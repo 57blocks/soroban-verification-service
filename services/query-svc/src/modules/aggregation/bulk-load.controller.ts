@@ -47,8 +47,7 @@ export class BulkLoadController {
     @Query("limit") limitParam?: string,
     @Query("cursor") cursorParam?: string,
   ): Promise<AggregatedBulkLoadPage> {
-    // An empty page before the first pass is indistinguishable from "nobody has verified anything", and a
-    // consumer records that as synchronised and never comes back.
+    // An empty page before the first pass would read to a consumer as fully synchronised.
     if (!this.sync.hasCompletedFirstPass) {
       throw new ApiError(503, {
         error: "aggregation_unavailable",
@@ -66,7 +65,6 @@ export class BulkLoadController {
     };
   }
 
-  /** Same handler, same body; the headers are the only difference. */
   @Get("api/query/v1/wasms.json")
   @ApiOperation({
     operationId: "aggregatedBulkLoadJson",
@@ -91,7 +89,6 @@ export class BulkLoadController {
   }
 }
 
-/** A malformed cursor, order or limit is a client error, never a silently substituted default. */
 function parseBulkQuery(orderParam?: string, limitParam?: string, cursorParam?: string) {
   const order = parseBulkOrder(orderParam);
   if (!order) throw new ApiError(400, { error: "invalid_order", message: "order must be 'asc' or 'desc'" });

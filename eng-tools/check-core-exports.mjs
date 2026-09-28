@@ -12,22 +12,6 @@ if (!existsSync(src)) {
   process.exit(2);
 }
 
-/**
- * Every module in `@scvs/core` has to be reachable, or say why it is not.
- *
- * The barrel's own first line admitted the problem: "a missing line is invisible to this package's own tsc".
- * A module left out of both the barrel and the exports map still compiles and still passes every test, and
- * nobody learns it is unreachable until a consumer tries to import it. Worse, an intentional internal looks
- * exactly like a forgotten export. So a module is reachable one of three ways, and the third is explicit:
- *
- * - re-exported by the barrel (`src/index.ts`) — what the services import;
- * - published as a subpath (`package.json` `exports`) — what the SDK imports, one module at a time;
- * - listed below as internal, naming what uses it.
- *
- * Browser safety is NOT this check's job: `clients/sdk/test/browser-graph-test.ts` already walks the graph
- * from every `@scvs/*` import the SDK actually makes. The barrel holds Node-only modules on purpose — only
- * Node consumers import it; the SDK imports subpaths.
- */
 const INTERNAL = {
   "validators/result-url-list": "registry.ts's `@IsResultUrlList`",
   "validators/source-code-uri-list": "registry.ts's `@IsSourceCodeUriList`",
@@ -56,7 +40,6 @@ const subpaths = Object.entries(exportsMap)
     module: String(target.default ?? target).replace(/^\.\/dist\/src\//, "").replace(/\.js$/, ""),
   }));
 
-// Which core modules another core module imports — the only thing that can make an internal module live.
 const importedInternally = new Set();
 for (const name of modules) {
   const file = join(src, `${name}.ts`);

@@ -10,8 +10,6 @@ export {
 
 export * from "./env.dto.js";
 
-// `env-contract.generated.ts` is emitted from config/env-manifest.yaml by `pnpm run generate:env-contract`;
-// check:env fails if it goes stale.
 export * from "./config-contract.js";
 export {
   ENV_CONTRACT,
@@ -19,9 +17,6 @@ export {
   type Observability,
   type VariableDescriptor,
 } from "./env-contract.generated.js";
-
-// Postgres connection parsing deliberately does NOT live here, even though this package owns env-var parsing
-// for everything else.
 
 export type VerifierIdentity = {
   id: string;
@@ -63,10 +58,7 @@ function parseCsv(value: string | undefined, fallback: string[]): string[] {
     .filter(Boolean);
 }
 
-/**
- * Reads `process.env.SCVS_POLICY_*` directly at each call site (not through a name-parameterized helper) so
- * `eng-tools/check-env-manifest.mjs`'s static scan.
- */
+/** Reads each `SCVS_POLICY_*` literally at its call site, which check-env-manifest.mjs's static scan requires. */
 export function getVerifierPolicyConfig(): VerifierPolicyConfig {
   return {
     acceptedTrustLevels: parseCsv(process.env.SCVS_POLICY_ACCEPTED_TRUST_LEVELS, ["sdf_trusted"]),
@@ -83,10 +75,6 @@ export type StagingStorageConfig = {
   region: string;
 };
 
-/**
- * Distinct from `resultStorageConfigFromEnv()` in `@scvs/storage-layout`, which configures the *published*
- * `results/` prefix (or the legacy filesystem/R2 backends).
- */
 export function getStagingStorageConfig(): StagingStorageConfig {
   return {
     bucket: requireEnv("SCVS_STORAGE_BUCKET"),
@@ -96,24 +84,12 @@ export function getStagingStorageConfig(): StagingStorageConfig {
 
 export type ArweaveConfig = {
   mode: "disabled" | "dry-run" | "irys";
-  /** Which Irys/Ethereum network the wallet signs against. */
   network: "mainnet" | "devnet";
-  /**
-   * Ethereum RPC endpoint the wallet signs through (Irys's own network is not an Ethereum RPC; this is the L1
-   * the wallet lives on).
-   */
+  /** The Ethereum L1 RPC the wallet signs through, not an Irys endpoint. */
   rpcUrl?: string;
-  /**
-   * Ethereum wallet private key, ecs-secrets injected — plain `process.env` read, same as every other `source:
-   * secret` variable this codebase already has.
-   */
   privateKey?: string;
-  /** Overridable so a deployment can point at a different Arweave gateway. */
   gatewayUrl: string;
-  /**
-   * Whether public mainnet source is eligible for Arweave archival at all (`mainnet-source-archive`
-   * design.md §8, MSA-5) — independent of `mode`, which still governs the report archive unconditionally.
-   */
+  /** Whether public mainnet source is eligible for Arweave archival; independent of `mode`. */
   sourceArchiveEnabled: boolean;
 };
 

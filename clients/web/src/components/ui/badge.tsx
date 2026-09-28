@@ -1,7 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-/** Two families of pill in the design, sharing one component: */
 const badgeVariants = cva("inline-flex items-center whitespace-nowrap", {
   variants: {
     variant: {

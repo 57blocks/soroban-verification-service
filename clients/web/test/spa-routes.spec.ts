@@ -26,8 +26,6 @@ describe("it refuses what it cannot render, rather than emitting a wrong allowli
     expect(() => locationMatcher("/verify//jobs")).toThrow(/empty segment/);
   });
 
-  // A splat has to match any depth. Emitting the single-segment form for it would 404 every path under it in
-  // the deployed image only.
   test.each(["/files/$", "/files/*"])("a splat (%s)", (path) => {
     expect(() => locationMatcher(path)).toThrow(/splat/);
   });

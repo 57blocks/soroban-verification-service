@@ -18,10 +18,6 @@ export type ReportArchiveUploadRecord = {
 export class ReportArchiveUploadsRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
 
-  /**
-   * Find-or-create, safe against two callers (any process, any replica) discovering the same unclaimed
-   * `report_sha256` at once — same pattern as `SourceArchiveUploadsRepository.findOrCreate`, re-keyed.
-   */
   async findOrCreate(reportSha256: string): Promise<{ record: ReportArchiveUploadRecord; won: boolean }> {
     const existing = await this.getByReportSha256(reportSha256);
     if (existing) return { record: existing, won: false };
@@ -43,12 +39,7 @@ export class ReportArchiveUploadsRepository {
     return row ? rowToRecord(row) : undefined;
   }
 
-  /**
-   * `claimed -> done`, as a compare-and-set: returns `false` when this caller's claim is no longer the one on
-   * the row. That happens when a losing caller reaped the claim as stale (`releaseClaim`) while this upload was
-   * still running, and possibly re-claimed it — an unconditional `update` would then either throw P2025 or
-   * silently overwrite the new claimant's row with this call's `txId`.
-   */
+  /** Compare-and-set: false when this caller's claim was reaped, and possibly re-claimed, meanwhile. */
   async markDone(reportSha256: string, txId: string): Promise<boolean> {
     const { count } = await this.prisma.reportArchiveUpload.updateMany({
       where: { reportSha256, status: "claimed" satisfies ReportArchiveUploadStatus },
@@ -57,18 +48,13 @@ export class ReportArchiveUploadsRepository {
     return count > 0;
   }
 
-  /** Deletes the row so a later `findOrCreate` can re-claim it. */
   async releaseClaim(reportSha256: string): Promise<void> {
     await this.prisma.reportArchiveUpload.deleteMany({
       where: { reportSha256, status: "claimed" satisfies ReportArchiveUploadStatus },
     });
   }
 
-  /**
-   * Deletes a `done` row that carries no `txId` — a state `markDone` cannot produce, so it means the row was
-   * corrupted out-of-band. The `txId: null` predicate is load-bearing: a `done` row WITH a `txId` is the record
-   * that this content was already paid for, and deleting one reintroduces the double-spend this table prevents.
-   */
+  /** `txId: null` is load-bearing: a done row with a txId records a paid upload and must never be deleted. */
   async discardCorruptDoneClaim(reportSha256: string): Promise<void> {
     await this.prisma.reportArchiveUpload.deleteMany({
       where: { reportSha256, status: "done" satisfies ReportArchiveUploadStatus, txId: null },
@@ -76,8 +62,6 @@ export class ReportArchiveUploadsRepository {
   }
 }
 
-// Same contract as jobs.repo.ts's `rowToJob`: anything derived from a raw column rather than passed straight
-// through is validated here, because the DB layer has no enum types of its own.
 function rowToRecord(row: PrismaReportArchiveUpload): ReportArchiveUploadRecord {
   return {
     reportSha256: row.reportSha256,

@@ -58,8 +58,6 @@ test.describe("E2E-SDK-04/browser — the built SDK aggregates two verifier root
         const tvlResponse = await nativeFetch(`${queryUrl}/api/query/v1/verifiers`);
         if (!tvlResponse.ok) throw new Error(`TVL request failed: ${tvlResponse.status}`);
         const tvl = await tvlResponse.json();
-        // Result roots, not display names (CV11). Returned raw: comparing roots is a stated rule and
-        // half of it fails a legitimate verifier, so `normalizeResultRoot` runs on the Node side.
         const expectedRoots = tvl.verifiers
           .filter((verifier: { status: string }) => verifier.status === "active")
           .map((verifier: { url: string }) => verifier.url);

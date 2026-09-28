@@ -83,7 +83,6 @@ describe("readJobParams — the presigned URL leg", () => {
   it("refuses a blob over the size bound rather than buffering it", async () => {
     const stream = new ReadableStream({
       start(controller) {
-        // Well over the 64 KiB bound, delivered in chunks so the cap must act mid-stream.
         const chunk = "x".repeat(8 * 1024);
         for (let i = 0; i < 20; i++) controller.enqueue(new TextEncoder().encode(chunk));
         controller.close();
@@ -99,8 +98,6 @@ describe("readJobParams — the presigned URL leg", () => {
   });
 
   it("validates the fetched document against the DTO like an inline one", async () => {
-    // A document with no job_id validates against neither half's class — the URL leg must not weaken validation
-    // the inline leg performs.
     jest.spyOn(globalThis, "fetch").mockImplementation(
       async () => okResponse(JSON.stringify({ mode: "verify" })),
     );

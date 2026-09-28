@@ -13,12 +13,10 @@ export type ApiErrorBody = {
   [key: string]: unknown;
 };
 
-/** The one place an error body is assembled. */
 export function errorBody(statusCode: number, body: ErrorDetail): ApiErrorBody {
   return { ...errorEnvelope(body), status_code: statusCode };
 }
 
-/** Thrown directly from controllers instead of relying on Nest's own default `HttpException` body. */
 export class ApiError extends HttpException {
   constructor(statusCode: number, body: ErrorDetail) {
     super(errorBody(statusCode, body), statusCode);

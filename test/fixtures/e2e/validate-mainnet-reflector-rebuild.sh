@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Rebuilds the public Reflector mainnet candidate in the verifier's composed environment.
-# This is evidence generation only: it never submits a verification or writes to Stellar.
-
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 expected_wasm="8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c"
 expected_source="cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d"
@@ -75,8 +72,7 @@ docker run --rm \
   "$image" \
   vendor --locked --manifest-path /source/Cargo.toml /vendor
 
-# The vendor redirect is written only after acquisition: applying [net] offline before cargo vendor
-# would prevent the download this stage is responsible for. The build stage below is offline.
+# Written only after `cargo vendor`: the offline source redirect would block its download.
 cat > "$work_root/out/cargo-home/config.toml" <<'EOF'
 [source.crates-io]
 replace-with = "vendored-sources"

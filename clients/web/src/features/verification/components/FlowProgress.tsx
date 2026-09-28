@@ -3,20 +3,11 @@ import { cn } from "@/lib/utils";
 import { flowSteps } from "../constants";
 
 type FlowProgressProps = {
-  /** Index of the step in progress; anything past the last step marks them all complete. */
   currentStep: number;
   isFailed: boolean;
-  /** An already-published result skips the pipeline entirely, so every step reads complete. */
   allComplete: boolean;
 };
 
-/**
- * Where a job has got to, as one rule across the page.
- *
- * It was a panel carrying `01 / 02 / 03` and a caption apiece, standing between the reader and the form while
- * saying nothing a job had not started. The captions are gone, the panel with them, and the caller renders this
- * only once there is job state for it to carry.
- */
 export const FlowProgress = ({
   currentStep,
   isFailed,
@@ -26,12 +17,10 @@ export const FlowProgress = ({
     {flowSteps.map(({ label }, index) => {
       const isComplete = allComplete || currentStep > index;
       const isCurrent = currentStep === index && !isFailed;
-      // A failure is always reported against the first step — that is where the user acts.
       const isStepFailed = isFailed && index === 0;
       const isLast = index === flowSteps.length - 1;
 
-      // The dot is the only thing carrying the step's state, and a dot is not readable. The tick this
-      // replaced was an `<img alt="Done">`, so the state was spoken before; it has to stay spoken.
+      // The dot is the only visual carrier of state, so the state must also be spoken.
       const state = isStepFailed
         ? "Failed"
         : isComplete

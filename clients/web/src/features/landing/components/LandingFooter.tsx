@@ -5,11 +5,6 @@ import { footerBlurb, footerLegal } from "../content";
 import { visibleFooterColumns, visibleOperatorPointer } from "../navigation";
 import { BrandLogo } from "./BrandLogo";
 
-/**
- * Light, where the design had it near-black with the closing CTA. The footer carries the company mark, and a
- * dark band leaves only two ways to show it: invert it to a white silhouette, which discards the mark's own
- * colours, or let it sit unreadable. The near-black band stops at the CTA instead.
- */
 export const LandingFooter = () => {
   const operator = visibleOperatorPointer();
 
@@ -47,8 +42,6 @@ export const LandingFooter = () => {
         ))}
       </div>
 
-      {/* All that is left of the self-host section — and it renders only where the guide it names can be
-          opened, because a pointer into a repository a reader cannot reach is worse than no pointer. */}
       {operator && (
         <p className="mx-auto mt-7 max-w-shell text-[0.8rem] text-ink-mute">
           {operator.prefix}{" "}

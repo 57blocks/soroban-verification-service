@@ -2,10 +2,8 @@ import { isAbsolute, posix } from "node:path";
 import { unescapeShellWord } from "./shell-words.js";
 import type { RebuildErrorCode } from "./rebuild-error-code.js";
 
-/** The `--manifest-path` a `bldopt` array records, as written. */
 export function extractManifestPath(bldopt?: string[]): string | undefined {
-  // An unparsable entry is dropped, not substituted — same as the replay path's own unescapeBldoptEntries, so
-  // an index-based lookahead here lines up with what replay actually sees.
+  // Unparsable entries are dropped, matching replay's `unescapeBldoptEntries`, so indices line up.
   const tokens: string[] = [];
   for (const raw of bldopt ?? []) {
     const parsed = unescapeShellWord(raw);
@@ -24,7 +22,6 @@ export function extractManifestPath(bldopt?: string[]): string | undefined {
   return undefined;
 }
 
-/** The manifest path as it will be passed **inside** the sandbox, under `/source`. */
 export function resolveContainerManifestPath(
   workspacePath: string,
 ): { ok: true; path: string } | { ok: false; reason: RebuildErrorCode; detail: string } {
@@ -42,7 +39,7 @@ export function resolveContainerManifestPath(
     : raw.endsWith("Cargo.toml")
       ? raw
       : posix.join(raw, "Cargo.toml");
-  // Normalised first, then checked: a leading `..` survives normalisation and is the escape.
+  // Normalised first, then checked: a leading `..` survives normalisation.
   const normalised = posix.normalize(manifest);
   if (normalised === ".." || normalised.startsWith("../")) {
     return {

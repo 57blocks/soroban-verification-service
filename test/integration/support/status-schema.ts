@@ -1,7 +1,4 @@
-/**
- * This intentionally does not import @scvs/core: importing the producer's own DTO would let both sides of the
- * publication test silently agree on the same contract, correct or not.
- */
+// Must not import @scvs/core: sharing the producer's DTO would let both sides agree on a wrong contract.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,10 +24,6 @@ const BLDIMG = /^(?:localhost(?::\d+)?|[^\s@/]*[.:][^\s@/]*)\/[^\s@]+@sha256:[0-
 
 const STATUSES = schema.$defs.verification.properties.status.enum!;
 const RECIPE_SOURCES = schema.$defs.verification.properties.recipe_source.enum!;
-/**
- * Read from the schema file, and exported so a case asserting the signal is stated cannot drift from
- * the document that defines it — the same reason the validator below reads every other enum here.
- */
 export const IMAGE_TRUST_LEVELS = schema.$defs.verification.properties.image_trust_level.enum!;
 const RESULT_URL_TYPES = schema.$defs.result_url.properties.type.enum!;
 const RESULT_URL_LOCATIONS = schema.$defs.result_url.properties.location.enum!;
@@ -39,7 +32,6 @@ const ENTRY_KEYS = Object.keys(schema.$defs.verification.properties);
 const VERIFIER_KEYS = Object.keys(schema.$defs.verifier.properties);
 const RESULT_URL_KEYS = Object.keys(schema.$defs.result_url.properties);
 const SOURCE_CODE_URI_KEYS = Object.keys(schema.$defs.source_code_uri.properties);
-/** SO3 — present exactly when the entry carries a verdict (mirrors the schema's if/then/else). */
 const VERDICT_CONDITIONAL = ["recipe_source", "image_trust_level", "source_sha256", "processed_at"] as const;
 
 type JsonObject = Record<string, unknown>;
@@ -85,7 +77,6 @@ function validateVerifier(value: unknown, path: string, errors: string[]) {
   if (!verifier) return;
   required(verifier, schema.$defs.verifier.required, path, errors);
   closed(verifier, VERIFIER_KEYS, path, errors);
-  // `url` is the identity and is required; `name` is self-claimed and optional.
   uri(verifier.url, `${path}.url`, errors);
   if ("name" in verifier && (typeof verifier.name !== "string" || verifier.name.length === 0)) {
     errors.push(`${path}.name must be non-empty when present`);
@@ -139,19 +130,14 @@ function validateEntry(value: unknown, index: number, errors: string[]) {
   if (typeof status !== "string" || !STATUSES.includes(status)) errors.push(`${path}.status is not a Results SEP status`);
   const verdict = status !== "unverified";
 
-  // SO3 — the four verdict-conditional fields.
   for (const field of VERDICT_CONDITIONAL) {
     if (verdict && !(field in entry)) errors.push(`${path}.${field} is required for a verdict`);
   }
-  // SO3's other half: an unverified entry is *exactly* `{verifier, status}`. Checking only the four
-  // left `bldimg`/`bldopt`/`results_urls` publishable on an entry that by definition has none — the
-  // schema's `if/then` was equally loose until 2026-09-08 and now says the same thing this does.
   if (!verdict) {
     for (const key of Object.keys(entry)) {
       if (key !== "verifier" && key !== "status") errors.push(`${path}.${key} is forbidden for unverified`);
     }
   }
-  // SO2.
   if (status === "mismatched" && !("rebuilt_hash" in entry)) errors.push(`${path}.rebuilt_hash is required for mismatched`);
   if (status !== "mismatched" && "rebuilt_hash" in entry) errors.push(`${path}.rebuilt_hash is only allowed for mismatched`);
 
@@ -177,7 +163,6 @@ function validateEntry(value: unknown, index: number, errors: string[]) {
   }
 }
 
-/** Returns every conformance error; an empty list means the document satisfies the schema. */
 export function validateSepStatusObject(value: unknown): string[] {
   const errors: string[] = [];
   const document = object(value, "$", errors);
@@ -194,7 +179,5 @@ export function validateSepStatusObject(value: unknown): string[] {
   return errors;
 }
 
-/**
- * @deprecated name kept for the E2E case that imported it; the schema it validates is the Results SEP's.
- */
+/** @deprecated Use validateSepStatusObject. */
 export const validateTrdStatusObject = validateSepStatusObject;

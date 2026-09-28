@@ -6,11 +6,6 @@ import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/**
- * Prunes job records that never reached publication (retention-and-pseudonymisation design.md RP-3). A job
- * whose `published_updated_at` is set is a published record and is never touched at any age — it is what a
- * consumer's incremental sync reads through `listPublished`.
- */
 @Injectable()
 export class JobRetentionScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("job-retention");
@@ -47,8 +42,7 @@ export class JobRetentionScheduler implements OnModuleInit, OnModuleDestroy {
       this.metrics.gauge("retention_backlog", candidates.length);
       if (candidates.length === 0) return 0;
 
-      // A job whose log object could not be deleted keeps its row and is retried next tick: `build_log_object_key`
-      // is the only pointer to that object, so the opposite ordering retains the log AND loses the way to reach it.
+      // Delete the log object before the row: build_log_object_key is the only pointer to it.
       const deletable: string[] = [];
       for (const candidate of candidates) {
         if (await this.removeBuildLog(candidate.jobId, candidate.buildLogObjectKey)) {
@@ -60,7 +54,6 @@ export class JobRetentionScheduler implements OnModuleInit, OnModuleDestroy {
       if (pruned > 0) this.logger.log("pruned unpublished job records", { pruned, retention_ms: retentionMs });
       return pruned;
     } catch (error) {
-      // A silent failure here is a retention breach nothing else reports.
       this.logger.error("job retention sweep failed", {
         error: error instanceof Error ? error : String(error),
       });
@@ -68,7 +61,6 @@ export class JobRetentionScheduler implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** True when there is nothing left in the staging bucket for this job — including when there never was. */
   private async removeBuildLog(jobId: string, objectKey?: string): Promise<boolean> {
     if (!objectKey) return true;
     const staging = this.configService.get("stagingStorage", { infer: true });

@@ -25,20 +25,11 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { JobModel as PrismaJob } from "../generated/prisma/models.js";
 
-/** Why automatic status-link recovery stopped. Closed here rather than in SQL: adding one is not a migration. */
 export type StatusLinkBlockedReason = "invalid_document" | "unrepresentable" | "manual_hold";
 
-/**
- * What one attempt to put a link into `wasms/<hash>.json` left behind. `complete` covers "already there"
- * too: a process dying between the object write and this row update replays into that, and a consumer
- * syncing on `published_updated_at` would never learn about the link if it counted as a no-op.
- */
+/** `complete` includes "already there": a crash between the object write and the row update replays into it. */
 export type StatusLinkOutcome =
-  /**
-   * `advancePublished` is false only for a `superseded` entry, where nothing changed for a consumer.
-   * Anywhere ambiguous the caller says true: a needless re-sync costs one read, a missed one loses the link
-   * from every consumer's view.
-   */
+  /** False only for a `superseded` entry; when in doubt pass true, since a missed re-sync loses the link. */
   | { state: "complete"; advancePublished: boolean }
   | { state: "pending" }
   | { state: "blocked"; reason: StatusLinkBlockedReason };
@@ -47,73 +38,41 @@ export type JobRecord = {
   jobId: string;
   status: JobStatus;
   failureReason: FailureReason | null;
-  /** Null until `comparing` computes it, and null forever on a job-level failure. */
   verdict: Verdict | null;
   target: VerificationTarget;
   verificationMode: VerificationMode;
   sourceRef: SourceReference;
   buildOptions: unknown;
-  /** The verdict is returned to the submitter and nothing is written to the result root. */
   dryRun: boolean;
-  /** Absent until the sandbox-side work that stores the redacted build output writes it. */
   buildLogObjectKey?: string;
   /** Never leaves this process: it is compared against, never returned on any surface. */
   buildLogTokenHash?: string;
   buildLogExpiresAt?: Date;
   buildLogHold: boolean;
-  /** The terms version this job's submitter accepted, and the hash of the bytes served under it. */
   acceptedTermsVersion?: string;
   acceptedTermsSha256?: string;
   manifest?: SubmittedSourceManifest;
   result?: VerificationResultSummary;
   error?: string;
   progress?: { step: string; detail?: string };
-  /**
-   * Absent until `services/orchestrator-svc` finds-or-creates it on the job's first poll tick — the job row
-   * itself is created before any rebuild lookup happens.
-   */
   rebuildId?: string;
-  /** Failed attempts at publishing this job's verdict — see schema.prisma's `publish_attempts`. */
   publishAttempts: number;
   retryAttempts: number;
-  /** Presence (non-`undefined`) is the durable pending flag AP4 requires. */
   archivePendingSince?: string;
-  /** Set once the archive upload succeeds. Presence means "done". */
   archivedTxId?: string;
-  /** Failed archive attempts — see schema.prisma's `archive_attempts`. No abandonment ceiling. */
   archiveAttempts: number;
-  /** Set the moment a public job's first publish attempt fails; cleared once the source durably lands. */
   sourcePublishPendingSince?: string;
-  /** Set once this job's source is durably written to `sources/{sha256}{ext}`. */
   sourceFileName?: string;
-  /**
-   * Failed source-publish attempts, recorded for observability — see `sourcePublishPendingSince` for what
-   * actually bounds retry.
-   */
   sourcePublishAttempts: number;
-  /**
-   * The archive obligation for THIS job's own public, mainnet source (mainnet-source-archive design.md MSA-2) —
-   * independent of `archivePendingSince` above.
-   */
   sourceArchivePendingSince?: string;
-  /** Set once the source archive upload succeeds. Presence means "done". */
   sourceArchivedTxId?: string;
-  /** Failed source-archive attempts — see schema.prisma's `source_archive_attempts`. */
   sourceArchiveAttempts: number;
-  /** At least one link this job owes `wasms/<hash>.json` is not in the document yet. */
   statusLinkPendingSince?: string;
-  /** Set alongside the reason when automatic link recovery stops; blocked rows still owe the link. */
   statusLinkBlockedSince?: string;
-  /** Why automatic recovery stopped — a closed set, never raw error text. */
   statusLinkBlockedReason?: StatusLinkBlockedReason;
-  /**
-   * Written by `report-artifact`'s `writePublication` on first publish, advanced by `archive-and-recovery`'s
-   * `appendArchiveReference` on a real archive-backfill write.
-   */
   publishedUpdatedAt?: string;
   createdAt: string;
   updatedAt: string;
-  /** When this job reached a terminal status. Absent in flight, and on rows predating the column. */
   completedAt?: string;
 };
 
@@ -124,24 +83,13 @@ export type CreateJobInput = {
   sourceRef: SourceReference;
   buildOptions: unknown;
   manifest: SubmittedSourceManifest;
-  /** No default: whether a job publishes its verdict is not something a caller should omit. */
   dryRun: boolean;
-  /**
-   * sha256 of the token that will authorise this job's raw build log (build-log-access design.md BL-1). The
-   * token itself never reaches this layer. Absent means no token was minted, and no request can ever read
-   * this job's raw log — which is what every job created before build-log tokens existed is.
-   */
+  /** sha256 of the build-log token; the token itself never reaches this layer. */
   buildLogTokenHash?: string;
-  /**
-   * The accepted terms version and the sha256 of the bytes served under it
-   * (versioned-terms-and-assent design.md TA-3). Absent together, never one without the other: absent means
-   * the submitter accepted nothing, which is what TA-7's unenforced regime produces.
-   */
   acceptedTermsVersion?: string;
   acceptedTermsSha256?: string;
 };
 
-// Non-terminal, for `getActiveJobForTarget`'s "you already asked for this" check.
 const ACTIVE_STATUSES: JobStatus[] = [
   "queued",
   "preparing",
@@ -151,10 +99,6 @@ const ACTIVE_STATUSES: JobStatus[] = [
   "publish_pending",
 ];
 
-/**
- * CRUD over the `jobs` table — operational/dedup state. S3 remains the public source of truth; see
- * packages/db/prisma/schema.prisma.
- */
 @Injectable()
 export class JobsRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
@@ -191,7 +135,6 @@ export class JobsRepository {
     return row ? rowToJob(row) : undefined;
   }
 
-  /** Jobs still in flight for this exact target — the "you already asked for this" check on submit. */
   async getActiveJobForTarget(
     target: VerificationTarget,
     options: {
@@ -208,12 +151,8 @@ export class JobsRepository {
         network: target.network,
         status: { in: ACTIVE_STATUSES },
         ...(options.dryRun === undefined ? {} : { dryRun: options.dryRun }),
-        // Without it a single wedged job blocks its target's resubmissions *forever*: the statuses above are
-        // non-terminal, `orderBy createdAt asc` deterministically returns the OLDEST match, and nothing ages a
-        // row out.
+        // Without this a wedged job blocks its target's resubmissions forever.
         ...(options.updatedSince ? { updatedAt: { gte: options.updatedSince } } : {}),
-        // `visibility` and `source_sha256` are part of the question for exactly the reason `dryRun` above is,
-        // and leaving them out of it was the defect:
         AND: [
           ...(options.visibility === undefined
             ? []
@@ -229,7 +168,6 @@ export class JobsRepository {
     return row ? rowToJob(row) : undefined;
   }
 
-  /** Oldest first, matching the submit-side lookup. */
   async getActiveJobForWasmHash(wasmHash: string): Promise<JobRecord | undefined> {
     const row = await this.prisma.job.findFirst({
       where: { wasmHash, status: { in: ACTIVE_STATUSES } },
@@ -238,7 +176,7 @@ export class JobsRepository {
     return row ? rowToJob(row) : undefined;
   }
 
-  /** DB1's claim, and every transition after it: **one conditional write that both selects and claims**. */
+  /** One conditional write that both selects and claims. */
   async advanceJob(
     jobId: string,
     from: JobStatus | JobStatus[],
@@ -249,8 +187,6 @@ export class JobsRepository {
       where: { id: jobId, status: { in: Array.isArray(from) ? from : [from] } },
       data: {
         status: to,
-        // Same write as the status, so they cannot diverge. The `null` arm is the clear-on-reopen case:
-        // transitioning to a non-terminal status means this job is no longer finished.
         completedAt: isTerminalJobStatus(to) ? new Date() : null,
         ...("failureReason" in updates ? { failureReason: updates.failureReason } : {}),
         ...("verdict" in updates ? { verdict: updates.verdict } : {}),
@@ -262,17 +198,10 @@ export class JobsRepository {
     return true;
   }
 
-  /**
-   * `publish_pending -> publishing`. The recovery scan's claim: exactly one scan — in this process or another
-   * replica's — drives any given retry.
-   */
   async claimForPublish(jobId: string): Promise<boolean> {
-    // Both states a publication can legitimately be acquired from: `comparing`, where the pipeline has just
-    // written the verdict, and `publish_pending`, where the recovery scan finds it.
     return this.advanceJob(jobId, ["comparing", "publish_pending"], "publishing");
   }
 
-  /** `publishing -> publish_pending` for a row whose worker died mid-publication. */
   async releaseStalePublishing(olderThan: Date, only?: string[]): Promise<string[]> {
     const where = {
       status: "publishing" satisfies JobStatus,
@@ -283,8 +212,6 @@ export class JobsRepository {
     if (stale.length === 0) return [];
     await this.prisma.job.updateMany({
       where,
-      // `publishAttempts` is otherwise only incremented by `recordPublishFailure`, i.e. only when
-      // `writePublication` *throws*.
       data: {
         status: "publish_pending" satisfies JobStatus,
         publishAttempts: { increment: 1 },
@@ -305,10 +232,6 @@ export class JobsRepository {
     await this.notifyJobUpdate(jobId);
   }
 
-  /**
-   * Every job whose verdict is computed from this rebuild — i.e. everyone who has to be resolved (or failed)
-   * when it goes terminal.
-   */
   async listJobsAttachedToRebuild(rebuildId: string): Promise<JobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: { rebuildId },
@@ -317,10 +240,6 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /**
-   * Re-opens jobs failed by a rebuild that has since been revived for a fresh attempt
-   * (`RebuildsRepository.requeueStaleCliFailure`).
-   */
   async reopenJobsFailedByRebuild(rebuildId: string, errorCode: string): Promise<string[]> {
     const where = {
       rebuildId,
@@ -333,15 +252,12 @@ export class JobsRepository {
     const { count } = await this.prisma.job.updateMany({
       where,
       data: {
-        // `building` is "waiting on the rebuild", which is what these jobs are doing.
         status: "building" satisfies JobStatus,
         failureReason: null,
         verdict: null,
         errorCode: null,
-        // Back into flight: a running job must not report when it finished.
         completedAt: null,
-        // `Prisma.DbNull`, not `undefined`: on a `Json?` column `undefined` means "leave alone", which would
-        // keep the stale build_failed summary and make the job invisible to the dispatch loop.
+        // `Prisma.DbNull`, not `undefined`: on a `Json?` column `undefined` means "leave alone".
         resultSummary: Prisma.DbNull,
         progressStep: "building",
         progressDetail:
@@ -350,14 +266,12 @@ export class JobsRepository {
     });
     if (count === 0) return [];
 
-    // One NOTIFY per re-opened job so any open SSE stream sees it leave its terminal state.
     for (const { id } of candidates) {
       await this.notifyJobUpdate(id);
     }
     return candidates.map(({ id }) => id);
   }
 
-  /** Returns the ids re-queued. */
   async requeueRetryableFailures(
     maxAttempts: number,
     eligibleSince: Date,
@@ -381,16 +295,12 @@ export class JobsRepository {
         status: "queued" satisfies JobStatus,
         retryAttempts: { increment: 1 },
         failureReason: null,
-        // Re-queued means not finished; the next terminal transition records a new instant.
         completedAt: null,
-        // Cleared for the same reason `reopenJobsFailedByRebuild` clears it: a job can reach `failed` *after*
-        // `comparing` wrote a verdict (`comparison_not_available` is the live path), and a re-queued job
-        // carrying a stale verdict is a row that lies until the next comparison overwrites it.
+        // A job can fail after `comparing` wrote a verdict, so a re-queue must clear it.
         verdict: null,
         errorCode: null,
         rebuildId: null,
-        // `Prisma.DbNull`, not `undefined`: on a `Json?` column `undefined` means "leave alone", which would
-        // keep the stale failure summary — the same trap `reopenJobsFailedByRebuild` documents.
+        // `Prisma.DbNull`, not `undefined`: on a `Json?` column `undefined` means "leave alone".
         resultSummary: Prisma.DbNull,
         progressStep: "queued",
         progressDetail: "Retrying after a retryable failure.",
@@ -404,10 +314,7 @@ export class JobsRepository {
     return candidates.map(({ id }) => id);
   }
 
-  /**
-   * Keyed on the recipe (through `rebuilds.idempotency_key`) AND on the hash the caller's target deploys *right
-   * now*, never on the recipe alone.
-   */
+  /** Keyed on the recipe AND the hash the target deploys now, never on the recipe alone. */
   async findPublishedVerdictForRecipe(input: {
     idempotencyKey: string;
     wasmHash: string;
@@ -432,10 +339,6 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /**
-   * `archivePendingSince` non-null is durable state, so this survives a process restart the way an in-process
-   * `Set` never could (AP4).
-   */
   async listJobsPendingArchive(): Promise<JobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: { archivePendingSince: { not: null } },
@@ -444,11 +347,6 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /**
-   * Records the outcome of one archive attempt. The upload and its link are separate facts and are written
-   * together: an upload that happened is recorded as `archivedTxId` even when its link did not land, because
-   * discarding a paid-for tx_id to express "the link is missing" is a lie in the other direction.
-   */
   async recordArchiveOutcome(
     jobId: string,
     outcome: { archived: true; txId: string; statusLink: StatusLinkOutcome } | { archived: false },
@@ -460,11 +358,6 @@ export class JobsRepository {
     await this.writeArchiveAndLink(jobId, "archived_tx_id", "archive_pending_since", outcome.txId, outcome.statusLink);
   }
 
-  /**
-   * Unlike `listJobsPendingArchive` this bounds retry to `olderThan` (caller passes `now - 24h`): a
-   * source-publish retry's input is the staged upload, which can be permanently gone, so retrying forever would
-   * waste scheduler cycles on a target that will never come back.
-   */
   async listJobsPendingSourcePublish(olderThan: Date): Promise<JobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: { sourcePublishPendingSince: { not: null, gt: olderThan } },
@@ -473,7 +366,6 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /** Records the outcome of one source-publish attempt. */
   async recordSourcePublishOutcome(
     jobId: string,
     outcome:
@@ -481,22 +373,16 @@ export class JobsRepository {
           published: true;
           sourceFileName: string;
           sourceArchivePendingSince?: Date;
-          /**
-           * Whether the document still has to be told about this source. False on a first publish, which
-           * wrote the URI into the entry it was building; true on a retry, which is amending a document that
-           * was written without it.
-           */
+          /** False on a first publish (the entry already carries the URI); true on a retry. */
           owesStatusLink: boolean;
         }
       | { published: false },
   ): Promise<void> {
     if (outcome.published) {
-      // The link obligation is created in the same write that discharges the source-publish one. Setting it
-      // afterwards leaves a window where the old obligation is gone and the new one is not yet written down,
-      // and a crash there loses the link for good — the pattern this whole change exists to remove.
+      // One write discharges source-publish and raises the link flag; split, a crash between loses the link.
       const now = new Date();
       const sourceArchive = outcome.sourceArchivePendingSince;
-      // Never clears the link flag, only raises it — clearing belongs to the pass that recomputed every link.
+      // Only ever raises the link flag; only the pass that recomputes every link may clear it.
       const statusLink = outcome.owesStatusLink
         ? Prisma.sql`COALESCE("status_link_pending_since", ${now})`
         : Prisma.sql`"status_link_pending_since"`;
@@ -516,10 +402,6 @@ export class JobsRepository {
     }
   }
 
-  /**
-   * Jobs with an outstanding source-archive obligation (mainnet-source-archive design.md MSA-2) — the
-   * reconciliation scan's query.
-   */
   async listJobsPendingSourceArchive(): Promise<JobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: { sourceArchivePendingSince: { not: null } },
@@ -528,7 +410,6 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /** Records the outcome of one source-archive attempt (live or reconciliation-scan retry). */
   async recordSourceArchiveOutcome(
     jobId: string,
     outcome: { archived: true; txId: string; statusLink: StatusLinkOutcome } | { archived: false },
@@ -547,11 +428,8 @@ export class JobsRepository {
   }
 
   /**
-   * ONE statement: a crash between recording the upload and recording the link it owes loses the obligation
-   * for good, since nothing would scan the row again.
-   *
-   * Raw because `status_link_pending_since` needs COALESCE — a retry must not restart the clock — which
-   * Prisma's typed update cannot express.
+   * One statement, or a crash between the upload and its link loses the obligation. Raw because the
+   * COALESCE (a retry must not restart the clock) is beyond Prisma's typed update.
    */
   private async writeArchiveAndLink(
     jobId: string,
@@ -564,10 +442,7 @@ export class JobsRepository {
     const txIdSql = Prisma.raw(`"${txIdColumn}"`);
     const pendingSql = Prisma.raw(`"${pendingColumn}"`);
     if (statusLink.state === "complete") {
-      // Deliberately leaves the status-link columns alone. One flag covers every link this job owes, and a
-      // job's report archive and source archive run concurrently — clearing it here because THIS link landed
-      // would discharge an obligation another link is still holding, and the scan would never look again.
-      // Only `recordStatusLinkOutcome`, which recomputes every link from the row, may clear it.
+      // Never clears the link flag: it covers every link this job owes; only `recordStatusLinkOutcome` may clear it.
       await this.expectOneRow(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
@@ -598,19 +473,12 @@ export class JobsRepository {
       WHERE "id" = ${jobId}::uuid`, jobId);
   }
 
-  /**
-   * A raw UPDATE reports rows touched instead of throwing on a `WHERE` that matched nothing, so a job deleted
-   * mid-flight would read as a successful write. These statements each address one row by id.
-   */
+  /** A raw UPDATE reports rows touched rather than throwing when its WHERE matched nothing. */
   private async expectOneRow(update: Promise<number>, jobId: string): Promise<void> {
     const rows = await update;
     if (rows !== 1) throw new Error(`jobs repository: expected to update job ${jobId}, updated ${rows} row(s)`);
   }
 
-  /**
-   * Jobs still owing a link and not held for a human. No time bound, unlike the source-publish scan: every
-   * input this replay needs — the report URL, the tx ids, the source file name — is durable.
-   */
   async listJobsPendingStatusLink(): Promise<JobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: { statusLinkPendingSince: { not: null }, statusLinkBlockedReason: null },
@@ -619,7 +487,6 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
-  /** Jobs held for a human, by reason — the gauge the recovery scan cannot see from its own query. */
   async countJobsBlockedStatusLink(): Promise<{ reason: StatusLinkBlockedReason; count: number }[]> {
     const grouped = await this.prisma.job.groupBy({
       by: ["statusLinkBlockedReason"],
@@ -632,11 +499,6 @@ export class JobsRepository {
     }));
   }
 
-  /**
-   * The recovery scan's counterpart to `recordArchiveOutcome`'s link half. It only ever runs on a row that
-   * already owes the link, so `complete` always advances `published_updated_at`: the link is in the document
-   * now and was not before, whether this attempt wrote it or found it already there.
-   */
   async recordStatusLinkOutcome(jobId: string, outcome: StatusLinkOutcome): Promise<void> {
     const now = new Date();
     if (outcome.state === "complete") {
@@ -652,8 +514,7 @@ export class JobsRepository {
       return;
     }
     if (outcome.state === "pending") {
-      // Deliberately writes nothing: the row already owes the link, and re-stamping the clock would hide how
-      // long it has been owed.
+      // Writes nothing: re-stamping the clock would hide how long the link has been owed.
       return;
     }
     await this.expectOneRow(this.prisma.$executeRaw`
@@ -665,7 +526,6 @@ export class JobsRepository {
       WHERE "id" = ${jobId}::uuid`, jobId);
   }
 
-  /** Puts a blocked job back in the recovery scan, keeping the clock that says how long the link has been owed. */
   async clearStatusLinkBlock(jobId: string): Promise<void> {
     await this.prisma.job.update({
       where: { id: jobId },
@@ -673,32 +533,23 @@ export class JobsRepository {
     });
   }
 
-  /** Removes specific jobs by id. **Test cleanup only**. */
+  /** Test cleanup only. */
   async deleteJobs(jobIds: string[]): Promise<number> {
     if (jobIds.length === 0) return 0;
     const { count } = await this.prisma.job.deleteMany({ where: { id: { in: jobIds } } });
     return count;
   }
 
-  /**
-   * Jobs old enough to prune: never published, and owing nothing
-   * (retention-and-pseudonymisation design.md RP-3). `publishedUpdatedAt` is the line rather than `status`
-   * because it, and only it, is what `listPublished` — and therefore a consumer's incremental sync — reads.
-   *
-   * Returns `buildLogObjectKey` alongside the id: the caller must delete that object before the row that
-   * points at it, and re-reading would be a second query for rows it just held.
-   */
+  /** The caller must delete each `buildLogObjectKey` object before pruning the row that points at it. */
   async listPrunableJobs(opts: { before: Date; limit: number }): Promise<PrunableJobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: {
         publishedUpdatedAt: null,
         createdAt: { lt: opts.before },
-        // A durable pending flag is an obligation; deleting the row holding one destroys it rather than
-        // discharging it. Such a job is published anyway and already excluded — this states the rule.
+        // Redundant with publishedUpdatedAt today, but a row holding a pending obligation must never be pruned.
         archivePendingSince: null,
         sourcePublishPendingSince: null,
         sourceArchivePendingSince: null,
-        // Blocked refines pending, so this one column covers a held job too.
         statusLinkPendingSince: null,
       },
       orderBy: { createdAt: "asc" },
@@ -708,11 +559,7 @@ export class JobsRepository {
     return rows.map((row) => ({ jobId: row.id, buildLogObjectKey: row.buildLogObjectKey ?? undefined }));
   }
 
-  /**
-   * Deletes the jobs, the `upload_job_references` rows carrying their ids (no foreign key cascades them), and
-   * any rebuild the last referencing job just took with it (ADR-008 — a rebuild is shared). Same ordering as
-   * `@scvs/db/testing`'s `CreatedRows.cleanup`, for the same reason.
-   */
+  /** No foreign key cascades `upload_job_references`; a shared rebuild goes only once unreferenced. */
   async pruneJobs(jobIds: string[]): Promise<number> {
     if (jobIds.length === 0) return 0;
     const rebuildIds = [
@@ -733,20 +580,10 @@ export class JobsRepository {
     return count;
   }
 
-  /**
-   * The hash a job already bound to `version`, when it differs from `contentSha256` — i.e. the operator
-   * edited the text without moving the version (versioned-terms-and-assent design.md TA-5).
-   *
-   * This is why the feature needs no `terms_versions` table: the property worth enforcing is that no job row
-   * asserts a version whose text has changed, and the rows themselves answer that. An edit under a fixed
-   * version stays undetected until one job has bound it, which is exactly when it starts mattering.
-   */
   async findConflictingTermsHash(version: string, contentSha256: string): Promise<string | null> {
     const row = await this.prisma.job.findFirst({
       where: {
         acceptedTermsVersion: version,
-        // Both clauses, rather than one `not`: `createJob` writes the pair together so a null hash cannot
-        // occur here, and spelling it out keeps the query correct whatever `not`'s null semantics are.
         AND: [{ acceptedTermsSha256: { not: null } }, { acceptedTermsSha256: { not: contentSha256 } }],
       },
       select: { acceptedTermsSha256: true },
@@ -754,11 +591,7 @@ export class JobsRepository {
     return row?.acceptedTermsSha256 ?? null;
   }
 
-  /**
-   * Records where a rebuild's build log was written, on **every** job attached to that rebuild — and, in the
-   * same write, when that log stops being served (build-log-access design.md BL-2). One write, because a key
-   * without an expiry is a log retained indefinitely, which is the state this ticket exists to end.
-   */
+  /** Key and expiry in one write: a key without an expiry is a log retained indefinitely. */
   async recordBuildLogKeyForRebuild(
     rebuildId: string,
     objectKey: string,
@@ -771,12 +604,7 @@ export class JobsRepository {
     return count;
   }
 
-  /**
-   * Distinct log objects every one of whose jobs has expired and none of which is held
-   * (build-log-access design.md BL-2). A rebuild is shared between jobs (ADR-008) and they share one object,
-   * so the object may only go when the LAST job pointing at it has expired — the same rule
-   * `UploadJobReferencesRepository.hasOutstandingObligation` applies to staged uploads.
-   */
+  /** A log object is shared by a rebuild's jobs: it goes only when every one has expired and none is held. */
   async listExpiredBuildLogs(now: Date, limit: number): Promise<string[]> {
     const expired = await this.prisma.job.findMany({
       where: { buildLogObjectKey: { not: null }, buildLogExpiresAt: { lt: now } },
@@ -788,7 +616,6 @@ export class JobsRepository {
     const keys = expired.map((row) => row.buildLogObjectKey as string);
     if (keys.length === 0) return [];
 
-    // One query for every key: a job that is held, or whose expiry has not arrived, keeps the whole object.
     const stillOwed = await this.prisma.job.findMany({
       where: {
         buildLogObjectKey: { in: keys },
@@ -801,12 +628,10 @@ export class JobsRepository {
     return keys.filter((key) => !owed.has(key));
   }
 
-  /** One job stops claiming the shared object — early deletion by its own token holder (BL-3). */
   async expireBuildLogForJob(jobId: string): Promise<void> {
     await this.prisma.job.update({ where: { id: jobId }, data: { buildLogExpiresAt: new Date(0) } });
   }
 
-  /** How many jobs still hold a live claim on this object — a held one counts, an expired one does not. */
   async countLiveBuildLogClaims(objectKey: string, now: Date): Promise<number> {
     return this.prisma.job.count({
       where: {
@@ -816,7 +641,6 @@ export class JobsRepository {
     });
   }
 
-  /** Clears the pointer on every job that shared a deleted object, so a later read is `410`, not a 502. */
   async clearBuildLogKey(objectKey: string): Promise<number> {
     const { count } = await this.prisma.job.updateMany({
       where: { buildLogObjectKey: objectKey },
@@ -825,15 +649,11 @@ export class JobsRepository {
     return count;
   }
 
-  // Pushes to services/verification-svc's SSE stream (job-events.ts's `JobEventsService`).
+  // The channel must match `CHANNEL` in job-events.ts.
   private async notifyJobUpdate(jobId: string): Promise<void> {
     await this.prisma.$executeRaw`SELECT pg_notify('scvs_job_updates', ${jobId})`;
   }
 
-  /**
-   * Prisma has no row-value comparison, so `(published_updated_at, wasm_hash) > (cursor)` is the `OR` expansion
-   * in `publishedKeyset` below.
-   */
   async listPublished(opts: {
     cursor?: PublishedJobCursor;
     order: "asc" | "desc";
@@ -841,10 +661,6 @@ export class JobsRepository {
   }): Promise<PublishedJobRecord[]> {
     const rows = await this.prisma.job.findMany({
       where: {
-        // `wasmHash` is always resolved and persisted before `publishedUpdatedAt` can ever be set on the same
-        // row (a job that cannot resolve one fails with `missing_wasm_hash` long before reaching `published`),
-        // so filtering on this column alone already excludes every row an added `wasmHash: { not: null }` would
-        // have.
         publishedUpdatedAt: { not: null },
         ...(opts.cursor ? publishedKeyset(opts.cursor, opts.order) : {}),
       },
@@ -852,8 +668,7 @@ export class JobsRepository {
       take: opts.limit,
     });
     return rows.map((row) => ({
-      // Narrowed by the `where` clause above (wasmHash is always set by the time publishedUpdatedAt is), not by
-      // Prisma's return type.
+      // Non-null: wasmHash is always set before publishedUpdatedAt can be.
       wasmHash: row.wasmHash as string,
       publishedUpdatedAt: (row.publishedUpdatedAt as Date).toISOString(),
     }));
@@ -865,10 +680,7 @@ export type PrunableJobRecord = { jobId: string; buildLogObjectKey?: string };
 export type PublishedJobCursor = { timestampMs: number; wasmHash: string };
 export type PublishedJobRecord = { wasmHash: string; publishedUpdatedAt: string };
 
-/**
- * `(published_updated_at, wasm_hash) > (cursor)` (asc) / `<` (desc) — Prisma has no row-value comparison, so
- * this is the `OR` expansion.
- */
+/** Prisma has no row-value comparison, so `(published_updated_at, wasm_hash)` vs the cursor is an OR expansion. */
 function publishedKeyset(cursor: PublishedJobCursor, order: "asc" | "desc"): { OR: object[] } {
   const at = new Date(cursor.timestampMs);
   return order === "asc"
@@ -876,7 +688,6 @@ function publishedKeyset(cursor: PublishedJobCursor, order: "asc" | "desc"): { O
     : { OR: [{ publishedUpdatedAt: { lt: at } }, { publishedUpdatedAt: at, wasmHash: { lt: cursor.wasmHash } }] };
 }
 
-/** The non-status half of a write, shared by `updateJob` and `advanceJob` so the two cannot drift. */
 function toUpdateData(updates: UpdateJobInput): Prisma.JobUncheckedUpdateManyInput {
   return {
     ...("wasmHash" in updates ? { wasmHash: updates.wasmHash } : {}),
@@ -907,13 +718,9 @@ function targetOrFilters(target: VerificationTarget): Array<Record<string, strin
   return filters;
 }
 
-/**
- * Fields any write may set. `status`, `failureReason` and `verdict` are deliberately **absent**: a status write
- * that is not a conditional transition is exactly what DB1 forbids, and the other two only ever change at one.
- */
+/** No `status`, `failureReason` or `verdict`: those change only through a conditional transition (`advanceJob`). */
 export type UpdateJobInput = Partial<{
   wasmHash: string;
-  /** `null` clears the link to the shared rebuild; `undefined` would leave it alone (Prisma). */
   rebuildId: string | null;
   result: VerificationResultSummary;
   error: string;
@@ -921,37 +728,18 @@ export type UpdateJobInput = Partial<{
   buildOptions: unknown;
   publishAttempts: number;
   retryAttempts: number;
-  /**
-   * Set by `writePublication` the moment a report publishes — see `recordArchiveOutcome` for the two ways this
-   * later resolves.
-   */
   archivePendingSince: Date;
-  /**
-   * Advancing it again on archive backfill goes through `recordArchiveOutcome`'s own `publishedUpdatedAt`
-   * parameter, not this generic path.
-   */
   publishedUpdatedAt: Date;
-  /**
-   * Set by `writePublication` the moment a public job's first source-publish attempt fails; `null` to clear it
-   * explicitly.
-   */
   sourcePublishPendingSince: Date | null;
-  /**
-   * Set by `writePublication` or `retryPendingSourcePublish` the moment a public, mainnet job's source is
-   * durably published (mainnet-source-archive design.md MSA-1/MSA-2).
-   */
   sourceArchivePendingSince: Date | null;
 }>;
 
-/** What a transition may write alongside the status change itself. */
 export type AdvanceJobInput = UpdateJobInput &
   Partial<{
     failureReason: FailureReason | null;
     verdict: Verdict | null;
   }>;
 
-// Every field derived from a raw Prisma column (rather than passed straight through) is run through its
-// `@scvs/core` class-validator class/guard here.
 function rowToJob(row: PrismaJob): JobRecord {
   return {
     jobId: row.id,

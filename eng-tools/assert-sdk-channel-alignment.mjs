@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-/**
- * Does the dist-tag serving an environment resolve to a build of the commit that environment runs? Reads the
- * registry through npm (the package is public, so no login is involved) and the SDK surface through
- * git, and reports drift at the severity that environment's channel carries.
- *
- *   node eng-tools/assert-sdk-channel-alignment.mjs --env staging --deployed-commit <sha>
- */
+/** Asserts an environment's SDK dist-tag resolves to a build of the commit it runs. npm + git; no login. */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,15 +40,11 @@ if (!isCommitPresent(deployed)) {
   fail(`${deployed} is not a commit in this checkout, so nothing can be proved about it — fetch the full history`);
 }
 
-/** Read through a throwaway cache so a stale packument cannot answer for the registry. */
+/** A throwaway cache, so a stale packument cannot answer for the registry. */
 const cache = mkdtempSync(join(tmpdir(), "scvs-alignment-"));
 const ABSENT = /E404|no match(ing version)? found|is not in this registry/i;
 
-/**
- * "" means the registry answered and has nothing under that name. A read that failed for any other reason —
- * no auth, no network, a 403 — is a hard failure, never an empty answer: reporting a broken read as
- * `unpublished` would turn this check into a warning that always passes.
- */
+/** "" means the registry has nothing under that name; any other read failure is fatal, never "". */
 function view(spec, field) {
   try {
     return execFileSync("npm", ["view", spec, field, "--prefer-online", "--cache", cache], {
@@ -69,7 +59,6 @@ function view(spec, field) {
   }
 }
 
-// Overridable so every verdict below can be exercised without a registry.
 let publishedVersion = flag("published-version", "");
 let publishedCommit = flag("published-commit", "");
 let packageExists = flag("package-exists", "") !== "false";
@@ -79,8 +68,6 @@ if (publishedVersion) {
   try {
     publishedVersion = view(`${PKG}@${channel.dist_tag}`, "version");
     if (publishedVersion) publishedCommit = view(`${PKG}@${publishedVersion}`, "scvs.gitSha");
-    // Asked only when a dist-tag resolved to nothing, and it tells two different situations apart —
-    // see the verdict below.
     else if (flag("package-exists", "") === "") packageExists = view(PKG, "name") !== "";
   } finally {
     rmSync(cache, { recursive: true, force: true });
@@ -93,13 +80,10 @@ const fixCommand =
     ? `gh workflow run release.yml -f commit=${deployed}`
     : `gh workflow run release.yml -f version=vX.Y.Z-rc.N -f commit=${deployed}`;
 
-/** `warn` keeps a deploy green and says so; `error` fails it. Both print the same one-command fix. */
 function report(verdict, detail, override) {
   const aligned = verdict === "aligned";
   const raised = override ?? channel.severity;
   const severity = aligned ? "notice" : raised;
-  // Releasing is not the fix for a package that cannot be published yet, and printing it as one sends
-  // whoever reads this at a workflow that will skip its publish step.
   const fix = verdict === "unpublished" && override === "warn" ? "" : fixCommand;
   const headline = `${PKG}@${channel.dist_tag} · ${targetEnv} · ${verdict}`;
 
@@ -135,10 +119,6 @@ function report(verdict, detail, override) {
 }
 
 if (!publishedVersion && !packageExists) {
-  // A name the registry has never seen is a different thing from a dist-tag left behind. Nothing can be
-  // published while this repository is private — a trusted publish stamps provenance, and provenance is
-  // verifiable only against a source anyone can read — so this is a decided state, not drift, and it must
-  // not fail a staging deploy. It becomes an error again the moment the first version exists.
   report(
     "unpublished",
     `${PKG} is not on the registry at all, so nothing serves ${targetEnv} yet. Expected until this repository is public`,
@@ -161,8 +141,6 @@ if (publishedCommit === deployed) {
   report("aligned", `${publishedVersion} was built from the commit ${targetEnv} runs`);
 }
 
-// Everything below diffs the two commits, which needs both of them here — a published commit that has left
-// the repository cannot be compared, and saying so beats a raw git error.
 if (!isCommitPresent(publishedCommit)) {
   report(
     "unprovable",

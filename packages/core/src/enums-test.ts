@@ -8,8 +8,6 @@ import {
   type VerificationStatus,
 } from "./enums.js";
 
-/** The defect was not that one value was wrong. */
-
 function test(name: string, fn: () => void): void {
   try {
     fn();
@@ -20,11 +18,8 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-/** Every answer the mapper can give, over its entire input space. */
 function reachableStatuses(): Set<VerificationStatus> {
   const reached = new Set<VerificationStatus>();
-  // `failed` is the only arm that reads `failureReason`, and `published`/`evaluated` the only two that read
-  // `verdict`.
   for (const status of jobStatuses) {
     for (const reason of [...failureReasons, null, undefined] as const) {
       for (const verdict of [...verdicts, null, undefined] as const) {
@@ -47,8 +42,6 @@ test("every declared wire status has a producer", () => {
 });
 
 test("the mapper invents no status the enum does not declare", () => {
-  // The other direction, and the reason this is not merely a spelling check: `parseDto` validates responses
-  // against the enum, so a mapper arm returning an undeclared value fails at the edge.
   const undeclared = [...reachableStatuses()].filter(
     (status) => !(verificationStatuses as readonly string[]).includes(status),
   );
@@ -56,8 +49,6 @@ test("the mapper invents no status the enum does not declare", () => {
 });
 
 test("source_hash_mismatch is not a wire status", () => {
-  // A real source-hash mismatch on the async path is the builder's re-hash of bytes it fetched itself, which is
-  // `source_unavailable` — "obtained, and could not be trusted".
   assert.equal((verificationStatuses as readonly string[]).includes("source_hash_mismatch"), false);
 });
 
@@ -72,8 +63,6 @@ test("the mapper still distinguishes a mismatch from a verified result", () => {
 });
 
 test("a publication still in progress is `running`, never a verdict", () => {
-  // verification-svc closes the SSE stream on anything that is not queued/running, so mapping these to a
-  // verdict would drop the connection before the result root exists.
   assert.equal(toWireVerificationStatus("publishing"), "running");
   assert.equal(toWireVerificationStatus("publish_pending"), "running");
 });

@@ -2,8 +2,7 @@ import { config as loadDotenv } from "dotenv";
 import { defineConfig } from "prisma/config";
 import { getDatabaseUrl } from "@scvs/db";
 
-// Same loading order as packages/db/prisma.config.ts, and for the same reason: the Prisma CLI runs with cwd =
-// packages/db-query, so a bare `dotenv/config` only ever sees this package's own .env.
+// The Prisma CLI runs with cwd = this package, so the root .env is loaded explicitly.
 loadDotenv({ quiet: true });
 loadDotenv({ path: new URL("../../.env", import.meta.url), quiet: true });
 

@@ -11,7 +11,6 @@ type AdditionalRootsPanelProps = {
   onRemove: (id: string) => void;
 };
 
-/** Result roots the reader adds for this session, asked alongside the Trusted Verifiers List. */
 export const AdditionalRootsPanel = ({ roots, onAdd, onRemove }: AdditionalRootsPanelProps) => {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -57,8 +56,6 @@ export const AdditionalRootsPanel = ({ roots, onAdd, onRemove }: AdditionalRoots
             key={root.id}
             className="flex list-none flex-wrap items-center gap-3 rounded-md border border-line px-3 py-2"
           >
-            {/* Behind the interstitial like any other peer-origin URL (S26) — the reader typed it,
-                but the page still must not turn it into a live link without showing the origin. */}
             <PeerLink url={root.url} label="root" />
             <button
               type="button"

@@ -6,7 +6,6 @@ import { execFileSync } from "node:child_process";
 
 const ROOT = process.cwd();
 
-/** The units whose `dependencies` closure ships: every service image, the console bundle, the SDK tarball. */
 const SHIPPED = ["services/*", "clients/web", "clients/sdk"];
 
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -21,7 +20,6 @@ const byName = new Map([...byDir].map(([dir, pkg]) => [pkg.name, dir]));
 
 const matches = (dir) => SHIPPED.some((p) => (p.endsWith("/*") ? dir.startsWith(p.slice(0, -1)) : dir === p));
 
-// Workspace packages a shipped unit reaches through `dependencies` edges only.
 const shipped = new Set([...byDir.keys()].filter(matches));
 for (let grew = true; grew; ) {
   grew = false;
@@ -46,10 +44,6 @@ try {
   audit = JSON.parse(out);
 }
 
-/**
- * An advisory reaches production when its path leaves a shipped package through that package's own
- * `dependencies`. Everything below that first edge is production by construction.
- */
 function classify(path) {
   const [root, first] = path.split(">");
   const dir = root.replace(/__/g, "/");

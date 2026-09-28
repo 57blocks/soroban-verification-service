@@ -1,12 +1,7 @@
 name: Build & deploy composer image
 
-# Same as deploy-builder.yml: one run deploys into BOTH environments (the register job's `environment: [dev,
-# staging]` matrix), so a dispatched run should not read as if it picked one.
 run-name: ${{ github.event_name == 'workflow_dispatch' && 'Build & deploy composer image → dev + staging' || '' }}
 
-# Structurally deploy-builder.yml, with two differences that matter:
-
-# Called by the operations repository, once per environment.
 on:
   workflow_call:
     inputs:
@@ -40,12 +35,12 @@ on:
         required: false
 
 permissions:
-  id-token: write # required for OIDC -> AWS role assumption
+  id-token: write
   contents: read
-  packages: read # the published composer image; see deploy.yml's note on the ceiling
+  # A called workflow's `permissions:` is a ceiling, not an addition; the caller must grant this too.
+  packages: read
 
-# Same reasoning as deploy-builder.yml's: dispatch resolves the latest ACTIVE revision by family name, so two
-# overlapping runs finishing out of order would leave an older composer image live.
+# Overlapping runs finishing out of order would leave an older image as the latest ACTIVE revision.
 concurrency:
   group: composer-job-definitions
   cancel-in-progress: false
@@ -55,25 +50,19 @@ env:
 
 jobs:
   build-and-deploy:
-    # Native arm64 — matches the Graviton compute environment, same as the builder's runner.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
-    # The composer tool image is built once and pushed to dev's repository regardless of which environment(s) it
-    # later composes for.
     environment: dev
     env:
-      # Plain variable: repository-level secrets do not reach jobs that reference an environment (the old
-      # secrets.AWS_ACCOUNT_ID fallback resolved empty here).
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     outputs:
-      # Split into two secret-free outputs, never a full image reference: the ECR registry hostname embeds the
-      # account id.
+      # Never a full image reference: the registry hostname embeds the account id, which GitHub strips from outputs.
       image_repo: ${{ steps.descriptor.outputs.ecr_composer }}
       image_digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -86,9 +75,7 @@ jobs:
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
 
-      # Pure git, no credentials, and placed before the first step that takes any: this environment may
-      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
-      # the ambient commit is the CALLER's, which is never on this repository's main.
+      # `--sha` is required: under workflow_call the ambient commit is the caller's.
       - name: Fetch main to prove the ref against
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
@@ -98,8 +85,6 @@ jobs:
           TARGET_SHA: ${{ inputs.source_sha }}
         run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
-      # This workflow registers its own job definition independently and is not triggered by an edit to
-      # deploy-builder.yml, so the check is repeated here rather than assumed covered.
       - name: Check every bind mount is host-visible at an identical path
         run: node eng-tools/check-mount-paths.mjs
 
@@ -123,10 +108,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # While the packages are private this authenticates as the CALLER — the operations
-      # repository, which the packages grant read to. Once they are public the pull needs no
-      # credential and this step costs a second and nothing else. The token is the caller's, so the
-      # caller's job has to allow `packages: read`.
       - name: Log in to the container registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -134,9 +115,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # publish-images.yml built it; this copies it into the registry Batch pulls from. A deploy
-      # that rebuilds is a deploy that can differ from what was reviewed and attested — and under
-      # `workflow_call` the tree this job could check out is the caller's, which holds no source.
       - name: Copy the published composer image into the deployment registry
         id: build
         env:
@@ -150,34 +128,26 @@ jobs:
             --format '{{ .Manifest.Digest }}')
           [ -n "$SOURCE_DIGEST" ] || { echo "::error::no published image at ${SOURCE_IMAGE}:${SOURCE_SHA}"; exit 1; }
           docker buildx imagetools create --tag "${REGISTRY}/${REPO}:${SOURCE_SHA}" "${SOURCE_IMAGE}@${SOURCE_DIGEST}"
-          # Read back rather than assume the copy preserved the digest: Batch pins by this value.
           DIGEST=$(aws ecr describe-images --repository-name "$REPO" --image-ids imageTag="$SOURCE_SHA" \
             --query 'imageDetails[0].imageDigest' --output text)
           [ -n "$DIGEST" ] && [ "$DIGEST" != "None" ] || { echo "::error::${REPO}:${SOURCE_SHA} is not in the registry after the copy"; exit 1; }
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-  # One job per environment, because the credentials cannot be shared.
   register:
     needs: build-and-deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # One key per environment, so each leg resolves THAT environment's GitHub variable;
-    # the ternary fallback covers the transition until the variable is set.
     environment: ${{ matrix.environment }}
     env:
-      # Plain variable, same rule as build-and-deploy's: no secret-based fallback in an environment-scoped job.
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     strategy:
-      # Both environments get their own family even if one fails — an environment left on its previous revision
-      # is a stale image, while an environment left mid-registration is nothing at all.
       fail-fast: false
       matrix:
         environment: [dev, staging]
     steps:
-      # `check:workflows` now enforces the checkout/call pairing in every job of every workflow.
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -190,9 +160,7 @@ jobs:
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
 
-      # Pure git, no credentials, and placed before the first step that takes any: this environment may
-      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
-      # the ambient commit is the CALLER's, which is never on this repository's main.
+      # `--sha` is required: under workflow_call the ambient commit is the caller's.
       - name: Fetch main to prove the ref against
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
@@ -202,8 +170,6 @@ jobs:
           TARGET_SHA: ${{ inputs.source_sha }}
         run: node eng-tools/assert-deploy-ref.mjs --env "$TARGET_ENV" --sha "$TARGET_SHA"
 
-      # The deployment's own contract, handed over by the caller: it states values for ONE deployment and
-      # this repository holds none. An absent artifact fails the job, which is the point.
       - name: Fetch the deployment's contracts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -228,15 +194,10 @@ jobs:
       - name: Resolve the deployment account
         id: account
         run: |
-          # From the OIDC identity itself — repository-level secrets do not reach jobs that reference an
-          # environment, so the account id for the ECR registry cannot come from one.
           echo "id=$(aws sts get-caller-identity --query Account --output text --region "$AWS_REGION")" >> "$GITHUB_OUTPUT"
 
       - name: Register new Batch job definition revision
         env:
-          # Composed here, not passed as a job output: build-and-deploy emits repo+digest only, because a full
-          # reference's registry hostname embeds the account id and GitHub strips job outputs that contain a
-          # registered secret's value.
           IMAGE: ${{ format('{0}.dkr.ecr.{1}.amazonaws.com/{2}@{3}', steps.account.outputs.id, env.AWS_REGION, needs.build-and-deploy.outputs.image_repo, needs.build-and-deploy.outputs.image_digest) }}
           JOB_DEFINITION_NAME: ${{ steps.descriptor.outputs.family }}
           JOB_ROLE_ARN: arn:aws:iam::${{ steps.descriptor.outputs.account_id }}:role/${{ steps.descriptor.outputs.composer_role }}
@@ -246,8 +207,6 @@ jobs:
           echo "job role: $JOB_ROLE_ARN"
           echo "image:    $IMAGE"
 
-          # If that role does not exist the call below fails, which is the right failure: a composer without it
-          # builds images it cannot push and would report `ecr_auth_failed` on every composition instead.
           CONTAINER_PROPERTIES="{
               \"image\": \"${IMAGE}\",
               \"jobRoleArn\": \"${JOB_ROLE_ARN}\",
@@ -266,10 +225,7 @@ jobs:
               ]
             }"
 
-          # invariants.md rule 1's boundary, made mechanical by rule 23. Asserts the 25 variables
-          # config/deploy/<env>/composer.json forbids before anything is registered. The composer's own
-          # `jobRoleArn` is NOT a violation — it is the trusted fleet, and invariants.md rule 17 requires that role for
-          # `ecr:PutImage` — so the check exempts it there while still enforcing it for the builder.
+          # Must run before register: a non-zero exit means the definition crosses the sandbox trust boundary.
           jq -n --argjson p "$CONTAINER_PROPERTIES" \
             '{jobDefinitionName: "x", type: "container", containerProperties: $p}' > /tmp/composer-jobdef.json
           node eng-tools/check-taskdef-boundary.mjs \

@@ -3,12 +3,6 @@ import type {
   WasmSummary as WasmSummaryDto,
 } from "@scvs/core";
 
-/**
- * **Why a mismatch happened** — a best-effort structural diff (sections, imports, exports, custom sections)
- * between the deployed Wasm and the one we rebuilt.
- */
-
-/** The structural diff. */
 export function describeWasmMismatch(
   deployed: Uint8Array | undefined,
   rebuilt: Uint8Array,
@@ -16,10 +10,6 @@ export function describeWasmMismatch(
   return compareWasmArtifacts(deployed, rebuilt);
 }
 
-/**
- * Human-readable troubleshooting hints for a mismatch. Always includes the standing caveats (diagnostics are
- * hints, not proof) plus anything the structural diff turned up.
- */
 export function inferMismatchCauses(compare: WasmComparisonDiagnosticsDto): string[] {
   const causes = new Set<string>();
   causes.add("Verification still requires a byte-for-byte Wasm match; diagnostics are only troubleshooting hints.");
@@ -85,10 +75,6 @@ function compareWasmArtifacts(
   };
 }
 
-/**
- * A `Buffer` view over the same memory — no copy. The parser below wants `readUInt32LE`/`subarray`, which are
- * `Buffer`'s and not `Uint8Array`'s, and these binaries are megabytes.
- */
 function asBuffer(bytes: Uint8Array): Buffer {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }

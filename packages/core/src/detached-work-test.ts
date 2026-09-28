@@ -18,7 +18,6 @@ function capturingLogger(): { logger: ScvsLogger; lines: string[] } {
   return { logger, lines };
 }
 
-/** A promise the test resolves by hand, so nothing here depends on how long anything takes. */
 function gate(): { opened: Promise<void>; open: () => void } {
   let open!: () => void;
   const opened = new Promise<void>((resolve) => (open = resolve));

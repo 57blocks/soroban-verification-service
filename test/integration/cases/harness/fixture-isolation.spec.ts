@@ -4,10 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { fixtureInventoryPath, recipeScopeLabel, runScopedBldopt } from "../../support/fixtures.js";
 
-// The same walk-up `packages/config`'s `findWorkspaceRoot` performs, re-derived here rather than
-// imported: this suite is black-box and depends on no `@scvs/*` package. Anchoring on the marker
-// instead of the checkout's directory name is what makes the assertion below hold from a `git
-// worktree`, where the root is `<repo>/.claude/worktrees/<branch>` and the old literal never matched.
+// Not imported from @scvs/config: this suite depends on no @scvs/* package.
 function workspaceRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
   while (!existsSync(join(dir, "pnpm-workspace.yaml"))) {
@@ -41,8 +38,6 @@ describe("E2E harness fixture isolation", () => {
     expect(anotherRun).not.toEqual(baseline);
   });
 
-  // The label is where the isolation actually came from, and where it was lost: `currentTestName` is undefined
-  // in `beforeAll`, so the old literal fallback gave every hook in a run one scope.
   it("falls back to the spec file when a hook has no test name", () => {
     expect(recipeScopeLabel({ currentTestName: "case-a", testPath: "/cases/arc/a.spec.ts" })).toBe("case-a");
     expect(recipeScopeLabel({ testPath: "/cases/arc/a.spec.ts" })).toBe("/cases/arc/a.spec.ts");

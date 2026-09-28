@@ -2,10 +2,6 @@ import type { ReactNode } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 
-/**
- * The two states a legal page gained when its text stopped being a build-time constant. A stated failure,
- * never an empty document (versioned-terms-and-assent design.md TA-6).
- */
 const Shell = ({ title, children }: { title: string; children: ReactNode }) => (
   <main className="min-h-screen bg-surface font-sans leading-normal text-ink antialiased">
     <SiteNav />

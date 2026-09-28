@@ -7,38 +7,17 @@ import { abuseCheckError, AbuseGuardService } from "./abuse-guard.js";
 import type { AppConfigService } from "../config/configuration.js";
 import { ApiError } from "@scvs/http";
 
-/**
- * Exported so `raw-archive-body.middleware.ts` can key its own abuse check on the exact same string this
- * guard would have used, had it still applied to that route — middleware runs before Nest resolves
- * `req.route.path`, so it cannot read the pattern back the way this guard does.
- */
+/** Middleware runs before Nest resolves `req.route.path`, so the upload middleware keys its check on this. */
 export const UPLOAD_SOURCE_ROUTE = "/api/verification/v1/uploads/source";
 
-/**
- * Routes on the stricter budget. Both are the same caller in the same flow — a client uploading source is one
- * about to submit — so they are one tier, not two.
- */
 const SUBMISSION_ROUTES = new Set(["/api/verification/v1/verifications", UPLOAD_SOURCE_ROUTE]);
 
-/**
- * The SSE progress route, on its own looser-than-submission tier: an open connection holds a socket/listener
- * for the life of the stream, so *setup* is metered like a write-shaped route would be — but reconnects
- * (stream_timeout, a dropped network) are routine, not abuse, so its budget is not as tight as a submission's.
- * StreamConcurrencyLimiter (jobs.service.ts) bounds how many of these stay open at once; this only bounds how
- * fast new ones may be opened.
- */
 const STREAM_ROUTES = new Set(["/api/verification/v1/verifications/:job_id/events"]);
 
-/**
- * The Postgres-backed sliding-window guard, applied via `@UseGuards(AbuseGuard)` on
- * `/api/verification/v1/preflight`, `/api/verification/v1/verifications`, and the build-log routes.
- */
 @Injectable()
 export class AbuseGuard implements CanActivate {
   private readonly logger = new ScvsLogger("abuse-guard");
 
-  // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
-  // metadata Nest's DI would otherwise infer this parameter's type from).
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(AbuseGuardService) private readonly abuse: AbuseGuardService,
@@ -46,10 +25,8 @@ export class AbuseGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    // The matched route pattern, not the URL: a path parameter in the key would give every distinct id its own
-    // budget, which is no budget at all.
+    // The route pattern, not the URL: a path parameter in the key would give every id its own budget.
     const route = req.route?.path;
-    // An unmatched route resolves to the strictest tier rather than the loosest.
     const maxPerWindow =
       route === undefined || SUBMISSION_ROUTES.has(route)
         ? this.configService.get("submitAbuseMaxPerWindow", { infer: true })

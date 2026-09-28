@@ -1,16 +1,11 @@
 import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString } from "class-validator";
 
-/** This service's environment contract, validated once at boot. */
 export class ComposerEnvDto {
-  // The corollary of not extending `SharedEnvDto`, exactly as in `BuilderEnvDto`: the handful of genuinely
-  // shared variables this unit *does* read have to be declared here rather than inherited.
   @IsOptional()
   @IsIn(["production", "development", "test"], {
     message: "NODE_ENV must be one of: production, development, test",
   })
   NODE_ENV?: string;
-
-  // `XDG_DATA_HOME` was validated here for the same DooD reason the builder gave.
 
   @IsNotEmpty({
     message:

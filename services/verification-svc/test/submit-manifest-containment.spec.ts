@@ -1,10 +1,6 @@
 import { jest } from "@jest/globals";
 import { SubmitService } from "../src/modules/verifications/submit.service.js";
 
-/**
- * This is intentionally a service test, rather than another pure manifest test, so a later reordering in
- * SubmitService cannot create or reuse a job before the rejection is returned.
- */
 describe("SubmitService submitted manifest containment", () => {
   it("rejects an escaping manifest path before reading or creating a job", async () => {
     const jobs = {
@@ -17,8 +13,7 @@ describe("SubmitService submitted manifest containment", () => {
     };
     const uploadJobReferences = { recordReference: jest.fn() };
     const configService = { get: jest.fn() };
-    // Accepts unconditionally: this spec is about the manifest gate, and a terms rejection would short-circuit
-    // ahead of it and prove nothing.
+    // Accepts unconditionally: a terms rejection would short-circuit ahead of the manifest gate.
     const legal = { checkAcceptance: jest.fn(() => ({ accepted: true })) };
     const service = new SubmitService(
       configService as never,

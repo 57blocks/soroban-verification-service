@@ -32,10 +32,6 @@ type RebuildCardProps = {
   groups: ProvenanceGroup[];
 };
 
-/**
- * How this contract was rebuilt, grouped by who chose each value — see `rebuildProvenance`. Drawn as the
- * landing page's sealed box, because these are the inputs a rebuild inside that sandbox actually ran on.
- */
 export const RebuildCard = ({ groups }: RebuildCardProps) => {
   if (!groups.length) return null;
 

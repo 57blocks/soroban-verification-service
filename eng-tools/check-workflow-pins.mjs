@@ -1,29 +1,8 @@
 #!/usr/bin/env node
-/**
- * Holds every reference this repository's workflows make to THIS repository at a commit whose copy of the
- * referenced path is the one in this tree.
- *
- * `uses:` cannot be an expression, so a workflow that is itself called cannot name the ref it was called at:
- * a nested `uses:` resolves on its own, at run time, against whatever the ref means then. An outer pin
- * therefore reaches the workflow it names and nothing below it. That is not theoretical — a caller pinning
- * `deploy.yml` to a sha has already run a `db-migrate.yml` two commits newer, in the same run. What the pin
- * could not reach was the pipeline's two most credential-adjacent files: `db-migrate.yml`, which assumes the
- * deploy role, and `actions/source-token`, which receives the App private key. GitHub's
- * `referenced_workflows` reports workflows only, so the action references escaped an audit of the run too.
- *
- * A commit cannot contain its own sha, so a pin names the commit that last changed the referenced path and a
- * follow-up commit bumps it. Content is what makes that sound, not identity: this refuses a pin whose copy of
- * the path differs by a byte from the working tree's, so a pinned outer workflow is a pinned pipeline.
- * Bumping converges in as many commits as the reference graph is deep — `deploy.yml` → `db-migrate.yml` →
- * `actions/source-token`, so two.
- *
- *   pnpm run check:workflow-pins              # every self-reference is a sha, and that sha is this tree
- *   pnpm run check:workflow-pins -- --write   # bump the stale ones, then commit the result
- */
+/** Every `uses:` self-reference in `.github/` must be a sha whose copy of the path matches this tree; `--write` bumps stale pins. */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-/** The one literal a fork edits, and the same one the workflows themselves carry as `source_repository`. */
 const SELF = "57blocks/soroban-verification-service";
 const WRITE = process.argv.includes("--write");
 
@@ -33,18 +12,14 @@ const SELF_RE = SELF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const REFERENCE = new RegExp(`^(\\s*(?:-\\s+)?uses:\\s*)${SELF_RE}/([^@\\s]+)@(\\S+?)(\\s*(?:#.*)?)$`);
 const SHA = /^[0-9a-f]{40}$/;
 
-/**
- * True when `sha`'s copy of `path` is byte-for-byte the working tree's. `git diff` compares the tree, so an
- * uncommitted edit counts — which is the point, since the pin has to match what is about to be committed.
- * It cannot see an untracked file, so that is asked separately.
- */
+/** `git diff <sha>` counts uncommitted edits but cannot see an untracked file, hence the separate ask. */
 function matchesTree(sha, path) {
   if (git("ls-files", "--others", "--exclude-standard", "--", path)) return false;
   try {
     execFileSync("git", ["diff", "--quiet", sha, "--", path], { stdio: "ignore" });
     return true;
   } catch {
-    return false; // exit 1 is "they differ"; anything higher is a sha this caller already checked
+    return false;
   }
 }
 
@@ -57,13 +32,7 @@ function isCommit(sha) {
   }
 }
 
-/**
- * True when `sha` is an ancestor of HEAD. Content equality is not enough: GitHub resolves a
- * `uses:@<sha>` only against a commit reachable from a branch or tag, so a pin written on a branch
- * that is then SQUASH-merged names a dead sha the moment that branch is deleted — and the caller
- * fails as a startup_failure with no job, no log and no annotation. On a feature branch the pin is a
- * commit of that branch and passes; on main after a bad squash it is an ancestor of nothing.
- */
+/** GitHub resolves `uses:@<sha>` only for a commit reachable from a branch or tag; a squash-merged head is not. */
 function isReachable(sha) {
   try {
     execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { stdio: "ignore" });
@@ -73,8 +42,6 @@ function isReachable(sha) {
   }
 }
 
-// A shallow clone has neither the pinned commits nor the history to place them, and answering "current"
-// from what it does have would be the wrong answer rather than no answer.
 if (git("rev-parse", "--is-shallow-repository") === "true") {
   console.error(
     "✗ this is a shallow clone, and the pinned commits are not in it. " +

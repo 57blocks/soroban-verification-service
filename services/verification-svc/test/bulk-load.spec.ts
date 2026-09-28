@@ -6,14 +6,10 @@ import { createPrismaClient, JobsRepository, readDbEnv } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 import { createTestApp } from "./bootstrap.js";
 
-// Same pattern as jobs.spec.ts: this route does nothing but a keyset read over `jobs`, so it is exercised
-// against the real local Postgres rather than a mocked JobsRepository.
 const prisma = createPrismaClient(readDbEnv());
 const jobsRepository = new JobsRepository(prisma);
 const createdRows = new CreatedRows();
 
-// Distinct prefix so this suite's rows never collide with a concurrently running sibling's, and so `wasmHash: {
-// not: null }` in `listPublished` never picks up unrelated jobs sharing this process's Postgres.
 const HASHES = ["1", "2"].map((prefix) => prefix.repeat(64));
 
 let app: NestExpressApplication;
@@ -32,7 +28,6 @@ afterAll(async () => {
   }
 });
 
-/** A job that reached `published` with a given `wasmHash`/`publishedUpdatedAt`, or neither. */
 async function createPublishedJob(input: { wasmHash: string; publishedUpdatedAt?: string }): Promise<string> {
   const jobId = createdRows.job(randomUUID());
   await jobsRepository.createJob({
@@ -73,7 +68,6 @@ describe("GET /api/verification/v1/wasms — BL1's stream, verification-svc's ow
   });
 
   it("pages by keyset, and two records sharing a millisecond both come through (BL2)", async () => {
-    // The case a timestamp-only cursor drops one of.
     const at = "2026-06-30T00:00:00.000Z";
     for (const wasmHash of HASHES) await createPublishedJob({ wasmHash, publishedUpdatedAt: at });
 
@@ -118,7 +112,6 @@ describe("GET /api/verification/v1/wasms — BL1's stream, verification-svc's ow
         source_uri: "https://example.com/fake.tar.gz",
       } as any,
     });
-    // Still `queued` — never reached `published`, so `publishedUpdatedAt` was never set.
 
     const res = await request(server).get("/api/verification/v1/wasms?limit=200");
     expect(res.status).toBe(200);
@@ -129,17 +122,13 @@ describe("GET /api/verification/v1/wasms — BL1's stream, verification-svc's ow
     "excludes a `published` row left with published_updated_at NULL by ADR-014's no-op overwrite " +
       "— this is not corrupt data, it just isn't the authoritative record for that hash",
     async () => {
-      // A job that reached `published` (e.g. a losing `mismatched` verdict for an already-`verified` hash) but
-      // whose publish attempt was a no-op overwrite (publish.service.ts's `isNoOpOverwrite`) never advances
-      // `publishedUpdatedAt`.
       const noOpHash = `${"9".repeat(63)}a`;
-      const noOpJob = await createPublishedJob({ wasmHash: noOpHash }); // no publishedUpdatedAt
+      const noOpJob = await createPublishedJob({ wasmHash: noOpHash });
 
       const res = await request(server).get("/api/verification/v1/wasms?limit=200");
       expect(res.status).toBe(200);
       expect(res.body.records.map((r: { wasm_hash: string }) => r.wasm_hash)).not.toContain(noOpHash);
 
-      // The row is real and published — just not this hash's bulk-load-eligible record.
       const row = await prisma.job.findUniqueOrThrow({ where: { id: noOpJob } });
       expect(row.status).toBe("published");
       expect(row.publishedUpdatedAt).toBeNull();
@@ -191,9 +180,8 @@ describe("GET /api/verification/v1/wasms — BL1's stream, verification-svc's ow
 });
 
 describe("GET /api/verification/v1/wasms.json — the deprecated spelling", () => {
-  // A sibling suite re-stamps `published_updated_at` on a row it already published (`recordArchiveOutcome`,
-  // `recordStatusLinkOutcome`), so both routes are asked for a one-row window opened 1 ms below a row this file
-  // created. `f`×64 is above every hex hash, so nothing sharing that lower bound's millisecond slips in.
+  // A sibling suite re-stamps `published_updated_at`, so ask for a one-row window opened 1 ms below this file's
+  // row; `f`×64 sorts above every hex hash.
   const windowFrom = (at: string) => `order=asc&limit=1&cursor=${new Date(at).getTime() - 1}-${"f".repeat(64)}`;
 
   it("answers what the canonical route answers, and says it is deprecated", async () => {
@@ -205,7 +193,6 @@ describe("GET /api/verification/v1/wasms.json — the deprecated spelling", () =
     const canonical = await request(server).get(`/api/verification/v1/wasms?${query}`);
     const alias = await request(server).get(`/api/verification/v1/wasms.json?${query}`);
 
-    // Spelled out, so the equality below can never hold by both routes answering an empty page.
     expect(canonical.status).toBe(200);
     expect(canonical.body).toEqual({
       schema: "stellar-verification-page",
@@ -222,8 +209,6 @@ describe("GET /api/verification/v1/wasms.json — the deprecated spelling", () =
   });
 
   it("shares one cursor space with the canonical route, so a consumer can migrate mid-stream", async () => {
-    // One pair on one timestamp: the handover only proves something if the canonical route resolves the same
-    // wasm_hash tiebreak the deprecated route's cursor encoded.
     const publishedUpdatedAt = "2097-07-01T00:00:00.000Z";
     const hashes = [`${"6".repeat(63)}d`, `${"6".repeat(63)}e`];
     for (const wasmHash of hashes) await createPublishedJob({ wasmHash, publishedUpdatedAt });

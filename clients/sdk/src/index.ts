@@ -24,8 +24,6 @@ import {
 export { newClient, SchemaValidationError } from "./client.js";
 export type { SoveClient, SoveClientOptions, VerifierDiscovery } from "./client.js";
 
-// The hosted mode: the same questions asked of a Public Query API rather than of the result roots
-// themselves (TRD §8.3). `AggregateReader` is what both modes answer.
 export { newHostedClient, queryApiFailureOf, QueryApiError, QUERY_API_V1 } from "./hosted.js";
 export type {
   AggregateReader,
@@ -34,7 +32,6 @@ export type {
   QueryApiFailure,
 } from "./hosted.js";
 
-// `newClient` applies a policy by default; these let a consumer inspect, tighten or reuse it.
 export {
   checkUrl,
   createGuardedFetch,
@@ -48,7 +45,6 @@ export {
 } from "./fetch-policy.js";
 export type { FetchPolicy, FetchPolicyInput } from "./fetch-policy.js";
 
-// `results_urls` hash verification, and the destination a UI needs before navigating.
 export {
   fetchAndVerifyResultUrl,
   UnverifiableEntryError,
@@ -56,7 +52,6 @@ export {
 } from "./result-urls.js";
 export type { ResultUrlEntry, VerifiedResultUrl, VerifyResultUrlOptions } from "./result-urls.js";
 
-// The Registry API read surface. The document shape comes from `packages/core`.
 export {
   aggregateWasmStatus,
   readStatusObject,
@@ -69,7 +64,6 @@ export type {
   RegistryValidationMode,
   StatusObjectReadOptions,
 } from "./registry-read.js";
-// `RegistryStatusObject` is the producer shape and `PeerRegistryStatusObject` the consumer one.
 export {
   RegistryStatusObject,
   PeerRegistryStatusObject,
@@ -89,9 +83,6 @@ export {
   RECIPE_SOURCES,
   IMAGE_TRUST_LEVELS,
   RESULT_URL_TYPES,
-  // The two field shapes a submission form has to agree with. The console carried its own copies — one of
-  // them annotated "deliberately copied rather than imported" — because it depends on this package and not on
-  // `@scvs/core`; exporting them here is what removes the reason to copy.
   SEP58_HEX_SHA256,
   SOURCE_URI_PATTERN,
 } from "@scvs/core/registry";
@@ -109,8 +100,6 @@ export {
   resultRootOf,
 };
 
-// The consumer classes for an aggregate someone else assembled. `PeerAggregatedWasmStatus` is what
-// `newHostedClient` validates with; `AggregatedWasmStatus` above is the shape we ourselves emit.
 export {
   AGGREGATE_SCHEMA,
   AGGREGATE_SCHEMA_MAJOR,

@@ -1,5 +1,4 @@
 import "reflect-metadata";
-// Loads this process's .env files — cwd first, then the workspace root's shared one.
 import "@scvs/config/load-env";
 import { formatConfigContractLogLine } from "@scvs/config";
 import { applyHttpServerTimeouts, ScvsLogger } from "@scvs/core";
@@ -20,8 +19,6 @@ const logger = new ScvsLogger("query-svc-bootstrap");
 
 async function bootstrap(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    // Passing the instance rather than a level list replaces Nest's own logger from the very first record,
-    // including the ones module initialisation emits before `app.init()` returns (O1).
     logger: process.env.NODE_ENV === "test" ? false : logger,
   });
 
@@ -29,18 +26,14 @@ async function bootstrap(): Promise<NestExpressApplication> {
 
   app.use(helmet());
 
-  // Load-bearing for the quota, not cosmetic: without it `req.ip` is the ALB node's address, so every caller
-  // behind the balancer shares one counter and the rate limit either refuses everyone at once or fragments a
-  // single caller's burst across proxy nodes. Same private ranges verification-svc trusts — see its main.ts.
+  // Load-bearing for the quota: without it `req.ip` is the load balancer node, so all callers share one counter.
   app.set("trust proxy", ["loopback", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]);
 
   app.enableCors({ origin: configService.get("corsOrigin", { infer: true }) });
 
   const document = buildOpenApiDocument(app);
 
-  // Registered BEFORE SwaggerModule.setup, and it has to be: the setup call mounts its routes on the adapter
-  // itself, where no Nest guard runs. Middleware is the only layer that sees both. Same storage as the guard,
-  // so the two tiers cannot drift into different notions of a window.
+  // Must be registered before SwaggerModule.setup, whose routes no Nest guard reaches.
   app.use(
     adapterRouteThrottle({
       storage: app.get(ThrottlerStorage),
@@ -50,14 +43,12 @@ async function bootstrap(): Promise<NestExpressApplication> {
     }),
   );
 
-  // `customSiteTitle`: see verification-svc — the `<title>` is what a probe uses to tell this document apart
-  // from the SPA, since both answer `200 text/html`.
+  // The host-routing probe matches this `<title>` to tell the docs page from the SPA.
   SwaggerModule.setup("api/query/v1/docs", app, document, {
     customSiteTitle: "Soroban Query API",
     jsonDocumentUrl: "api/query/v1/openapi.json",
   });
 
-  // Without this, SIGTERM kills the process outright and `DrainService.beforeApplicationShutdown` never runs.
   app.enableShutdownHooks();
 
   await app.init();
@@ -71,14 +62,9 @@ if (process.env.NODE_ENV !== "test") {
       const config = app.get<AppConfigService>(ConfigService);
       const port = config.get("port", { infer: true });
       const httpServer = await app.listen(port);
-      // After listen(), never before: Nest has no `http.Server` to configure until it is bound. The quota
-      // bounds how many requests a caller may make; these bound how long any one of them may hold a
-      // connection, which no request counter can express.
       applyHttpServerTimeouts(httpServer, config.get("httpTimeouts", { infer: true }));
-      // After listening, and never from a lifecycle hook: `generate-openapi.ts` initialises this application
-      // with no database.
       app.get(AggregationSyncService).start();
-      // CI asserts this line; it needs no ingress, which is why it works for a service with none.
+      // CI asserts this line.
       console.log(formatConfigContractLogLine("query-svc"));
       logger.log("Public Query API listening", {
         port,

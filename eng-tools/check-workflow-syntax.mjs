@@ -6,14 +6,10 @@ import { join } from "node:path";
 
 const DIR = ".github/workflows";
 
-/**
- * Duplicate-key detection by hand: a YAML library configured to reject them would be better, but the one
- * already in this repo's dependency tree does not offer it.
- */
 function duplicateKeys(text) {
   const found = [];
-  const stack = []; // { indent, keys: Set }
-  let blockIndent = null; // inside a `|`/`>` scalar: the indent its content must exceed
+  const stack = [];
+  let blockIndent = null;
 
   text.split("\n").forEach((raw, i) => {
     const line = raw.replace(/\r$/, "");
@@ -21,7 +17,7 @@ function duplicateKeys(text) {
     const indent = line.length - line.trimStart().length;
 
     if (blockIndent !== null) {
-      if (indent > blockIndent) return; // still inside the scalar
+      if (indent > blockIndent) return;
       blockIndent = null;
     }
 
@@ -51,7 +47,6 @@ function duplicateKeys(text) {
   return found;
 }
 
-/** Every `run:` block's body, with GitHub expressions blanked so bash sees valid tokens. */
 function runBlocks(text) {
   const out = [];
   const lines = text.split("\n");
@@ -72,7 +67,6 @@ function runBlocks(text) {
   return out;
 }
 
-/** Job-level `env:` entries that read the `env` context — which GitHub does not provide there. */
 function jobLevelEnvContext(text) {
   const found = [];
   const lines = text.split("\n");
@@ -89,7 +83,6 @@ function jobLevelEnvContext(text) {
       continue;
     }
     if (!inJobs) continue;
-    // A new job, or any other key at job level, closes a previous job's env block.
     if (indent <= 2) {
       inJobEnv = false;
       continue;
@@ -106,7 +99,6 @@ function jobLevelEnvContext(text) {
   return found;
 }
 
-/** db-migrate.yml's preflight had no `actions/checkout` and was fixed by hand (#172). */
 function repoScriptWithoutCheckout(text) {
   const found = [];
   const lines = text.split("\n");

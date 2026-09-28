@@ -5,9 +5,6 @@ import configuration from "../src/config/configuration.js";
 import { buildRecipeArtifact } from "../src/modules/builder/recipe.js";
 import type { RunCliResult } from "../src/modules/builder/run-cli.types.js";
 
-// A malformed `BatchJobParams` is the one path that's both deterministic and reachable with no external
-// dependencies: it fails Zod parsing before ever touching fetch-source/run-cli, giving a reliable "fatal"
-// classification every time.
 describe("BuilderService", () => {
   const originalEnv = process.env.SCVS_JOB_PARAMS_JSON;
 

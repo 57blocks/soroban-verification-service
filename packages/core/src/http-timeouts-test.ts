@@ -25,10 +25,8 @@ const VALID: HttpServerTimeouts = {
   frontingProxyIdleTimeoutMs: FRONTING_PROXY_IDLE_TIMEOUT_MS,
 };
 
-/** Node truncates above this instead of honouring it — see the constant's comment in http-timeouts.ts. */
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
-/** A server is cheap and never listens here — only the three properties are under test. */
 const server = () => createServer();
 
 test("applies all three deadlines to the server", () => {
@@ -46,7 +44,6 @@ test("the shipped defaults are themselves a valid combination", () => {
 });
 
 test("the default keep-alive outlives the fronting proxy's idle timeout", () => {
-  // This is the 502: a balancer that reuses a connection Node has already closed has nothing to send it to.
   assert.ok(
     HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs > FRONTING_PROXY_IDLE_TIMEOUT_MS,
     `keep-alive ${HTTP_TIMEOUT_DEFAULTS.keepAliveTimeoutMs}ms must exceed the proxy's ${FRONTING_PROXY_IDLE_TIMEOUT_MS}ms`,
@@ -54,7 +51,6 @@ test("the default keep-alive outlives the fronting proxy's idle timeout", () => 
 });
 
 test("a keep-alive at or under the proxy's idle timeout is refused, not merely discouraged", () => {
-  // A well-formed override that silently reintroduces the 502. The default being correct is not enough.
   for (const keepAliveTimeoutMs of [1, 5_000, 30_000, FRONTING_PROXY_IDLE_TIMEOUT_MS]) {
     assert.throws(
       () => applyHttpServerTimeouts(server(), { ...VALID, keepAliveTimeoutMs }),
@@ -68,16 +64,12 @@ test("a keep-alive at or under the proxy's idle timeout is refused, not merely d
 });
 
 test("a server with nothing in front of it declares 0 and keeps a short keep-alive", () => {
-  // orchestrator-svc's listener is loopback-only, and a self-hoster may expose the port directly. Neither
-  // should inherit this deployment's ALB as a constraint.
   const s = server();
   applyHttpServerTimeouts(s, { ...VALID, frontingProxyIdleTimeoutMs: 0, keepAliveTimeoutMs: 5_000 });
   assert.equal(s.keepAliveTimeout, 5_000);
 });
 
 test("no ordering is required between the request and headers deadlines", () => {
-  // Measured: the two are independent and a stalled head is closed at whichever is SHORTER — neither makes
-  // the other unreachable. This module refused `request < headers` on the opposite belief until 2026-09-14.
   const s = server();
   applyHttpServerTimeouts(s, { ...VALID, requestTimeoutMs: 600, headersTimeoutMs: 3_000 });
   assert.equal(s.requestTimeout, 600);
@@ -85,9 +77,6 @@ test("no ordering is required between the request and headers deadlines", () => 
 });
 
 test("a headers deadline under the keep-alive deadline is allowed", () => {
-  // Also measured: Node times headers from the first byte of a request, not from when a connection goes idle,
-  // so a short headers deadline does not break reuse of a long-lived idle connection. The shipped defaults
-  // are exactly this shape, so refusing it would refuse our own configuration.
   const s = server();
   applyHttpServerTimeouts(s, { ...VALID, headersTimeoutMs: 10_000, keepAliveTimeoutMs: 65_000 });
   assert.equal(s.headersTimeout, 10_000);
@@ -115,9 +104,6 @@ test("negative, fractional and non-finite values are refused", () => {
 });
 
 test("a value above Node's timer ceiling is refused rather than silently truncated", () => {
-  // Measured: Node does NOT collapse these to ~1 ms the way setTimeout's overflow rule does — it truncates to
-  // the ceiling, so a 24-day keep-alive is what an operator actually gets. Either way the number they wrote
-  // stops applying, which is the thing this module promises.
   for (const field of ["requestTimeoutMs", "headersTimeoutMs", "keepAliveTimeoutMs"] as const) {
     assert.throws(
       () => applyHttpServerTimeouts(server(), { ...VALID, [field]: MAX_TIMEOUT_MS + 1 }),
@@ -146,7 +132,6 @@ test("a negative fronting-proxy timeout is refused, though zero is not", () => {
 });
 
 test("a rejected combination leaves the server untouched", () => {
-  // Nothing may be half-applied: a boot that throws must not leave one deadline set and two at Node's defaults.
   const s = server();
   const before = {
     requestTimeout: s.requestTimeout,

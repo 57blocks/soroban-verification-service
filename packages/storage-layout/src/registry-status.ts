@@ -18,33 +18,25 @@ import {
   type RegistryVerifier,
 } from "@scvs/core";
 
-// The wire shape lives in packages/core/src/registry.ts; this file owns the merge rule and the write-side
-// strictness.
-
 export type BuildWasmStatusParams = {
   existing: PeerRegistryStatusObject | undefined;
   wasmHash: string;
-  /** `url` is the result root — the identity `isSameVerifier` keys on (AU2). */
   verifier: RegistryVerifier & { url: string };
   verdict: "verified" | "mismatched";
   recipeSource: RecipeSource;
   imageTrustLevel: ImageTrustLevel;
   bldimg?: string;
-  /** SEP-58 v0.6.0: order-significant; passed through as recorded. */
+  /** Order-significant; passed through as recorded. */
   bldarg?: string[];
-  /** An array of complete flags; order is not significant. */
   bldopt?: string[];
   sourceSha256: string;
   sourceUri?: string;
-  /** Required when verdict === "mismatched"; the strict parse rejects an entry missing it. */
   rebuiltHash?: string;
   processedAt: string;
-  /** Every entry must carry `sha256` — AU1: we publish nothing we cannot anchor. */
   resultsUrls: RegistryResultUrl[];
   verifiedSourceCodeUris?: RegistrySourceCodeUri[];
 };
 
-/** This verifier's own entry in a document, by identity, or undefined when it has none. */
 export function findOwnEntry(
   document: PeerRegistryStatusObject | undefined,
   verifier: RegistryVerifier,
@@ -60,16 +52,11 @@ export function findOwnEntry(
   );
 }
 
-/**
- * `superseded` is an outcome, not an error: rule 20 forbids a `mismatched` from displacing a `verified`
- * entry of ours. It cannot be expressed by handing `existing` back, which is a PEER document and may carry
- * unknown fields (CV8) our own strict shape forbids.
- */
+/** `superseded` rather than handing back `existing`, which is a peer document our strict shape may reject. */
 export type WasmStatusBuild =
   | { outcome: "write"; document: RegistryStatusObject }
   | { outcome: "superseded" };
 
-/** Computes the status object for one verification. */
 export function buildWasmStatus(params: BuildWasmStatusParams): WasmStatusBuild {
   const entries = params.existing?.source_code_verifications ?? [];
   const ours = findOwnEntry(params.existing, params.verifier);
@@ -116,7 +103,6 @@ export function buildWasmStatus(params: BuildWasmStatusParams): WasmStatusBuild 
   };
 }
 
-/** Re-emit a document read in either shape as a strict SEP document, with one entry replaced. */
 export function rewriteWasmStatus(
   existing: PeerRegistryStatusObject,
   replaceIndex: number,
@@ -143,7 +129,6 @@ export function rewriteWasmStatus(
   try {
     return parseStrictRegistryStatusObject(document);
   } catch {
-    // The upgrade guards are the first line and this is the second.
     return undefined;
   }
 }
@@ -158,15 +143,10 @@ function upgradeOrThrow(entry: PeerRegistryVerification, custody: LegacyCustody 
   return upgraded;
 }
 
-/**
- * Validates one of OUR documents strictly — `additionalProperties: false` at every level, exactly the shape and
- * version we claim (CV1).
- */
 export function validateWasmStatus(value: unknown): RegistryStatusObject {
   return parseStrictRegistryStatusObject(value);
 }
 
-/** Non-throwing counterpart of validateWasmStatus. */
 export function safeValidateWasmStatus(
   value: unknown,
 ): { success: true; data: RegistryStatusObject } | { success: false } {
@@ -177,7 +157,7 @@ export function safeValidateWasmStatus(
   }
 }
 
-/** Unknown fields survive (CV8). */
+/** Unknown fields survive. */
 export function parsePeerWasmStatus(value: unknown): PeerRegistryStatusObject | undefined {
   const result = safeParseDto(PeerRegistryStatusObject, value);
   return result.success ? result.data : undefined;

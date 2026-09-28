@@ -22,21 +22,15 @@ afterAll(async () => {
   }
 });
 
-/**
- * A fresh target per case, deliberately: `getActiveJobForTarget` reuses a non-terminal job for the same
- * target, so a shared fixture would hand later cases the first case's unbound job and every binding
- * assertion would read `undefined`.
- */
+/** A fresh target per case: `getActiveJobForTarget` would hand later cases the first case's non-terminal job. */
 const freshTarget = () => ({ network: "testnet" as const, wasm_hash: randomBytes(32).toString("hex") });
 
-/** The minimal complete submitted manifest — same shape submit-dedup.spec.ts posts. */
 const manifest = {
   schema: "stellar-submitted-source-verification-manifest-v1",
   source_sha256: "a".repeat(64),
   source_uri: "https://example.test/source.tar.gz",
 };
 
-/** A bundle written to a temp file, so each case boots a `LegalService` over text it controls. */
 async function bundleFile(mutate: (bundle: Record<string, unknown>) => void): Promise<{ path: string; sha256: string; version: string }> {
   const bundle = JSON.parse(await readFile(examplePath, "utf8")) as Record<string, unknown>;
   mutate(bundle);
@@ -60,13 +54,8 @@ async function legalFor(path: string): Promise<LegalService> {
   return service;
 }
 
-/** The one config value the accepting paths reach — `getActiveJobForTarget`'s staleness window. */
 const configStub = { get: (key: string) => (key === "activeJobDedupStaleMs" ? 30 * 60_000 : undefined) };
 
-/**
- * A `SubmitService` over the real repository and a real `LegalService`. The chain reader is not stubbed:
- * every case here supplies a complete manifest, so nothing calls preflight.
- */
 function submitServiceFor(legal: LegalService): SubmitService {
   return new SubmitService(
     configStub as never,
@@ -78,7 +67,6 @@ function submitServiceFor(legal: LegalService): SubmitService {
 }
 
 describe("the terms gate on POST /verifications", () => {
-  // TRD §8.1's six cases. `effective_date` absent is TA-7's unenforced regime.
   it("accepts a submission that carries nothing while the operator's text has no effective date", async () => {
     const draft = await bundleFile(() => {});
     const service = submitServiceFor(await legalFor(draft.path));
@@ -88,8 +76,6 @@ describe("the terms gate on POST /verifications", () => {
     expect(response.statusCode).toBe(202);
     const jobId = createdRows.job((response.body as { job_id: string }).job_id);
     const row = await jobsRepository.getJobById(jobId);
-    // Nothing was accepted, so nothing is bound — and that is indistinguishable from a pre-feature row,
-    // deliberately (migration comment).
     expect(row?.acceptedTermsVersion).toBeUndefined();
     expect(row?.acceptedTermsSha256).toBeUndefined();
   });
@@ -109,7 +95,6 @@ describe("the terms gate on POST /verifications", () => {
     const jobId = createdRows.job((response.body as { job_id: string }).job_id);
     const row = await jobsRepository.getJobById(jobId);
     expect(row?.acceptedTermsVersion).toBe(draft.version);
-    // The service's own hash of the bytes it served, never anything the request carried.
     expect(row?.acceptedTermsSha256).toBe(draft.sha256);
   });
 
@@ -137,7 +122,6 @@ describe("the terms gate on POST /verifications", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.body).toMatchObject({ error: "terms_acceptance_required" });
-    // Distinguishable from a malformed request, which is the whole point of a second code (AC3).
     expect(response.body).not.toMatchObject({ error: "invalid_request" });
   });
 
@@ -168,8 +152,7 @@ describe("the terms gate on POST /verifications", () => {
       bundle.effective_date = "2026-09-15";
     });
     const jobs = { getActiveJobForTarget: jest.fn(), createJob: jest.fn() };
-    // Proves the ordering without a spy, which ESM will not allow: `chainReaderConfig()` is the first thing
-    // the preflight path asks for, so reaching it throws instead of returning a 400.
+    // ESM allows no spy, so `chainReaderConfig()`, the preflight path's first call, throws if reached.
     const configService = {
       get: (key: string) => {
         if (key === "stellarCliPath") throw new Error("the chain was read before the terms gate ran");
@@ -184,7 +167,6 @@ describe("the terms gate on POST /verifications", () => {
       (await legalFor(inEffect.path)) as never,
     );
 
-    // No manifest: without the gate this is the path that reads the chain and can queue a job outright.
     const response = await service.submit({ target: freshTarget() });
 
     expect(response.statusCode).toBe(400);
@@ -206,7 +188,6 @@ describe("changing the text produces a new version (AC7)", () => {
     });
     const beforeId = createdRows.job((before.body as { job_id: string }).job_id);
 
-    // A new deployment of edited text under a new version — the operator's whole obligation under TA-5.
     const second = await bundleFile((bundle) => {
       bundle.version = `spec-b-${randomUUID()}`;
       bundle.operator_name = "Edited Operator";
@@ -226,7 +207,6 @@ describe("changing the text produces a new version (AC7)", () => {
     expect(afterRow?.acceptedTermsVersion).toBe(second.version);
     expect(beforeRow?.acceptedTermsSha256).toBe(first.sha256);
     expect(afterRow?.acceptedTermsSha256).toBe(second.sha256);
-    // The earlier job keeps the earlier version: changes are prospective, and no report is rewritten.
     expect(beforeRow?.acceptedTermsVersion).not.toBe(afterRow?.acceptedTermsVersion);
   });
 
@@ -243,7 +223,6 @@ describe("changing the text produces a new version (AC7)", () => {
     });
     createdRows.job((submitted.body as { job_id: string }).job_id);
 
-    // Same version, different words — the silent edit TA-5 exists to make impossible.
     const edited = await bundleFile((bundle) => {
       bundle.version = version;
       bundle.operator_name = "Silently Edited Operator";
@@ -253,7 +232,6 @@ describe("changing the text produces a new version (AC7)", () => {
     await expect(service.assertNoVersionConflict()).rejects.toThrow(
       /is already bound to different text/,
     );
-    // Both hashes are named, so an operator can see which text is which.
     await expect(service.assertNoVersionConflict()).rejects.toThrow(new RegExp(original.sha256));
     await expect(service.assertNoVersionConflict()).rejects.toThrow(new RegExp(edited.sha256));
   });

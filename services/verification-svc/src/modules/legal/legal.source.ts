@@ -4,11 +4,6 @@ import { findWorkspaceRoot } from "@scvs/config";
 
 const VARIABLE = "SCVS_LEGAL_DOCUMENTS_SOURCE";
 
-/**
- * Follows `scripts/seed-tvl.ts`'s loader shape — path or `https:` URL, resolved against the workspace root —
- * and is deliberately a second copy rather than a shared helper: that one is `fail: silent` and returns a
- * committed default, this one is `fail: boot` and has none, so unifying them would change the seed step.
- */
 export async function loadLegalDocumentsSource(configured: string | undefined): Promise<{ label: string; raw: string }> {
   const source = configured?.trim();
   if (!source) {

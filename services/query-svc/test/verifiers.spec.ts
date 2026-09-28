@@ -9,8 +9,6 @@ let app: NestExpressApplication;
 const prisma = createPrismaClient(readDbEnv());
 const verifiers = new TrustedVerifiersRepository(prisma);
 
-// A unique-per-run id so two concurrent runs never collide, and every assertion is scoped to that row rather
-// than to whatever the shared database's seeded list happens to hold.
 const OUR_ID = `spec-verifiers-${randomUUID()}`;
 
 beforeAll(async () => {

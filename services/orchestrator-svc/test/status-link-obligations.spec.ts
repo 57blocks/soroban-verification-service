@@ -6,11 +6,6 @@ import { CreatedRows } from "@scvs/db/testing";
 import configuration, { type AppConfigService } from "../src/config/configuration.js";
 import { combineStatusLinkOutcomes } from "../src/modules/publish/status-link-outcome.util.js";
 
-/**
- * The link obligation against real Postgres: what the CHECK refuses, what a retry does to the clock, and
- * which rows the scans see. The link-writing half lives in the storage-layout suites; this is the row.
- */
-
 let jobs: JobsRepository;
 let prisma: PrismaClient;
 let moduleRef: TestingModule;
@@ -18,7 +13,7 @@ const createdRows = new CreatedRows();
 
 const OLD = new Date("2026-01-01T00:00:00Z");
 
-// `rowToJob` parses this back through the DTO, so the scans only see a row whose reference is real.
+// Must parse through the DTO in `rowToJob`, or the scans never see the row.
 const sourceRef = {
   type: "git" as const,
   visibility: "public" as const,
@@ -117,12 +112,9 @@ describe("one flag, several links", () => {
   it("a second link landing does not discharge the first link's obligation", async () => {
     const jobId = await publishedJob();
 
-    // The report archive's link lost its compare-and-swap, so the job owes it.
     await jobs.recordArchiveOutcome(jobId, { archived: true, txId: "tx-report", statusLink: { state: "pending" } });
     expect((await read(jobId)).statusLinkPendingSince).not.toBeNull();
 
-    // The source archive runs concurrently for the same job and its link lands. That says nothing about the
-    // report link, which is still missing.
     await jobs.recordSourceArchiveOutcome(jobId, {
       archived: true,
       txId: "tx-source",
@@ -159,16 +151,12 @@ describe("publishing a source", () => {
     const row = await read(jobId);
     expect(row.sourcePublishPendingSince).toBeNull();
     expect(row.sourceFileName).toBe(`${"b".repeat(64)}.tar.gz`);
-    // Both in one statement: a crash between them would leave the link owed by nobody.
     expect(row.statusLinkPendingSince).not.toBeNull();
   });
 
   it("owes nothing when the document already carries the URI", async () => {
     const jobId = await publishedJob();
 
-    // A first publish writes the source URI into the entry it is building, so raising the flag here would
-    // put every public job through a recovery pass that has nothing to do — and bury the backlog gauge that
-    // is supposed to show the ones that do.
     await jobs.recordSourcePublishOutcome(jobId, {
       published: true,
       sourceFileName: `${"b".repeat(64)}.tar.gz`,
@@ -220,15 +208,12 @@ describe("a job held for a human", () => {
 
     const row = await read(jobId);
     expect(row.statusLinkBlockedReason).toBeNull();
-    // Not re-stamped: an unblock must not hide how long the link has been owed.
     expect(row.statusLinkPendingSince).toEqual(OLD);
     expect((await jobs.listJobsPendingStatusLink()).map((j) => j.jobId)).toContain(jobId);
   });
 
   it("cannot be written into an impossible shape", async () => {
     const jobId = await publishedJob();
-    // Blocked without owing the link is not a state; the database refuses it rather than trusting the one
-    // method that writes these columns to never drift.
     await expect(
       prisma.$executeRawUnsafe(
         `UPDATE "jobs" SET "status_link_blocked_since" = now(), "status_link_blocked_reason" = 'invalid_document' WHERE "id" = '${jobId}'::uuid`,
@@ -283,7 +268,6 @@ describe("several links, one obligation", () => {
         { state: "complete", advancePublished: true },
       ]),
     ).toEqual({ state: "complete", advancePublished: true });
-    // No links left to write is not an obligation to keep scanning.
     expect(combineStatusLinkOutcomes([])).toEqual({ state: "complete", advancePublished: false });
   });
 });

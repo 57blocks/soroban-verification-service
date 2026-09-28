@@ -1,13 +1,8 @@
 import { createHash } from "node:crypto";
 import type { SourceReference } from "./source.js";
 
-/**
- * SEP-58's own default for an absent `bldarg`. Normalising to it is what stops the same build, submitted two
- * ways, producing two keys and bypassing the dedup rules.
- */
 const DEFAULT_BLDARG = ["contract", "build"] as const;
 
-/** The identity of a *rebuild attempt*: `sha256(source_sha256 + bldimg + bldarg + bldopt)`. */
 export function computeIdempotencyKey(
   sourceRef: SourceReference,
   imageDigest: string,
@@ -17,8 +12,7 @@ export function computeIdempotencyKey(
   const hash = createHash("sha256");
   hash.update(encodeString(sourceContentHash(sourceRef)));
   hash.update(encodeString(imageDigest));
-  // `bldarg` is order-significant per SEP-58 and is hashed as received; `bldopt` is not, so it is sorted first
-  // — without that, reordering two flags produces a second key and misses dedup.
+  // `bldarg` order is significant; `bldopt` order is not, so only it is sorted.
   hash.update(encodeList(bldarg));
   hash.update(encodeList(sortBytewise(bldopt)));
   if (metadataReplay.length > 0) {
@@ -27,7 +21,6 @@ export function computeIdempotencyKey(
   return hash.digest("hex");
 }
 
-/** The hash of the *bytes* this source resolves to, for every arm. */
 function sourceContentHash(source: SourceReference): string {
   switch (source.type) {
     case "git":
@@ -46,13 +39,11 @@ function sourceContentHash(source: SourceReference): string {
   }
 }
 
-/** `<decimal byte length>:<UTF-8 bytes>`. */
 function encodeString(value: string): Buffer {
   const bytes = Buffer.from(value, "utf8");
   return Buffer.concat([Buffer.from(`${bytes.length}:`, "ascii"), bytes]);
 }
 
-/** `<decimal element count>:<concatenated encodeString of each element>`. */
 function encodeList(values: readonly string[]): Buffer {
   return Buffer.concat([
     Buffer.from(`${values.length}:`, "ascii"),
@@ -60,7 +51,7 @@ function encodeList(values: readonly string[]): Buffer {
   ]);
 }
 
-/** Bytewise, not `Array.prototype.sort()`'s default. */
+/** Bytewise UTF-8 order, not `sort()`'s UTF-16 order; they differ above U+FFFF. */
 function sortBytewise(values: readonly string[]): string[] {
   return [...values].sort((a, b) =>
     Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")),

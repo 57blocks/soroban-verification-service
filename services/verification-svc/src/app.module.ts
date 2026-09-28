@@ -27,29 +27,20 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-      // Without this, ConfigModule reads only `<cwd>/.env` — the reason the same POSTGRES_* block had to exist
-      // in every service directory.
       envFilePath: envFilePaths(),
-      // Runs BEFORE the `load` factory below, so a malformed variable is reported ahead of any single-variable
-      // throw inside configuration.ts.
       validate: createEnvValidator(VerificationSvcEnvDto, "verification-svc"),
     }),
-    // Provides the PrismaClient + every repository.
     DbModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) =>
         configService.get("postgres", { infer: true }),
     }),
-    // Global, so the health controller and the submission guard share one DrainState — two instances would mean
-    // a process that is draining according to one of them and not the other.
     DrainModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) =>
         configService.get("drainGraceMs", { infer: true }),
     }),
-    // Global for the same reason as DrainModule above — see abuse-guard.module.ts.
     AbuseGuardModule,
-    // The cheap in-process tier in front of the Postgres-backed `AbuseGuard`.
     ThrottlerModule.forRootAsync({
       // Throttler 6.7's options type cannot resolve Nest 12's `@nestjs/common/interfaces`, which makes `imports` required.
       imports: [],
@@ -77,9 +68,6 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
   ],
 })
 export class AppModule implements NestModule {
-  // Every route, including `/health` and the SSE stream: O2's identifier has to exist for the request legs that
-  // precede a job, and a middleware applied selectively would leave gaps that only show up as a missing field
-  // months later.
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(RequestIdMiddleware).forRoutes("*path");
   }

@@ -6,10 +6,6 @@ import {
   troubleshootingMessage,
 } from "@/features/verification/utils/result.util";
 
-// The console's first tests.
-
-// It is gone: the generated union requires `status` on both submit variants, so there is nothing left to infer.
-
 describe("consoleStateToSubmissionState", () => {
   test("takes the status straight off an accepted submission", () => {
     expect(
@@ -62,8 +58,6 @@ describe("bannerView", () => {
     ).toMatchObject({ code: "job_timeout", detail: "stuck", jobId: "j1" });
   });
 
-  // An accepted submission is not a failure, so it has no code to show — the old flat object made this
-  // indistinguishable from "a failure whose code we failed to find".
   test("an accepted submission shows its message and no code", () => {
     const view = bannerView({
       phase: "accepted",
@@ -118,7 +112,6 @@ describe("troubleshootingMessage", () => {
   });
 
   test("an ordinary build failure still gets the submission-focused advice", () => {
-    // The generic copy is right when the rebuild actually ran, so the new branch must not swallow it.
     expect(troubleshootingMessage("build_failed", { reason: "build_error" })).toContain("manifest path");
     expect(troubleshootingMessage("build_failed", {})).toContain("manifest path");
   });

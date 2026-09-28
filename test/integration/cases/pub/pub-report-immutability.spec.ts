@@ -1,4 +1,3 @@
-/** E2E-PUB-05 — immutable, content-addressed report artifacts. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -7,10 +6,8 @@ import { submitAndWait } from "../../support/job.js";
 import { ownEntryOf, ownVerifierIdentity, readReportByUrl, requireStatusObject } from "../../support/result-tree.js";
 import { linkUrl, type RegistryResultUrl } from "../../support/types.js";
 
-/** `reports/<report_sha256>.json` — the anchor a pre-cutover consumer reads, beside the link's own `sha256`. */
 const REPORT_POINTER = /\/reports\/([0-9a-f]{64})\.json(?:[?#].*)?$/i;
 
-/** The `results_urls` link pointing at this report, in either the SEP or the pre-cutover form. */
 function reportLink(entry: unknown, reportUrl: string): RegistryResultUrl | undefined {
   const links = (entry as { results_urls?: RegistryResultUrl[] }).results_urls ?? [];
   return links.find((link) => linkUrl(link) === reportUrl);
@@ -55,8 +52,6 @@ caseBlock(
     });
 
     it("/hash_matches_results_urls — the published report pointer carries the exact content hash", () => {
-      // Two anchors (AU1 reinstated): the entry states its own `sha256`, and the
-      // content-addressed filename states it again. Both must equal the bytes retrieved.
       const link = reportLink(statusEntry, reportUrl);
       expect(link).toBeDefined();
       expect(reportUrl.match(REPORT_POINTER)?.[1]?.toLowerCase()).toBe(reportSha256);

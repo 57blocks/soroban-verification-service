@@ -6,9 +6,8 @@ export type ContractMetaEntry = {
 };
 
 export type ContractMetaSection = {
-  /** Encounter order among `contractmetav0` custom sections. */
   index: number;
-  /** XDR order inside this section. Never sorted or de-duplicated. */
+  /** Never sorted or de-duplicated. */
   entries: ContractMetaEntry[];
 };
 
@@ -156,10 +155,7 @@ export function planMetadataReplay(
   };
 }
 
-/**
- * Those entries normally live in separate `contractmetav0` sections, so pair extraction deliberately does not
- * reuse metadata replay's MR2 section boundary.
- */
+/** Searches every section: cliver and rsver usually sit in separate `contractmetav0` sections. */
 export function recordedToolchainPair(
   sections: ContractMetaSection[],
 ): RecordedToolchainPair | undefined {

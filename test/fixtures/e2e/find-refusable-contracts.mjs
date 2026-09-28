@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Finds a live testnet contract the verifier **must permanently refuse**, so the refusal can be tested end to
- * end instead of only at the composition layer.
- */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -12,7 +8,6 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-/** The real classifier and the real parser, from built output. */
 let parseCliver;
 let classifyBuildEnvironment;
 try {
@@ -41,10 +36,6 @@ function arg(name, fallback) {
   return at === -1 ? fallback : process.argv[at + 1];
 }
 
-/**
- * Reads a deployed contract's metadata the way `deploy-testnet.sh` does — `stellar contract fetch` then
- * `stellar contract info meta`.
- */
 async function readChainMetadata(contractId, workdir) {
   const wasmPath = join(workdir, `${contractId}.wasm`);
   await run("stellar", [
@@ -65,19 +56,11 @@ async function readChainMetadata(contractId, workdir) {
   return { meta, wasmHash: createHash("sha256").update(bytes).digest("hex") };
 }
 
-/**
- * A single value, or `undefined` for absent **and for repeated** — the same rule `build-purpose-contracts.sh`'s
- * `assert_metadata_value` uses.
- */
 function single(meta, key) {
   const values = meta[key];
   return values?.length === 1 ? values[0] : undefined;
 }
 
-/**
- * Which permanent composition reason this contract would hit, or a `reject` explaining why it is not a
- * candidate.
- */
 function verdictFor(meta) {
   const cliver = single(meta, "cliver");
   const rsver = single(meta, "rsver");
@@ -89,8 +72,6 @@ function verdictFor(meta) {
     return { reject: "records a bldimg → cli-58, resolved as `chain_named`; it never reaches composition at all" };
   }
 
-  // `missing_toolchain_pair` and `undated_nightly` are refused at *preflight*, which is a different surface and
-  // a different case — E2E-SUB-08 covers the synchronous family.
   const pair = cliver !== undefined && rsver !== undefined ? { cliver, rsver } : undefined;
   const classification = classifyBuildEnvironment({ pair });
   if (classification.kind !== "compose") {
@@ -102,7 +83,6 @@ function verdictFor(meta) {
     };
   }
 
-  // Routed to compose. Now: must the composer refuse it permanently?
   if (parseCliver(cliver) === undefined) {
     return {
       reason: "unaddressable_cliver",
@@ -134,14 +114,10 @@ async function check(contractIds) {
       try {
         read = await readChainMetadata(contractId, workdir);
       } catch (error) {
-        // Unreachable is not the same as unsuitable; reporting it as a rejection would quietly shrink the
-        // candidate pool for an infrastructure reason.
         console.log(`?  ${contractId}  could not be read: ${String(error.message ?? error).split("\n")[0]}`);
         continue;
       }
 
-      // Deduping on the hash makes the output the list of distinct *toolchains* seen, which is what is being
-      // searched for.
       const already = seenHashes.get(read.wasmHash);
       if (already) {
         console.log(`=  ${contractId}  same Wasm as ${already} (${read.wasmHash.slice(0, 12)})`);
@@ -166,10 +142,6 @@ async function check(contractIds) {
   return found;
 }
 
-/**
- * Enumerates contract ids from StellarExpert. Returns ids only — every judgement is made from chain bytes in
- * `check()`, never from the index.
- */
 async function scan(pages) {
   const ids = [];
   const seenCursors = new Set();
@@ -202,7 +174,6 @@ async function scan(pages) {
   return [...new Set(ids)];
 }
 
-/** The registry entry, printed so it can be pasted rather than retyped. */
 function printRegistryEntry(winner) {
   console.log(`  existing_testnet_refusable_${winner.reason === "unaddressable_cliver" ? "cliver" : "rsver"}:`);
   console.log(`    fixture_roles: [F-FLOOR-REFUSE]`);

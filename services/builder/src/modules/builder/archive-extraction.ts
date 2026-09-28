@@ -12,10 +12,6 @@ export type ExtractionOptions = {
   stripComponents: 0 | 1;
 };
 
-/**
- * What a caller may ask for. `stripComponents` is optional and omitting it is the normal case: the depth is
- * decided per archive by `stripDepthFor`, from the listing.
- */
 export type ExtractionOptionsInput = Partial<ExtractionOptions>;
 
 export const DEFAULT_EXTRACTION_OPTIONS: ExtractionOptions = {
@@ -24,7 +20,6 @@ export const DEFAULT_EXTRACTION_OPTIONS: ExtractionOptions = {
   stripComponents: 1,
 };
 
-/** The bounds an archive must respect before anything is written to disk. */
 export type ArchiveLimits = {
   maxEntries: number;
   maxUncompressedBytes: number;
@@ -40,20 +35,17 @@ export type ExtractSourceArchiveResult =
       ok: true;
       source_root: string;
       normalisation: ExtractionOptions;
-      /** Absent when nothing was peeled, so a depth-0 extraction reports exactly what it always did. */
       canonicalisation?: Canonicalisation;
     }
   | { ok: false; reason: RebuildErrorCode; detail: string; extract?: CommandResult };
 
-/** The refusal arm on its own, so the helpers that only ever return one can say so. */
 type ExtractionFailure = Extract<ExtractSourceArchiveResult, { ok: false }>;
 
-/** Which binary reads which container format — **chosen from the bytes, never from the filename**. */
+/** Which binary reads which container format, chosen from the bytes and never from the filename. */
 export function archiveReaderFor(format: ArchiveFormat): string {
   return format === "zip" ? "bsdtar" : "tar";
 }
 
-/** The reader binary could not be run at all, rather than the archive being bad. */
 function readerUnavailable(
   result: CommandResult,
   reader: string,
@@ -76,49 +68,36 @@ export type ExtractSourceArchiveInput = {
   options?: ExtractionOptionsInput;
   limits?: ArchiveLimits;
   config?: RunCliRuntimeConfig;
-  /**
-   * `reader -tf archivePath`'s output, when the caller has already read it — `canonicaliseSourceArchive`
-   * returns exactly this.
-   */
   listing?: string;
 };
 
-/** How deep a chain of containers is followed before the attempt is refused. */
 export const MAX_UNWRAP_DEPTH = 4;
 
-/** What peeling found, for the handoff and for diagnostics. `depth: 0` is every ordinary submission. */
 export type Canonicalisation = {
   depth: number;
   outer_format: ArchiveFormat;
   canonical_format: ArchiveFormat;
-  /** Every peel performed, outermost first. What the `too_deep` refusal names back to the submitter. */
   peeled: Array<{ member: string; format: ArchiveFormat }>;
 };
 
 export type CanonicaliseResult =
   | {
       ok: true;
-      /** The archive to hand the CLI and to extract. The input path when nothing was peeled. */
       archivePath: string;
       canonicalisation: Canonicalisation;
-      /** The input bounds, less what peeling already spent. Pass these to the extraction. */
       limits: ArchiveLimits;
-      /** `reader -tf archivePath`'s output, for the archive being returned. */
       listing: string;
-      /** A no-op at depth 0. */
       dispose: () => Promise<void>;
     }
   | ExtractionFailure;
 
 export type CanonicaliseSourceArchiveInput = {
   archivePath: string;
-  /** `mkdtemp` prefix for the directory intermediate levels are written under — a path prefix, not a directory. */
   stagePrefix: string;
   limits?: ArchiveLimits;
   config?: RunCliRuntimeConfig;
 };
 
-/** Peel containers until what is left is not one, and hand back the archive it stopped on. */
 export async function canonicaliseSourceArchive(
   input: CanonicaliseSourceArchiveInput,
 ): Promise<CanonicaliseResult> {
@@ -129,7 +108,6 @@ export async function canonicaliseSourceArchive(
   let format = outer_format;
   let limits = input.limits ?? DEFAULT_ARCHIVE_LIMITS;
   const peeled: Canonicalisation["peeled"] = [];
-  // Created on the first peel only, so the common case leaves no trace.
   let peelRoot: string | undefined;
   let previousStage: string | undefined;
 
@@ -159,8 +137,6 @@ export async function canonicaliseSourceArchive(
     }
 
     const member = wrappedArchiveMember(list.stdout);
-    // `list` is this archive's own listing, and this archive is the one being returned — so it is the listing
-    // the extraction needs, already read.
     if (!member) return stopHere(list.stdout);
 
     if (peeled.length >= MAX_UNWRAP_DEPTH) {
@@ -190,10 +166,9 @@ export async function canonicaliseSourceArchive(
       peelRoot = await mkdtemp(input.stagePrefix);
     }
     const stage = await mkdtemp(join(peelRoot, `level-${peeled.length + 1}-`));
-    // No `--strip-components`: the member is wanted exactly as named.
     const extract = await runCommand([reader, "-xf", archivePath, "-C", stage], { timeout_ms });
 
-    /** **The member's presence decides this, not the exit code** — measured. */
+    // The member's presence decides success, not the reader's exit code.
     const inner = join(stage, member);
     const present = await lstat(inner)
       .then((info) => info.isFile())
@@ -224,8 +199,7 @@ export async function canonicaliseSourceArchive(
     }
 
     peeled.push({ member, format });
-    // `max(0, …)` because a member whose declared size already used the whole bound leaves nothing to spend,
-    // and a negative ceiling would read as "unbounded" to every `>` comparison downstream.
+    // Clamped at 0: a negative ceiling would read as "unbounded" to every `>` comparison downstream.
     limits = {
       ...limits,
       maxUncompressedBytes: Math.max(0, limits.maxUncompressedBytes - inspected.bytes),
@@ -237,7 +211,6 @@ export async function canonicaliseSourceArchive(
   }
 }
 
-/** Peel, then extract what peeling stopped on. */
 export async function extractSourceArchive(
   input: ExtractSourceArchiveInput,
 ): Promise<ExtractSourceArchiveResult> {
@@ -259,12 +232,10 @@ export async function extractSourceArchive(
     if (!extracted.ok || canonical.canonicalisation.depth === 0) return extracted;
     return { ...extracted, canonicalisation: canonical.canonicalisation };
   } finally {
-    // The tree is out, so the intermediate archives have no reader left.
     await canonical.dispose();
   }
 }
 
-/** Validate and extract exactly one archive — no peeling, which the caller has already done. */
 export async function extractCanonicalArchive(
   input: ExtractSourceArchiveInput,
 ): Promise<ExtractSourceArchiveResult> {
@@ -273,7 +244,6 @@ export async function extractCanonicalArchive(
   const config = input.config;
   await mkdir(destRoot, { recursive: true });
   const timeout_ms = cliTimeoutMs(config);
-  // Before any command runs, because the command's *name* depends on the answer.
   const format = await sniffArchiveFormat(archivePath);
   const reader = archiveReaderFor(format);
 
@@ -285,8 +255,6 @@ export async function extractCanonicalArchive(
         readerUnavailable(list, reader, format) ?? {
           ok: false,
           reason: "source_archive_extract_failed",
-          // Names the format and the reader. The generic sentence this replaces is what sent an operator
-          // looking at the submitter's source for a zip the image had no parser for.
           detail: `Could not list the submitted source archive (detected ${format}, read with ${reader}) before extraction.`,
           extract: list,
         }
@@ -307,8 +275,6 @@ export async function extractCanonicalArchive(
   const inspected = await inspectArchive({ reader, format, archivePath, timeout_ms, limits });
   if (!inspected.ok) return inspected;
 
-  // `--strip-components` is libarchive's too, and works on zip members — verified against bsdtar 3.6.2, the
-  // version in the builder image.
   const extract = await runCommand(
     [reader, "-xf", archivePath, "-C", destRoot, "--strip-components", String(options.stripComponents)],
     { timeout_ms },
@@ -332,7 +298,6 @@ export async function extractCanonicalArchive(
   };
 }
 
-/** How many leading path components an archive's members share and can therefore lose. */
 export function stripDepthFor(listing: string): 0 | 1 {
   const tops = new Set<string>();
   let entries = 0;
@@ -342,8 +307,7 @@ export function stripDepthFor(listing: string): 0 | 1 {
     const parts = entry.split("/").filter((part) => part.length > 0 && part !== ".");
     if (parts.length === 0) continue;
     entries += 1;
-    // Both readers print a trailing slash for a directory member, so a one-component entry without one is a
-    // file at the archive's root.
+    // Both readers print a trailing slash for a directory member.
     if (parts.length === 1 && !entry.endsWith("/")) return 0;
     tops.add(parts[0]);
     if (tops.size > 1) return 0;
@@ -351,10 +315,6 @@ export function stripDepthFor(listing: string): 0 | 1 {
   return entries > 0 && tops.size === 1 ? 1 : 0;
 }
 
-/**
- * Factored out because the peel has to apply the identical pair to each container before it writes the member
- * it is going to read.
- */
 async function inspectArchive(args: {
   reader: string;
   format: ArchiveFormat;
@@ -363,9 +323,7 @@ async function inspectArchive(args: {
   limits: ArchiveLimits;
 }): Promise<{ ok: true; bytes: number } | ExtractionFailure> {
   const { reader, format, archivePath, timeout_ms, limits } = args;
-  // Pinned so the listing's date column is always English/ISO, regardless of the caller's locale: a non-English
-  // `LC_TIME` makes BSD tar print a numeric month, which `timestampIndex` cannot tell apart from an
-  // attacker-controlled `--uname`/`--gname` field without widening the fail-closed size check's false-match surface.
+  // Pinned: a non-English LC_TIME makes BSD tar print a numeric month, which timestampIndex must not accept.
   const verbose = await runCommand([reader, "-tvf", archivePath], {
     timeout_ms,
     mirrorOutput: false,
@@ -391,8 +349,7 @@ async function inspectArchive(args: {
 
   const size = totalUncompressedBytes(verbose.stdout);
   if (!size.ok) {
-    // Fail closed rather than skipping the bound. An unparseable listing means we cannot say how much this
-    // archive expands to, and "we could not measure it" must not read the same as "it fits".
+    // Fail closed: an archive whose expansion cannot be measured must not read as one that fits.
     return {
       ok: false,
       reason: "source_archive_unreadable",
@@ -412,16 +369,11 @@ async function inspectArchive(args: {
   return { ok: true, bytes: size.bytes };
 }
 
-/**
- * The one member of an archive that is a wrapper around a single file, or `undefined` for every other shape —
- * including a normal source archive, which is the case this must never claim.
- */
 function wrappedArchiveMember(stdout: string): string | undefined {
   const entries = stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  // Both readers print a trailing slash for a directory member.
   const files = entries.filter((entry) => !entry.endsWith("/") && !isArchiverDropping(entry));
   if (files.length !== 1) return undefined;
   const parts = files[0].split("/").filter((part) => part.length > 0 && part !== ".");
@@ -429,7 +381,6 @@ function wrappedArchiveMember(stdout: string): string | undefined {
   return files[0];
 }
 
-/** Metadata an archiver added on its own; never source a build reads. */
 function isArchiverDropping(entry: string): boolean {
   const parts = entry.split("/").filter((part) => part.length > 0 && part !== ".");
   const name = parts[parts.length - 1] ?? "";
@@ -462,8 +413,6 @@ function validateArchiveEntries(
     }
     materializedEntries += 1;
     if (materializedEntries > limits.maxEntries) {
-      // Counted rather than measured against the whole listing, so an archive with millions of entries is
-      // rejected on the way past the bound instead of after walking all of them.
       return {
         ok: false,
         reason: "source_archive_too_many_entries",
@@ -497,7 +446,6 @@ function stripArchivePath(
   return { ok: true, path: normalized };
 }
 
-/** Sum the sizes `tar -tvf` reports, without depending on which tar produced the listing. */
 export function totalUncompressedBytes(
   stdout: string,
 ): { ok: true; bytes: number } | { ok: false; detail: string } {
@@ -505,8 +453,7 @@ export function totalUncompressedBytes(
   for (const line of stdout.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    // Directories carry a size of 0 in both formats, so they sum harmlessly; non-regular entries never reach
-    // here, having been rejected by the link check first.
+    // Non-regular entries never reach here: the link check has already rejected them.
     const fields = trimmed.split(/\s+/);
     const dateIndex = timestampIndex(fields);
     if (dateIndex < 1) {
@@ -521,7 +468,6 @@ export function totalUncompressedBytes(
   return { ok: true, bytes: total };
 }
 
-/** Index of the first field that begins a whole timestamp, or -1. */
 function timestampIndex(fields: string[]): number {
   const isTime = (f?: string) => f !== undefined && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(f);
   const isYear = (f?: string) => f !== undefined && /^\d{4}$/.test(f);

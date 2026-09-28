@@ -13,39 +13,26 @@ export type SdkConsumerInput = {
 export type SdkConsumerResult = {
   aggregate: unknown;
   discoveries: Array<{
-    /**
-     * The result root, and what a caller correlates on: it is the identity the SEP defines and the one
-     * field `ResolvedVerifier` guarantees. `id` is optional and implementation-local, so a harness that
-     * keyed on it would drop any entry that carries none.
-     */
     resultRoot: string;
-    /** Optional in the published schema, so optional here. Never a correlation key. */
     verifierId?: string;
-    /** `available` | `not_advertised` | `unavailable` — see `VerifierDiscovery` in the SDK. */
     outcome: string;
-    /** Both present only on `available`; a manifest is optional and its absence is not a failure. */
     manifestId?: string;
     policyId?: string;
   }>;
   requests: string[];
 };
 
-// `pnpm --filter … exec` starts Jest from the selected package directory, while callers using the workspace
-// root have a different cwd.
+// Resolved from this file, not cwd: `pnpm --filter … exec` changes the working directory.
 const sdkConsumerCwd = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "clients", "sdk");
 
-// The consumer imports the package by name, so an unbuilt SDK arrives as ERR_MODULE_NOT_FOUND from an evaluated
-// module — a stack that names neither this suite nor the missing build step.
 const sdkEntry = resolve(sdkConsumerCwd, "dist", "index.js");
 
-/** The sources the bundle inlines: a change in either reaches these cases only after a rebuild. */
 const inlinedSources = [
   resolve(sdkConsumerCwd, "src"),
   resolve(sdkConsumerCwd, "..", "..", "packages", "core", "src"),
   resolve(sdkConsumerCwd, "..", "..", "packages", "storage-layout", "src"),
 ];
 
-/** Newest mtime under a directory, or 0 when it does not exist. */
 function newestMtimeMs(path: string): number {
   let newest = 0;
   const walk = (current: string) => {
@@ -60,7 +47,6 @@ function newestMtimeMs(path: string): number {
   return newest;
 }
 
-/** Runs the SDK's built entry from an isolated consumer process. */
 export function runSdkConsumer(input: SdkConsumerInput): SdkConsumerResult {
   if (!existsSync(sdkEntry)) {
     throw new Error(
@@ -68,8 +54,6 @@ export function runSdkConsumer(input: SdkConsumerInput): SdkConsumerResult {
     );
   }
 
-  // A stale bundle runs, validates the deployment against a contract that has moved, and blames the
-  // deployment. CI has a build step; a local run has none, so this is it.
   const builtAtMs = statSync(sdkEntry).mtimeMs;
   const changedAtMs = Math.max(...inlinedSources.map(newestMtimeMs));
   if (changedAtMs > builtAtMs) {
@@ -126,7 +110,7 @@ export function runSdkConsumer(input: SdkConsumerInput): SdkConsumerResult {
     encoding: "utf8",
   });
 
-  // A long-lived parent process can retain a Homebrew Cellar path removed by a Node upgrade.
+  // A long-lived parent can hold a Homebrew Cellar node path that an upgrade removed.
   let result = runConsumer(process.execPath);
   if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
     result = runConsumer("node");

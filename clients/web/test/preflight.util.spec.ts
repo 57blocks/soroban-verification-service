@@ -29,7 +29,6 @@ describe("readVerdict — unsupported toolchains", () => {
   );
 });
 
-// The console-side twin of verification-svc's image-policy-disjointness.spec.ts.
 describe("readVerdict — one arm, two labels", () => {
   test("image_not_sdf_trusted is unsupported, not policy_rejected", () => {
     const verdict = readVerdict({

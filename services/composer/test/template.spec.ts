@@ -7,7 +7,6 @@ import {
   templateDirFor,
 } from "../src/modules/composer/template.js";
 
-/** `template.json` is the file `template_version` *names*, and `recipe_sha256` hashes over the version string. */
 const GOOD = {
   schema: "scvs-composition-template-v1",
   template_version: "v1",
@@ -39,8 +38,6 @@ describe("loadCompositionTemplate", () => {
   });
 
   it("rejects the all-zero placeholder base image digest the file ships with", async () => {
-    // `template.json` is committed with placeholders so the shape is reviewable before the real pins are
-    // chosen.
     const root = await withTemplate({
       ...GOOD,
       base_image: { ...GOOD.base_image, digest: "sha256:" + "0".repeat(64) },
@@ -70,7 +67,6 @@ describe("loadCompositionTemplate", () => {
   });
 
   it("requires an explicit platform rather than inheriting the build host's", async () => {
-    // The composed image is run by the *builder* fleet (arm64 Graviton), not by whatever composed it.
     const root = await withTemplate({ ...GOOD, platform: undefined });
     await expect(loadCompositionTemplate(root, "v1")).rejects.toThrow(/platform must be an explicit/);
 
@@ -91,8 +87,6 @@ describe("loadCompositionTemplate", () => {
   });
 
   it("distinguishes a template that is absent from one that is malformed", async () => {
-    // `CURRENT_COMPOSE_TEMPLATE_VERSION` moved to `v2` while the deployed composer image was still built from a
-    // pre-`v2` commit, so the orchestrator asked a `v1`-only image for `v2`.
     const root = await withTemplate(GOOD);
     await expect(loadCompositionTemplate(root, "v9")).rejects.toMatchObject({
       reason: "composition_template_missing",
@@ -105,9 +99,6 @@ describe("loadCompositionTemplate", () => {
   });
 
   it("defaults an unlabelled template error to invalid, never to missing", async () => {
-    // `missing` is the code an operator may safely bulk-reset environment rows on
-    // (`eng-tools/reset-failed-environments.mjs`), so a new throw site that forgot its reason must not silently
-    // inherit it.
     const root = await withTemplate({ ...GOOD, template_version: "v2" }, "v1");
     await expect(loadCompositionTemplate(root, "v1")).rejects.toMatchObject({
       reason: "composition_template_invalid",
@@ -118,10 +109,6 @@ describe("loadCompositionTemplate", () => {
   });
 });
 
-/**
- * `runtime_libraries` exists because template v1 shipped without it and every composition it attempted failed
- * `smoke_test_failed`.
- */
 describe("loadCompositionTemplate: runtime_libraries", () => {
   const LIBRARY = {
     name: "libdbus-1-3",
@@ -138,15 +125,12 @@ describe("loadCompositionTemplate: runtime_libraries", () => {
   });
 
   it("treats an absent section as none, so v1-shaped templates keep loading", async () => {
-    // Empty is the expected steady state, not a special case — a template whose base image supplies everything
-    // its components need declares nothing here.
     const root = await withTemplate(GOOD);
     const template = await loadCompositionTemplate(root, "v1");
     expect(template.runtimeLibraries).toEqual([]);
   });
 
   it("rejects a name that is not usable as a filename in the build context", async () => {
-    // `name` becomes `<name>.deb` in the context and the template's `COPY` target.
     for (const name of ["../etc/passwd", "lib/dbus", "", "Libdbus", "-libdbus"]) {
       const root = await withTemplate(withLibraries([{ ...LIBRARY, name }]));
       await expect(loadCompositionTemplate(root, "v1")).rejects.toThrow(/not a usable package name/);
@@ -179,8 +163,6 @@ describe("loadCompositionTemplate: runtime_libraries", () => {
 
 describe("templateDirFor", () => {
   it("refuses a template_version that is not a single path segment", () => {
-    // Chain-derived values never reach this parameter — the orchestrator populates it from its own constant —
-    // but it is interpolated into a filesystem path, so it is validated rather than trusted.
     for (const bad of ["../v1", "v1/../..", "/etc", "a/b", ""]) {
       expect(() => templateDirFor("/templates", bad)).toThrow(CompositionTemplateError);
     }

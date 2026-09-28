@@ -7,18 +7,15 @@ import { AbuseControlRepository, createPrismaClient, readDbEnv } from "@scvs/db"
 import { fingerprintRequest } from "../src/common/abuse-guard.js";
 import { createTestApp } from "./bootstrap.js";
 
-/** What `main.ts`'s `trust proxy` setting is worth, measured through the guard that depends on it. */
 const prisma = createPrismaClient(readDbEnv());
 const abuseControl = new AbuseControlRepository(prisma);
 
 const ROUTE = "/api/verification/v1/verifications";
 const WINDOW_MS = 60_000;
-/** Low enough that a burst of three reaches it, and restored in `afterAll` — see below. */
 const SUBMIT_LIMIT = 2;
 
 const invented: string[] = [];
 
-/** The window is part of the fingerprint, so a caller has one value per window it spent in. */
 const fingerprintOf = (address: string, windowStartMs: number) =>
   fingerprintRequest(
     { ip: address } as Request,
@@ -26,10 +23,6 @@ const fingerprintOf = (address: string, windowStartMs: number) =>
     process.env.SCVS_ABUSE_FINGERPRINT_KEY as string,
   );
 
-/**
- * A caller address nothing else in the repository — no other spec, no parallel Jest worker, no previous run —
- * will ever impersonate.
- */
 function inventCaller(): string {
   const groups = randomUUID().replace(/-/g, "").slice(0, 16).match(/.{4}/g) as string[];
   const address = `2001:db8:${groups.join(":")}::1`;
@@ -39,7 +32,6 @@ function inventCaller(): string {
 
 const windowStartOf = (now = Date.now()) => Math.floor(now / WINDOW_MS) * WINDOW_MS;
 
-/** Sends `forwardedFor` values in order and reports the statuses. */
 async function burst(server: Server, forwardedFor: string[]): Promise<number[]> {
   const statuses: number[] = [];
   for (const value of forwardedFor) {
@@ -49,10 +41,6 @@ async function burst(server: Server, forwardedFor: string[]): Promise<number[]> 
   return statuses;
 }
 
-/**
- * Runs `attempt` and repeats it once with fresh state if the wall clock crossed a window boundary mid-burst —
- * the one way a correct guard legitimately refuses nothing.
- */
 async function withinOneWindow<T>(attempt: () => Promise<T>): Promise<T> {
   for (let tries = 0; ; tries++) {
     const before = windowStartOf();
@@ -68,8 +56,7 @@ let suiteStartedAt: number;
 
 beforeAll(async () => {
   suiteStartedAt = Date.now();
-  // jest.setup.cjs raises this to a number no suite can reach; the threshold is the subject here, so it has to
-  // come back down.
+  // jest.setup.cjs raises this out of reach; the threshold is the subject here, so it comes back down.
   savedLimit = process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW;
   process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW = String(SUBMIT_LIMIT);
   app = await createTestApp();
@@ -81,7 +68,6 @@ afterAll(async () => {
   else process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW = savedLimit;
   try {
     await app?.close();
-    // Every window this run touched, so a burst that straddled a boundary still cleans up both of its rows.
     const windows: number[] = [];
     for (let at = windowStartOf(suiteStartedAt); at <= windowStartOf(); at += WINDOW_MS) windows.push(at);
     const fingerprints = invented.flatMap((address) =>
@@ -119,8 +105,6 @@ describe("submitter identity behind a proxy", () => {
     expect(bystander[0]).not.toBe(429);
   });
 
-  // The ALB APPENDS the address it observed, and a client can only prepend, so the entry that identifies the
-  // caller is the rightmost one.
   it("ignores an X-Forwarded-For entry the caller prepended itself", async () => {
     const statuses = await withinOneWindow(async () => {
       const caller = inventCaller();
@@ -132,10 +116,8 @@ describe("submitter identity behind a proxy", () => {
   });
 });
 
-// The fallback matters on its own: a deployment with nothing in front of it must not become unmetered.
 it("falls back to the socket address when no forwarding header is sent", async () => {
-  // Which of these Node reports depends on whether the server bound a dual-stack socket; all three are
-  // loopback, and asserting on the set is honest where asserting on one shape would be a guess.
+  // Which one Node reports depends on whether the server bound a dual-stack socket.
   const loopback = ["127.0.0.1", "::ffff:127.0.0.1", "::1"];
   const total = async () => {
     const windowStartMs = windowStartOf();
@@ -154,7 +136,6 @@ it("falls back to the socket address when no forwarding header is sent", async (
     return [start, await total()];
   });
 
-  // `>=` and not `+ 1`: parallel workers share this row, so a larger delta is another suite submitting, which
-  // is the behaviour under test rather than interference with it.
+  // `>=`, not `+ 1`: parallel workers share this row.
   expect(after).toBeGreaterThanOrEqual(before + 1);
 });

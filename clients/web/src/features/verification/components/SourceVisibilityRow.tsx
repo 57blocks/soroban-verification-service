@@ -2,10 +2,6 @@ import type { ReactNode } from "react";
 import type { PublishedArtifactState } from "../types";
 import { MonoLabel } from "./MonoLabel";
 
-/**
- * `MonoLabel` is `uppercase`, which is right for a caption and wrong for a sentence — and actively harmful
- * over 64 hex characters.
- */
 const Sentence = ({ children }: { children: ReactNode }) => (
   <p className="m-0 text-[0.85rem] leading-[1.5] text-ink-value">{children}</p>
 );
@@ -14,7 +10,6 @@ type SourceVisibilityRowProps = {
   state: PublishedArtifactState;
 };
 
-/** Whether this result's source can be retrieved, shown beside the verdict and never inside it. */
 export const SourceVisibilityRow = ({ state }: SourceVisibilityRowProps) => {
   if (state.phase === "not_published") return null;
 
@@ -49,8 +44,6 @@ export const SourceVisibilityRow = ({ state }: SourceVisibilityRowProps) => {
           source_sha256 {sourceSha256}
         </p>
       )}
-      {/* The filename repeats the digest, deliberately: naming the exact object a reader can fetch
-          is a prior decision, pinned by `source-visibility.spec.tsx`. */}
       {isPublic && fileName && <Sentence>Published as {fileName}</Sentence>}
     </div>
   );

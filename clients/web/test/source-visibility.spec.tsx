@@ -7,7 +7,6 @@ import { defaultValues } from "@/features/verification/constants";
 
 const SHA = "b".repeat(64);
 
-/** `SourceVisibilityRow` reads only `source`; the recipe is another card's input. */
 const NO_RECIPE: ArtifactRecipeFacts = {
   recipeSource: null,
   buildIsolation: null,
@@ -52,8 +51,6 @@ describe("non-public source is a legitimate outcome, not a missing one", () => {
     expect(text).toMatch(new RegExp(`${SHA}\\.tar\\.gz`));
   });
 
-  // "we could not tell" and "not public" are different claims, and conflating them would report a published
-  // source as private the moment the artifact read failed.
   test("an unreadable artifact is unknown, not private", () => {
     render(<SourceVisibilityRow state={{ phase: "unreadable", error: "boom" }} />);
 

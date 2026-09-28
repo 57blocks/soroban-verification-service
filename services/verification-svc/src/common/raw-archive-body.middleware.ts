@@ -8,28 +8,14 @@ import { UPLOAD_SOURCE_ROUTE } from "./abuse.guard.js";
 import type { AppConfigService } from "../config/configuration.js";
 import { errorBody } from "@scvs/http";
 
-/**
- * Starting allocation for a body with no Content-Length to size it by. Small on purpose: a client can omit
- * the header at will, and preallocating the ceiling itself would let that alone force a full-size allocation
- * per connection — the growth path below (same one an understated Content-Length uses) picks up from here.
- */
+/** Small because Content-Length is optional: preallocating the ceiling would cost a full-size buffer per connection. */
 const UNSIZED_BODY_INITIAL_BYTES = 64 * 1024;
 
-/**
- * Accumulates the raw request body as a Buffer instead of parsing it as JSON — uploads are binary tarballs.
- *
- * Also carries this route's drain and abuse checks, run here rather than through `@UseGuards(DrainGuard,
- * AbuseGuard)` on the controller: a guard only runs once the body has already been fully buffered, which
- * defeats the point of metering an upload before memory is spent on it. Drain runs first, matching the
- * ordering `submit` uses on the controller — refusing a submission the instance is about to stop serving
- * should not consume the submitter's abuse-check quota.
- */
+/** Runs the drain, then abuse checks itself: a guard would only run after the body is fully buffered. */
 @Injectable()
 export class RawArchiveBodyMiddleware implements NestMiddleware {
   private readonly logger = new ScvsLogger("raw-archive-body-middleware");
 
-  // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
-  // metadata Nest's DI would otherwise infer this parameter's type from).
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(AbuseGuardService) private readonly abuse: AbuseGuardService,
@@ -53,8 +39,6 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       return;
     }
 
-    // Free and synchronous, so it runs before the DB-backed abuse check below: a flood of requests that only
-    // ever declare an oversized body should not each cost a Postgres round-trip to reject.
     const declaredLength = Number(req.headers["content-length"]);
     if (Number.isFinite(declaredLength) && declaredLength > maxUploadBytes) {
       res.status(413).json(
@@ -82,13 +66,11 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
       return;
     }
 
-    // Not a chunk array concatenated at the end: that briefly holds both the parts and the whole at once.
     let buffer = Buffer.allocUnsafe(
       Number.isFinite(declaredLength) ? declaredLength : Math.min(UNSIZED_BODY_INITIAL_BYTES, maxUploadBytes),
     );
     let size = 0;
-    // Multiple "data" events can each push size past the ceiling before req.destroy() takes effect — without
-    // this, a second rejection would call res.json() on an already-sent response and throw unhandled.
+    // Several "data" events can pass the ceiling before destroy() takes effect; this stops a second res.json().
     let rejected = false;
 
     req.on("data", (chunk: Buffer) => {
@@ -124,12 +106,8 @@ export class RawArchiveBodyMiddleware implements NestMiddleware {
     req.on("error", next);
   }
 
-  /**
-   * After sending a rejection, the client may still be mid-write on a body we're never going to read. `req`
-   * defaults to paused, so an unconsumed stream fills the socket's receive buffer, applies TCP backpressure,
-   * and can stall the very response we just sent. `resume()` drains the rest of the body instead; `destroy()`
-   * waits for the response to actually finish sending, since an immediate destroy would race that write.
-   */
+  // `req` starts paused: resume() drains the unread body so backpressure cannot stall the response, and
+  // destroy() waits for "finish" because destroying at once would race that write.
   private discardAndClose(req: Request, res: Response): void {
     req.resume();
     res.on("finish", () => req.destroy());

@@ -18,7 +18,6 @@ function schemasOf(document: OpenAPIObject): Record<string, Record<string, unkno
   return (document.components?.schemas ?? {}) as Record<string, Record<string, unknown>>;
 }
 
-/** The assertion that catches the most: a derivation that silently produces nothing. */
 function everySchemaHasProperties(): void {
   const schemas = schemasOf(applyDerivedSchemas(documentWith("AggregatedWasmStatus")));
   assert.ok(Object.keys(schemas).length > 1, "the closure pulled in nothing");
@@ -31,7 +30,6 @@ function everySchemaHasProperties(): void {
   }
 }
 
-/** Nest registers only the models a route names; everything beneath them arrives by following $ref. */
 function closureReachesNestedShapes(): void {
   const schemas = schemasOf(applyDerivedSchemas(documentWith("AggregatedWasmStatus")));
   for (const name of ["AggregatedRegistryVerification", "UnavailableVerifier", "RegistryVerifier"]) {
@@ -44,10 +42,6 @@ function closureReachesNestedShapes(): void {
   );
 }
 
-/**
- * `@ValidateNested` + `@Type(() => X)`: without class-transformer's storage these degrade to `{}` / `$ref:
- * Array`.
- */
 function nestedTypesResolve(): void {
   const schemas = schemasOf(applyDerivedSchemas(documentWith("TrustedVerifiersList")));
   assert.deepEqual((schemas.TrustedVerifiersList.properties as Record<string, unknown>).verifiers, {
@@ -56,7 +50,6 @@ function nestedTypesResolve(): void {
   });
 }
 
-/** Enum and optionality come from `@IsIn` and `@IsOptional`, not from a second annotation. */
 function validatorsReachTheSchema(): void {
   const schemas = schemasOf(applyDerivedSchemas(documentWith("UnavailableVerifier")));
   const properties = schemas.UnavailableVerifier.properties as Record<string, Record<string, unknown>>;
@@ -64,14 +57,12 @@ function validatorsReachTheSchema(): void {
   assert.deepEqual(schemas.UnavailableVerifier.required, ["url", "reason"]);
 }
 
-/** `@SchemaHint` is the only route for a fact validation cannot state. */
 function hintsReachTheSchema(): void {
   const schemas = schemasOf(applyDerivedSchemas(documentWith("SandboxDiagnostics")));
   const properties = schemas.SandboxDiagnostics.properties as Record<string, Record<string, unknown>>;
   assert.equal(properties.exit_code?.nullable, true, "the nullable hint did not reach the schema");
 }
 
-/** Declared wins per property — not per schema, or a validated-but-unannotated field vanishes. */
 function declaredWinsPerProperty(): void {
   const document = documentWith();
   (document.components!.schemas as Record<string, unknown>).UnavailableVerifier = {

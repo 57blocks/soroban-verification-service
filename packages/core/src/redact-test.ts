@@ -11,7 +11,6 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-/** The minimal shared-layer smoke tests. */
 test("drops a presigned URL's query string, keeps host and key", () => {
   const url =
     "https://sv-staging-scratch.s3.ap-southeast-2.amazonaws.com/staging/r1/build/params/runner.json" +

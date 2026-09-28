@@ -5,10 +5,8 @@ import { useAggregateLookup } from "./use-aggregate-lookup";
 import { lookupFailureCopy } from "./use-hash-lookup";
 import type { LookupState } from "../types";
 
-/** Uppercased first, because this page sends the uppercased value — see `CONTRACT_ID_SHAPE`. */
 export const isContractId = (value: string): boolean => CONTRACT_ID_SHAPE.test(value.trim().toUpperCase());
 
-/** Every trusted verifier's answer for whatever Wasm a contract address currently holds. */
 export const useContractLookup = (
   network: Network,
   contractId: string | null,
@@ -23,7 +21,6 @@ export const useContractLookup = (
   );
 };
 
-/** What the reader is told for each way this route refuses. */
 export const contractFailureCopy = (failure: QueryApiFailure): string => {
   switch (failure.code) {
     case "invalid_network":

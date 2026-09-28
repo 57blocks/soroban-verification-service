@@ -7,78 +7,15 @@ wasm_root="$output_root/wasm/purpose-built"
 manifest="$output_root/purpose-built-wasm.ndjson"
 source_sha="ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533"
 source_uri="https://raw.githubusercontent.com/jia57b/soroban-contract/main/$source_sha.tar.gz"
-# The official image every fixture below is built with, unless a caller overrides it. Digest-pinned:
-# registry.yaml records this digest as cliver 27.0.0 / rsver 1.96.0.
 image="${SCVS_FIXTURE_BUILD_IMAGE:-docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43}"
 
 sep58_bldopt=(--locked --manifest-path=contracts/verified-demo/Cargo.toml --package=verified-demo --optimize)
 sep58_recipe_meta=()
 
-# ── Fixtures on pairs no official image exists for ────────────────────────────────────────────────
-# Every fixture built by `docker_build` above is built inside an *official* image, which is what makes
-# F-LEG-1 meaningful: built by the official toolchain, verified by our composed one, so a `verified`
-# verdict is cross-environment evidence rather than a determinism check.
-#
-# These are deliberately the other thing. Docker Hub publishes six `(cliver, rsver)` pairs (corpus scan
-# §7) against 99 live ones, and the corpus's top three demand pairs are not among them — those contracts
-# can only ever be verified through composition. So each of these is built inside **our own composed
-# image**, which is the only environment that can produce its pair at all.
-#
-# ★ What that costs, stated rather than glossed: built by our composer and verified by our composer, a
-# byte match proves the pipeline works and the composition is deterministic — it does **not** prove our
-# composed environment matches what some third party's build of the same pair would produce, because
-# there is no official build of that pair to be right or wrong against. F-LEG-1 carries that half;
-# `compose_targets` below records which pairs carry this narrower determinism evidence.
-#
-# ── The table, and why it is a table rather than two environment variables ────────────────────────
-# It started as `SCVS_FIXTURE_COMPOSE_ONLY_CLIVER` / `_RSVER`, which made adding a pair free — and that
-# was the problem. A fixture's pair is the one thing about it that has to be *reviewable*: it decides
-# what the E2E case proves, it has to agree with `registry.yaml`, and "why this pair" is an argument, not
-# a parameter. An ad-hoc pair passed on the command line produces a deployed contract nobody can trace
-# to a reason. So the pairs live here, one line each, and `SCVS_FIXTURE_COMPOSE_TARGET` selects one.
-#
-# One target per run, because each needs a *different* composed image and the image is a separate input.
-#
-# ── ★ Why the build options are in the table too ──────────────────────────────────────────────────
-# They were hard-coded in `compose_build`, all four of them, copied from F-LEG-1. That broke on the first
-# 25.1.0 build: `error: unexpected argument '--locked' found`. `stellar contract build` gained `--locked`
-# somewhere between 25.1.0 and 25.2.0, so the option set is a property of the **cliver**, not of the
-# fixture family.
-#
-# And the fix is not "drop --locked everywhere" — it is the same shape as the 1.81.0 finding. A recipe is
-# a *submitter claim replayed inside the recorded toolchain*, so a fixture whose recipe carries an option
-# its own cliver does not accept describes a build that could not have happened. No real 25.1.0 contract
-# on chain records `--locked`, because no 25.1.0 binary would have accepted it. Carrying it would make the
-# fixture test a recipe that cannot exist.
-#
-# What is lost by dropping it, stated: `--locked` turns "cargo silently updated Cargo.lock" into an error.
-# Without it, determinism rests on the committed `Cargo.lock` being sufficient — which it is for a fixed
-# source tree, since cargo only re-resolves when the manifest forces it. That is exactly the position
-# every real 25.1.0 contract is in, so the fixture is not weaker than what it stands for.
-#
-# The options therefore live here, per row, reviewed like the pair — and `assertImageAcceptsOptions`
-# below refuses to build when the image does not offer one of them, naming it, instead of letting a
-# 20-minute run die on the first `docker run`.
-#
 #   id | cliver | rsver | output wasm | build options (space-separated)
 compose_targets=(
-  # Rank 2 by demand (10.1%). The first fixture of this kind; deployed 2026-08-19.
   "F-COMPOSE-ONLY|25.2.0#28484880988199233a7e8e87c97cb12dac323cb3|1.94.0|f-compose-only.wasm|--locked --manifest-path=contracts/verified-demo/Cargo.toml --package=verified-demo --optimize"
-  # ★ Rank 1 by demand: 813 live contracts, 25.2% of live class-B on its own — the single largest
-  # combination in the corpus, and one no official image serves. Composition proved it can be built
-  # (`eng-tools/composition-pairs.mjs`'s `demand-01` row); this carries it end to end.
-  # ★ No `--locked`: 25.1.0's `contract build` does not have it (measured 2026-08-19 —
-  # "unexpected argument '--locked' found"). See the note above; this is correctness, not a compromise.
   "F-DEMAND-01|25.1.0#a048a57a75762458b487052e0021ea704a926bee|1.95.0|f-demand-01.wasm|--manifest-path=contracts/verified-demo/Cargo.toml --package=verified-demo --optimize"
-  # The old end. Rank 4 (4.6%), the oldest CLI major with real demand, and the only fixture below
-  # rust 1.94. The corpus's risk is concentrated here — 23.x CLIs with 1.8x/1.9x Rust — and the E2E
-  # layer had nothing below 27.0.0/1.94.0. `oldest-major-cli23.3.0-rust1.91.1` composed, so the
-  # environment exists; what is untested is whether a *submission* on it reaches a verdict.
-  # ★ 23.3.0 is older still, so it certainly lacks `--locked`. `--optimize` and `--package` are
-  # measured present: the option probe accepted them and the build succeeded on 2026-08-19. That run
-  # also answered the MSRV worry — soroban-sdk 25.3.1 accepts rust 1.91.1 — and, more usefully,
-  # resolved that same SDK *without* `--locked`, which is the observation the "a committed Cargo.lock
-  # is sufficient" claim above was missing.
   "F-OLD-END|23.3.0#08473ac20016c369067ce0dbca91d9595e72d6d4|1.91.1|f-old-end.wasm|--manifest-path=contracts/verified-demo/Cargo.toml --package=verified-demo --optimize"
 )
 compose_target="${SCVS_FIXTURE_COMPOSE_TARGET:-F-COMPOSE-ONLY}"
@@ -92,17 +29,12 @@ for compose_row in "${compose_targets[@]}"; do
     compose_cliver="$row_cliver"
     compose_rsver="$row_rsver"
     compose_output="$row_output"
-    # No option contains a space, so word-splitting is the whole parse. `read -ra` rather than an
-    # unquoted expansion so nothing is glob-expanded on the way in.
     read -ra compose_bldopt <<<"$row_bldopt"
   fi
 done
 tag_only_image="docker.io/stellar/stellar-cli:25.2.0"
 untrusted_image="docker.io/library/rust@sha256:4732ca96fd086cb9be682050c3f0176288eebaac2b80aa2bcefccfaf198e1950"
 work_root="$(mktemp -d /tmp/scvs-e2e-purpose.XXXXXX)"
-# CI runs the outer verifiable CLI as the recorded build-image user so its hardened archive remains
-# readable to the inner Docker build. Let that user traverse this disposable root. Local runs retain
-# their original permissions and do not enter this branch.
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   chmod a+rwx "$work_root"
 fi
@@ -128,8 +60,6 @@ tar_bin="${SCVS_FIXTURE_TAR_BIN:-tar}"
 cleanup() {
   case "$work_root" in
     /tmp/scvs-e2e-purpose.*)
-      # Docker owns some target files under the official image UID in CI. The GitHub runner has
-      # passwordless sudo; local runs retain the ordinary unprivileged cleanup path.
       if [[ "${GITHUB_ACTIONS:-}" == "true" ]] && command -v sudo >/dev/null; then
         sudo rm -rf "$work_root"
       else
@@ -189,11 +119,7 @@ if [[ "$build_scope" != "all" && "$build_scope" != "upgrade" && "$build_scope" !
   exit 1
 fi
 
-# Both checks here rather than at the build call, so a wrong target or a wrong image costs a second
-# instead of a clone, a pull and a compile.
 if [[ "$build_scope" == "compose-only" ]]; then
-  # An unknown target would otherwise reach `compose_build` with empty pair variables, and
-  # `assert_metadata_value` would compare the real cliver against "" — a confusing way to say "typo".
   if [[ -z "$compose_output" ]]; then
     echo "unknown SCVS_FIXTURE_COMPOSE_TARGET '$compose_target'. Known targets:" >&2
     for compose_row in "${compose_targets[@]}"; do
@@ -205,10 +131,6 @@ if [[ "$build_scope" == "compose-only" ]]; then
     exit 1
   fi
 
-  # The whole point of these fixtures is a pair no official image exists for; run one against the
-  # official default and it produces F-LEG-1's bytes under a name that claims otherwise.
-  # `compose_build`'s metadata and duplicate-hash guards would catch it, but the honest form of the
-  # constraint is stated up front, with the command that satisfies it.
   if [[ "$image" == docker.io/stellar/stellar-cli* ]]; then
     echo "scope 'compose-only' needs a composed image in SCVS_FIXTURE_BUILD_IMAGE, not the official one" >&2
     echo "build one for $compose_target first:" >&2
@@ -221,8 +143,6 @@ if [[ "$build_scope" == "compose-only" ]]; then
   echo "compose target: $compose_target  ($compose_cliver / $compose_rsver) → $compose_output"
 fi
 
-# The host CLI only reads emitted metadata. Builds and recipe metadata generation happen in the
-# recorded image, so this path needs no unmerged CLI capability.
 stellar_candidates=()
 if [[ -n "${SCVS_FIXTURE_STELLAR_BIN:-}" ]]; then
   stellar_candidates+=("$SCVS_FIXTURE_STELLAR_BIN")
@@ -252,14 +172,7 @@ fi
 echo "using Stellar CLI: $stellar_bin ($("$stellar_bin" --version | head -n 1))"
 
 mkdir -p "$wasm_root" "$docker_cargo"
-# This bind-mounted Cargo cache is shared by every fixture image in the run, and those images do not
-# agree on a UID: the official stellar-cli image runs as an unprivileged user, the untrusted `rust`
-# image runs as root. Whoever built first owns the crate files it downloaded, and the host runner owns
-# neither — so a plain `chmod -R` here fails with EPERM on every second and later build scope of the
-# same job. Relax the tree as root on the CI runner, which has passwordless sudo; local runs keep the
-# unprivileged chmod they always used, and only downgrade its failure to a warning, since the crates a
-# build image already owns are writable by that image regardless. The cache holds downloaded crates
-# only and, unlike $work_root, is deliberately reused across runs.
+# Images with different UIDs share this Cargo cache, so relax it (as root on CI) before each build.
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]] && command -v sudo >/dev/null 2>&1; then
   sudo chmod -R a+rwX "$docker_cargo"
 elif ! chmod -R a+rwX "$docker_cargo"; then
@@ -278,8 +191,6 @@ if [[ "$build_scope" != "all" && -f "$manifest" ]]; then
   elif [[ "$build_scope" == "multi-package" ]]; then
     jq_filter='select(.fixture_id != "F-MULTIPKG-testnet")'
   elif [[ "$build_scope" == "compose-only" ]]; then
-    # Only the row being rebuilt is dropped. Each compose target is a separate run against a separate
-    # image, so a run for one must not evict the manifest entries the others already produced.
     jq_filter="$(printf 'select(.fixture_id != "%s-testnet")' "$compose_target")"
   else
     jq_filter='select(.fixture_id != "F-LEG-3-target")'
@@ -290,8 +201,6 @@ else
   : > "$manifest"
 fi
 
-# The archive named by source_uri/source_sha256 is the actual build input. Do not substitute a Git
-# checkout that might no longer match the archive bytes the fixture declares.
 if [[ "$build_scope" != "multi-package" ]]; then
   canonical_archive="${SCVS_E2E_CANONICAL_SOURCE_ARCHIVE:-$repo_root/artifacts/e2e-fixtures/archives/canonical-source.tar.gz}"
   if [[ "$canonical_archive" != /* ]]; then canonical_archive="$repo_root/$canonical_archive"; fi
@@ -311,9 +220,6 @@ if [[ "$build_scope" != "multi-package" ]]; then
 fi
 
 reset_source_root() {
-  # Docker builds run as the image's unprivileged UID in CI, so their target files are not removable
-  # by the GitHub runner. Use the same scoped sudo cleanup as the EXIT trap before copying the next
-  # fixture source tree; local runs retain the ordinary unprivileged path.
   case "$source_root" in
     "$work_root"/*)
       if [[ "${GITHUB_ACTIONS:-}" == "true" ]] && command -v sudo >/dev/null 2>&1; then
@@ -330,9 +236,7 @@ reset_source_root() {
 
 if [[ "$build_scope" != "multi-package" ]]; then reset_source_root; fi
 
-# A composed image is built locally by `check-composition-template.mjs` and exists in no registry, so
-# an unconditional `docker pull` would fail on exactly the scope this parameterisation exists for.
-# Pull only what is not already here; a missing *remote* image still fails, loudly, on the pull.
+# Composed images exist only locally, so pull only an image that is not already present.
 if docker image inspect "$image" >/dev/null 2>&1; then
   echo "using local image: $image"
 else
@@ -443,37 +347,6 @@ assert_metadata_keys() {
   fi
 }
 
-# Builds the selected compose target inside whatever `$image` is, then *proves* which toolchain did it.
-#
-# ── Why the metadata assertions are the point, not a formality ────────────────────────────────────
-# These fixtures' whole claim is "the deployed bytes were produced by a pair no official image exists
-# for". Nothing in `docker run` enforces that: point `SCVS_FIXTURE_BUILD_IMAGE` at the wrong tag — the
-# official 27.0.0 default, a stale composed image from an earlier gate run, the image for a *different*
-# row of the table above — and this function still emits a perfectly good Wasm, `deploy-testnet.sh`
-# still deploys it, and the E2E case still goes green while testing a pair already covered. The failure
-# mode is a fixture that passes for the wrong reason, which is the one the SEC cases taught us to
-# design out.
-#
-# ★ That last variant is new and is the reason this check matters more now than when there was one
-# target. With three rows and one shared image tag (`scvs-composed:template-gate-v3` — the gate reuses
-# the tag for every pair), forgetting to re-run `check-composition-template.mjs` between targets
-# silently builds the next fixture in the previous fixture's image. The metadata read-back is the only
-# thing standing between that mistake and a deployed contract that lies about its own toolchain.
-#
-# So the built Wasm's own `contractmetav0` — the same bytes the chain will carry and the same field
-# the verifier reads to decide it must compose — is read back and required to name the row's pair. The
-# image does not get to be trusted about itself.
-# Asks the image which build options it offers, and refuses the ones it does not.
-#
-# ── Why this is a separate step and not just "let the build fail" ──────────────────────────────────
-# It did just let the build fail, once, and the failure was fine — `error: unexpected argument
-# '--locked' found`, clear and immediate. What was not fine is that it arrived **after** an 8-minute
-# composition, a git clone and a docker pull, and it names one option at a time: fix `--locked` and the
-# next run tells you about `--optimize`. An option set is small and `--help` is instant, so the whole
-# answer is worth having before anything is spent.
-#
-# ★ Matched against the flag name only, so `--manifest-path=x` is checked as `--manifest-path`. Matching
-# the whole `key=value` would silently pass every option through, since no help text contains a value.
 assert_image_accepts_options() {
   local help_text option flag
   local -a unsupported=()
@@ -486,8 +359,7 @@ assert_image_accepts_options() {
 
   for option in "${compose_bldopt[@]}"; do
     flag="${option%%=*}"
-    # Word-boundary-ish: the flag must appear followed by a space, `=`, `<`, or end of line, so
-    # `--package` is not satisfied by `--package-name` appearing somewhere in the help.
+# The flag must be followed by space, `=`, `<` or EOL, so `--package` does not match `--package-name`.
     if ! printf '%s' "$help_text" | grep -qE -- "(^|[^A-Za-z0-9._-])${flag}([ =<]|$)"; then
       unsupported+=("$option")
     fi
@@ -525,11 +397,6 @@ compose_build() {
   assert_metadata_value "$wasm_root/$output_name" "cliver" "$compose_cliver"
   assert_metadata_value "$wasm_root/$output_name" "rsver" "$compose_rsver"
 
-  # Every fixture here is the same source, so two of them agreeing byte for byte means the toolchain did
-  # not actually change and one is a duplicate of the other wearing a different name. The metadata check
-  # above would still pass in that case only if the image were also wrong in a matching way — but the
-  # cheap and common mistake is a *stale* image, where metadata and bytes are consistently the previous
-  # row's. Compared against F-LEG-1 and against every sibling in the table.
   local mine
   mine="$(shasum -a 256 "$wasm_root/$output_name" | awk '{print $1}')"
   local other other_hash other_name
@@ -550,8 +417,6 @@ compose_build() {
     fi
   done
 
-  # No source archive: the source tree is byte-identical to F-LEG-1's, which is what makes the pair the
-  # only variable. The inventory entries therefore reuse F-LEG-1's `source_uri`/`source_sha256`.
   record_wasm "$compose_target-testnet" "$wasm_root/$output_name"
 }
 
@@ -576,9 +441,6 @@ sep58_build() {
   local -a recipe_bldopt=("${sep58_bldopt[@]}")
   assert_digest_pinned_image "$fixture_id"
   if [[ -n "$meta_value" ]]; then
-    # `build --verifiable --meta source_repo=...` wrote the custom metadata before the SEP-58 recipe
-    # and recorded that option between --package and --optimize. Preserve those bytes while using only
-    # released `contract build --meta` capabilities.
     [[ "$meta_value" == "source_repo=github:example/contract" ]] || {
       echo "$fixture_id has no recorded build --meta compatibility mapping for: $meta_value" >&2
       exit 1
@@ -647,8 +509,6 @@ prepare_private_cli58_source() {
   )
 }
 
-# Same run-scoped identity pattern as F-58-PRIV. The ZIP fixtures' source hashes are inputs to the
-# rebuild key, so a fresh contract address alone would only recompute a verdict against an old rebuild.
 prepare_zip_cli58_source() {
   local label="$1"
   local scope="${SCVS_FIXTURE_DEPLOYMENT_SCOPE:-local}"
@@ -666,8 +526,6 @@ prepare_multi_package_source() {
   cp -R "$multi_package_fixture_root/." "$multi_package_build_root/"
   rm -rf "$multi_package_build_root/target"
   rm -f "$multi_package_build_root/README.md" "$multi_package_build_root/.DS_Store"
-  # See the source-root permission above: `stellar contract build` creates its temporary target
-  # directory at the root of this bind mount.
   chmod a+rwx "$multi_package_build_root"
   cp -R "$multi_package_build_root/." "$archive_tree/source/"
   (
@@ -726,7 +584,6 @@ if [[ "$build_scope" == "all" ]]; then
 fi
 
 if [[ "$build_scope" == "ci" ]]; then
-  # Exercise RA5's literal prefix rule against chain-read metadata, rather than a submitter-controlled body.
   docker_build "F-S55-E-testnet" "f-s55-e.wasm" "source_repo=GitHub:example/contract"
   docker_build "F-S55-F-testnet" "f-s55-f.wasm" "source_repo=github:"
 
@@ -772,10 +629,6 @@ if [[ "$build_scope" == "all" || "$build_scope" == "multi-package" ]]; then
   multi_package_build
 fi
 
-# Deliberately **not** in `all`. `all` runs against the official default image, and building this
-# fixture there would produce exactly F-LEG-1's bytes under a name that claims otherwise — the
-# duplicate-hash guard inside `compose_only_build` would stop it, but the honest expression of the
-# constraint is that this scope needs an image `all` does not have.
 if [[ "$build_scope" == "compose-only" ]]; then
   compose_build
 fi

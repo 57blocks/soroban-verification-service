@@ -14,12 +14,10 @@ import {
 import { composerArtifactKey } from "./composer-dispatch.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** What this service decided about a composition, after verifying the composer's own receipt. */
 export type EnvironmentOutcome =
   | { status: "ready"; recipeSha256: string; imageDigest: string }
   | { status: "failed"; errorCode: string };
 
-/** The one place that turns "the composer's `composer.json`" into "this environment's recorded state". */
 @Injectable()
 export class EnvironmentOutcomeService {
   private readonly logger = new ScvsLogger("environment-outcome");
@@ -30,7 +28,6 @@ export class EnvironmentOutcomeService {
     @Inject(EnvironmentsRepository) private readonly environments: EnvironmentsRepository,
   ) {}
 
-  /** Records the outcome for a composition whose Batch job is known to have reached a terminal state. */
   async recordFromBatchTerminalState(
     environment: EnvironmentRecord,
     event: { status: string; statusReason?: string },
@@ -50,7 +47,6 @@ export class EnvironmentOutcomeService {
     return this.record(environment, artifact);
   }
 
-  /** Records the outcome **only** if the composer's receipt is there to read, and reports whether it was. */
   async tryRecordFromArtifact(environment: EnvironmentRecord): Promise<boolean> {
     const artifact = await this.readArtifact(environment);
     if (!artifact) return false;
@@ -68,19 +64,16 @@ export class EnvironmentOutcomeService {
       staging.bucket,
       composerArtifactKey(environment.environmentId),
     );
-    // A *failure to read* (permissions, an unreachable bucket) still throws — that is not the same fact as "no
-    // receipt" and must not be recorded as one.
+    // A read failure throws rather than returning undefined: it is not "no receipt".
     if (!raw) return undefined;
     return parseDto(ComposerArtifactDto, JSON.parse(raw));
   }
 
-  /** Verifies the receipt, then writes the row. */
   private async record(
     environment: EnvironmentRecord,
     artifact: ComposerArtifact,
   ): Promise<EnvironmentOutcome> {
     if (artifact.environment_id !== environment.environmentId) {
-      // A receipt for a different environment at this environment's key.
       this.logger.error("composer receipt is for a different environment", {
         environment_id: environment.environmentId,
         receipt_environment_id: artifact.environment_id,
@@ -94,8 +87,6 @@ export class EnvironmentOutcomeService {
         cliver: environment.cliver,
         rsver: environment.rsver,
         reason: artifact.reason,
-        // Keys only, matching `RebuildOutcomeService`'s treatment of `failure_context`: the values travel on
-        // the receipt, which is the channel meant to carry them.
         failure_context_keys: artifact.failure_context
           ? Object.keys(artifact.failure_context).sort()
           : undefined,
@@ -106,7 +97,6 @@ export class EnvironmentOutcomeService {
     const invalid = this.verifySuccessReceipt(environment, artifact);
     if (invalid) return this.recordFailure(environment, invalid);
 
-    // Non-null by `verifySuccessReceipt` above.
     const recipeSha256 = artifact.recipe_sha256!;
     const imageDigest = artifact.image_digest!;
     const recipe = artifact.recipe!;
@@ -115,8 +105,7 @@ export class EnvironmentOutcomeService {
       recipeSha256,
       imageDigest,
       recipe,
-      // See `ComposerArtifact.image_architecture` for why `@IsIn` there was wrong: it would have thrown out of
-      // `readArtifact`, leaving the pair to be recomposed forever.
+      // The DTO does not validate this field; an unknown architecture is dropped here.
       ...(isBuildArchitecture(artifact.image_architecture)
         ? { arch: artifact.image_architecture }
         : {}),
@@ -133,8 +122,6 @@ export class EnvironmentOutcomeService {
       template_version: environment.templateVersion,
       recipe_sha256: recipeSha256,
       image_digest: imageDigest,
-      // Absent here means every rebuild against this environment will route by the configured default rather
-      // than by what the image declares — worth seeing at the moment the row becomes usable.
       image_architecture: artifact.image_architecture,
       reported_cliver: artifact.smoke_test?.reported_cliver,
       reported_rsver: artifact.smoke_test?.reported_rsver,
@@ -142,15 +129,11 @@ export class EnvironmentOutcomeService {
     return { status: "ready", recipeSha256, imageDigest };
   }
 
-  /** Returns an error code when a `success` receipt cannot be trusted, or `undefined` when it can. */
   private verifySuccessReceipt(
     environment: EnvironmentRecord,
     artifact: ComposerArtifact,
   ): string | undefined {
     if (!artifact.recipe_sha256 || !artifact.image_digest || !artifact.recipe) {
-      // The three identities are not independently optional: a row with a recipe hash but no pull coordinate is
-      // not a coherent `ready` state (`EnvironmentsRepository.markReady` requires all three), so half-recording
-      // this would produce an environment nothing could dispatch against.
       this.logger.error("composer reported success without all three identities", {
         environment_id: environment.environmentId,
         has_recipe_sha256: artifact.recipe_sha256 !== undefined,
@@ -165,7 +148,6 @@ export class EnvironmentOutcomeService {
       artifact.recipe.pair.rsver !== environment.rsver ||
       artifact.recipe.template_version !== environment.templateVersion
     ) {
-      // The composer built something other than what it was asked for.
       this.logger.error("composer receipt describes a different pair or template than requested", {
         environment_id: environment.environmentId,
         requested_cliver: environment.cliver,
@@ -180,7 +162,6 @@ export class EnvironmentOutcomeService {
 
     const recomputed = composedEnvironmentRecipeHash(artifact.recipe);
     if (recomputed !== artifact.recipe_sha256) {
-      // The published identity would not hash from the published recipe.
       this.logger.error("composer receipt's recipe_sha256 does not hash from its own recipe", {
         environment_id: environment.environmentId,
         reported_recipe_sha256: artifact.recipe_sha256,
@@ -214,10 +195,6 @@ export class EnvironmentOutcomeService {
     return { status: "failed", errorCode };
   }
 
-  /**
-   * Dispatch-to-terminal wall clock. Measured from `createdAt` rather than from the claim: the row is created
-   * and claimed within the same tick, and `updatedAt` has already moved by the time this runs.
-   */
   private recordDuration(environment: EnvironmentRecord, outcome: string): void {
     const seconds = (Date.now() - Date.parse(environment.createdAt)) / 1000;
     this.metrics.histogram("environment_composition_seconds", seconds, {

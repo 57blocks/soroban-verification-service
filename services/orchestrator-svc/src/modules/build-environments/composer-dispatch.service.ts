@@ -6,15 +6,10 @@ import { ScvsLogger, type ComposeIntent, type ComposerJobParams } from "@scvs/co
 import type { AppConfigService } from "../../config/configuration.js";
 import { ConfigurationError } from "../../config/configuration-error.js";
 
-/** The S3 key one composition's receipt is written to. */
 export function composerArtifactKey(environmentId: string): string {
   return `staging/environments/${environmentId}/composer.json`;
 }
 
-/**
- * Keeping the two dispatchers apart makes that a type-level impossibility rather than a config mistake waiting
- * to happen.
- */
 @Injectable()
 export class ComposerDispatchService {
   private readonly logger = new ScvsLogger("composer-dispatch");
@@ -24,7 +19,6 @@ export class ComposerDispatchService {
     @Inject(EnvironmentsRepository) private readonly environments: EnvironmentsRepository,
   ) {}
 
-  /** Submits the composition and records the Batch job id on the `Environment` row. */
   async submitComposerJob(input: {
     environmentId: string;
     intent: ComposeIntent;
@@ -75,9 +69,7 @@ export class ComposerDispatchService {
       containerOverrides: {
         environment: [
           {
-            // Deliberately a different variable name from the builder's `SCVS_JOB_PARAMS_JSON`: a job
-            // definition must not be able to satisfy one worker's input contract by carrying the other's, and a
-            // shared name would make a misrouted submission look well-formed.
+            // Distinct from the builder's SCVS_JOB_PARAMS_JSON so a misrouted submission cannot look well-formed.
             name: "SCVS_COMPOSER_PARAMS_JSON",
             value: JSON.stringify(params),
           },
@@ -93,10 +85,6 @@ export class ComposerDispatchService {
     return batchJobId;
   }
 
-  /**
-   * Asks AWS Batch what a composition's state actually is — the input to `EnvironmentReconcilerScheduler`, for
-   * compositions whose terminal SQS event never arrived.
-   */
   async describeBatchJob(
     batchJobId: string,
   ): Promise<{ status: string; statusReason?: string } | undefined> {
@@ -109,7 +97,6 @@ export class ComposerDispatchService {
     };
   }
 
-  /** Throws naming the variable rather than returning a vague failure. */
   private requireConfig(value: string | undefined, envName: string): string {
     if (!value) {
       throw new ConfigurationError(

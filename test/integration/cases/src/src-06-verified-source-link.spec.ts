@@ -1,4 +1,3 @@
-/** E2E-SRC-06 — the published link from a `verified` verdict points at the source that produced it */
 import { linkUrls, sourceCodeUriUrls } from "../../support/types.js";
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
@@ -17,7 +16,6 @@ import type { RegistryVerification, VerificationArtifact } from "../../support/t
 
 const CASE_ID = "E2E-SRC-06";
 
-/** The report a status-object entry actually points at. */
 async function reportViaEntry(
   entry: RegistryVerification,
   wasmHash: string
@@ -33,7 +31,6 @@ async function reportViaEntry(
   return (await readReportByUrl(pointer)).artifact;
 }
 
-/** Fetches a retained archive by the file name its own report publishes, and hashes it. */
 async function fetchRetainedSource(artifact: VerificationArtifact, label: string): Promise<string> {
   const source = artifact.source;
   if (!source?.source_file_name) {
@@ -47,7 +44,6 @@ async function fetchRetainedSource(artifact: VerificationArtifact, label: string
   const fetched = await http(staticSourceUrl(source.source_file_name));
   expectStatus(fetched, 200);
   const hash = sha256Hex(fetched.bytes);
-  // The commitment: what came back is what the report said it would be.
   expect(hash).toBe(source.source_sha256);
   return hash;
 }
@@ -69,13 +65,8 @@ caseBlock(
         const competitor = fixtures.contracts["F-LEG-3"];
         const hsOk = target.source_sha256!;
 
-        // Premise: the two candidates are different archives. Same bytes would make "points at the right one"
-        // unanswerable rather than true.
         expect(competitor.source_sha256).not.toBe(hsOk);
 
-        // ── 1. A competing candidate for F-LEG-1's hash ────────────────────────────────────────
-        // F-LEG-3's archive is a real, compilable source that builds to different bytes, so this is a
-        // `mismatch` and not a build failure.
         const competingBody = await submissionFor("F-LEG-3", { is_public: true });
         const competing = await submitAndWait({
           ...competingBody,
@@ -88,18 +79,14 @@ caseBlock(
         expect(hsBad).toBe(competitor.source_sha256);
         expect(hsBad).not.toBe(hsOk);
 
-        // ── 2. The matching source ─────────────────────────────────────────────────────────────
         const verified = await submitAndWait(await submissionFor("F-LEG-1", { is_public: true }));
         expect(verified.body.status).toBe("verified");
         const wasmHash = verified.body.result!.wasm_hash!;
 
-        // ── 3. Step 2 of the case, as literally written ────────────────────────────────────────
         const status = await requireStatusObject(wasmHash);
         const ours = ownEntryOf(status.source_code_verifications, await ownVerifierIdentity());
         expect(ours?.status).toBe("verified");
 
-        // ── The entry names the source it was verified from (TRD §5.2) ─────────────────────
-        // SEP-58 v0.5.0's vocabulary: `source_sha256` required, `source_uri` optional.
         expect(ours!.source_sha256).toBe(hsOk);
         expect(ours!.source_sha256).not.toBe(hsBad);
 
@@ -108,7 +95,6 @@ caseBlock(
         expect(artifact.source?.is_public).toBe(true);
         expect(artifact.source?.source_file_name).toBeDefined();
 
-        // HA1 and HA2 — the status object names the same durable source object as its report.
         const declaredUri = staticSourceUrl(artifact.source!.source_file_name!);
         expect(sourceCodeUriUrls(ours!)).toEqual(expect.arrayContaining([declaredUri]));
 
@@ -116,15 +102,11 @@ caseBlock(
         expectStatus(linkedByField, 200);
         expect(sha256Hex(linkedByField.bytes)).toBe(hsOk);
 
-        // HA1 — and not to the candidate that failed to reproduce the deployed bytes.
         expect(sha256Hex(linkedByField.bytes)).not.toBe(hsBad);
 
-        // ── 4. HA1 and HA2, through the report path ───────────────────────────────────────────
         const linked = await fetchRetainedSource(artifact, "the verified result");
 
-        // HA2 — equal to the entry's own `source_sha256` commitment.
         expect(linked).toBe(artifact.source!.source_sha256);
-        // HA1 — and that commitment is HS_ok, not the candidate that failed to reproduce the bytes.
         expect(linked).toBe(hsOk);
         expect(linked).not.toBe(hsBad);
 
@@ -139,8 +121,6 @@ caseBlock(
     it(
       "HA3 — a `mismatched` entry identifies the attempted public source without claiming a match",
       async () => {
-        // If it ever carries a `verified` entry from us the case can never pass again, and that is a
-        // fixture-inventory problem with a specific fix rather than something to skip past.
         await assertHashNotYetVerifiedByUs(fixtures.contracts["F-LEG-3"].wasm_hash!, CASE_ID);
 
         const run = await submitAndWait(await submissionFor("F-LEG-3", { is_public: true }));
@@ -151,7 +131,6 @@ caseBlock(
         const ours = ownEntryOf(status.source_code_verifications, await ownVerifierIdentity());
         expect(ours?.status).toBe("mismatched");
 
-        // A durable public source remains retrievable even after a mismatch.
         const artifact = await reportViaEntry(ours!, wasmHash);
         const declaredUri = staticSourceUrl(artifact.source!.source_file_name!);
         expect(sourceCodeUriUrls(ours!)).toEqual(expect.arrayContaining([declaredUri]));
@@ -160,7 +139,6 @@ caseBlock(
         expect(ours!.rebuilt_hash).toMatch(/^[0-9a-f]{64}$/);
         expect(ours!.rebuilt_hash).not.toBe(wasmHash);
 
-        // Absence here would be a retention bug, and it would also make HA3 pass for the wrong reason.
         const retained = await fetchRetainedSource(artifact, "the mismatched candidate");
         expect(retained).toBe(fixtures.contracts["F-LEG-3"].source_sha256);
       },

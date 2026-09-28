@@ -14,47 +14,24 @@ interface Dot {
 }
 
 export interface DotFieldProps {
-  /** Radius of each dot in CSS pixels (default 1.5). */
   dotRadius?: number;
-  /** Gap between dot centres, added to `dotRadius` (default 14). */
   dotSpacing?: number;
-  /** How far away the cursor still influences dots (default 500). */
   cursorRadius?: number;
-  /** How forcefully dots are pushed (default 0.1). Only used when `bulgeOnly` is false. */
   cursorForce?: number;
-  /** When true (default), dots bulge away from the cursor rather than being thrown. */
   bulgeOnly?: boolean;
-  /** Bulge push strength in pixels at the cursor centre (default 67). */
   bulgeStrength?: number;
-  /** Dot fill colour (defaults to stellar yellow). */
   dotColor?: string;
-  /** Optional CSS gradient start for the canvas fill before dots are drawn. */
   gradientFrom?: string;
-  /** Optional CSS gradient end. */
   gradientTo?: string;
-  /** Distance from the top of the container, in CSS pixels, where the field starts fading out. */
   fadeStart?: number;
-  /**
-   * Distance from the top of the container, in CSS pixels, where the field has faded to nothing (default 0 = no
-   * fade, dots fill the whole container).
-   */
   fadeEnd?: number;
-  /** When true, a small fraction of dots pulse larger each frame. */
   sparkle?: boolean;
-  /** Sine-wave amplitude in pixels. Only active when >0. */
   waveAmplitude?: number;
-  /** Additional CSS class forwarded to the container. */
   className?: string;
-  /** Inline styles forwarded to the container. */
   style?: CSSProperties;
 }
 
-// ── Presets — the two looks used in this app, defined once so call sites don't repeat values ──
-
-// The accent, `yellow.DEFAULT` in tailwind.config.js. A canvas `fillStyle` takes a colour rather than a
-// utility class, so this is the one file that cannot reference the token — it writes it once here and
-// derives the three opacities from it. (It arrived as `#fdda24`, Stellar's own yellow from the palette this
-// component was written against; over `bg-dark` the two differ by 15 in blue, which is visible.)
+// Must match `yellow.DEFAULT` in tailwind.config.js; a canvas `fillStyle` cannot reference the token.
 const DOT = "245, 211, 90";
 
 const lightDefaults: Partial<DotFieldProps> = {
@@ -75,10 +52,6 @@ const darkDefaults: Partial<DotFieldProps> = {
   bulgeStrength: 84,
 };
 
-/**
- * An interactive dot-field background rendered on a `<canvas>` — dots bulge away from the cursor, and optional
- * sparkle + wave effects add life.
- */
 const DotField = memo(
   ({
     dotRadius = 1.5,
@@ -125,7 +98,6 @@ const DotField = memo(
       fadeStart,
       fadeEnd,
     });
-    // The rAF loop reads propsRef so it always sees the latest values without being restarted.
     useEffect(() => {
       propsRef.current = {
         dotRadius,
@@ -199,13 +171,10 @@ const DotField = memo(
       function buildDots(w: number, h: number) {
         const p = propsRef.current;
         const step = p.dotRadius + p.dotSpacing;
-        // Below `fadeEnd` every dot would be erased by the fade anyway, so on a long page the grid stops there
-        // rather than costing a few tens of thousands of arcs a frame.
         const gridH = p.fadeEnd > 0 ? Math.min(h, p.fadeEnd) : h;
         const cols = Math.floor(w / step);
         const rows = Math.floor(gridH / step);
         const padX = (w % step) / 2;
-        // A fading field is anchored to the top edge; an unfaded one keeps its rows centred.
         const padY = p.fadeEnd > 0 ? 0 : (h % step) / 2;
         const dots: Dot[] = new Array(rows * cols);
         let idx = 0;
@@ -248,7 +217,6 @@ const DotField = memo(
         const t = frameCount * 0.02;
         const now = performance.now();
 
-        // Update mouse speed at ~20 Hz
         if (now - lastSpeedCalc > 20) {
           const dx = m.prevX - m.x;
           const dy = m.prevY - m.y;
@@ -267,7 +235,6 @@ const DotField = memo(
 
         ctx!.clearRect(0, 0, w, h);
 
-        // Draw gradient if specified
         const gf = p.gradientFrom;
         const gt = p.gradientTo;
         if (gf !== "transparent" || gt !== "transparent") {
@@ -284,7 +251,6 @@ const DotField = memo(
         const rad = p.dotRadius / 2;
         const isBulge = p.bulgeOnly;
 
-        // Build a single path for all dots in one fill call
         ctx!.beginPath();
 
         for (let i = 0; i < len; i++) {
@@ -345,17 +311,13 @@ const DotField = memo(
 
         ctx!.fill();
 
-        // The vertical fade is erased out of the finished field rather than baked into `fillStyle`:
-        // `destination-out` works whatever `dotColor` is, and a canvas gradient interpolating an rgba colour
-        // towards `transparent` would dull its hue on the way.
         if (p.fadeEnd > p.fadeStart) {
           const fade = ctx!.createLinearGradient(0, p.fadeStart, 0, p.fadeEnd);
           fade.addColorStop(0, "rgba(0,0,0,0)");
           fade.addColorStop(1, "rgba(0,0,0,1)");
           ctx!.globalCompositeOperation = "destination-out";
           ctx!.fillStyle = fade;
-          // Past the last stop the gradient clamps to fully opaque, so one rect erases both the ramp and
-          // everything below it.
+          // Past the last stop the gradient clamps to opaque, so one rect erases the ramp and everything below.
           ctx!.fillRect(0, p.fadeStart, w, h - p.fadeStart);
           ctx!.globalCompositeOperation = "source-over";
         }
@@ -363,14 +325,11 @@ const DotField = memo(
         rafRef.current = requestAnimationFrame(tick);
       }
 
-      // ── initialise ──
       doResize();
       window.addEventListener("resize", resize);
       window.addEventListener("mousemove", onMouseMove, { passive: true });
       rafRef.current = requestAnimationFrame(tick);
 
-      // The container grows with its content — the verify console gets taller the moment a result panel
-      // renders.
       const container = canvas.parentElement;
       const observer = container ? new ResizeObserver(resize) : null;
       if (container && observer) observer.observe(container);
@@ -389,7 +348,6 @@ const DotField = memo(
       };
     }, []);
 
-    // Rebuild the dot grid when size-affecting props change (e.g. responsive overrides).
     useEffect(() => {
       rebuildRef.current?.();
     }, [dotRadius, dotSpacing, fadeEnd]);
@@ -416,15 +374,11 @@ const DotField = memo(
 
 DotField.displayName = "DotField";
 
-// ── Preset convenience components — exported as named exports so TypeScript sees them as FC ──
-
-/** Hero / light-section preset: stellar-yellow dots on a transparent background. */
 export const DotFieldLight: FC<DotFieldProps> = (props) => (
   <DotField {...lightDefaults} {...props} />
 );
 DotFieldLight.displayName = "DotFieldLight";
 
-/** Dark-section preset: warm yellow dots on black, subtler than the light variant. */
 export const DotFieldDark: FC<DotFieldProps> = (props) => (
   <DotField {...darkDefaults} {...props} />
 );

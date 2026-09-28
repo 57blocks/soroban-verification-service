@@ -1,43 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-/**
- * A flowing fluid background: a WebGL Eulerian solve (advect → mouse force → viscosity → divergence →
- * Poisson → pressure projection) whose velocity field is read back as colour. Adapted from React Bits'
- * LiquidEther.
- *
- * The canvas carries no background of its own — it writes premultiplied colour at an alpha taken from
- * the flow speed, so a still region is fully transparent and whatever sits under the component shows
- * through. That is what lets it sit on the hero's white wash and stay a wash itself.
- *
- * Four departures from upstream, each for a reason this app cares about:
- *
- * - `backgroundColor` is not accepted. Upstream takes the prop and then hard-codes a transparent clear
- *   and a transparent `bgColor` uniform, so the only thing it could do here is mislead the next reader.
- * - The effect does not mount at all under `prefers-reduced-motion: reduce`. `index.css` gives those
- *   users the fade-up transition switched off rather than shortened, and a background that is nothing
- *   but motion gets the same answer: the hero's own static wash is the design, and this is an
- *   enhancement on top of it, not the thing that carries it.
- * - The mount effect depends on the palette's *contents* rather than the array's identity, and on
- *   `lightMode`; every other prop is applied to the running simulation in place. Upstream lists all of
- *   them, so a caller passing an inline `colors={[...]}` — or nudging `mouseForce` — tears down the
- *   renderer and its render targets and builds them again on each render. Rebuilding on a real palette
- *   change is still correct and is all this needs.
- * - Auto mode can drive several pointers (`autoPointers`) on spiralling paths (`autoCurl`). Upstream
- *   drives one in straight lines, which leaves a wide canvas with a single straight band across it.
- *
- * `lightMode` answers the same question for a light page: the palette stops are normalised to their own
- * chroma before they are drawn, so a near-white stop cannot wash out against white and the flow keeps a
- * readable hue at the low velocities that cover most of the canvas.
- *
- * One property of the simulation is worth knowing before tuning it: **speed and colour are the same
- * quantity.** The colour pass reads `length(vel)`, and the advection pass moves the pattern by `vel`, so
- * `mouseForce`, `autoIntensity` and `autoSpeed` all scale both at once. There is no prop that calms the
- * motion without also fading it, and a wash that covers the hero is by construction a wash that moves
- * quickly across it. Pick the speed first — it is the thing a visitor notices — and let the colour follow.
- */
+/** Adapted from React Bits' LiquidEther. */
 
-/** A single uniform slot. Loose on purpose: three only ever reads `value`. */
 type Uniforms = Record<string, { value: unknown }>;
 
 interface ShaderSpec {
@@ -66,8 +31,6 @@ interface SimOptions {
   BFECC: boolean;
 }
 
-/** What the prop-sync effect reaches through. Structural, because the classes that satisfy it are built
- *  inside the mount effect. */
 interface SimulationHandle {
   options: SimOptions;
   resize: () => void;
@@ -93,47 +56,32 @@ interface LiquidEtherHandle {
 }
 
 export interface LiquidEtherProps {
-  /** Hex stops, slowest flow first. Ignored unless the array's contents change. */
   colors?: string[];
-  /** Strength multiplier on pointer movement. */
   mouseForce?: number;
-  /** Radius of the force brush, in pixels at base resolution. */
   cursorSize?: number;
-  /** Simulation texture scale against canvas size. Lower is cheaper and softer. */
   resolution?: number;
-  /** Fixed simulation timestep. */
   dt?: number;
-  /** Error-compensated advection: crisper flow, slightly more work. */
   BFECC?: boolean;
   isViscous?: boolean;
   viscous?: number;
   iterationsViscous?: number;
   iterationsPoisson?: number;
-  /** Draws the velocity-clamped boundary. A debug view, off in normal use. */
   isBounce?: boolean;
   style?: React.CSSProperties;
   className?: string;
-  /** Drives the pointer itself while nobody is interacting, so an unattended hero still moves. */
   autoDemo?: boolean;
-  /** How many pointers auto mode drives at once, each stirring its own trail at its own pace. */
   autoPointers?: number;
-  /** How hard the auto pointers curl: 0 steers in plain arcs, 1 spirals into each target. */
   autoCurl?: number;
   autoSpeed?: number;
   autoIntensity?: number;
-  /** Seconds to hand control from the auto pointer to the real one, once the mouse moves. */
   takeoverDuration?: number;
-  /** Idle milliseconds before auto mode resumes. */
   autoResumeDelay?: number;
-  /** Seconds to ramp the auto pointer from standstill to full speed. */
   autoRampDuration?: number;
-  /** Normalise palette stops to their own chroma. On for light pages. */
   lightMode?: boolean;
 }
 
 const defaultColors = ["#5227FF", "#FF9FFC", "#B497CF"];
 
-/** The render targets the solver ping-pongs between, in creation order. */
 const FBO_KEYS = [
   "vel_0",
   "vel_1",
@@ -173,8 +121,7 @@ export const LiquidEther = ({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const webglRef = useRef<LiquidEtherHandle | null>(null);
 
-  // The mount effect keys off this rather than the array, so a caller may pass `colors` inline without
-  // rebuilding the renderer on every render.
+  // Keyed on the palette's contents, not the array's identity, so an inline `colors` does not rebuild.
   const paletteKey = colors.join(",");
 
   useEffect(() => {
@@ -206,8 +153,7 @@ export const LiquidEther = ({
     };
 
     const paletteTex = makePaletteTexture(palette);
-    // Cleared to nothing: the shader mixes against this, so a zero vector here is what makes a still
-    // region transparent instead of black.
+    // Zero vector: the shader mixes against it, so a still region is transparent rather than black.
     const bgVec4 = new THREE.Vector4(0, 0, 0, 0);
 
     class CommonClass {
@@ -279,8 +225,7 @@ export const LiquidEther = ({
         const defaultView = this.docTarget.defaultView;
         if (!defaultView) return;
         this.listenerTarget = defaultView;
-        // Listeners go on the window, not the canvas: the hero's CTA has to stay clickable, so the
-        // canvas is `pointer-events-none` and every hit test happens against the container's rect.
+        // On the window, not the canvas: the canvas is pointer-events-none so the hero's CTA stays clickable.
         this.listenerTarget.addEventListener("mousemove", this._onMouseMove);
         this.listenerTarget.addEventListener("touchstart", this._onTouchStart, { passive: true });
         this.listenerTarget.addEventListener("touchmove", this._onTouchMove, { passive: true });
@@ -389,18 +334,15 @@ export const LiquidEther = ({
     }
     const Mouse = new MouseClass();
 
-    /** What the auto driver reads off the manager: the clock that says when a person last touched it. */
     interface InteractionClock {
       lastUserInteraction: number;
     }
 
-    /** A force brush: where it is and how far it moved this frame, both in clip space. */
     interface Brush {
       coords: THREE.Vector2;
       diff: THREE.Vector2;
     }
 
-    /** The auto driver's pointers beyond the first, refilled each frame and read by the force pass. */
     const autoBrushes: Brush[] = [];
 
     // Targets stay inside ±TARGET_BOX in clip space; past ±SAFE a pointer turns hard back toward its target.
@@ -410,20 +352,15 @@ export const LiquidEther = ({
     const clampInside = (v: number) => Math.min(Math.max(v, -TARGET_BOX), TARGET_BOX);
     const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
-    // Path geometry is in "square" units, clip space rescaled by √aspect per axis, so a loop is round on
-    // screen rather than squashed to the canvas's shape.
+    // Path geometry is in "square" units (clip space rescaled by √aspect per axis), so a loop stays round.
     const HOP_MIN = 0.5;
     const HOP_MAX = 1.1;
     const ARRIVE = 0.15;
-    /** Heading turn per unit travelled, per radian the heading is off its target. */
     const PULL = 3;
-    /** Per-run spin. Against PULL it holds the heading 30–75° off the target, so every run spirals in. */
     const SPIN_MIN = 1.5;
     const SPIN_MAX = 4;
-    /** Curvature cap: the tightest loop has a radius of 1/7. */
     const MAX_TURN = 7;
 
-    /** One auto pointer, spiralling from one nearby target to the next. */
     class Wanderer implements Brush {
       coords = new THREE.Vector2(randomInside(), randomInside());
       diff = new THREE.Vector2();
@@ -436,7 +373,6 @@ export const LiquidEther = ({
       constructor(pace: number) {
         this.pace = pace;
       }
-      /** The offset to the target in square units, written into `diff` as scratch. */
       private toTarget(s: number) {
         return this.diff.set((this.target.x - this.coords.x) * s, (this.target.y - this.coords.y) / s);
       }
@@ -450,7 +386,6 @@ export const LiquidEther = ({
         this.spin = (Math.random() < 0.5 ? -1 : 1) * (SPIN_MIN + Math.random() * (SPIN_MAX - SPIN_MIN));
         this.budget = hop * 4;
       }
-      /** Travels `distance * pace` along the path and leaves the move, scaled by `intensity`, in `diff`. */
       step(distance: number, intensity: number, curl: number, aspect: number) {
         const s = Math.sqrt(aspect);
         let to = this.toTarget(s);
@@ -479,7 +414,6 @@ export const LiquidEther = ({
       rampDurationMs: number;
       curl: number;
       active = false;
-      /** The first one steers `Mouse`, so a takeover glides from where it is; the rest are `autoBrushes`. */
       wanderers: Wanderer[] = [];
       lastTime = performance.now();
       activationTime = 0;
@@ -507,7 +441,6 @@ export const LiquidEther = ({
       }
       setPointers(count: number) {
         const n = Math.max(1, Math.round(count));
-        // Paces differ so the trails drift apart instead of moving as one formation.
         while (this.wanderers.length < n) {
           this.wanderers.push(new Wanderer(this.wanderers.length === 0 ? 1 : 0.7 + Math.random() * 0.6));
         }
@@ -551,7 +484,6 @@ export const LiquidEther = ({
         }
         const step = this.speed * dtSec * ramp;
         const aspect = Common.width / Common.height;
-        // `Mouse.update` applies `autoIntensity` to the lead, so only the rest take it here.
         lead.step(step, 1, this.curl, aspect);
         this.mouse.setNormalized(lead.coords.x, lead.coords.y);
         autoBrushes.length = 0;
@@ -855,7 +787,6 @@ export const LiquidEther = ({
         const cursorSizeY = cursor * cell.y;
         const uniforms = (this.mouse.material as THREE.RawShaderMaterial).uniforms;
         uniforms.scale.value.set(cursor, cursor);
-        // One draw per brush; the additive blend sums them into the velocity field.
         for (const brush of [Mouse, ...autoBrushes]) {
           const forceX = (brush.diff.x / 2) * (mouse_force || 0);
           const forceY = (brush.diff.y / 2) * (mouse_force || 0);
@@ -1169,12 +1100,7 @@ export const LiquidEther = ({
           fragmentShader: color_frag,
           transparent: true,
           depthWrite: false,
-          // `color_frag` writes `mix(bgColor, ink, lenv)` against a zero `bgColor`, which is premultiplied
-          // for the RGB and `lenv` for the alpha. three's default for a transparent material is
-          // straight-alpha blending (`SrcAlpha, OneMinusSrcAlpha`), which would multiply the colour by
-          // alpha a second time: the layer then darkens its backdrop almost without tinting it, reading as
-          // grey smoke on a white page instead of ink. This pairs the blend equation with what the shader
-          // actually wrote.
+          // color_frag writes premultiplied colour; three's default straight-alpha blend would apply alpha twice.
           premultipliedAlpha: true,
           uniforms: {
             velocity: { value: this.simulation.fbos.vel_0.texture },
@@ -1201,9 +1127,7 @@ export const LiquidEther = ({
     }
 
     class WebGLManager implements LiquidEtherHandle, InteractionClock {
-      // Both are built in the constructor rather than as field initializers: a field initializer runs
-      // before the constructor body, so `new Output()` there would size the whole solver to a 0x0
-      // container and never be told otherwise.
+      // Assigned in the constructor: as field initializers they would run first and size the solver to 0x0.
       output: Output;
       autoDriver: AutoDriver;
       lastUserInteraction = performance.now();
@@ -1311,8 +1235,6 @@ export const LiquidEther = ({
     webglRef.current = webgl;
     webgl.start();
 
-    // Solving the fluid is wasted work while the hero is scrolled past or the tab is hidden, and a
-    // background that only moves when it can be seen is also the cheaper one.
     const io = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
@@ -1341,14 +1263,10 @@ export const LiquidEther = ({
       webglRef.current?.dispose();
       webglRef.current = null;
     };
-    // The auto-driver props are read once here, to seed the driver, and the effect below owns keeping
-    // them current. Listing them would mean a nudge to any of them tears down the renderer and its
-    // render targets — which is the one thing this dependency array exists to prevent.
+    // Other props are applied in place by the effect below; listing them here would rebuild the renderer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paletteKey, lightMode]);
 
-  // Props other than the palette and `lightMode` reach the simulation in place: the render targets and
-  // the renderer survive a tuning change, which is the whole reason this is a second effect.
   useEffect(() => {
     const sim = webglRef.current?.simulation;
     if (!sim) return;

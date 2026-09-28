@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-// Before any module whose decorators run at class-definition time — `batch-test.ts`'s precedent.
+// Must load before any decorated class is evaluated.
 import "reflect-metadata";
 import { computeIdempotencyKey } from "./rebuild-key.js";
 import { RegistryStatusObject, SEP58_HEX_SHA256 } from "./registry.js";
@@ -12,7 +12,6 @@ const MIXED = `${UPPERCASE.slice(0, 32)}${LOWERCASE.slice(32)}`;
 
 const IMAGE_DIGEST = "docker.io/stellar/stellar-cli@sha256:" + "b".repeat(64);
 
-/** `parseSourceReference` returns the union; the variant-specific digests need it narrowed. */
 function parseRef<T extends SourceReference["type"]>(
   type: T,
   fields: Record<string, unknown>,
@@ -42,9 +41,6 @@ function statusObject(sourceSha256: string): unknown {
 }
 
 function main(): void {
-  // ---- the row-read path, per variant -------------------------------------------------------
-  // `jobs.repo.ts` and `rebuilds.repo.ts` parse every stored `sourceRef` column through `parseSourceReference`,
-  // so this is what makes a row written before the submit gate closed publishable with no migration.
   const uri = parseSourceReference({
     type: "source_uri",
     visibility: "private",
@@ -79,7 +75,6 @@ function main(): void {
   });
   assert.equal(git.source_sha256, LOWERCASE);
 
-  // Already-lowercase input is untouched, and a genuine stored row (JSON, not a literal) round-trips.
   assert.equal(
     parseSourceReference({ type: "source_uri", visibility: "public", source_sha256: LOWERCASE }).source_sha256,
     LOWERCASE,
@@ -89,8 +84,6 @@ function main(): void {
   );
   assert.equal(fromStoredRow.source_sha256, LOWERCASE);
 
-  // The stored `manifest` column is read back through this class (`jobs.repo.ts`), so it needs the same
-  // treatment — the submitted manifest is published evidence of what was asked for.
   const manifest = parseDto(SubmittedSourceManifest, {
     schema: "stellar-submitted-source-verification-manifest-v1",
     target: { network: "testnet", wasm_hash: "a".repeat(64) },
@@ -99,8 +92,6 @@ function main(): void {
   });
   assert.equal(manifest.source_sha256, LOWERCASE);
 
-  // ---- K1: one set of bytes, one rebuild key ------------------------------------------------
-  // The only behaviour change this ruling introduces, and the reason it was the owner's to make.
   const keyFromUppercase = computeIdempotencyKey(uri, IMAGE_DIGEST, { bldarg: [], bldopt: [] });
   const keyFromLowercase = computeIdempotencyKey(
     parseSourceReference({
@@ -128,9 +119,6 @@ function main(): void {
     "the key is a hash of the string it is handed — which is why the normalisation has to happen before it",
   );
 
-  // ---- the two boundaries agree on ONE rule --------------------------------------------------
-  // The assertion whose absence is what makes this defect class recur: anything the input boundary accepts must
-  // be publishable, and the constant is shared rather than copied.
   assert.equal(SEP58_HEX_SHA256.test(uri.source_sha256 as string), true);
   parseDto(RegistryStatusObject, statusObject(uri.source_sha256 as string));
   assert.throws(

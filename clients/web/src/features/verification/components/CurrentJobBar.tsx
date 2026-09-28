@@ -8,7 +8,6 @@ type CurrentJobBarProps = {
   onCopyLink: () => void;
 };
 
-/** Header of a job page: which job this is, plus the two ways to leave or share it. */
 export const CurrentJobBar = ({ jobId, onCopyLink }: CurrentJobBarProps) => (
   <section className="mb-5 rounded-xl border border-line bg-surface p-4 shadow-panel">
     <div className="flex flex-wrap items-center justify-between gap-4">

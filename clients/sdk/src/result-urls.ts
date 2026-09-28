@@ -6,9 +6,7 @@ import {
   type FetchPolicyInput,
 } from "./fetch-policy.js";
 
-// Fetches an artifact a status object points at and checks it against the declared sha256.
-
-/** A `results_urls` entry in its structured form. Peer-supplied: every field is untrusted. */
+/** A `results_urls` entry in structured form; every field is peer-supplied and untrusted. */
 export type ResultUrlEntry = {
   type: string;
   url: string;
@@ -18,11 +16,10 @@ export type ResultUrlEntry = {
 export type VerifiedResultUrl = {
   type: string;
   url: string;
-  /** The origin the bytes actually came from — what an interstitial shows before opening them. */
+  /** The origin the bytes actually came from. */
   origin: string;
   /** `true` only when a declared `sha256` matched the bytes. `false` only under `allowUnverified`. */
   verified: boolean;
-  /** The hash the bytes were checked against, when the entry declared one. */
   sha256?: string;
   bytes: Uint8Array;
 };
@@ -36,7 +33,6 @@ export type VerifyResultUrlOptions = {
   allowUnverified?: boolean;
 };
 
-/** An entry with no `sha256`: nothing to check the bytes against. */
 export class UnverifiableEntryError extends Error {
   constructor(url: string) {
     super(
@@ -47,7 +43,7 @@ export class UnverifiableEntryError extends Error {
   }
 }
 
-/** The bytes did not hash to the declared value. They are discarded, not returned. */
+/** The bytes did not hash to the declared value; they are discarded, not returned. */
 export class HashMismatchError extends Error {
   constructor(url: string, expected: string, actual: string) {
     super(`results_urls entry ${url} hashed to ${actual}, expected ${expected}`);
@@ -59,8 +55,7 @@ export async function fetchAndVerifyResultUrl(
   entry: ResultUrlEntry,
   options: VerifyResultUrlOptions = {},
 ): Promise<VerifiedResultUrl> {
-  // Read once and type-checked: the entry comes from a peer, so `null` and a number reach here as readily as a
-  // string, and `=== undefined` would let both past the guard.
+  // Type-checked, not `=== undefined`: a peer may send `null` or a number.
   const declared = typeof entry.sha256 === "string" ? entry.sha256.toLowerCase() : undefined;
   if (declared === undefined && options.allowUnverified !== true) {
     throw new UnverifiableEntryError(entry.url);
@@ -81,7 +76,6 @@ export async function fetchAndVerifyResultUrl(
     const hasher = options.hasher ?? webCryptoSha256;
     const actual = (await hasher(bytes)).toLowerCase();
     if (actual !== declared) {
-      // No bytes escape on a mismatch.
       throw new HashMismatchError(entry.url, declared, actual);
     }
   }
@@ -89,7 +83,6 @@ export async function fetchAndVerifyResultUrl(
   return {
     type: entry.type,
     url: entry.url,
-    // Both URLs are already through `checkUrl`, so neither can fail to parse here.
     origin: new URL(response.url || entry.url).origin,
     verified: declared !== undefined,
     ...(declared !== undefined ? { sha256: declared } : {}),

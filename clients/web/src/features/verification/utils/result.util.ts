@@ -10,11 +10,9 @@ import type {
   VerificationTarget,
 } from "../types";
 
-/** The sentence to show for a submission the verifier refused. */
 export const submitErrorText = (body: ApiErrorResponse) =>
   body.message || body.detail || body.error || "";
 
-/** A response that arrived is an answer; only a request that never got one is a network failure. */
 export const submitRejection = (error: unknown): ConsoleFailure => {
   const body = isHttpError(error) ? (error.response?.data as ApiErrorResponse | undefined) : undefined;
   const detail = body ? submitErrorText(body) : "";
@@ -25,10 +23,6 @@ export const submitRejection = (error: unknown): ConsoleFailure => {
   };
 };
 
-/**
- * The display status for the current `ConsoleState`. Exhaustive by construction: adding a phase without a
- * mapping is a compile error rather than a state that renders as nothing.
- */
 export const consoleStateToSubmissionState = (state: ConsoleState): SubmissionState => {
   switch (state.phase) {
     case "idle":
@@ -44,7 +38,6 @@ export const consoleStateToSubmissionState = (state: ConsoleState): SubmissionSt
   }
 };
 
-/** What the banner shows, resolved here so no component has to know which producer wrote the state. */
 export const bannerView = (state: ConsoleState): BannerView => {
   switch (state.phase) {
     case "idle":
@@ -111,18 +104,12 @@ export const getRecentJobTone = (status: RecentJob["status"]): ResultTone => {
   return "warning";
 };
 
-/**
- * The headline fields of a published result, and deliberately almost nothing: `StatusBanner` carries the
- * target, `JobTimingCard` the finish instant, `RebuildCard` the build inputs, and `ResultPanel` renders the two
- * published documents itself.
- */
 export const resultSummaryEntries = (result?: Record<string, unknown>) => {
   if (!result) return [];
   const keys = ["rebuilt_wasm_hash", "matched", "arweave_tx_id"];
   return keys
     .filter((key) => {
       const value = result[key];
-      // Only a mismatch shows the rebuilt hash: there it is the one value the verdict cannot state.
       if (key === "rebuilt_wasm_hash" && result.matched !== false) return false;
       if (
         key === "matched" &&
@@ -162,27 +149,20 @@ export const resultLabel = (key: string) => {
   return labels[key] || key;
 };
 
-/** Composition failures that reach the submitter as `build_failed`. */
 const COMPOSITION_FAILURE_REASONS = new Set([
-  // The composed image was built but its own binaries could not be executed in it.
   "smoke_test_failed",
-  // The image did not build, or the verified CLI archive could not be unpacked into it.
   "image_build_failed",
   "cli_archive_extract_failed",
-  // An official component could not be fetched — upstream or our network, never the submission.
   "component_unreachable",
   "component_too_large",
-  // The image was built and verified but could not be stored where rebuilds pull it from.
   "ecr_push_failed",
   "ecr_auth_failed",
-  // The verifier's own template or worker was misconfigured.
   "composition_template_invalid",
   "composer_params_invalid",
   "composer_internal_error",
   "receipt_upload_failed",
 ]);
 
-/** Operator-facing next step for a failure the verifier reported without `likely_causes`. */
 export const troubleshootingMessage = (
   state: SubmissionState,
   result?: Record<string, unknown>,
@@ -191,8 +171,7 @@ export const troubleshootingMessage = (
   if (reason === "sandbox_unavailable") {
     return "Docker is not available. Start Docker Desktop or Docker Engine, then retry verification.";
   }
-  // Before the state checks, because the state is `build_failed` and the state's own advice is wrong here:
-  // nothing about the submission is implicated, and no change to it would help.
+  // Before the state checks: these report `build_failed`, whose own advice is wrong here.
   if (COMPOSITION_FAILURE_REASONS.has(reason)) {
     return "The verifier could not build the environment this contract's on-chain metadata records, so your source was never rebuilt. Nothing in your submission needs changing — this is a problem on the verifier's side. Resubmit once the verifier reports it fixed.";
   }

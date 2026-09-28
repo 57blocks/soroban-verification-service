@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { legalBundleFixture } from "./legal-bundle.fixture";
 
-/** `useBuildLog` calls the route through the shared axios instance — see the hook for why. */
 const buildLogGet = vi.fn();
 
 vi.mock("@scvs/verify-api-client", async () => ({
@@ -12,16 +11,12 @@ vi.mock("@scvs/verify-api-client", async () => ({
   usePreflightVerification: () => ({ mutateAsync: vi.fn() }),
   useSubmitVerification: () => ({ mutateAsync: vi.fn() }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  // The route and its header are the generated client's, proved by `clients/api-client/src/client-test.ts`. What
-  // this spec owns is *when* the console asks, and with which job and which token.
   getBuildLog: (...args: unknown[]) => buildLogGet(...args),
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
   AXIOS_INSTANCE: { defaults: {} },
 }));
 
-/** The hook asks for nothing without a token, so the fixture browser holds one. */
 const TOKEN = "t".repeat(43);
 vi.mock("@/features/verification/utils/build-log-tokens.store", () => ({
   rememberBuildLogToken: vi.fn(),
@@ -46,7 +41,6 @@ const { useVerificationConsole } = await import(
 
 const JOB_ID = "fc589d78-ca50-4bcc-afe1-3a4c9d49240b";
 
-/** A stream the test drives, replacing `setup.ts`'s inert stand-in. */
 class DrivableEventSource {
   static readonly CLOSED = 2;
   static last: DrivableEventSource | null = null;
@@ -107,10 +101,6 @@ beforeEach(() => {
   globalThis.EventSource = DrivableEventSource as unknown as typeof EventSource;
 });
 
-/**
- * `GET /api/verification/v1/verifications/:id/log` answering 404 for a job that has not built is *correct* — the body carries
- * `job_status` and the reason.
- */
 describe("the build log is not requested before the job has an outcome", () => {
   test("a queued job makes no request at all", async () => {
     const { result, stream } = openJob();
@@ -142,12 +132,9 @@ describe("the build log is not requested before the job has an outcome", () => {
         text: "cargo build --release\nFinished",
       }),
     );
-    // Exactly one: a second request would mean the queued state had also fired one.
     expect(buildLogGet).toHaveBeenCalledTimes(1);
   });
 
-  // `not_attempted` and `policy_rejected` are reached before any build, so their 404 is the honest answer and
-  // the pane renders the reason.
   test("an outcome that never built still asks, so the pane can show why", async () => {
     const { stream } = openJob();
     await emit(stream, queuedEvent);

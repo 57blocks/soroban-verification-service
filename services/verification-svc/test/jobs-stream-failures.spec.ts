@@ -33,7 +33,6 @@ function queuedJob(jobId: string): JobRecord {
   } as unknown as JobRecord;
 }
 
-/** The first read succeeds and every later one rejects, as a transient database error would. */
 function failingAfterFirstRead(jobId: string) {
   let reads = 0;
   return {
@@ -45,7 +44,6 @@ function failingAfterFirstRead(jobId: string) {
   } as never;
 }
 
-/** Keeps the NOTIFY listener the stream registers, so a test can fire it. */
 function capturingJobEvents() {
   let listener: ((jobId: string) => void) | undefined;
   const jobEvents = {
@@ -74,18 +72,15 @@ function openStream(service: JobsService, jobId: string) {
   return { events, ended, isCompleted: () => completed, close: () => subscription.unsubscribe() };
 }
 
-/** Runs every queued microtask before the test goes on. */
 function nextMacrotask(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-/** Bounded, so a stream that never ends fails an assertion instead of timing the test out. */
 async function waitForEnd(stream: ReturnType<typeof openStream>): Promise<void> {
   await Promise.race([stream.ended, new Promise((resolve) => setTimeout(resolve, 1_000))]);
   await nextMacrotask();
 }
 
-/** Records every interval and timeout set while installed; `stop()` clears any left and returns their count. */
 function trackTimers() {
   const real = { setInterval, clearInterval, setTimeout, clearTimeout };
   const live = new Set<unknown>();

@@ -10,17 +10,12 @@ import {
 import { rebuiltWasmKey } from "../../common/staging-keys.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** Explains a mismatch, for the submitter who now has to find which of a dozen build inputs differed. */
 @Injectable()
 export class MismatchDiagnosticsService {
   private readonly logger = new ScvsLogger("mismatch-diagnostics");
 
   constructor(@Inject(ConfigService) private readonly configService: AppConfigService) {}
 
-  /**
-   * Returns the job's `sandbox_diagnostics` with `wasm_compare`/`likely_causes` filled in, or `undefined` when
-   * no explanation could be assembled — in which case the caller publishes what it had.
-   */
   async describe(input: {
     rebuildId: string;
     buildMode: BuildMode;
@@ -49,10 +44,6 @@ export class MismatchDiagnosticsService {
     };
   }
 
-  /**
-   * `runner` is the one required field, and `rebuild.runner` is a plain `string` in the database while the DTO
-   * constrains it to two values.
-   */
   private baselineDiagnostics(
     existing: SandboxDiagnostics | undefined,
     runner: string | undefined,
@@ -64,10 +55,6 @@ export class MismatchDiagnosticsService {
     return undefined;
   }
 
-  /**
-   * The same object, key and ceiling the verdict's own hash came from — deliberately re-fetched rather than
-   * threaded through from `RebuildOutcomeService`.
-   */
   private async fetchRebuiltBytes(
     rebuildId: string,
     buildMode: BuildMode,
@@ -84,8 +71,6 @@ export class MismatchDiagnosticsService {
         maxBytes,
       );
       if (!object || "tooLarge" in object) {
-        // Both are unreachable in practice: a verdict only exists because these bytes were fetched and hashed
-        // already.
         this.logger.warn("no rebuilt Wasm to explain the mismatch with", {
           rebuild_id: rebuildId,
           artifact_key: key,
@@ -109,7 +94,6 @@ export class MismatchDiagnosticsService {
     try {
       return await readFile(path);
     } catch (error) {
-      // The CLI's workdir is a temp directory; losing it costs the deployed half of the diff and nothing else.
       this.logger.warn("could not read the deployed Wasm for mismatch diagnostics", {
         deployed_wasm_path: path,
         error: error instanceof Error ? error : String(error),

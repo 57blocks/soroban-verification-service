@@ -29,7 +29,6 @@ test("O4: a gauge is one record carrying metric, value and unit", () => {
   const { records, metrics } = capture();
   metrics.gauge("queue_depth", 7);
 
-  // This exact shape is what an O5 metric filter selects and extracts.
   assert.deepEqual(records[0], {
     ts: "2026-08-05T00:00:00.000Z",
     level: "info",
@@ -70,8 +69,6 @@ test("O4: job duration carries BOTH path and outcome, which is what makes it ans
 test("a metric record inherits the ambient job_id, with no call site passing one", () => {
   const { records, metrics } = capture("verification-pipeline");
 
-  // The property the CloudWatch SDK path would not have given us for free: the worker's poll loop entered this
-  // scope, and a metric emitted anywhere beneath it is attributable to the job.
   runWithLogContext({ job_id: "job-1" }, () => {
     metrics.counter("failure_reason_total", 1, { reason: "build_timeout" });
   });
@@ -99,7 +96,6 @@ test("a dimension cannot shadow `value` and silently redirect the filter", () =>
 
 test("a non-finite value is dropped with a warning, never emitted", () => {
   const { records, metrics } = capture();
-  // How this happens for real: a duration computed from a timestamp that failed to parse.
   metrics.histogram("job_duration_seconds", Number.NaN, { path: "cli", outcome: "verified" });
   metrics.gauge("queue_depth", Number.POSITIVE_INFINITY);
 
@@ -108,7 +104,7 @@ test("a non-finite value is dropped with a warning, never emitted", () => {
     assert.equal(record.level, "warn");
     assert.equal(record.msg, "metric dropped: value is not finite");
     assert.equal(record.value, undefined);
-    assert.equal(record.metric, undefined); // must not look like a metric record to a filter
+    assert.equal(record.metric, undefined);
   }
 });
 
@@ -119,8 +115,6 @@ test("counter defaults to 1", () => {
 });
 
 test("archive_backlog is a real gauge, sourced from a durable count — not announced as unavailable", () => {
-  // `archive_backlog` is now just another gauge; `ArchiveRecoveryScheduler` is what sources its value, from
-  // `JobsRepository.listJobsPendingArchive`.
   const { records, metrics } = capture("archive-recovery");
   metrics.gauge("archive_backlog", 3);
 

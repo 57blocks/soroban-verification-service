@@ -9,7 +9,6 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 
-/** Renders `ui` under a throwaway memory router with one index route. */
 export const renderInRouter = async (ui: ReactNode) => {
   const root = createRootRoute({ component: Outlet });
   const index = createRoute({

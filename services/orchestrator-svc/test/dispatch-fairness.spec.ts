@@ -17,10 +17,6 @@ import { WorkerTickState } from "../src/common/worker-tick.module.js";
 import { StartupRecoveryService } from "../src/modules/scheduler/startup-recovery.service.js";
 import { VerificationPipelineService } from "../src/modules/verification-pipeline/verification-pipeline.service.js";
 
-/**
- * At the default `SCVS_WORKER_CONCURRENCY=1` the oldest non-terminal job took the only slot *every* tick and no
- * newer job advanced a single step until it terminated.
- */
 class RecordingPipeline {
   readonly handled: string[] = [];
   async run(job: JobRecord): Promise<void> {
@@ -28,10 +24,6 @@ class RecordingPipeline {
   }
 }
 
-/**
- * Holds a slot until deliberately released, unlike `RecordingPipeline` (which resolves immediately, freeing its
- * slot before the next tick).
- */
 class HoldingPipeline {
   readonly handled: string[] = [];
   private readonly pending = new Map<string, () => void>();
@@ -48,25 +40,17 @@ class HoldingPipeline {
   }
 }
 
-/** `StartupRecoveryService`'s real onModuleInit would reach for AWS Batch; it is not under test. */
 class NoopStartupRecovery {
   async onModuleInit(): Promise<void> {}
 }
 
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
 
-/**
- * Lets the fire-and-forget dispatch in `pollOnce` settle. The loop starts a job without awaiting it and frees
- * its concurrency slot in a `.finally`, so the slot is only observably free one macrotask later.
- */
+/** The loop frees a slot in a `.finally` after an unawaited dispatch, so it is free only one macrotask later. */
 function flushDispatch(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-/**
- * One `BuildDispatchScheduler` wired to a real `JobsRepository`/Postgres, a substituted pipeline, and a
- * `listJobsByStatus` narrowed to rows this harness's own `createJob` calls created.
- */
 async function buildSchedulerHarness(pipeline: {
   run: VerificationPipelineService["run"];
   releaseAll?: () => void;
@@ -81,8 +65,6 @@ async function buildSchedulerHarness(pipeline: {
 }> {
   const moduleRef = await Test.createTestingModule({
     imports: [
-      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness needs
-      // the module that provides it.
       ScheduleModule.forRoot(),
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
       DbModule.forRootAsync({
@@ -93,8 +75,6 @@ async function buildSchedulerHarness(pipeline: {
     ],
     providers: [
       BuildDispatchScheduler,
-      // The scheduler now honours the drain (it stops claiming while draining) and records what it last saw for
-      // `/health/ready`.
       DrainState,
       WorkerTickState,
       { provide: VerificationPipelineService, useValue: pipeline },
@@ -107,12 +87,8 @@ async function buildSchedulerHarness(pipeline: {
   const prisma = moduleRef.get(PRISMA_CLIENT);
   const createdRows = new CreatedRows();
 
-  /** The rows the dispatch loop is allowed to see, which bounds a full rotation at the jobs a case creates. */
   const visible = new Set<string>();
 
-  // Hide rows this suite does not own from the dispatch loop, without hiding them from Postgres: the real query
-  // still runs, against the real shared table, and the rotation still receives a `JobRecord[]` in oldest-first
-  // creation order.
   const listJobsByStatus = jobs.listJobsByStatus.bind(jobs);
   jobs.listJobsByStatus = async (statuses) =>
     (await listJobsByStatus(statuses)).filter((job) => visible.has(job.jobId));
@@ -143,12 +119,11 @@ async function buildSchedulerHarness(pipeline: {
     return jobId;
   }
 
-  // Only rows this suite created.
   async function cleanup(): Promise<void> {
     try {
       await createdRows.cleanup(prisma);
     } finally {
-      // Closing waits for every dispatched step, so a case that failed before releasing its jobs must not hang it.
+      // `close()` waits for every dispatched step, so release held jobs first or it hangs.
       pipeline.releaseAll?.();
       await moduleRef.close();
     }
@@ -167,19 +142,14 @@ describe("BuildDispatchScheduler fairness", () => {
   });
 
   afterAll(async () => {
-    // `harness` is unset when `beforeAll` threw; cleaning up then would bury the real error under a TypeError.
     if (harness) await harness.cleanup();
   });
 
   it("gives every active job a turn instead of replaying the oldest one every tick", async () => {
-    // Three jobs, created oldest-first — the shape that starved. `SCVS_WORKER_CONCURRENCY` is unset in the test
-    // environment, so `clampConcurrency` yields 1: exactly the production default.
     const first = await harness.createJob("testnet");
     const second = await harness.createJob("testnet");
     const third = await harness.createJob("testnet");
 
-    // One full rotation — the cursor advances one job per tick, so three ticks is exactly enough for all three
-    // to be served once, and no more than enough.
     for (let i = 0; i < 3; i++) {
       await harness.scheduler.pollOnce();
       await flushDispatch();
@@ -199,16 +169,11 @@ describe("BuildDispatchScheduler fairness", () => {
 
     await harness.scheduler.pollOnce();
 
-    // Concurrency is 1, so one tick may only start one job — fairness rotates *across* ticks, it does not widen
-    // the cap.
     expect(pipeline.handled).toHaveLength(1);
   });
 });
 
-/**
- * `configuration()` reads `SCVS_WORKER_CONCURRENCY`/`SCVS_WORKER_CONCURRENCY_TESTNET` from `process.env` once,
- * at `ConfigModule.forRoot`'s compile time.
- */
+/** `configuration()` reads these variables once, when each harness module compiles. */
 describe("BuildDispatchScheduler per-network admission ceiling", () => {
   const originalConcurrency = process.env.SCVS_WORKER_CONCURRENCY;
   const originalTestnetConcurrency = process.env.SCVS_WORKER_CONCURRENCY_TESTNET;
@@ -227,12 +192,10 @@ describe("BuildDispatchScheduler per-network admission ceiling", () => {
     const harness = await buildSchedulerHarness(pipeline);
 
     try {
-      // Global concurrency is 2, testnet's ceiling is 1.
       const testnetFirst = await harness.createJob("testnet");
       const testnetSecond = await harness.createJob("testnet");
       const mainnetJob = await harness.createJob("mainnet");
 
-      // Tick 1: rotation starts at index 0 (testnetFirst).
       await harness.scheduler.pollOnce();
       await flushDispatch();
 
@@ -241,15 +204,10 @@ describe("BuildDispatchScheduler per-network admission ceiling", () => {
       expect(handledAfterTick1.has(mainnetJob)).toBe(true);
       expect(handledAfterTick1.has(testnetSecond)).toBe(false);
 
-      // Tick 2: both global slots are still held (neither job has been released), so the whole tick
-      // short-circuits on the global cap before the per-network check is ever reached. testnetSecond still
-      // cannot get in.
       await harness.scheduler.pollOnce();
       await flushDispatch();
       expect(new Set(pipeline.handled).has(testnetSecond)).toBe(false);
 
-      // Release the mainnet job's slot and let a further tick run: the freed slot is global, not
-      // network-scoped, so testnetSecond is now free to take it.
       pipeline.release(mainnetJob);
       await harness.scheduler.pollOnce();
       await flushDispatch();
@@ -267,7 +225,6 @@ describe("BuildDispatchScheduler per-network admission ceiling", () => {
   });
 
   it("unset SCVS_WORKER_CONCURRENCY_TESTNET admits testnet up to the global cap, unchanged", async () => {
-    // Two testnet jobs against a global cap of 2 is the part that actually exercises "unchanged".
     process.env.SCVS_WORKER_CONCURRENCY = "2";
     delete process.env.SCVS_WORKER_CONCURRENCY_TESTNET;
     const pipeline = new HoldingPipeline();
@@ -291,8 +248,6 @@ describe("BuildDispatchScheduler per-network admission ceiling", () => {
   });
 
   it("does not apply the testnet ceiling to mainnet jobs", async () => {
-    // The per-network check in build-dispatch.scheduler.ts guards on `job.target.network === "testnet"` — this
-    // case fails if that guard is ever widened to cover every network.
     process.env.SCVS_WORKER_CONCURRENCY = "2";
     process.env.SCVS_WORKER_CONCURRENCY_TESTNET = "0";
     const pipeline = new HoldingPipeline();
@@ -316,8 +271,6 @@ describe("BuildDispatchScheduler per-network admission ceiling", () => {
   });
 
   it("SCVS_WORKER_CONCURRENCY_TESTNET=0 admits no testnet jobs and does not error", async () => {
-    // The global cap is never the binding constraint here — the per-network check must reject both jobs before
-    // it.
     process.env.SCVS_WORKER_CONCURRENCY = "2";
     process.env.SCVS_WORKER_CONCURRENCY_TESTNET = "0";
     const pipeline = new HoldingPipeline();

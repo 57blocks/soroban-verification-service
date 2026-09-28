@@ -5,7 +5,6 @@ type RejectedOptionsProps = {
   rejected: RejectedBuildOption[];
 };
 
-/** Build options this verifier will not replay. */
 export const RejectedOptions = ({ rejected }: RejectedOptionsProps) => {
   if (rejected.length === 0) return null;
 

@@ -5,12 +5,8 @@ type JobModule = typeof import("../../support/job.js");
 
 const RETRY_INTERVAL_MS = 600;
 
-/**
- * Each job's published statuses, in order, with how many reads each answers; the last answers every read after.
- * Counting reads rather than time keeps the sequence independent of how fast the poll loop is scheduled.
- */
+/** Each status answers `reads` polls; the last answers every later poll. */
 const TIMELINES: Record<string, readonly (readonly [status: string, reads: number])[]> = {
-  // A retryable failure the scan re-queues inside one settle window, then the verdict.
   retried: [["queued", 1], ["build_failed", 2], ["queued", 1], ["verified", 0]],
   permanent: [["queued", 1], ["build_failed", 0]],
 };
@@ -53,7 +49,7 @@ describe("E2E harness waiting for a terminal state", () => {
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 
-    // `env.ts` reads these once, at import, so they are set before the first import below.
+    // env.ts reads these once at import, so set them before the first import below.
     delete process.env.SCVS_E2E_ENV;
     process.env.SCVS_E2E_VERIFY_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     process.env.SCVS_E2E_POLL_INTERVAL_MS = "20";
@@ -91,7 +87,6 @@ describe("E2E harness waiting for a terminal state", () => {
 
     expect(run.body.status).toBe("build_failed");
     expect(Date.now() - started).toBeGreaterThanOrEqual(job.RETRYABLE_SETTLE_MS);
-    // Measured to the first sighting, so the settle window never reads as build time.
     expect(run.wallClockMs).toBeLessThan(job.RETRYABLE_SETTLE_MS);
   });
 });

@@ -1,4 +1,3 @@
-/** E2E-ARC-03 -- an archived report is byte-for-byte the published report. */
 import { linkUrls, type RegistryResultUrl } from "../../support/types.js";
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
@@ -9,7 +8,6 @@ import { ownEntryOf, ownVerifierIdentity, readReportByUrl, requireStatusObject }
 
 const CASE_ID = "E2E-ARC-03";
 
-/** The archive entry beside `reportUrl`, or undefined while the entry does not carry it yet. */
 function archiveUrlFrom(entry: { results_urls?: RegistryResultUrl[] }, reportUrl: string): string | undefined {
   const urls = linkUrls(entry);
   if (!urls.includes(reportUrl)) return undefined;
@@ -38,7 +36,6 @@ function transactionIdFrom(archiveUrl: string): string {
   return transactionId;
 }
 
-// How long the entry may go without naming this job's report before that is a verdict rather than a wait.
 const OWNERSHIP_GRACE_MS = 90_000;
 
 async function waitForArchive(wasmHash: string, reportUrl: string): Promise<string> {

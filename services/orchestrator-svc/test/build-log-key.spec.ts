@@ -9,11 +9,6 @@ import {
 import { CreatedRows } from "@scvs/db/testing";
 import { buildLogKey } from "../src/common/staging-keys.util.js";
 
-/**
- * **The key must satisfy `build-logs/`.** `verification-svc`'s log route refuses to read any key outside that
- * prefix (`jobs.service.ts`'s `isBuildLogKey`), because the staging bucket also holds submitters' private
- * source tarballs.
- */
 let client: PrismaClient;
 let jobs: JobsRepository;
 let rebuilds: RebuildsRepository;
@@ -37,14 +32,10 @@ describe("buildLogKey", () => {
   });
 
   it("separates a rebuild's two attempts, so a retry cannot overwrite the first", () => {
-    // A rebuild may submit two Batch jobs — `verify`, then `build` on the one permitted retry — and the log of
-    // the attempt that failed is the one a submitter came for.
     expect(buildLogKey("r", "verify")).not.toBe(buildLogKey("r", "build"));
   });
 
   it("is rebuild-scoped, never job-scoped", () => {
-    // A job-scoped key would leave every deduped job's log route answering 404 forever while the object sat
-    // there.
     expect(buildLogKey("rebuild-a", "build")).toBe(buildLogKey("rebuild-a", "build"));
     expect(buildLogKey("rebuild-a", "build")).not.toBe(buildLogKey("rebuild-b", "build"));
   });
@@ -96,7 +87,6 @@ describe("recordBuildLogKeyForRebuild", () => {
     return { rebuildId, ids };
   }
 
-  /** Terminal, so nothing that scans by status can pick these fixtures up as work. */
   async function park(ids: string[]) {
     for (const jobId of ids) {
       await jobs.advanceJob(jobId, "preparing", "failed", {
@@ -120,8 +110,6 @@ describe("recordBuildLogKeyForRebuild", () => {
   });
 
   it("touches no job attached to a different rebuild", async () => {
-    // `updateMany` with a wrong predicate would stamp the key across the table, and every unrelated job's log
-    // route would then serve someone else's build output.
     const mine = await twoJobsOneRebuild();
     const other = await twoJobsOneRebuild();
 

@@ -5,10 +5,6 @@ import configuration from "./config/configuration.js";
 import { BuilderEnvDto } from "./config/env.dto.js";
 import { MaterialiseModule } from "./modules/materialise/materialise.module.js";
 
-/**
- * The materialiser container's root module — the same environment contract as the runner's, and
- * `MaterialiseModule` instead of `BuilderModule`.
- */
 @Module({
   imports: [
     ConfigModule.forRoot({

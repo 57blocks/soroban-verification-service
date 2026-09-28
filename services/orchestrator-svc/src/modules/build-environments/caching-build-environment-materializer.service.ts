@@ -11,7 +11,6 @@ import {
 import { BuildEnvironmentMaterializer } from "./build-environment-materializer.js";
 import { ComposerDispatchService } from "./composer-dispatch.service.js";
 
-/** The expensive part (the Batch submission) happens only on the tick that wins the claim. */
 @Injectable()
 export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMaterializer {
   private readonly logger = new ScvsLogger("build-environments");
@@ -39,7 +38,6 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
       case "ready":
         return this.readyResult(environment);
       case "failed":
-        // Terminal and not retried here on purpose.
         this.logger.warn("environment composition previously failed; not retrying automatically", {
           environment_id: environment.environmentId,
           cliver: environment.cliver,
@@ -64,7 +62,6 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
   ): Promise<MaterializedEnvironment | undefined> {
     const environment = await this.environments.findByRecipeSha256(recipeSha256);
     if (!environment || environment.status !== "ready") {
-      // Reachable only if the row was reset or removed after a rebuild was already keyed on its hash.
       this.logger.warn("no ready environment for a recipe hash a rebuild is already keyed on", {
         recipe_sha256: recipeSha256,
         found_status: environment?.status,
@@ -74,7 +71,6 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
     return this.materializedFrom(environment);
   }
 
-  /** Claims the right to compose and submits the Batch job. Exactly one caller wins the CAS. */
   private async tryCompose(
     environment: EnvironmentRecord,
     intent: ComposeIntent,
@@ -99,7 +95,6 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
         intent,
       });
     } catch (error) {
-      // Two different failures reach here and they must not be recorded the same way.
       await this.environments.releaseClaim(environment.environmentId);
       this.metrics.counter("environment_composition_total", 1, {
         outcome: "dispatch_failed",
@@ -119,8 +114,6 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
   private readyResult(environment: EnvironmentRecord): MaterializationResult {
     const materialized = this.materializedFrom(environment);
     if (!materialized) {
-      // A `ready` row is supposed to carry all three identities together — `markReady` requires them — so this
-      // is a corrupt row rather than a state.
       this.logger.error("a ready environment is missing its recorded identities", {
         environment_id: environment.environmentId,
         has_recipe_sha256: environment.recipeSha256 !== undefined,
@@ -150,8 +143,6 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
       recipeSha256: environment.recipeSha256,
       imageDigest: environment.imageDigest,
       recipe: environment.recipe,
-      // Absent for rows composed before that column existed, which is why the three above are checked for
-      // completeness and this one is not.
       ...(environment.arch ? { arch: environment.arch } : {}),
     };
   }

@@ -2,7 +2,6 @@ import { RegistryStatusObject, SEP58_BLDOPT_ENTRY, parseDto } from "@scvs/core";
 import { validateSubmittedManifest } from "../src/modules/preflight/manifest.js";
 import type { VerificationTarget } from "@scvs/core";
 
-/** SO5 at the submit boundary — `bldopt` is one complete flag per entry, value in `=` form. */
 const TARGET: VerificationTarget = {
   network: "testnet",
   wasm_hash: "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c",
@@ -36,8 +35,6 @@ describe("SO5 at submit — a flag and its value are one entry", () => {
   });
 
   it("refuses a short flag, which SO5 cannot represent at all", () => {
-    // `registry.ts`'s own note: the draft's pattern requires `--`, so `-p foo` must be normalised to its long
-    // form before publication.
     for (const bldopt of [["-p", "my-contract"], ["-p=my-contract"]]) {
       expect(rejectionFor(bldopt)).toContain("--package=my-contract");
     }
@@ -79,11 +76,6 @@ describe("SO5 at submit — what must keep working", () => {
   });
 });
 
-/**
- * `extractManifestPath`/`resolveContainerManifestPath` are shared with `services/builder`'s own use on
- * chain-recorded `bldopt` (`packages/core/src/manifest-path.ts`), so this only exercises the submit-time
- * wiring.
- */
 describe("S12 at submit — an escaping manifest path is refused before a job exists", () => {
   it("refuses a manifest path that escapes the source tree", () => {
     const result = submit(["--manifest-path=../../outside/Cargo.toml"]);
@@ -112,16 +104,12 @@ describe("S12 at submit — an escaping manifest path is refused before a job ex
   });
 
   it("refuses the two-token form the same as the `=` form — SO5's shape check catches it first", () => {
-    // `["--manifest-path", "../../outside/Cargo.toml"]` never reaches the containment check: the bare second
-    // token fails firstBldoptShapeViolation before extractManifestPath runs.
     const result = submit(["--manifest-path", "../../outside/Cargo.toml"]);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("invalid_manifest");
   });
 
   it("leaves a trailing bare --manifest-path (no value) unvalidated rather than crashing", () => {
-    // extractManifestPath returns undefined for a flag with nothing after it — indistinguishable from "absent"
-    // at this boundary, same as services/builder's own behaviour on this input.
     const result = submit(["--manifest-path"]);
     expect(result.ok).toBe(true);
   });
@@ -131,7 +119,6 @@ describe("S12 at submit — an escaping manifest path is refused before a job ex
   });
 });
 
-/** The assertion that stops the two boundaries drifting apart again. */
 describe("the submit gate and the publish validator agree, by construction", () => {
   const statusObjectFor = (bldopt: string[]) =>
     parseDto(RegistryStatusObject, {

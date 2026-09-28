@@ -28,7 +28,6 @@ const jestStatus = run(
 );
 if (autoScope === "slow") process.exit(jestStatus);
 
-// The Jest leg above reports through `run-e2e-test.mjs`.
 const playwrightArgs = ["--filter", "@scvs/e2e-tests", "exec", "playwright", "test"];
 const playwrightEnv = { ...autoEnv };
 if (process.env.SCVS_E2E_REPORT_DIR) {
@@ -38,6 +37,5 @@ if (process.env.SCVS_E2E_REPORT_DIR) {
   playwrightArgs.push("--reporter=list,json");
   playwrightEnv.PLAYWRIGHT_JSON_OUTPUT_NAME = resolve(reportDir, `${label}-web-playwright.json`);
 }
-// Runs whatever the Jest leg returned, so both legs' results reach the summary; either failing fails the run.
 const playwrightStatus = run("pnpm", playwrightArgs, playwrightEnv);
 process.exit(jestStatus !== 0 ? jestStatus : playwrightStatus);

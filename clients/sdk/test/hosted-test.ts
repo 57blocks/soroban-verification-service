@@ -10,13 +10,9 @@ import {
   type SoveClient,
 } from "../src/index.js";
 
-// The hosted half of TRD §8.3, over real HTTP: a hand-rolled `fetch` double would skip the bound, the
-// timeout and the redirect refusal, which is most of what this client is.
-
 const WASM_HASH = "a".repeat(64);
 const CONTRACT_ID = `C${"A".repeat(55)}`;
 
-/** What query-svc answers — the producer shape, `schema` and all. */
 const aggregate = (over: Record<string, unknown> = {}) => ({
   schema: "stellar-verification-aggregate",
   schema_version: "1.0",
@@ -52,7 +48,6 @@ const TVL = {
 
 type Handler = (request: IncomingMessage, response: ServerResponse) => void;
 
-/** One server per case, and the paths it was actually asked for. */
 async function withServer<T>(
   handler: Handler,
   body: (origin: string, requested: string[]) => Promise<T>,
@@ -75,7 +70,6 @@ async function withServer<T>(
 const json = (response: ServerResponse, status: number, value: unknown) =>
   response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
 
-/** The failure a call produced, or a thrown assertion if it answered instead. */
 async function failureOf(call: () => Promise<unknown>): Promise<ReturnType<typeof queryApiFailureOf>> {
   try {
     await call();
@@ -86,7 +80,6 @@ async function failureOf(call: () => Promise<unknown>): Promise<ReturnType<typeo
   throw new assert.AssertionError({ message: "the call answered where a failure was expected" });
 }
 
-/** The three routes, and the paths they are built from. */
 async function routes(): Promise<void> {
   await withServer(
     (request, response) => {
@@ -115,7 +108,6 @@ async function routes(): Promise<void> {
 
       assert.deepEqual(requested, [
         `${QUERY_API_V1}/wasms/${WASM_HASH}`,
-        // No network in the hash path (ADR-007), and one in the contract path.
         `${QUERY_API_V1}/contracts/testnet/${CONTRACT_ID}`,
         `${QUERY_API_V1}/verifiers`,
       ]);
@@ -123,7 +115,6 @@ async function routes(): Promise<void> {
   );
 }
 
-/** The list a hosted read answers is the object the client-side mode takes. */
 async function hostedListSeedsClientSideMode(): Promise<void> {
   await withServer(
     (_request, response) => json(response, 200, TVL),
@@ -138,7 +129,6 @@ async function hostedListSeedsClientSideMode(): Promise<void> {
   );
 }
 
-/** A subject is not allowed to carry `../` out of the prefix it was joined onto. */
 async function pathTraversal(): Promise<void> {
   await withServer(
     (_request, response) => json(response, 404, { error: "not_found", message: "no" }),
@@ -157,7 +147,6 @@ async function pathTraversal(): Promise<void> {
   );
 }
 
-/** query-svc's declared codes reach the caller; a body without one is synthesised from the status. */
 async function declaredFailures(): Promise<void> {
   await withServer(
     (request, response) => {
@@ -180,7 +169,6 @@ async function declaredFailures(): Promise<void> {
       assert.equal(notFound.code, "contract_not_found");
       assert.match(notFound.message, /No Wasm-executable contract/);
 
-      // No `error` in the body, so the status is all there is to name it by.
       const undeclared = await failureOf(() => client.registry.byHash(WASM_HASH));
       assert.equal(undeclared.code, "http_503");
       assert.notEqual(undeclared.message, "");
@@ -188,10 +176,6 @@ async function declaredFailures(): Promise<void> {
   );
 }
 
-/**
- * The two ways a 200 is not an answer: a console sharing the API's origin serving the SPA, and a
- * well-formed JSON document that is not this response.
- */
 async function twoHundredIsNotAnAnswer(): Promise<void> {
   await withServer(
     (request, response) => {
@@ -215,7 +199,6 @@ async function twoHundredIsNotAnAnswer(): Promise<void> {
   );
 }
 
-/** A consumer tolerates a higher MINOR of the MAJOR it reads, and refuses a MAJOR it does not (SO7/CV6). */
 async function schemaVersionTolerance(): Promise<void> {
   await withServer(
     (request, response) =>
@@ -231,7 +214,6 @@ async function schemaVersionTolerance(): Promise<void> {
     async (origin) => {
       const client = newHostedClient({ baseUrl: origin });
 
-      // The unknown summary rides along: an aggregate is not rejected for a field a reader renders as text.
       const tolerated = await client.registry.byHash(WASM_HASH);
       assert.equal(tolerated.agreement as string, "a_summary_added_after_us");
 
@@ -242,9 +224,8 @@ async function schemaVersionTolerance(): Promise<void> {
   );
 }
 
-/** No response, a slow one, and one too large to read: three failures with three codes. */
 async function transportFailures(): Promise<void> {
-  // A port nothing listens on. Bound and released first, so the number is one nothing else took.
+  // Bound and released first, so the port is one nothing else holds.
   const dead = await withServer(
     () => undefined,
     async (origin) => origin,
@@ -276,23 +257,19 @@ async function transportFailures(): Promise<void> {
   );
 }
 
-/** The configured origin is a pin, and a redirect does not lift it. */
 async function originStaysPinned(): Promise<void> {
-  // A second origin that really answers — an unresolvable one would fail as a transport error and never
-  // reach the check this is about.
+  // Must really answer: an unresolvable origin fails as a transport error and never reaches the check.
   await withServer(
     (_request, response) => json(response, 200, aggregate()),
     async (elsewhere) =>
       withServer(
         (_request, response) => response.writeHead(302, { location: `${elsewhere}/x` }).end(),
         async (origin) => {
-          // Refused at the transport by default: the policy does not follow a redirect at all.
           const unfollowed = await failureOf(() =>
             newHostedClient({ baseUrl: origin }).registry.byHash(WASM_HASH),
           );
           assert.equal(unfollowed.status, 0);
 
-          // And with following turned on, the origin check on the *final* URL is what refuses it.
           const followed = await failureOf(() =>
             newHostedClient({ baseUrl: origin, policy: { followRedirects: true } }).registry.byHash(WASM_HASH),
           );
@@ -303,15 +280,12 @@ async function originStaysPinned(): Promise<void> {
   );
 }
 
-/** A relative base is a browser's own origin; outside one there is nothing to resolve it against. */
 function relativeBaseNeedsADocument(): void {
   assert.throws(() => newHostedClient({ baseUrl: "" }), /relative/);
   assert.throws(() => newHostedClient({ baseUrl: "/api" }), /pass an absolute origin/);
-  // And a bare host is neither, in a browser or out of one.
   assert.throws(() => newHostedClient({ baseUrl: "api.example.com" }), /needs its scheme/);
 }
 
-// TRD §8.3's "without code change", as a type: both modes' `registry` answers `byHash`.
 type Assert<T extends true> = T;
 type _BothModesAreReaders = [
   Assert<SoveClient["registry"] extends AggregateReader ? true : false>,

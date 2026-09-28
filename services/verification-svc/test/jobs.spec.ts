@@ -17,8 +17,7 @@ beforeAll(async () => {
   server = app.getHttpServer();
 });
 
-// This fixture pins a fixed contract_id, so a leaked `queued` row would sit in the dedup path of every later
-// submission naming that contract.
+// The fixture pins a fixed contract_id, so a leaked `queued` row would enter every later submission's dedup path.
 afterAll(async () => {
   try {
     await app?.close();
@@ -27,9 +26,6 @@ afterAll(async () => {
     await prisma.$disconnect();
   }
 });
-
-// Characterization test for GET /api/verification/v1/verifications/:job_id (verifications.controller.ts's
-// getJob).
 
 describe("GET /api/verification/v1/verifications/:job_id", () => {
   it("returns 404 for an unknown job id", async () => {
@@ -66,12 +62,9 @@ describe("GET /api/verification/v1/verifications/:job_id", () => {
     });
     expect(typeof res.body.created_at).toBe("string");
     expect(typeof res.body.updated_at).toBe("string");
-    // In flight: the key is absent rather than null, matching the optional field on the client.
     expect(res.body).not.toHaveProperty("completed_at");
   });
 
-  // `updated_at` keeps advancing after the verdict (archive and source-publish retries write settled rows), so
-  // it cannot answer "when did this finish".
   it("reports completed_at once the job has settled, and does not move it afterwards", async () => {
     const jobId = createdRows.job(randomUUID());
     await jobsRepository.createJob({
@@ -99,7 +92,6 @@ describe("GET /api/verification/v1/verifications/:job_id", () => {
     expect(typeof completedAt).toBe("string");
     expect(completedAt).toBe((await jobsRepository.getJobById(jobId))?.completedAt);
 
-    // An archive attempt fails on the settled row: `updated_at` moves, `completed_at` does not.
     await jobsRepository.recordArchiveOutcome(jobId, { archived: false });
 
     const again = await request(server).get(`/api/verification/v1/verifications/${jobId}`);

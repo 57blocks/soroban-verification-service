@@ -2,11 +2,6 @@ import { rebuildErrorCodeClass, rebuildErrorCodes, type RebuildErrorCodeClass } 
 import { rebuildFailureReason } from "../src/modules/verification-pipeline/failure-reason.util.js";
 import type { RebuildRecord } from "@scvs/db";
 
-/**
- * The classes in `@scvs/core`'s `rebuildErrorCodeClass` are only worth having if this rung reads all of them.
- * Before the table, three parallel `Set`s here were the only record of which codes existed, and a code the
- * sandbox emitted but no set listed became a silent, non-retryable `build_failed`.
- */
 const rebuild = (
   errorCode: string,
   diagnostics: Record<string, unknown> = {},
@@ -42,8 +37,6 @@ describe("the rungs keep their order", () => {
   });
 
   it("a policy code is not reachable by the docker_error test below it", () => {
-    // An inadmissible recipe is neither a source problem nor a machinery one, even inside a sandbox that also
-    // reported a Docker fault.
     expect(rebuildFailureReason(rebuild("manifest_path_escapes_source", { docker_error: "no daemon" }))).toBe(
       "policy_rejected",
     );
@@ -57,8 +50,6 @@ describe("the rungs keep their order", () => {
   });
 
   it("an unknown code still falls through to the same two answers", () => {
-    // A sandbox older or newer than this reader, and the `docker_error` string passed through in the code's
-    // place, both arrive here.
     expect(rebuildFailureReason(rebuild("a_code_no_build_of_this_knows"))).toBe("build_failed");
     expect(
       rebuildFailureReason(rebuild("a_code_no_build_of_this_knows", { docker_error: "no daemon" })),

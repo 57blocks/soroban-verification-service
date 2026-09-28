@@ -3,14 +3,6 @@ import { FadeUp } from "@/components/ui/fade-up";
 import type { Capability } from "../content";
 import { cn } from "@/lib/utils";
 
-/**
- * The cards used by the result and security sections. `auto-fit` rather than a fixed column count: the two
- * sections carry six and four cards, and both read badly when the last row is a widow.
- *
- * A `wide` card takes the whole row and spends it on width rather than height — text left, sample right. It
- * opens the section, and it leaves the remaining five to fill the rows evenly behind it; two columns instead
- * of the row would leave the sixth card alone at the bottom.
- */
 export const CardGrid = ({ items }: { items: Capability[] }) => (
   <div className="mx-auto grid max-w-shell gap-6 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
     {items.map(({ title, description, sample, wide }, index) => (

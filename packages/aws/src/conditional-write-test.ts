@@ -9,30 +9,24 @@ import {
 const named = (name: string, httpStatusCode?: number) => ({ name, $metadata: { httpStatusCode } });
 
 function main(): void {
-  // Condition failed: a conflict under either mode.
   assert.equal(classifyConditionalWriteError(named("PreconditionFailed", 412), "if-match"), "conflict");
   assert.equal(classifyConditionalWriteError(named("PreconditionFailed", 412), "if-none-match"), "conflict");
   assert.equal(classifyConditionalWriteError(named("ConditionalRequestConflict", 409), "if-match"), "conflict");
 
-  // Raced by a delete: only If-Match can see it, and only there is it replayable.
   assert.equal(classifyConditionalWriteError(named("NoSuchKey", 404), "if-match"), "vanished");
   assert.equal(classifyConditionalWriteError(named("NoSuchKey", 404), "if-none-match"), "fatal");
-  // HeadObject's name, which a conditional write has no business returning.
   assert.equal(classifyConditionalWriteError(named("NotFound", 404), "if-match"), "fatal");
 
-  // A missing bucket or a permission problem — including one disguised as a 404 — is never retried.
   assert.equal(classifyConditionalWriteError(named("NoSuchBucket", 404), "if-match"), "fatal");
   assert.equal(classifyConditionalWriteError(named("AccessDenied", 404), "if-match"), "fatal");
   assert.equal(classifyConditionalWriteError(named("AccessDenied", 403), "if-match"), "fatal");
 
-  // The status code is consulted only when the response carries no error name.
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 412 } }, "if-match"), "conflict");
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 409 } }, "if-match"), "conflict");
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 404 } }, "if-match"), "vanished");
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 404 } }, "if-none-match"), "fatal");
   assert.equal(classifyConditionalWriteError({ $metadata: { httpStatusCode: 500 } }, "if-match"), "fatal");
 
-  // A non-object input must not throw.
   assert.equal(classifyConditionalWriteError(undefined, "if-match"), "fatal");
   assert.equal(classifyConditionalWriteError("boom", "if-match"), "fatal");
 
@@ -41,12 +35,10 @@ function main(): void {
 
 type SentInput = Record<string, unknown>;
 
-/** An error shaped the way the AWS SDK shapes one: the `name` carries the code. */
 function awsError(name: string, httpStatusCode: number): Error {
   return Object.assign(new Error(name), { name, $metadata: { httpStatusCode } });
 }
 
-/** `send` is the only S3Client member these functions touch, so a structural stand-in needs no bucket. */
 function fakeClient(handler: (input: SentInput) => unknown): { client: S3Client; sent: SentInput[] } {
   const sent: SentInput[] = [];
   const client = {
@@ -63,7 +55,6 @@ function fakeClient(handler: (input: SentInput) => unknown): { client: S3Client;
 const body = (text: string) => ({ transformToString: async () => text });
 
 async function reads(): Promise<void> {
-  // The ETag is handed back exactly as stored, quotes included: it goes straight into an If-Match header.
   {
     const { client, sent } = fakeClient(() => ({ Body: body("{}\n"), ETag: '"abc123"' }));
     const result = await getObjectTextVersioned(client, "bucket", "wasms/x.json");
@@ -71,13 +62,11 @@ async function reads(): Promise<void> {
     assert.deepEqual(sent[0], { Bucket: "bucket", Key: "wasms/x.json" });
   }
 
-  // A genuinely absent key is absence.
   {
     const { client } = fakeClient(() => awsError("NoSuchKey", 404));
     assert.equal(await getObjectTextVersioned(client, "bucket", "wasms/x.json"), undefined);
   }
 
-  // A missing bucket answers 404 too, and must not read as absence.
   {
     const { client } = fakeClient(() => awsError("NoSuchBucket", 404));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /NoSuchBucket/);
@@ -87,26 +76,22 @@ async function reads(): Promise<void> {
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /AccessDenied/);
   }
 
-  // HeadObject's "NotFound" is not GetObject's absence, so it propagates rather than being read as missing.
   {
     const { client } = fakeClient(() => awsError("NotFound", 404));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /NotFound/);
   }
 
-  // Only a rejection carrying no name at all falls back to the status code.
   {
     const nameless = { $metadata: { httpStatusCode: 404 } };
     const { client } = fakeClient(() => { throw nameless; });
     assert.equal(await getObjectTextVersioned(client, "bucket", "wasms/x.json"), undefined);
   }
 
-  // A bare Error carries the name "Error", which names nothing we recognise, so it propagates.
   {
     const { client } = fakeClient(() => Object.assign(new Error("gone"), { $metadata: { httpStatusCode: 404 } }));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /gone/);
   }
 
-  // No ETag means no pin, which must fail loudly rather than degrade to an unconditional write.
   {
     const { client } = fakeClient(() => ({ Body: body("{}\n") }));
     await assert.rejects(getObjectTextVersioned(client, "bucket", "wasms/x.json"), /no ETag/);
@@ -114,7 +99,6 @@ async function reads(): Promise<void> {
 }
 
 async function writes(): Promise<void> {
-  // A null expectation is "must not exist", which is If-None-Match: * and never If-Match.
   {
     const { client, sent } = fakeClient(() => ({}));
     assert.equal(
@@ -128,7 +112,6 @@ async function writes(): Promise<void> {
     assert.equal(sent[0].Body, "{}\n");
   }
 
-  // A version expectation is If-Match on that exact token, and never If-None-Match.
   {
     const { client, sent } = fakeClient(() => ({}));
     assert.equal(
@@ -137,11 +120,9 @@ async function writes(): Promise<void> {
     );
     assert.equal(sent[0].IfMatch, '"abc123"');
     assert.equal("IfNoneMatch" in sent[0], false);
-    // An omitted cache control stays omitted rather than becoming undefined on the wire.
     assert.equal("CacheControl" in sent[0], false);
   }
 
-  // The replayable outcomes come back as values.
   {
     const { client } = fakeClient(() => awsError("PreconditionFailed", 412));
     assert.equal(
@@ -158,7 +139,6 @@ async function writes(): Promise<void> {
     assert.equal(await putObjectTextConditional(client, "bucket", "k", "x", "text/plain", '"e"'), "vanished");
   }
 
-  // Everything else propagates, including the 404 that is not about the key.
   {
     const { client } = fakeClient(() => awsError("NoSuchKey", 404));
     await assert.rejects(putObjectTextConditional(client, "bucket", "k", "x", "text/plain", null), /NoSuchKey/);

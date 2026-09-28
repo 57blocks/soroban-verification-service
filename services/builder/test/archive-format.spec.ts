@@ -10,10 +10,6 @@ import {
 } from "../src/modules/builder/archive-format.js";
 import { materializeSource } from "../src/modules/builder/fetch-source.js";
 
-/**
- * `stellar contract verify` decides an archive's format from its **name**, and that name was the submitter's
- * `x-filename` header carried through the staging key and the presigned URL's path into `--source-uri`.
- */
 describe("sniffArchiveFormat", () => {
   it("reads the format from the magic number, not the name", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-archive-format-"));
@@ -24,7 +20,6 @@ describe("sniffArchiveFormat", () => {
 
     const zip = join(root, "source.tar.gz");
     await writeFile(zip, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]));
-    // A zip *named* `.tar.gz` — the name is accepted and the format is still read off the bytes.
     expect(await sniffArchiveFormat(zip)).toBe("zip");
 
     const tar = join(root, "source.tar");
@@ -35,8 +30,6 @@ describe("sniffArchiveFormat", () => {
     await writeFile(text, "not an archive\n");
     expect(await sniffArchiveFormat(text)).toBe("unknown");
 
-    // Unreadable is `unknown`, not a throw: this decides what to *name* a file, and a read failure is the
-    // byte-level checks' business (`archive-extraction.ts`), not this one's.
     expect(await sniffArchiveFormat(join(root, "absent"))).toBe("unknown");
     expect(await sniffArchiveFormat(root)).toBe("unknown");
   });
@@ -45,7 +38,6 @@ describe("sniffArchiveFormat", () => {
     expect(hasCliAcceptedArchiveSuffix("/tmp/x/source.tar.gz")).toBe(true);
     expect(hasCliAcceptedArchiveSuffix("/tmp/x/source.TGZ")).toBe(true);
     expect(hasCliAcceptedArchiveSuffix("/tmp/x/source.zip")).toBe(true);
-    // `.tar` is a real archive our own extractor handles and one the CLI has no accepted name for.
     expect(hasCliAcceptedArchiveSuffix("/tmp/x/source.tar")).toBe(false);
     expect(hasCliAcceptedArchiveSuffix("/tmp/x/source")).toBe(false);
     expect(hasCliAcceptedArchiveSuffix("/tmp/x/source.gz")).toBe(false);
@@ -66,7 +58,6 @@ describe("alignArchiveNameForCli", () => {
     expect(aligned.alignment).toBe("linked");
     expect(basename(aligned.path)).toBe("counter-contract.tar.gz");
     expect(hasCliAcceptedArchiveSuffix(aligned.path)).toBe(true);
-    // Byte-identical, and the same inode rather than a second copy.
     expect(await readFile(aligned.path)).toEqual(bytes);
     expect((await stat(aligned.path)).ino).toBe((await stat(original)).ino);
     expect(await readFile(original)).toEqual(bytes);
@@ -97,8 +88,6 @@ describe("materializeSource — the name the CLI is handed", () => {
   it("publishes an accepted name for a correctly-hashed archive that was badly named", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-materialize-name-"));
     const artifactDir = join(root, "artifacts");
-    // The staging case: `x-filename: counter-contract` on the upload, so the presigned URL's path — and then
-    // the local file — carried a name with no extension at all.
     const path = join(root, "counter-contract");
     const bytes = gzipSync(Buffer.from("source archive contents"));
     await writeFile(path, bytes);
@@ -113,8 +102,6 @@ describe("materializeSource — the name the CLI is handed", () => {
     if (!result.ok) return;
     expect(hasCliAcceptedArchiveSuffix(result.source.source_uri!)).toBe(true);
     expect(result.source.workspace_path).toBe(result.source.source_uri);
-    // It is also what the CLI re-checks against the contract's recorded `source_sha256`, which is why nothing
-    // may repack.
     expect(result.source.source_sha256).toBe(sha256);
     expect(await readFile(result.source.source_uri!)).toEqual(bytes);
   });
@@ -134,7 +121,7 @@ describe("materializeSource — the name the CLI is handed", () => {
   });
 });
 
-/** A minimal tar member header: `ustar` at offset 257 is what identifies the format. */
+/** `ustar` at offset 257 is what identifies the format. */
 function tarBytes(): Buffer {
   const block = Buffer.alloc(512);
   block.write("source/Cargo.toml", 0, "latin1");

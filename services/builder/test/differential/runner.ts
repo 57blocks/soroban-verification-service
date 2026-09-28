@@ -34,13 +34,6 @@ export async function runDifferentialFixture(fixture: DifferentialFixture): Prom
   };
 }
 
-/**
- * The oracle and deviation legs pick from the report alone, which production no longer does: production's
- * predicate needs an output mount holding nothing but artifacts, and neither leg has one — the reference leg
- * passes no `--out-dir` at all, and the deviation leg's `/out` also carries the target directory for the
- * `redirected-target-dir` deviation. Sound here because a fixture source is ours, not an adversary's; the
- * legs exist to compare bytes, and both mechanisms name the same file in an honest build.
- */
 function pickReportedArtifact(
   reports: { containerPath: string; sha256?: string }[],
   packageName?: string,
@@ -77,13 +70,6 @@ async function runReferenceLeg(fixture: DifferentialFixture): Promise<string> {
   return sha256File(artifactPath);
 }
 
-/**
- * `bldopt` is a *recording*, not a command line: `--env=NAME=value` means "set this in the build container"
- * (BE4) and `stellar contract build` has no such flag — forwarding the recorded entries verbatim made
- * `be4-bldopt-encoding-current` die on `unexpected argument '--env' found` before it built anything. The
- * sandbox and deviation legs already split the recording with these two helpers; the oracle leg has to
- * replay it the same way or the three legs are not comparing the same build.
- */
 function referenceBuildCommand(fixture: DifferentialFixture, source: string): string[] {
   const replayed = replayableBuildOptions(fixture.bldopt);
   if (replayed.unparsable.length) {
@@ -91,7 +77,6 @@ function referenceBuildCommand(fixture: DifferentialFixture, source: string): st
   }
   const manifestPath = extractManifestPath(fixture.bldopt);
   const buildPackage = extractBuildPackage(fixture.bldopt);
-  // Relative to `-w /source`, which is where the recorded path is rooted.
   const recorded = [
     ...replayed.forwarded,
     "--manifest-path",
@@ -130,10 +115,7 @@ async function runSandboxLeg(fixture: DifferentialFixture): Promise<string> {
       mode: "public_repo",
       visibility: "public",
       source_sha256: "fixture",
-      // Both fields carry the same value here for the same reason `materializeSource` sets them that way
-      // (`fetch-source.ts`): `runManualRebuild` resolves the source root from `workspace_path`, so a `"."`
-      // here resolved against this process's cwd and every leg that got this far failed
-      // `manifest_path_not_found`.
+      // `runManualRebuild` resolves the source root from `workspace_path`, so it must be the absolute source dir.
       workspace_path: fixture.sourceDir,
       local_path: fixture.sourceDir,
       retained_after_verification: false,
@@ -233,15 +215,7 @@ async function runDeviationOffLeg(fixture: DifferentialFixture, deviation: Devia
   return sha256File(join(out, selected.containerPath.slice(CONTAINER_OUT_DIR.length + 1)));
 }
 
-/**
- * The oracle images run as a non-root user, and a bind mount keeps its *host* owner, so a tree this process
- * creates under `tmpdir()` is not writable inside the container: the CLI could not create its target
- * directory and every build-executing leg died on `Permission denied (os error 13) at path "/source/target…"`.
- * Widening a throwaway temp tree is the fix that leaves the oracle alone — `--user` would make the image's own
- * `CARGO_HOME` unwritable and force the `CARGO_HOME`/`CARGO_TARGET_DIR` overrides that the *sandbox* applies
- * deliberately (`run-cli.config.ts`), which is exactly what a reference build must not inherit.
- * macOS hides this: Docker Desktop maps bind-mount ownership, so the harness passed locally from day one.
- */
+/** Oracle images run as non-root and bind mounts keep host ownership; `--user` would instead break the image's CARGO_HOME. */
 async function openTempTreeToContainerUser(root: string): Promise<void> {
   const relaxed = await runCommand(["chmod", "-R", "a+rwX", root], { mirrorOutput: false });
   if (relaxed.exit_code !== 0) {

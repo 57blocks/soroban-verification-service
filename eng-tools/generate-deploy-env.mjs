@@ -1,15 +1,11 @@
 #!/usr/bin/env node
-/**
- * Emits `config/deploy/<env>/<service>.json` from `config/env-manifest.yaml` — the flat per-service artifact
- * the deployment reads.
- */
+/** Emits `config/deploy/<env>/<service>.json`, the flat per-service artifact, from `config/env-manifest.yaml`. */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadManifest, resolveManifest } from "./env-manifest.mjs";
 
 export const OUTPUT_DIR = "config/deploy";
 
-/** Which ECS/Batch field a variable belongs in. */
 const ENV_BLOCK_INJECTS = new Set([
   "ecs-environment",
   "batch-job-definition",
@@ -18,27 +14,19 @@ const ENV_BLOCK_INJECTS = new Set([
 
 const isRequired = (entry) => entry.required === true || entry.required === "yes";
 
-/**
- * The per-service configuration secret CI writes. `render-taskdef.mjs` resolves the ARN from this name at
- * deploy time.
- */
 export const configSecretName = (targetEnv, service) => `scvs/${targetEnv}/${service}/config`;
 
-/** Where an entry with no explicit `inject:` lands. See the call site for why Batch differs. */
 const defaultInjectFor = (kind) =>
   kind === "batch-job-definition" ? "batch-job-definition" : "ecs-secrets";
 
-/** `source:` is optional on a tunable, where it means the obvious thing — the value is ours. */
 const sourceOf = (entry) => entry.source ?? "literal";
 
-/** One variable's entry in the artifact — only the fields Terraform needs to act. */
 function describe(entry, targetEnv, name) {
   const source = sourceOf(entry);
   const out = { required: isRequired(entry), fail: entry.fail ?? "n/a", source };
   if (entry.required_when) out.required_when = entry.required_when;
 
   if (source === "secret") {
-    // The logical reference. Terraform composes valueFrom; see the header for why not here.
     const rawName = entry.secret_ref?.name;
     const resolvedName =
       rawName && typeof rawName === "object" ? rawName[targetEnv] : rawName;
@@ -60,11 +48,8 @@ function describe(entry, targetEnv, name) {
     if (source === "image-build") {
       out.note = "the image supplies this; set it only to point somewhere else";
     }
-    // A value this repo owns is authoritative when recorded.
     if (recorded !== undefined) out.value = String(recorded);
     else if (entry.value_ref) {
-      // Required, ours to decide, and NOT expressible as a literal here — the value is settled in a decision
-      // record.
       out.value_ref = entry.value_ref;
     } else if (entry.default !== undefined && entry.default !== null) {
       out.default = String(entry.default);
@@ -73,16 +58,11 @@ function describe(entry, targetEnv, name) {
     return out;
   }
 
-  // What CI mints on first deploy and preserves after. Carried into the artifact because sync-secrets and
-  // render-taskdef both branch on it, and neither reads the manifest.
+  // sync-secrets and render-taskdef branch on `generate` and never read the manifest.
   if (entry.generate) out.generate = entry.generate;
-  // `terraform_output` stays alongside it: it names WHICH Terraform output backs the value, which is what makes
-  // a descriptor field traceable to its source when the two disagree.
   if (entry.value_from_output) out.value_from_output = entry.value_from_output;
   if (entry.terraform) out.terraform_output = entry.terraform;
-  // `<env>` in a resource name expands to the environment being generated.
   if (entry.resource) out.resource = entry.resource.replaceAll("<env>", targetEnv);
-  // A recorded value for a non-literal source is a stable resource NAME, kept greppable per decided: Q2.
   if (recorded !== undefined) {
     out.value = String(recorded);
     out.value_is_authoritative = false;
@@ -93,9 +73,7 @@ function describe(entry, targetEnv, name) {
 export function buildArtifacts(manifest, environments) {
   const resolved = resolveManifest(manifest);
   const envs = environments?.length ? environments : (manifest.meta?.environments ?? ["dev"]);
-  const artifacts = new Map(); // relative path -> JSON string
-
-  // There is no cross-service parameter sharing to compute any more.
+  const artifacts = new Map();
 
   for (const targetEnv of envs) {
     for (const [service, svc] of resolved.services) {
@@ -109,20 +87,12 @@ export function buildArtifacts(manifest, environments) {
       const neverDeployed = [];
 
       for (const [name, entry] of [...allowed.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-        // The inline tunables (`FOO: { type: number, default: 5 }`) declare no `inject:`.
         const inject = entry.inject ?? defaultInjectFor(svc.kind);
         if (entry.deploy === "never") {
-          // Legal locally, wrong in a deployed environment — a distinction `required: forbidden` cannot draw,
-          // because it is absolute.
           neverDeployed.push(name);
         } else if (inject === "batch-submit-job" || inject === "ecs-run-task-override") {
-          // Two mechanisms, one meaning: nothing durable carries the value, so a definition holding
-          // it holds a stale one. A job parameter, or the `run-task` override db-migrate.yml
-          // composes — the only channel into a task that borrows another service's definition.
           perInvocation.push(name);
         } else if (inject === "ecs-secrets") {
-          // A `credential` entry names its own pre-existing secret; a `config` entry lands in the per-service
-          // one CI writes, whose ARN is resolved at deploy time.
           const d = describe(entry, targetEnv, name);
           const tier = entry.tier ?? "knob";
           d.store = tier === "secret" ? "credential" : "config";
@@ -133,7 +103,6 @@ export function buildArtifacts(manifest, environments) {
         } else if (ENV_BLOCK_INJECTS.has(inject)) {
           environment[name] = describe(entry, targetEnv, name);
         }
-        // `inject: none` is deliberately dropped: it means "nothing sets this".
       }
 
       const invariants = Object.entries(manifest.groups ?? {})
@@ -218,12 +187,8 @@ export function buildArtifacts(manifest, environments) {
   return artifacts;
 }
 
-// ── CLI ─────────────────────────────────────────────────────────────────────────────────────────
-
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = process.cwd();
-  // `--env` so a deployment whose environment list is not this repository's business can still
-  // regenerate without editing a tracked file to do it.
   const environments = process.argv.reduce(
     (acc, arg, i) => (arg === "--env" ? [...acc, process.argv[i + 1]] : acc),
     [],

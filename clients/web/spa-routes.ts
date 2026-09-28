@@ -1,8 +1,3 @@
-/**
- * Renders the nginx `location` allowlist that serves the console's entry document, from
- * `src/app/route-paths.ts`. Emitted into the bundle at build time so the served config cannot drift from
- * the route tree; `docker/web.Dockerfile` moves it out of the document root.
- */
 import type { Plugin } from "vite";
 import { CONSOLE_ROUTE_PATHS } from "./src/app/route-paths.ts";
 
@@ -19,10 +14,6 @@ const PARAM = /^\$[A-Za-z_][A-Za-z0-9_]*$/;
 
 const escapeRegex = (segment: string) => segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/**
- * A path's nginx matcher: `= /exact` where it has no parameters, `~ ^…$` where it has. A parameter matches
- * one segment, so `/verify/jobs/a/b` is not a route and 404s.
- */
 export const locationMatcher = (path: string): string => {
   if (!path.startsWith("/")) {
     throw new SpaRoutesError(`route path must be absolute, got "${path}"`);
@@ -32,8 +23,6 @@ export const locationMatcher = (path: string): string => {
     if (segment === "") {
       throw new SpaRoutesError(`route path "${path}" has an empty segment`);
     }
-    // A splat would have to match any depth, which this renderer does not express — and a wrong guess here
-    // is a route that 404s only in the deployed image.
     if (segment === "$" || segment === "*") {
       throw new SpaRoutesError(
         `route path "${path}" is a splat, which spa-routes.ts cannot render — teach it, or the ` +
@@ -58,8 +47,6 @@ export const renderSpaRoutesConf = (paths: readonly string[] = CONSOLE_ROUTE_PAT
     seen.add(path);
   }
   const matchers = paths.map(locationMatcher);
-  // Exact before regex, which is nginx's own precedence — written in that order so the file reads the way
-  // it matches.
   const ordered = [
     ...matchers.filter((m) => m.startsWith("= ")).sort(),
     ...matchers.filter((m) => m.startsWith("~ ")).sort(),

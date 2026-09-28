@@ -5,7 +5,6 @@ export type ManifestValidation =
   | { ok: true; manifest: SubmittedSourceManifest }
   | { ok: false; error: string; detail: string };
 
-/** An absent `chainSourceSha256` covers "records none" and "could not be read" alike: neither is a disagreement. */
 export function compareSourceAgainstChain(
   chainSourceSha256: string | undefined,
   submittedSha256: string,
@@ -21,9 +20,7 @@ export function compareSourceAgainstChain(
 }
 
 const HEX_64_RE = /^[0-9a-f]{64}$/i;
-// Digest pinning/trust is a policy concern.
 const BLDIMG_RE = /^(?:localhost(?::\d+)?|[^\s@/]*[.:][^\s@/]*\/)[^\s@]+(?::[^\s@]+)?(?:@sha256:[0-9a-f]{64})?$/i;
-// See that constant's own doc comment.
 const SOURCE_URI_RE = SOURCE_URI_PATTERN;
 
 export function validateSubmittedManifest(
@@ -41,7 +38,6 @@ export function validateSubmittedManifest(
     );
   }
 
-  // It never selects the build environment: orchestrator-svc derives that from the deployed Wasm's metadata.
   if (value.bldimg !== undefined && (typeof value.bldimg !== "string" || !BLDIMG_RE.test(value.bldimg))) {
     return invalid(
       "invalid_manifest",
@@ -49,7 +45,6 @@ export function validateSubmittedManifest(
     );
   }
 
-  // Order is significant (replayed as-is ahead of bldopt); defaults to `contract build` when absent.
   if (value.bldarg !== undefined) {
     if (!Array.isArray(value.bldarg) || !value.bldarg.every((a) => typeof a === "string" && a.length > 0)) {
       return invalid("invalid_manifest", "manifest.bldarg must be an array of non-empty strings when provided (SEP-58 §1).");
@@ -70,8 +65,6 @@ export function validateSubmittedManifest(
     }
   }
 
-  // Either case is accepted and lowercased on the way out (see the return below), so the message no longer
-  // promises a lowercase rule this regex never enforced.
   if (typeof value.source_sha256 !== "string" || !HEX_64_RE.test(value.source_sha256)) {
     return invalid(
       "invalid_manifest",
@@ -101,7 +94,6 @@ export function validateSubmittedManifest(
     );
   }
 
-  // Declared, never inferred from upload_id's presence — see source.ts's is_public field comment.
   if (value.is_public !== undefined && typeof value.is_public !== "boolean") {
     return invalid("invalid_manifest", "manifest.is_public must be a boolean when provided.");
   }
@@ -122,7 +114,7 @@ export function validateSubmittedManifest(
   };
 }
 
-/** SO5 at the input boundary: each `bldopt` entry is one complete flag with its value in `=` form. */
+/** Each `bldopt` entry is one complete flag, with its value in `=` form. */
 function firstBldoptShapeViolation(bldopt: string[]): string | undefined {
   const rule =
     "SEP-58 §1 records one complete flag per entry, with its value in `=` form (status-object constraint SO5).";
@@ -131,8 +123,6 @@ function firstBldoptShapeViolation(bldopt: string[]): string | undefined {
     const entry = bldopt[index];
     if (SEP58_BLDOPT_ENTRY.test(entry)) continue;
 
-    // Detectable, so say exactly what to write instead of restating the rule and leaving the submitter to infer
-    // the edit.
     const previous = index > 0 ? bldopt[index - 1] : undefined;
     if (previous && /^--[A-Za-z][A-Za-z0-9_-]*$/.test(previous) && !entry.startsWith("-")) {
       return `manifest.bldopt entry ${JSON.stringify(entry)} is a bare value, not a flag: ${rule} Write ${JSON.stringify(`${previous}=${entry}`)} as a single entry rather than ${JSON.stringify(previous)} and its value separately.`;

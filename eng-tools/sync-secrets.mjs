@@ -1,30 +1,5 @@
 #!/usr/bin/env node
-/**
- * Writes one service's configuration into `scvs/<env>/<service>/config` in Secrets Manager.
- *
- *   node eng-tools/sync-secrets.mjs --env dev --service query-svc [--descriptor <json>] [--dry-run]
- *
- * The write half of ADR-025: `config/deploy/<env>/<service>.json` says which variables a service gets
- * and where each value comes from; this resolves them and puts the result in the one secret CI owns.
- *
- * **It never touches a credential.** `store: "credential"` entries name pre-existing secrets
- * (`sv-<env>-rds-master-*`, `try-arweave/private-key`) that DevOps wrote and CI has no grant on — they
- * are referenced by ARN in the task definition and are not this tool's business. That separation is
- * ADR-016's blast-radius argument, which ADR-025 keeps: a grant to write a request timeout must not
- * reach a database password.
- *
- * Value resolution, in the order the manifest's `source:` implies:
- *
- *   literal       the artifact's `value` — this repository is the authority
- *   terraform     `value_from_output`, a path into the CI descriptor, resolved fresh every deploy. An
- *                 identifier carrying an account id, region, or revision is never committed; a stable
- *                 name may be, as `value` with `value_is_authoritative: false`, and the descriptor wins.
- *   image-build   skipped — the image supplies it
- *
- * Idempotent: it reads the current secret first and writes only on a real difference, so a redeploy
- * that changes nothing creates no new secret version. `--dry-run` prints the diff and writes nothing,
- * which is also what makes this safe to run against a live environment while developing.
- */
+/** Writes one service's configuration into `scvs/<env>/<service>/config`; never touches a credential secret. */
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -48,7 +23,6 @@ if (!service) {
   process.exit(2);
 }
 
-// See check-taskdef-boundary.mjs: the contract belongs to the deployment, not to this repository.
 const ROOT = process.cwd();
 const contractPath = flag("contract")
   ? resolve(flag("contract"))
@@ -60,8 +34,6 @@ if (!existsSync(contractPath)) {
 const contract = JSON.parse(readFileSync(contractPath, "utf8"));
 
 if (contract.kind === "batch-job-definition") {
-  // Not an oversight and not a no-op worth being quiet about: a Batch job definition keeps its
-  // variables plaintext because reading a secret needs a grant ADR-002 denies its execution role.
   console.log(
     `${service} is a Batch job definition — no config secret by ADR-025 decision 1 (ADR-002). Nothing to sync.`
   );
@@ -74,10 +46,6 @@ if (!secretName) {
   console.error(`::error::${contractPath} declares no secrets.config_secret — nothing to write to`);
   process.exit(1);
 }
-
-// ── The descriptor ──────────────────────────────────────────────────────────────────────────────
-// Passed in (the preflight job already read it) rather than read here, so one deploy reads SSM once
-// and every later step sees the same document. `@path` for a file, to keep a large JSON off argv.
 
 function loadDescriptor() {
   const raw = flag("descriptor") ?? process.env.CI_DESCRIPTOR_JSON;
@@ -92,7 +60,6 @@ function loadDescriptor() {
 }
 const descriptor = loadDescriptor();
 
-/** Reads a dotted path out of the descriptor. Returns undefined for any missing segment. */
 function readPath(source, path) {
   let cursor = source;
   for (const segment of path.split(".")) {
@@ -102,9 +69,7 @@ function readPath(source, path) {
   return cursor;
 }
 
-// ── What is already there ───────────────────────────────────────────────────────────────────────
-// Read before resolving, not after: a `generate:` variable resolves to the value already in the
-// secret, and minting a fresh one on every deploy would rotate the key under a running service.
+// Read before resolving: a `generate:` value is kept from the secret, or every deploy would rotate it.
 
 const aws = (argv) =>
   execFileSync("aws", argv, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -123,23 +88,17 @@ function currentPayload() {
     ]);
     return JSON.parse(raw);
   } catch {
-    return null; // absent, or unreadable — either way there is nothing to compare against
+    return null;
   }
 }
 
 const existing = currentPayload();
 
-/**
- * A value CI mints rather than reads. `random-256-bit` is 32 bytes of CSPRNG output, base64 — the only
- * kind anything asks for so far, and an unknown kind is a hard failure rather than a guess.
- */
 function mint(kind, name) {
   if (kind === "random-256-bit") return randomBytes(32).toString("base64");
   console.error(`::error::${name} declares generate: "${kind}", which this tool does not know how to mint`);
   process.exit(1);
 }
-
-// ── Resolve ─────────────────────────────────────────────────────────────────────────────────────
 
 const payload = {};
 const unresolved = [];
@@ -147,15 +106,10 @@ const skipped = [];
 const minted = [];
 
 for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.localeCompare(b))) {
-  if (entry.store !== "config") continue; // credentials are not ours to write
+  if (entry.store !== "config") continue;
 
-  // `source: image-build` is NOT a reason to skip. It says where the value came from — the image
-  // ships the binary — not whether the variable is injected; STELLAR_CLI_PATH is `image-build` and
-  // `inject: ecs-secrets`, and the live task definitions set it. Skipping on source dropped it from
-  // the rendered definition, which would have been a silent contract change rather than a migration.
-  // What decides is whether the contract records a value to write.
-  // Ahead of every other branch: `generate:` and a recorded value are mutually exclusive (check:env's
-  // check J refuses both), and the existing value is what keeps the key stable across deploys.
+  // `source: image-build` is not a reason to skip: what decides is whether the contract records a value.
+  // Before every other branch: the existing value keeps a generated key stable across deploys.
   if (entry.generate) {
     const kept = existing?.[name];
     payload[name] = kept ?? mint(entry.generate, name);
@@ -163,8 +117,7 @@ for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.local
     continue;
   }
 
-  // Ahead of `value`: a recorded value beside a descriptor path is a name kept for grep, and falling
-  // back to it would write a stale name after a rename with nothing failing.
+  // Before `value`: a recorded value beside a descriptor path is only a greppable name, often stale.
   if (entry.value_from_output) {
     if (!descriptor) {
       unresolved.push(`${name} needs descriptor path "${entry.value_from_output}" but none was given`);
@@ -188,7 +141,6 @@ for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.local
   }
 
   if (entry.default !== undefined) {
-    // The service supplies this default itself; writing it would pin a value the code owns.
     skipped.push(`${name} (service default)`);
     continue;
   }
@@ -200,16 +152,13 @@ for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.local
   }
 }
 
-// Fail before writing anything. A partial secret is worse than no write: the service would start with
-// some variables at their old values and some at new ones, and nothing would say so.
+// Fail before writing anything: a partial secret would mix old and new values silently.
 if (unresolved.length) {
   console.error(`✗ ${service}: ${unresolved.length} variable(s) could not be resolved`);
   for (const u of unresolved) console.error(`  ✗ ${u}`);
   console.error("\nNothing was written. Resolve these before deploying.");
   process.exit(1);
 }
-
-// ── Compare, then write ─────────────────────────────────────────────────────────────────────────
 
 const desired = JSON.stringify(payload, Object.keys(payload).sort(), 2);
 
@@ -235,7 +184,7 @@ if (existing !== null) {
   console.log(`${secretName}: creating with ${Object.keys(payload).length} variable(s)`);
 }
 
-// Names only, like the diff above — the whole point of minting here is that the value never travels.
+// Names only: a minted value never leaves this process.
 if (minted.length) console.log(`  ★ minted for the first time: ${minted.join(", ")}`);
 if (skipped.length) console.log(`  (${skipped.length} not written: ${skipped.join(", ")})`);
 

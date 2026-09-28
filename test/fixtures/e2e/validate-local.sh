@@ -117,10 +117,6 @@ if ! rg -q 'expected one of|error:' "$work_root/build-failed.log"; then
   exit 1
 fi
 
-# Do not execute this fixture here: its contract is to outlive the deployment's own wall-clock
-# limit, and a local validation run has no such supervisor. Validate the two properties that make
-# it deterministic and diagnosable instead — Cargo invokes the script, and the script emits the
-# marker before entering an unbounded sleep loop.
 timeout_root="$(extract_fixture build-timeout "$archive_root/build-timeout.tar.gz")"
 timeout_manifest="$timeout_root/contracts/verified-demo/Cargo.toml"
 timeout_script="$timeout_root/contracts/verified-demo/build.rs"

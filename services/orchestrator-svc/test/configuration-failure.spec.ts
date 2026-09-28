@@ -13,18 +13,12 @@ import type { AppConfigService } from "../src/config/configuration.js";
 import type { EnvironmentsRepository } from "@scvs/db";
 import type { ComposeIntent } from "@scvs/core";
 
-/**
- * Because all three are `required: no`, the service booted healthy and every cli-legacy verification threw on
- * first use.
- */
-
 const STAGING = { bucket: "stellar-scratch", region: "ap-southeast-2" };
 const INTENT: ComposeIntent = {
   pair: { cliver: "25.1.0", rsver: "1.95.0" },
   template_version: "v1",
 };
 
-/** Only the keys `ComposerDispatchService` reads; anything absent is an unset variable. */
 function configWith(overrides: Record<string, string | undefined>): AppConfigService {
   const values: Record<string, unknown> = { stagingStorage: STAGING, ...overrides };
   return { get: (key: string) => values[key] } as unknown as AppConfigService;
@@ -46,16 +40,12 @@ describe("configurationFailure", () => {
   });
 
   it("leaves every other throw on the retryable path", () => {
-    // An RPC blip, a Batch rejection, a dropped connection — re-running those genuinely can produce a different
-    // answer, and narrowing that set is not what this change is for.
     expect(configurationFailure(new Error("Batch rejected the submission"))).toBeUndefined();
     expect(configurationFailure("not even an Error")).toBeUndefined();
     expect(configurationFailure(undefined)).toBeUndefined();
   });
 
   it("recognises the error across module realizations", () => {
-    // `instanceof` alone is not enough: the class is reachable through more than one specifier (a test's `src/`
-    // import vs. the built `dist/` path), and two realizations fail `instanceof` against each other silently.
     const foreign = Object.assign(new Error("SCVS_X is required"), {
       name: "ConfigurationError",
       envName: "SCVS_X",
@@ -74,7 +64,6 @@ describe("configurationFailure", () => {
 describe("ComposerDispatchService's configuration checks", () => {
   const environments = {} as unknown as EnvironmentsRepository;
 
-  /** Each variable is checked in turn, so the case for the second is "the first one is set". */
   it.each([
     ["SCVS_COMPOSER_JOB_QUEUE_ARN", {}],
     [
@@ -99,9 +88,6 @@ describe("ComposerDispatchService's configuration checks", () => {
 
 describe("the composition claim under a misconfiguration", () => {
   it("releases the claim and re-throws the error unchanged, so the pipeline can classify it", async () => {
-    // Two properties in one, and they are separate: `releaseClaim` keeps a perfectly composable pair out of a
-    // terminal `failed` row over an operator's missing variable (see the materializer's own comment), and
-    // re-throwing the ORIGINAL error.
     const row = {
       environmentId: "env-1",
       status: "pending" as const,

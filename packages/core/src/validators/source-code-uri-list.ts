@@ -7,7 +7,6 @@ import {
 } from "class-validator";
 import { HEX_SHA256 } from "../digest.js";
 
-/** True for either form a `verified_source_code_uris` item can take on the wire: a bare URI, or `{location, url, sha256?}`. */
 export function isSourceCodeUriItem(value: unknown): boolean {
   if (typeof value === "string") return value.length > 0;
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -28,10 +27,6 @@ class IsSourceCodeUriListConstraint implements ValidatorConstraintInterface {
   }
 }
 
-/**
- * The consumer-side shape of `verified_source_code_uris`: a bare URI string is the only shape published before
- * `location` existed, and a peer may be on either.
- */
 export function IsSourceCodeUriList(validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string) => {
     registerDecorator({

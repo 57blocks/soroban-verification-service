@@ -23,7 +23,6 @@ import { AggregationSyncService } from "../aggregation/aggregation-sync.service.
 import { ADDRESS_RESOLVER, MalformedContractIdError, type AddressResolver } from "./address-resolver.js";
 import { ApiError, ApiErrorResponse } from "@scvs/http";
 
-/** The aggregated read surface: one entry per verifier, in the Registry's own vocabulary. */
 @Controller()
 export class ResultsController {
   constructor(
@@ -32,10 +31,7 @@ export class ResultsController {
     @Inject(ADDRESS_RESOLVER) private readonly addresses: AddressResolver,
   ) {}
 
-  /**
-   * **Declared before the canonical route on purpose, and the order is load-bearing.** Express's `:wasm_hash`
-   * matches greedily and takes the dot with it, so `/wasms/abc.json` matches the route below too.
-   */
+  /** Must be declared before the canonical route: Express's `:wasm_hash` also matches the dot. */
   @Get("api/query/v1/wasms/:wasm_hash.json")
   @ApiOperation({ operationId: "queryByHashJson", deprecated: true, description: DEPRECATED_JSON_ROUTE_DESCRIPTION })
   @Header("Deprecation", "true")
@@ -57,12 +53,7 @@ export class ResultsController {
   }
 
   @Get("api/query/v1/contracts/:network/:contract_id")
-  /**
-   * The only route that reaches a third party — one outbound RPC per admitted request, uncached (see
-   * `resolve`) — so this tier is sized against what the upstream tolerates, and `@Throttle` replacing the
-   * global limit rather than stacking under it is why boot refuses a value at or above it. The limit comes
-   * from `process.env`, a decorator argument being evaluated before any container exists.
-   */
+  /** Decorator arguments are evaluated before any container exists, so the limit is read from `process.env`. */
   @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })
   @ApiOkResponse({ type: AggregatedWasmStatus })
@@ -83,24 +74,17 @@ export class ResultsController {
     @Param("network") networkParam: string,
     @Param("contract_id") contractId: string,
   ): Promise<AggregatedWasmStatus> {
-    // Before resolving: an answer we cannot give is not worth a ledger round-trip.
     this.assertFirstPassComplete();
     if (!isNetwork(networkParam)) {
       throw new ApiError(400, { error: "invalid_network", message: "network must be 'mainnet' or 'testnet'" });
     }
     const network: Network = networkParam;
 
-    // Re-resolved per request, never read from a published file: the mapping changes on upgrade, and a stale
-    // pointer would attribute a verdict to code that is no longer deployed.
+    // Resolved per request, never cached: a contract's Wasm changes on upgrade.
     const wasmHash = await this.resolve(network, contractId);
     return this.reader.byHash(wasmHash.toLowerCase());
   }
 
-  /**
-   * `agreement: "no_data"` with an empty `unavailable_verifiers` asserts that every member was asked and none
-   * had a result. Before the first pass none of them has been asked, so the same body would be a lie a
-   * consumer cannot detect — the reason `GET /v1/wasms` refuses too.
-   */
   private assertFirstPassComplete(): void {
     if (this.sync.hasCompletedFirstPass) return;
     throw new ApiError(503, {
@@ -117,8 +101,6 @@ export class ResultsController {
       if (error instanceof MalformedContractIdError) {
         throw new ApiError(400, { error: "invalid_contract_id", message: error.message });
       }
-      // Failing to reach the ledger is not the same as the address having no subject, and it is not an
-      // unavailable *verifier* either — the request has no subject at all.
       throw new ApiError(502, {
         error: "address_resolution_failed",
         message: error instanceof Error ? error.message : String(error),

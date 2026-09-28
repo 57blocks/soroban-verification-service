@@ -1,4 +1,3 @@
-/** E2E-PUB-02 — everything is hash-addressed; E2E-PUB-09 — failed jobs never publish. */
 import { caseBlock, rowTest } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -23,11 +22,6 @@ const MAX_PAGINATION_PAGES = 200;
 
 type BulkRecord = { wasm_hash: string; updated_at: string };
 
-/**
- * BL5 is an upsert stream, not a set of hashes. A hash may reappear after its publication clock advances (for
- * example after a new report or archive backfill), but the same composite stream key must never be emitted
- * twice.
- */
 function assertUpsertableStream(records: readonly BulkRecord[]): void {
   const keys = new Set<string>();
   const latestByHash = new Map<string, number>();
@@ -51,7 +45,6 @@ function assertUpsertableStream(records: readonly BulkRecord[]): void {
 
     const previousTimestamp = latestByHash.get(record.wasm_hash);
     if (previousTimestamp !== undefined) {
-      // Re-delivery is valid only after the hash's publication update time advances.
       expect(timestamp).toBeGreaterThan(previousTimestamp);
     }
     latestByHash.set(record.wasm_hash, timestamp);
@@ -67,8 +60,6 @@ caseBlock(
     prerequisites: ["P1"],
   },
   () => {
-    // The case says to list every object key. A black-box client cannot list a bucket over HTTPS, and enabling
-    // listing to make the test possible would change the thing under test.
     const forbidden = [
       { key: "feeds/latest.json", why: "ADR-010 removed the feeds lookup files" },
       { key: "feeds/testnet/2026-06-30.jsonl", why: "date-partitioned enumeration" },
@@ -121,23 +112,19 @@ caseBlock(
         const dynamicBefore = await http(aggregatedByHashUrl(target.wasm_hash!));
         expectStatus(dynamicBefore, 200, 202, 404);
 
-        // A source that cannot be fetched fails the job without consuming a build slot, which is what keeps
-        // this row out of the builder while still exercising a real asynchronous job.
         const run = await submitAndWait(
           await submissionFor("F-LEG-1", { source_uri: fixtures.unreachable_source_uri! })
         );
 
         expect(["source_unavailable", "build_failed"]).toContain(run.body.status);
 
-        // HA2 — a failed job must not change the hash's existing published state.
         const before = staticBefore;
 
-        // HA1 — the dynamic surface must also remain unchanged.
         const dynamic = await http(aggregatedByHashUrl(target.wasm_hash!));
         expectStatus(dynamic, 200, 202, 404);
         expect(dynamic.status).toBe(dynamicBefore.status);
         if (dynamic.status === 200 && dynamicBefore.status === 200) {
-          // AggregationReadService assigns `updated_at` when it serves each response.
+          // updated_at is assigned per response, so it is left out of the comparison.
           const { updated_at: _beforeUpdatedAt, ...beforeAggregate } = dynamicBefore.json;
           const { updated_at: _afterUpdatedAt, ...afterAggregate } = dynamic.json;
           expect(afterAggregate).toEqual(beforeAggregate);
@@ -147,8 +134,6 @@ caseBlock(
         expect(after.found).toBe(before.found);
         if (before.found && after.found) expect(after.object).toEqual(before.object);
 
-        // The diagnostic the case adds, and the thing that makes the above humane: the submitter still learns
-        // what happened, through their own job.
         expect(run.body.result?.reason ?? run.body.error).toBeDefined();
       },
       env.jobTimeoutMs + 60_000
@@ -182,7 +167,6 @@ caseBlock(
         expect(mismatchedFixture.wasm_hash).toBeDefined();
         expect(verifiedFixture.wasm_hash).not.toBe(mismatchedFixture.wasm_hash);
 
-        // The result root and jobs table are intentionally persistent across E2E runs.
         const latest = await http(ownBulkLoadUrl({ order: "desc", limit: 1 }));
         expectStatus(latest, 200);
         const latestPage = latest.json as BulkLoadPage;
@@ -223,7 +207,6 @@ caseBlock(
           break;
         }
 
-        // With limit=1, every non-empty page must expose the next keyset cursor.
         expect(body.records).toHaveLength(PAGINATION_LIMIT);
         if (body.cursor === null) throw new Error("A non-empty limit=1 bulk-load page has no cursor.");
         expect(body.cursor).toMatch(/^\d+-[0-9a-f]{64}$/);
@@ -235,8 +218,6 @@ caseBlock(
         }
         cursor = body.cursor;
 
-        // BL5 consumers stop once they have observed the records they need and upsert them locally; they do not
-        // need to drain the deployment's entire historical stream to an empty page.
         if (observedTargets.size === targetHashes.size) return seen;
       }
 
@@ -259,7 +240,6 @@ caseBlock(
       expectStatus(second, 200);
       const secondPage = second.json as BulkLoadPage;
       expect(secondPage.records).toHaveLength(PAGINATION_LIMIT);
-      // BL5 permits the same hash on the next page when its publication timestamp advanced.
       const firstRecord = firstPage.records[0];
       const secondRecord = secondPage.records[0];
       const firstTimestamp = Date.parse(firstRecord.updated_at);
@@ -275,7 +255,6 @@ caseBlock(
       assertUpsertableStream(seen);
       const hashes = seen.map((record) => record.wasm_hash);
       for (const hash of publishedHashes) {
-        // A hash may be re-delivered after a later publication update; consumers upsert it by hash.
         expect(hashes.filter((seenHash) => seenHash === hash).length).toBeGreaterThanOrEqual(1);
       }
     });
@@ -293,8 +272,6 @@ caseBlock(
     });
 
     it("rejects a malformed cursor rather than silently restarting the stream", async () => {
-      // A stream that answered 200 from the beginning here would hand a consumer the whole corpus again and
-      // look like success.
       const response = await http(ownBulkLoadUrl({ cursor: "not-a-cursor" }));
       expectStatus(response, 400);
       expect(response.json.error).toBe("invalid_cursor");
@@ -319,7 +296,6 @@ caseBlock(
       expect(manifest.display_name.length).toBeGreaterThan(0);
       expect(manifest.url.length).toBeGreaterThan(0);
 
-      // HA3 — a manifest whose `policy_url` 404s makes every trust claim in the tree unfollowable.
       const policy = await http(new URL(manifest.policy_url, `${manifest.url}/`).toString());
       expectStatus(policy, 200);
       expect(policy.json.schema).toBe("stellar-verifier-policy-v1");
@@ -337,9 +313,7 @@ caseBlock(
     unless: () => missingFixture("F-LEG-1"),
   },
   () => {
-    // The 202 case leaves a real job building on purpose. A recipe scope separates rebuild identity, never the
-    // status document, so draining here is the only thing that keeps this case from poisoning E2E-ARC-03 and
-    // E2E-PUB-05.
+    // Drain the in-flight job, or it later rewrites the status document other specs read.
     let inFlightJobId: string | undefined;
 
     afterAll(async () => {
@@ -349,21 +323,14 @@ caseBlock(
     it(
       "serves the published tree verbatim and distinguishes it from a never-seen hash",
       async () => {
-        // H_done — published.
         const done = await submitAndWait(await submissionFor("F-LEG-1"));
         const doneHash = done.body.result?.wasm_hash ?? fixtures.contracts["F-LEG-1"].wasm_hash!;
         await requireStatusObject(doneHash);
 
-        // H_never — never submitted.
         const neverStatic = await http(staticWasmStatusUrl(NEVER_SUBMITTED_HASH));
         expect([403, 404]).toContain(neverStatic.status);
-        // SEP §8 puts the static result root OUTSIDE the error envelope, necessarily: a missing key
-        // returns whatever the origin produces — an object store's XML, a web server's HTML — and no
-        // verifier can make a static origin emit our JSON. Asserted as an absence rather than left
-        // implicit, because it is half of the asymmetry the next assertion completes.
         expect(neverStatic.json?.schema).not.toBe("stellar-verification-error");
 
-        // The static origin has exactly two answers: a settled document or an absence.
         const { staticRead, dynamicRead, uppercaseRead } = await readStatusFormsUntilAgreed(doneHash);
         expectStatus(staticRead, 200);
         expectStatus(dynamicRead, 200);
@@ -371,10 +338,6 @@ caseBlock(
         expect(dynamicRead.text).toBe(staticRead.text);
         expect(uppercaseRead.text).toBe(staticRead.text);
 
-        // The other half of that asymmetry: on the SAME absent hash the dynamic route does carry the
-        // envelope (§4). Answering an absence differently in the two forms is deliberate — a consumer
-        // reading the static form cannot tell "no such hash" from "misconfigured origin", which is one
-        // of the reasons §4's route exists.
         const neverDynamic = await http(verifyWasmStatusUrl(NEVER_SUBMITTED_HASH));
         expectStatus(neverDynamic, 404);
         expect(expectErrorEnvelope(neverDynamic).error).toBe("not_found");
@@ -385,8 +348,6 @@ caseBlock(
     it(
       "returns the draft pending 202 while a verification is in flight",
       async () => {
-        // A second run-scoped F-LEG-1 submission produces a real active job without stubbing an owned
-        // component.
         const target = fixtures.contracts["F-LEG-1"];
         const wasmHash = target.wasm_hash;
         if (!wasmHash) throw new Error("F-LEG-1 was selected without a wasm_hash");
@@ -412,7 +373,6 @@ caseBlock(
           }),
         );
         expect(pending!.json.source_code_verifications[0]).not.toHaveProperty("processed_at");
-        // RC3's 202 is a pending response, not a settled source-verification record.
         expect(pending!.json.source_code_verifications[0]).not.toHaveProperty("source_sha256");
       },
       env.jobTimeoutMs

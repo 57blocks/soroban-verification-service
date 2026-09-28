@@ -10,14 +10,6 @@ import {
 } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 
-/**
- * RP-3's database half: which jobs are selectable, and what a delete takes with it.
- *
- * **Nothing here calls `JobRetentionScheduler.sweep`.** The sweep is table-wide by design, which is right for
- * production and is exactly what ADR-015 forbids a suite to do against the shared Postgres — it would delete a
- * concurrently running sibling's rows. `pruneJobs` is called with explicit ids this file created, and the
- * scheduler's own logic is covered without a database in `job-retention-scheduler.spec.ts`.
- */
 let client: PrismaClient;
 let jobs: JobsRepository;
 let rebuilds: RebuildsRepository;
@@ -27,11 +19,8 @@ const createdRows = new CreatedRows();
 
 const IMAGE = `docker.io/example/img@sha256:${"a".repeat(64)}`;
 const RETENTION_MS = 30 * 24 * 60 * 60_000;
-/** A cutoff every job created during this run is behind — the shape `sweep` computes from `now - retention`. */
 const cutoff = () => new Date(Date.now() + RETENTION_MS + 60_000);
 
-/** Distinct per call, so `listPublished`'s table-wide read never mistakes another row — ours or a sibling
- *  suite's — for one this assertion is about. The `a` prefix keeps a suite's own hashes sorting together. */
 const newPublishedHash = () => `a${randomBytes(31).toString("hex")}f`;
 
 beforeAll(() => {
@@ -81,7 +70,6 @@ async function createJob(opts: { rebuildId?: string } = {}): Promise<string> {
   return jobId;
 }
 
-/** A job that failed and was never published — what RP-3's sweep is for. */
 async function createFailedJob(): Promise<string> {
   const jobId = await createJob();
   await jobs.advanceJob(jobId, "queued", "failed", {
@@ -91,7 +79,6 @@ async function createFailedJob(): Promise<string> {
   return jobId;
 }
 
-/** A job carrying `published_updated_at` — a published record, and the thing bulk load reads. */
 async function createPublishedJob(wasmHash: string, publishedUpdatedAt: Date): Promise<string> {
   const jobId = await createJob();
   await jobs.advanceJob(jobId, "queued", "published", { verdict: "verified", wasmHash, publishedUpdatedAt });
@@ -112,7 +99,6 @@ describe("listPrunableJobs", () => {
 
   it("leaves a job carrying an unfinished obligation, however old", async () => {
     const owing = await createFailedJob();
-    // `archive_pending_since` is a durable obligation; deleting the row destroys it rather than discharging it.
     await client.job.update({ where: { id: owing }, data: { archivePendingSince: new Date(0) } });
 
     const ids = (await jobs.listPrunableJobs({ before: cutoff(), limit: 500 })).map(
@@ -174,8 +160,6 @@ describe("published records are not the sweep's business", () => {
     );
     const failed = [await createFailedJob(), await createFailedJob()];
 
-    // What a consumer holds before the sweep: one page, and the cursor it would resume from. `listPublished`
-    // is the exact call `OwnBulkLoadController` serves `GET /api/verification/v1/wasms` from.
     const ourPage = (records: { wasmHash: string; publishedUpdatedAt: string }[]) =>
       records.filter((row) => mine.includes(row.wasmHash));
     const before = ourPage(await jobs.listPublished({ order: "asc", limit: 200 }));
@@ -185,7 +169,6 @@ describe("published records are not the sweep's business", () => {
       wasmHash: before[0].wasmHash,
     };
 
-    // Exactly what a sweep would have selected among this file's own rows, and nothing else.
     const selectable = (await jobs.listPrunableJobs({ before: cutoff(), limit: 500 })).map((row) => row.jobId);
     expect(failed.every((jobId) => selectable.includes(jobId))).toBe(true);
     expect(published.some((jobId) => selectable.includes(jobId))).toBe(false);
@@ -194,7 +177,6 @@ describe("published records are not the sweep's business", () => {
     for (const jobId of failed) expect(await jobs.getJobById(jobId)).toBeUndefined();
     for (const jobId of published) expect(await jobs.getJobById(jobId)).toBeDefined();
 
-    // The sync resumes from its stored cursor and sees exactly the records that follow it, as before.
     const resumed = ourPage(await jobs.listPublished({ order: "asc", limit: 200, cursor: resumeFrom }));
     expect(resumed.map((row) => row.wasmHash)).toEqual(mine.slice(1));
     expect(ourPage(await jobs.listPublished({ order: "asc", limit: 200 }))).toEqual(before);

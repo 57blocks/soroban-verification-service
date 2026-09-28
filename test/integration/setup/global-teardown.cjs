@@ -1,4 +1,3 @@
-/** Prints the drift ledger once, after every worker has finished. */
 const fs = require("node:fs");
 
 module.exports = async function printDrift() {

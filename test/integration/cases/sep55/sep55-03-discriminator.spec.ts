@@ -1,4 +1,3 @@
-/** E2E-SEP55-03 — the discriminator is **begins with** `github:`, not **contains** it */
 import { fixture, missingDeployedTarget } from "../../support/fixtures.js";
 import { caseBlock, rowTest } from "../../support/gate.js";
 import {
@@ -11,10 +10,8 @@ import {
 const CASE_ID = "E2E-SEP55-03";
 
 interface DiscriminatorRow {
-  /** The semantic suffix from the case file's parameter table. */
   readonly suffix: string;
   readonly fixtureId: string;
-  /** The on-chain `source_repo` value, restated so the row reads without the inventory open. */
   readonly sourceRepo: string;
   readonly expected: boolean;
 }
@@ -53,8 +50,6 @@ caseBlock(
     mode: "AUTO",
     needs: ["SCVS_E2E_VERIFY_URL", "SCVS_E2E_RESULT_ROOT"],
     prerequisites: ["P1"],
-    // The persistent rows establish the common E2E prerequisites. Run-scoped boundary rows name a
-    // missing fixture individually when this is not the CI inventory.
     unless: () => missingDeployedTarget("F-S55-B", "F-S55-C"),
   },
   () => {
@@ -71,24 +66,16 @@ caseBlock(
           });
           const { artifact } = observation;
 
-          // ── The hard assertion the whole row exists for ──────────────────────────────────────
           expectMarker(observation, row.expected);
 
-          // A `false` marker is still one field in one place.
           expectSingleMarkerRepresentation(observation);
 
-          // ── Shared step 3, as far as open item 2 allows ──────────────────────────────────────
-          // The verdict published at all, so retrieval succeeded — and it cannot have used the `source_repo`
-          // value, whose host does not resolve.
           expect(observation.terminal.body.status).not.toBe("source_unavailable");
           expect(artifact.source?.is_public).toBe(true);
           expect(artifact.source?.source_sha256).toBe(fixture(fixtureId).source_sha256);
           expect(artifact.source?.source_uri).toBe(fixture(fixtureId).source_uri);
           expect(artifact.source?.source_uri).not.toBe(row.sourceRepo);
 
-          // ── The other half of SEP55-01's HA3 ────────────────────────────────────────────────
-          // Same source and recipe, with only the observed metadata value changed: the verdict is
-          // still exactly the byte comparison, so the marker did not move it.
           const rebuilt = artifact.result.rebuilt_wasm_hash?.toLowerCase();
           const deployed = artifact.result.wasm_hash?.toLowerCase();
           expect(artifact.result.matched).toBe(rebuilt !== undefined && rebuilt === deployed);

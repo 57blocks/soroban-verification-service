@@ -1,6 +1,5 @@
 import { Toaster as Sonner } from "sonner";
 
-/** Replaces Ant Design's `message` API. */
 export const Toaster = (props: React.ComponentProps<typeof Sonner>) => (
   <Sonner
     position="top-center"

@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prepare the shared target/source material for E2E-QRY-02..05.
-#
-# No new contract is required. F-LEG-1 is already a ready testnet cli-legacy contract and the
-# mismatch archive is already generated. Dev publishes a verified result for F-LEG-1; staging can
-# publish a mismatched result for the same target by submitting mismatch.tar.gz. QRY-03..05 then use
-# the same hash while the staging/dead TVL entry is unavailable. This script intentionally does not
-# mutate a chain or call a verifier: both environments are currently inaccessible and the later
-# deployment window must make that external state change explicitly.
-
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 inventory="${SCVS_E2E_FIXTURES:-${repo_root}/test/integration/fixtures/e2e-fixtures.dev.json}"
 archive="${repo_root}/artifacts/e2e-fixtures/archives/mismatch.tar.gz"

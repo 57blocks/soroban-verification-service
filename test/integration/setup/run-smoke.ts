@@ -134,8 +134,6 @@ const smokeEnv = {
   SCVS_E2E_ALLOW_BROWSER: "1",
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --experimental-vm-modules`.trim(),
 };
-// `eng-tools/write-e2e-summary.mjs` renders the job summary from these two reports, which until now were
-// written into a temp directory and deleted on the way out.
 const configuredReportDir = process.env.SCVS_E2E_REPORT_DIR;
 const persistentReportDir = configuredReportDir
   ? isAbsolute(configuredReportDir)
@@ -195,8 +193,6 @@ try {
   for (const smokeCase of provisionedJestCases) {
     if (!e2eIsEnabled()) continue;
     announce("3/3 Provisioned verification", [smokeCase.id]);
-    // That script forwards trailing arguments to its own Jest run, so the provisioned leg can report into the
-    // same directory instead of being the one case the summary cannot see.
     const provisionedReport = persistentReportDir
       ? join(
           persistentReportDir,

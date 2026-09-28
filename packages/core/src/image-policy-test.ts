@@ -24,9 +24,6 @@ test("the official digest-pinned CLI image is accepted, with its evidence", () =
   assert.equal(result.evidence.checked, "digest_pinned_stellar_cli_image");
 });
 
-// `unsupported` and `policy_rejected` are disjoint, and telling them apart is the whole point: a well-formed
-// digest-pinned image policy has not accepted *yet* is "come back later", while a tag-only reference is "fix
-// your submission".
 test("a well-formed but not-yet-accepted image is unsupported", () => {
   const result = evaluateBuildImage(UNTRUSTED_IMAGE);
   assert.equal(result.ok, false);
@@ -43,7 +40,6 @@ test("a non-digest-pinned reference is policy_rejected", () => {
   assert.equal(imagePolicyErrorCode(result.reason), "policy_rejected");
 });
 
-// The two reasons must map to two codes. One code for both is the defect this exists to prevent.
 test("the two reasons map to two distinct codes", () => {
   assert.notEqual(
     imagePolicyErrorCode("image_not_sdf_trusted"),
@@ -51,9 +47,6 @@ test("the two reasons map to two distinct codes", () => {
   );
 });
 
-// The shape rung is derived from `BLDIMG_PATTERN` with the `i` flag both service copies carried. An upper-case
-// digest is therefore well-formed here and stops at the trust rung, not the shape one — worth pinning, because
-// `BLDIMG_PATTERN` itself is lower-case only and governs what may be published.
 test("an upper-case digest is judged by trust, not by shape", () => {
   const upper = `ghcr.io/someone/their-builder@sha256:${"A".repeat(64)}`;
   const result = evaluateBuildImage(upper);

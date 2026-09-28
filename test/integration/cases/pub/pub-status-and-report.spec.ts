@@ -1,4 +1,3 @@
-/** E2E-PUB-04 (SO1–SO5), E2E-PUB-07 (report provenance), E2E-PUB-08 (`results_urls`), E2E-PUB-17 (custody). */
 import { caseBlock, rowTest } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { expectPerTrd } from "../../support/conformance.js";
@@ -54,8 +53,6 @@ caseBlock(
       for (const status of [verifiedStatus, mismatchedStatus]) {
         for (const entry of status.source_code_verifications) {
           expect(["verified", "mismatched", "unverified"]).toContain(entry.status);
-          // Stated as its own assertion because `mismatch` is the one spelling that would pass a loose enum
-          // check on the *job* surface and fail a consumer parsing the Registry schema.
           expect(entry.status).not.toBe("mismatch");
         }
       }
@@ -67,7 +64,6 @@ caseBlock(
         if (entry.status === "mismatched") {
           expect(typeof entry.rebuilt_hash).toBe("string");
         } else {
-          // `null` would be a third state a consumer has to handle; the schema says omit.
           expect(Object.prototype.hasOwnProperty.call(entry, "rebuilt_hash")).toBe(false);
         }
       }
@@ -87,8 +83,6 @@ caseBlock(
     });
 
     it("/at_least_one_entry — SO4: a published object is never an empty array", () => {
-      // The corollary matters as much as the rule: "no verifications" is expressed as a 404 on the document,
-      // not as a 200 carrying nothing.
       expect(verifiedStatus.source_code_verifications.length).toBeGreaterThanOrEqual(1);
       expect(mismatchedStatus.source_code_verifications.length).toBeGreaterThanOrEqual(1);
     });
@@ -105,14 +99,8 @@ caseBlock(
     });
 
     it("/bldarg_matches_the_report — the recipe on the entry is the recipe the report records", async () => {
-      // `bldarg` reached the status object, and it is the half of the recipe a consumer
-      // replaying from the entry alone did not have. SEP-58 v0.6.0 makes it order-significant, so
-      // this is `toEqual` on the array and never a set comparison. The entry and the report it
-      // points at are written by one pipeline from one recipe; a disagreement means one is stale.
       const ours = ownEntryOf(verifiedStatus.source_code_verifications, identity);
       expect(ours).toBeDefined();
-      // Non-vacuity: F-LEG-1 carries `["contract", "build"]`, so an empty array on both sides would
-      // be the failure this asserts against rather than a pass.
       expect(ours!.bldarg).toEqual(fixtures.contracts["F-LEG-1"].bldarg);
 
       const pointer = linkUrls(ours!).find((url) => url.includes("/reports/"));
@@ -130,10 +118,6 @@ caseBlock(
     });
 
     it("identifies this verifier in a way a consumer can follow back to a policy", () => {
-      // Retargeted 2026-09-04: this asserted `verifier.name` was a string. A name is
-      // self-claimed, optional, and leads nowhere. `verifier.url` is the result root — the place
-      // `verifier-manifest.json` and `policy.json` actually are — which is what makes this title's
-      // sentence true. That those two are reachable is E2E-PUB-02's assertion, not a second copy here.
       const ours = ownEntryOf(verifiedStatus.source_code_verifications, identity);
       expect(ours).toBeDefined();
       expect(ours!.verifier.url).toBe(identity.url);
@@ -160,35 +144,26 @@ caseBlock(
 
         const { artifact } = await readReportByUrl(url!);
 
-        // /recipe_source — F-LEG-1's recipe was supplied by the submitter, so `submitted`.
         expect(artifact.provenance.recipe_source).toBe("submitted");
 
-        // /build_isolation — this is a live F-LEG-1 submission, so assert the mechanism it actually runs rather
-        // than accepting the historical CLI-managed value.
         expect(artifact.provenance.build_isolation).toBe("network_isolated");
 
-        // /full_recipe_with_bldarg — the recipe is evidence, so it has to be complete enough to replay.
         const recipe = artifact.build_recipe as Record<string, unknown> | undefined;
         expect(recipe).toBeDefined();
 
-        // This read `recipe!.source_sha256`, transcribed from IMPLEMENTATION-SPEC D.1's example, whose `recipe`
-        // block carries `source_sha256` and `source_uri`.
         expect(artifact.source!.source_sha256).toBe(fixtures.contracts["F-LEG-1"].source_sha256);
 
         expect(artifact.source!.is_public).toBe(true);
         expect(typeof artifact.source!.source_file_name).toBe("string");
         expect(typeof artifact.source!.source_uri).toBe("string");
 
-        // /trust_block — one field, and only one.
         expect(typeof artifact.trust.sep55_attestation_present).toBe("boolean");
 
-        // /build_environment_trust_level — canonical home is the build_recipe block, not `trust`.
         const buildEnvironment = recipe?.build_environment as { trust_level?: string } | undefined;
         if (buildEnvironment?.trust_level) {
           expect(["sdf_trusted", "upstream_pinned"]).toContain(buildEnvironment.trust_level);
         }
 
-        // /log_pointer — no `build_log_url` field exists anywhere in the codebase.
         expectPerTrd("REPORT_LOG_POINTER", "E2E-PUB-07/log_pointer", () => {
           const diagnostics = (artifact.result.sandbox_diagnostics ?? {}) as Record<string, unknown>;
           expect(typeof diagnostics.build_log_url).toBe("string");
@@ -240,8 +215,6 @@ caseBlock(
           (verification: RegistryVerification) => verification.results_urls ?? []
         );
 
-        // Results SEP 1.0 (AU1): every entry this verifier publishes is `{type, url, sha256}`, and the sha256
-        // is the integrity anchor for the bytes at `url` — the report and its archive copy alike.
         expect(entries.length).toBeGreaterThan(0);
         for (const entry of entries) {
           expect(typeof entry).toBe("object");
@@ -271,8 +244,7 @@ caseBlock(
     unless: () => missingFixture("F-LEG-1"),
   },
   () => {
-    // Retargeted 2026-09-04: `out_of_band` became `recipe_source` + `image_trust_level`.
-    // The suffixes keep their old spelling — `setup/run-e2e-test.mjs` gates a fixture on `/on_chain_false`.
+    // run-e2e-test.mjs selects fixtures by these suffixes (`on_chain_false`); do not rename them.
     const rows = [
       { suffix: "submitted_true", fixtureId: "F-LEG-1", recipeSource: "submitted" },
       { suffix: "on_chain_false", fixtureId: "F-58-PRIV", recipeSource: "on_chain_metadata" },
@@ -294,20 +266,14 @@ caseBlock(
           const status = await requireStatusObject(hash);
           const ours = ownEntryOf(status.source_code_verifications, await ownVerifierIdentity());
 
-          // HA1 — present on every entry carrying a verdict (SO3). `undefined` is not `on_chain_metadata`.
           expect(ours).toBeDefined();
           expect(ours!.status).not.toBe("unverified");
           expect(ours!.recipe_source).toBe(row.recipeSource);
 
-          // HA1b — the second custody signal. Membership of the schema's own enum, because which
-          // value a deployment produces depends on the image it built with.
           expect(IMAGE_TRUST_LEVELS).toContain(ours!.image_trust_level);
 
-          // HA1c — the field they replaced is gone: the SEP entry object is closed.
           expect(ours!.out_of_band).toBeUndefined();
 
-          // HA2 — and the report agrees. These two are written by the same pipeline from the same decision; a
-          // disagreement means one of them is stale.
           const { artifact } = await readReportByUrl(run.body.result!.artifact_url!);
           expect(artifact.provenance.recipe_source).toBe(row.recipeSource);
         },

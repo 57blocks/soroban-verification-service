@@ -11,8 +11,6 @@ import {
 } from "./aggregate.js";
 import { parseDto, safeParseDto } from "./validate.js";
 
-// A standalone script, like `registry-test.ts` — no package under `packages/` has a Jest setup.
-
 const here = dirname(fileURLToPath(import.meta.url));
 const schemaPath = resolve(here, "../../../docs/results-sep/schemas/stellar-verification-page-1.0.schema.json");
 
@@ -30,7 +28,6 @@ function rejects(value: unknown, why: string): void {
 }
 
 function main(): void {
-  // ── the producer document ────────────────────────────────────────────────────────────────────
   const parsed = parseDto(OwnBulkLoadPage, page);
   assert.equal(parsed.schema, "stellar-verification-page");
   assert.equal(parsed.records[0]?.wasm_hash, record.wasm_hash);
@@ -41,13 +38,9 @@ function main(): void {
   rejects({ ...page, order: "ascending" }, "order echoes back what was asked, from a closed set");
   rejects({ ...page, cursor: 7 }, "a cursor is a string or null");
 
-  // ── the consumer document ────────────────────────────────────────────────────────────────────
-  // A verifier that has not cut over publishes no `schema`. Rejecting it here would make every unmigrated peer
-  // `invalid_response` and drop it from the aggregate.
   const legacy = { schema_version: "1.0", order: "asc", cursor: null, records: [record] };
   assert.equal(parseDto(PeerBulkLoadPage, legacy).schema, undefined);
 
-  // SO7: branch on MAJOR, tolerate a higher MINOR.
   assert.equal(parseDto(PeerBulkLoadPage, { ...legacy, schema_version: "1.7" }).schema_version, "1.7");
   assert.equal(
     safeParseDto(PeerBulkLoadPage, { ...legacy, schema_version: "2.0" }).success,
@@ -56,11 +49,9 @@ function main(): void {
   );
   assert.equal(safeParseDto(PeerBulkLoadPage, { ...legacy, schema_version: "1" }).success, false);
 
-  // CV8: an unrecognised field is kept, not a reason to reject the page.
   const extra = parseDto(PeerBulkLoadPage, { ...page, something_new: 1 }) as unknown as Record<string, unknown>;
   assert.equal(extra["something_new"], 1);
 
-  // ── the schema file and the classes describe the same document ───────────────────────────────
   const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as {
     properties: { schema: { const: string }; schema_version: { const: string } };
     required: string[];
@@ -71,9 +62,7 @@ function main(): void {
   assert.deepEqual(schema.required, ["schema", "schema_version", "order", "cursor", "records"]);
   assert.deepEqual(schema.$defs.reference_record.required, ["wasm_hash", "updated_at"]);
 
-  // ── the aggregate document ───────────────────────────────────────────────────────────────────
   const relayed = {
-    // The peer's own block, unchanged. `url` identifies; `name` is what they call themselves.
     verifier: { url: "https://peer.example/", name: "As They Name Themselves" },
     schema_version: "1.3",
     status: "verified",
@@ -92,12 +81,9 @@ function main(): void {
   const parsedAggregate = parseDto(AggregatedWasmStatus, aggregate);
   assert.equal(parsedAggregate.schema, "stellar-verification-aggregate");
 
-  // An aggregator that made them agree would be re-versioning a claim it only passes on.
   assert.equal(parsedAggregate.schema_version, "1.0");
   assert.equal(parsedAggregate.source_code_verifications[0]?.schema_version, "1.3");
 
-  // CV11: the peer's own block is relayed unchanged. There is no second identity and no aggregator-local id —
-  // the result root is the identity, so nothing needs asserting.
   assert.equal(parsedAggregate.source_code_verifications[0]?.verifier.url, "https://peer.example/");
   assert.equal(parsedAggregate.source_code_verifications[0]?.verifier.name, "As They Name Themselves");
 

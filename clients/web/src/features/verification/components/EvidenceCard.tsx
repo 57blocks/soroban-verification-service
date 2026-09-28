@@ -22,14 +22,11 @@ type EvidenceCardProps = {
     onModeChange: (mode: SourceAccessMode) => void;
     archive: SourceArchiveInfo | null;
     onSelectArchive: (file: File | null) => void;
-    /** The picker's own refusal, rendered beside it rather than only as a toast. */
     error?: string | null;
   };
   isSubmitting: boolean;
   onSubmit: () => void;
-  /** Build options this verifier will not replay — UI1a, labelled `policy_rejected`. */
   rejectedOptions: RejectedBuildOption[];
-  /** The clickwrap state — this card holds the only control that forms an agreement. */
   terms: {
     accepted: boolean;
     onAcceptedChange: (accepted: boolean) => void;
@@ -38,7 +35,6 @@ type EvidenceCardProps = {
   };
 };
 
-/** Stage two: the source and build evidence the chain did not already state. */
 export const EvidenceCard = ({
   form,
   availableFields,
@@ -74,14 +70,8 @@ export const EvidenceCard = ({
         archiveError={sourceAccess.error}
       />
 
-      {/* This button is the submission — the public declaration made above becomes permanent
-          here — so the agreement is restated beside it, not only at the preflight step. It gets the full
-          width rather than a column in the button row: at `max-w-[36ch]` beside the rejected options it was
-          the smallest thing on the row that had to be acted on. */}
       <SubmissionAgreement className="mt-6" acceptance={terms} />
 
-      {/* Enabled even when the agreement has not been made: a disabled button states its reason only in a
-          tooltip nobody on a touch screen can open, so the press is what surfaces the refusal. */}
       <div className="mt-4 flex flex-wrap items-end justify-end gap-x-6 gap-y-2">
         <RejectedOptions rejected={rejectedOptions} />
         <Button onClick={onSubmit} disabled={isSubmitting} aria-busy={isSubmitting}>

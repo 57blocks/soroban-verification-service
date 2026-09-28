@@ -13,7 +13,6 @@ export const TrustModelSection = () => (
 
       <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
         {trustSignals.map(({ tone, title, description, tag, compare }, index) => (
-          // `h-full` on both keeps the cards row-height as they were before FadeUp took over as the grid item.
           <FadeUp key={title} delay={index * 120} className="h-full">
             <div className="flex h-full flex-col rounded-xl border border-line bg-surface p-6 transition-all duration-150 hover:-translate-y-1 hover:shadow-lg md:p-7">
               <div className="mb-5 flex items-center gap-2">

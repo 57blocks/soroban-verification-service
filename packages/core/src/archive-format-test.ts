@@ -19,7 +19,6 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-/** A ustar header block. `zip`/`gzip` need only their first bytes; `tar`'s marker is at offset 257. */
 function ustarHead(): Uint8Array {
   const head = Buffer.alloc(ARCHIVE_HEAD_BYTES);
   head.write("ustar", 257, "latin1");
@@ -39,8 +38,6 @@ test("all three zip signatures — local file header, empty, spanned", () => {
 });
 
 test("`PK` followed by something else is not a zip", () => {
-  // Fail closed rather than guessing: a self-extracting or prefixed archive is `unknown` and routes to the tar
-  // reader, which is what it did before this table had one owner.
   assert.equal(sniffArchiveFormatFromHead(zipHead([0x01, 0x02])), "unknown");
 });
 
@@ -51,7 +48,6 @@ test("bare tar, from the marker at offset 257", () => {
 test("a buffer too short to carry a marker is unknown, never a throw", () => {
   assert.equal(sniffArchiveFormatFromHead(new Uint8Array()), "unknown");
   assert.equal(sniffArchiveFormatFromHead(Uint8Array.from([0x1f])), "unknown");
-  // 261 bytes of a tar header is one short of the marker's end.
   assert.equal(sniffArchiveFormatFromHead(ustarHead().subarray(0, 261)), "unknown");
 });
 
@@ -62,14 +58,11 @@ test("the upload door's predicate is this table, not a second copy of it", () =>
 });
 
 test("a bare tar is refused at the door and still read by the build path", () => {
-  // Not an oversight: a bare tar has no name `stellar contract verify` accepts, and re-compressing it to invent
-  // one would change the bytes `source_sha256` is a hash of.
   assert.equal(sniffArchiveFormatFromHead(ustarHead()), "tar");
   assert.equal(uploadArchiveFormat(ustarHead()), undefined);
 });
 
 test("every admitted format has a name, a content type and a default suffix", () => {
-  // A format admitted with no way to store it is a 500 waiting for the first submitter to find it.
   for (const format of ["gzip", "zip"] as const) {
     assert.ok(UPLOAD_ARCHIVE_CONTENT_TYPE[format], `no content type for ${format}`);
     const suffix = UPLOAD_ARCHIVE_DEFAULT_SUFFIX[format];

@@ -1,11 +1,9 @@
 import type { PreflightResponseBuildEnvironment } from "@scvs/verify-api-client";
 import type { ImagePolicyReason, PreflightVerdict } from "../types";
 
-/** Which label an image-policy rejection carries. */
 const imagePolicyLabel = (reason: ImagePolicyReason): "unsupported" | "policy_rejected" =>
   reason === "image_not_sdf_trusted" ? "unsupported" : "policy_rejected";
 
-/** Preflight's per-contract answer, reduced to "may this be submitted, and if not, why". */
 export const readVerdict = (buildEnvironment: unknown): PreflightVerdict | null => {
   if (typeof buildEnvironment !== "object" || buildEnvironment === null) return null;
   const environment = buildEnvironment as Partial<PreflightResponseBuildEnvironment> & {

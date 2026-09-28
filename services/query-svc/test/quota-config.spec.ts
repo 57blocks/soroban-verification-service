@@ -2,7 +2,6 @@ import { validateSync } from "class-validator";
 import { plainToInstance } from "class-transformer";
 import { QuerySvcEnvDto } from "../src/config/env.dto.js";
 
-/** `IsNumberString` accepted "0", "-5" and "1.5"; `0` alone would refuse every request on the read surface. */
 const QUOTA_VARS = ["SCVS_QUERY_THROTTLE_LIMIT", "SCVS_QUERY_ADDRESS_THROTTLE_LIMIT"] as const;
 
 function errorsFor(variable: string, value: string): string[] {
@@ -22,14 +21,11 @@ describe.each(QUOTA_VARS)("%s", (variable) => {
   });
 });
 
-/** `@Throttle` replaces the global budget rather than stacking under it, so the ordering is a boot error. */
 describe("the two tiers' ordering", () => {
   const load = async (env: Record<string, string | undefined>) => {
     const previous = { ...process.env };
     Object.assign(process.env, env);
     try {
-      // Imported fresh each time: `configuration()` reads `process.env` when it is called, and the assertion
-      // runs inside it.
       const { default: configuration } = await import("../src/config/configuration.js");
       return configuration();
     } finally {
@@ -59,8 +55,6 @@ describe("the two tiers' ordering", () => {
   });
 
   it("checks the defaults too, not only values someone set", async () => {
-    // A deployment that sets only the global one, below the address default, is the case a check on the raw
-    // variables would miss entirely.
     await expect(
       load({ SCVS_QUERY_THROTTLE_LIMIT: "10", SCVS_QUERY_ADDRESS_THROTTLE_LIMIT: undefined }),
     ).rejects.toThrow(/must be below SCVS_QUERY_THROTTLE_LIMIT/);

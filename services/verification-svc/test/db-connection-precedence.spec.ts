@@ -5,11 +5,6 @@ import {
   type PostgresConnectionConfig,
 } from "@scvs/db";
 
-/**
- * Guards the two precedence rules that broke while `packages/db`'s connection was being moved off ambient
- * `process.env`.
- */
-
 const DB_KEYS = [
   "DATABASE_URL",
   "POSTGRES_HOST",
@@ -37,8 +32,6 @@ afterEach(() => {
 
 describe("readDbEnv", () => {
   it("lets DATABASE_URL short-circuit the five discrete POSTGRES_* variables", () => {
-    // Assembling the discrete fields first would invert it, and every deployment sets both, so nothing would
-    // visibly break — the service would just quietly talk to the wrong database.
     process.env.DATABASE_URL = "postgresql://u:p@example.invalid:5432/from_url";
     process.env.POSTGRES_DB = "from_discrete_fields";
     process.env.POSTGRES_USER = "u";
@@ -67,8 +60,6 @@ describe("readDbEnv", () => {
   });
 
   it("reports a partial config rather than throwing when nothing is set", () => {
-    // generate-openapi.ts boots the real Nest app in CI with no database environment at all, so this loader
-    // must not throw.
     for (const key of DB_KEYS) delete process.env[key];
 
     const config = readDbEnv() as Partial<PostgresConnectionConfig>;
@@ -120,18 +111,12 @@ describe("readDbEnv", () => {
     process.env.SCVS_DB_IDLE_TIMEOUT_MS = "-1";
     expect(readDbEnv()).not.toHaveProperty("idleTimeoutMillis");
 
-    // pg's own documented meaning for 0 is "never evict an idle client", not "unset" — dropping it would
-    // silently substitute pg's 10000ms default for an operator's explicit override.
     process.env.SCVS_DB_IDLE_TIMEOUT_MS = "0";
     expect(readDbEnv()).toMatchObject({ idleTimeoutMillis: 0 });
   });
 });
 
 describe("toConnectionString", () => {
-  // This is where "does this process actually need a database?" gets answered, which is why the Postgres
-  // variables are absent from `ConfigModule`'s validate schema: `DbModule`'s factory reaches this and fails at
-  // startup, while `generate-openapi.ts` boots the same AppModule in CI without a database and never reaches
-  // it.
   it("throws and names every missing field when the config is incomplete", () => {
     expect(() => toConnectionString({ host: "localhost", port: 5433 })).toThrow(
       /missing POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD/,
@@ -151,8 +136,6 @@ describe("toConnectionString", () => {
   });
 
   it("percent-encodes credentials when assembling from discrete fields", () => {
-    // A password with a `@` or `/` in it would otherwise produce a connection string that parses into a
-    // different host or database entirely.
     expect(
       toConnectionString({
         host: "db.example.invalid",
@@ -166,8 +149,6 @@ describe("toConnectionString", () => {
 });
 
 describe("resolvePoolConfig", () => {
-  // Asserts on the config createPrismaClient would hand `PrismaPg`, without constructing a real
-  // PrismaClient (which needs a real Prisma engine) or mocking @prisma/adapter-pg.
   let originalNodeEnv: string | undefined;
 
   beforeEach(() => {

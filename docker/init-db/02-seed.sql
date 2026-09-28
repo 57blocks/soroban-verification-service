@@ -1,5 +1,3 @@
--- Local dev seed: inserts the default "self" trusted verifier so query-svc can aggregate against at least one
--- verifier without manual steps.
 INSERT INTO "trusted_verifiers" ("verifier_id", "manifest_url", "results_root", "enabled")
 VALUES (
   'local-verifier',

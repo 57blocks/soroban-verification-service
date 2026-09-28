@@ -63,11 +63,8 @@ describe("extractSourceArchive", () => {
     }
   });
 
-  /** 0.2. The extension is now nothing the validator consults. */
   it("rejects a traversal entry in an archive whose name has no archive extension", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-rename-"));
-    // `.bin`, so the deleted gate — /\.(tar|tar\.gz|tgz)$/i over a submitter-chosen filename — would have
-    // skipped every check for this archive.
     const traversal = await traversalFixture(root, "not-an-archive.bin");
     const dest = await mkdtemp(join(tmpdir(), "scvs-extract-rename-dest-"));
 
@@ -119,15 +116,12 @@ describe("extractSourceArchive", () => {
     }
   });
 
-  /** The console offers `.zip` and `stellar contract verify` accepts it, so a zip could take the verify path. */
   it("extracts a zip with the same stripping and mode normalisation as a tar", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-zip-"));
     const archive = join(root, "source.zip");
     await writeFile(
       archive,
       zipArchive([
-        // 0o777 in the archive, so the mode assertions below are about *our* normalisation rather than about
-        // what the writer happened to record.
         { name: "pkg/Cargo.toml", body: '[package]\nname = "pkg"\n', mode: 0o100777 },
         { name: "pkg/src/lib.rs", body: "pub fn hello() {}\n" },
       ]),
@@ -146,7 +140,6 @@ describe("extractSourceArchive", () => {
     expect(modeOf(await stat(join(dest, "src", "lib.rs")))).toBe("0644");
   });
 
-  /** The bound has to hold on the zip listing too. */
   it("reads the uncompressed bound off a zip listing", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-zipsize-"));
     const archive = join(root, "big.zip");
@@ -162,13 +155,10 @@ describe("extractSourceArchive", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("source_archive_too_large_uncompressed");
-      // The declared size, not the ~100-byte compressed one — proving the listing was parsed rather than the
-      // file stat'ed.
       expect(result.detail).toContain(String(64 * 1024));
     }
   });
 
-  /** A missing reader is the verifier's fault, and gets a reason code that says so. */
   it("names a missing reader as an infrastructure fault, not a bad archive", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-noreader-"));
     const archive = join(root, "source.zip");
@@ -192,15 +182,12 @@ describe("extractSourceArchive", () => {
   });
 
   it("routes each detected format to the reader that can read it", () => {
-    // `unknown` staying on tar is the clause that bounds the change: bzip2/xz/zstd carry no magic number the
-    // sniffer knows, and work today only via GNU tar's own auto-detection.
     expect(archiveReaderFor("zip")).toBe("bsdtar");
     expect(archiveReaderFor("gzip")).toBe("tar");
     expect(archiveReaderFor("tar")).toBe("tar");
     expect(archiveReaderFor("unknown")).toBe("tar");
   });
 
-  /** A submitter who compresses an archive again — a macOS Finder "Compress", a mail client, a browser download. */
   it("unwraps a source archive that was compressed a second time (.tar.gz.zip)", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-nested-"));
     const source = join(root, "pkg");
@@ -219,8 +206,6 @@ describe("extractSourceArchive", () => {
       ok: true,
       source_root: dest,
       normalisation: DEFAULT_EXTRACTION_OPTIONS,
-      // What the peel found, which is also what reaches the handoff and decides which archive the verify path
-      // hands the CLI.
       canonicalisation: {
         depth: 1,
         outer_format: "zip",
@@ -228,21 +213,13 @@ describe("extractSourceArchive", () => {
         peeled: [{ member: "counter.tar.gz", format: "zip" }],
       },
     });
-    // The inner archive's top-level directory is what got stripped — the outer container's member never becomes
-    // a path in the build tree.
     expect((await readdir(dest)).sort()).toEqual(["Cargo.toml", "src"]);
     expect(modeOf(await stat(join(dest, "Cargo.toml")))).toBe("0644");
     expect(modeOf(await stat(join(dest, "src", "lib.rs")))).toBe("0644");
-    // Nothing left behind: the peel stages into a sibling of destRoot, and a second copy of the submitter's
-    // bytes must not survive in the handoff.
     const siblings = await readdir(dirname(dest));
     expect(siblings.filter((entry) => entry.startsWith(`${basename(dest)}-peel-`))).toEqual([]);
   });
 
-  /**
-   * The likeliest way a `.tar.gz` ends up inside a `.zip` at all is macOS Finder's "Compress", which writes an
-   * AppleDouble sidecar next to the file it was asked to compress.
-   */
   it("unwraps through a Finder zip's AppleDouble droppings", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-finder-"));
     await mkdir(join(root, "pkg"), { recursive: true });
@@ -262,14 +239,9 @@ describe("extractSourceArchive", () => {
     const result = await extractSourceArchive({ archivePath: archive, destRoot: dest });
 
     expect(result.ok).toBe(true);
-    // The droppings were skipped for *recognising* the shape, and never became part of the tree.
     expect(await readdir(dest)).toEqual(["Cargo.toml"]);
   });
 
-  /**
-   * Every line of the outer listing still goes through `validateArchiveEntries`, so a traversal hidden under a
-   * name the predicate skips is refused before the unwrap writes anything.
-   */
   it("still refuses an unsafe path hidden in a wrapper's droppings", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-nested-unsafe-"));
     await mkdir(join(root, "pkg"), { recursive: true });
@@ -280,8 +252,6 @@ describe("extractSourceArchive", () => {
       archive,
       zipArchive([
         { name: "counter.tar.gz", body: await latin1(inner) },
-        // A dropping-shaped *basename* (`._`) carrying a traversal, rather than something under `__MACOSX/`,
-        // and the choice is about being platform-independent.
         { name: "pkg/../../._evil", body: "escaped\n" },
       ]),
     );
@@ -293,10 +263,6 @@ describe("extractSourceArchive", () => {
     if (!result.ok) expect(result.reason).toBe("source_archive_unsafe_path");
   });
 
-  /**
-   * The refusal half, and the reason it has its own code: "we unwrapped one level and what was inside is not a
-   * source archive" is a fact the submitter can act on in one step.
-   */
   it("refuses a container whose single member is not an archive", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-nested-plain-"));
     const archive = join(root, "source.zip");
@@ -309,15 +275,10 @@ describe("extractSourceArchive", () => {
     if (!result.ok) {
       expect(result.reason).toBe("source_archive_nested_unsupported");
       expect(result.detail).toContain("lib.rs");
-      // Names what to submit instead, rather than only what was wrong.
       expect(result.detail).toContain(".tar.gz");
     }
   });
 
-  /**
-   * A chain, followed rather than refused at the first level: a submitter who compresses an already compressed
-   * archive twice is doing nothing a single compression does not already do.
-   */
   it("follows a chain of wrappers up to the depth bound", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-chain-ok-"));
     const archive = await wrapperChain(root, MAX_UNWRAP_DEPTH);
@@ -326,7 +287,6 @@ describe("extractSourceArchive", () => {
     const result = await extractSourceArchive({ archivePath: archive, destRoot: dest });
 
     expect(result.ok).toBe(true);
-    // The real source tree came out, not an intermediate archive.
     expect(await readdir(dest)).toEqual(["Cargo.toml"]);
     if (result.ok) {
       expect(result.canonicalisation?.depth).toBe(MAX_UNWRAP_DEPTH);
@@ -335,10 +295,6 @@ describe("extractSourceArchive", () => {
     }
   });
 
-  /**
-   * The bound bounds *work*, not bytes — `maxUncompressedBytes` is charged down the chain and is what bounds
-   * expansion (see the budget case above).
-   */
   it("refuses a chain of wrappers deeper than the bound", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-nested-deep-"));
     const archive = await wrapperChain(root, MAX_UNWRAP_DEPTH + 1);
@@ -353,10 +309,6 @@ describe("extractSourceArchive", () => {
     }
   });
 
-  /**
-   * A zip whose single member is a zip was refused outright before, on the argument that "each level is bounded
-   * on its own, so N levels are bounded by nothing".
-   */
   it("reads a zip nested inside a zip", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-zip-in-zip-"));
     const innerZip = join(root, "counter.zip");
@@ -372,10 +324,6 @@ describe("extractSourceArchive", () => {
     if (result.ok) expect(result.canonicalisation?.canonical_format).toBe("zip");
   });
 
-  /**
-   * A fixed `--strip-components 1` deletes `Cargo.toml` outright and lifts `src/lib.rs` to `lib.rs`, then
-   * reports a layout problem about a source tree that is fine.
-   */
   it("keeps a flat source tree that has no wrapping directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-flat-"));
     const archive = join(root, "source.zip");
@@ -396,10 +344,6 @@ describe("extractSourceArchive", () => {
     expect(await readdir(join(dest, "src"))).toEqual(["lib.rs"]);
   });
 
-  /**
-   * The inner archive is charged for what the unwrap already wrote, so a chain cannot spend the uncompressed
-   * ceiling once per level.
-   */
   it("charges the unwrapped member against the inner archive's uncompressed bound", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-extract-nested-budget-"));
     await mkdir(join(root, "pkg"), { recursive: true });
@@ -413,8 +357,6 @@ describe("extractSourceArchive", () => {
     const result = await extractSourceArchive({
       archivePath: archive,
       destRoot: dest,
-      // Enough for the wrapper's member, and — because that spend is charged — not enough for the 64 KiB the
-      // inner archive then declares.
       limits: { ...DEFAULT_ARCHIVE_LIMITS, maxUncompressedBytes: innerBytes + 1024 },
     });
 
@@ -440,10 +382,6 @@ describe("extractSourceArchive", () => {
   });
 });
 
-/**
- * The size column sits at a different field index in each tar, so these are the two layouts the bound has to
- * survive.
- */
 describe("totalUncompressedBytes", () => {
   const GNU = [
     "drwxr-xr-x owner/group     0 2026-08-11 05:27 sub/",
@@ -469,10 +407,6 @@ describe("totalUncompressedBytes", () => {
     expect(totalUncompressedBytes(GNU)).toEqual(totalUncompressedBytes(BSD));
   });
 
-  /**
-   * `uname` and `gname` are attacker-chosen strings printed before the size, so an archive built with
-   * `--uname=Jan` puts a month-shaped token in front of the real date.
-   */
   it("is not fooled by a month name in the owner field", () => {
     const bsd = "-rw-r--r--  0 Jan    wheel 10485760 Aug  6 15:06 pkg/big.bin";
     const gnu = "-rw-r--r-- 0 Aug 0/g      1000 2026-08-11 05:27 src/lib.rs";
@@ -508,8 +442,7 @@ describe("totalUncompressedBytes", () => {
     await writeFile(join(source, "b.txt"), "y".repeat(250));
     const archive = await tarFixture(root, "pkg");
 
-    // Pinned so this test's intent — does the parser read a real tar listing — doesn't depend on whatever
-    // locale this machine happens to run under.
+    // LC_ALL pinned: a non-English locale changes tar's date column.
     const listing = await runCommand(["tar", "-tvf", archive], {
       mirrorOutput: false,
       env: { LC_ALL: "C" },
@@ -520,12 +453,6 @@ describe("totalUncompressedBytes", () => {
     if (parsed.ok) expect(parsed.bytes).toBe(350);
   });
 
-  // A non-English `LC_TIME` (confirmed for zh_CN) makes BSD tar print a numeric month in `-tvf`'s date column
-  // (e.g. "9  9 13:52" instead of "Sep  9 13:52"), which `timestampIndex` cannot read — and must not be taught
-  // to, since a lenient numeric-month match would let a crafted `--uname`/`--gname` plus a size chosen to look
-  // like a 4-digit year forge an earlier false timestamp match, misreading the real size and defeating the
-  // fail-closed `maxUncompressedBytes` check. This only reproduces if the machine has the locale installed to
-  // prove it with.
   const hasZhCnLocale = (() => {
     try {
       return execFileSync("locale", ["-a"], { encoding: "utf8" })
@@ -545,16 +472,12 @@ describe("totalUncompressedBytes", () => {
       await writeFile(join(source, "Cargo.toml"), "[package]\nname = \"pkg\"\n");
       const archive = await tarFixture(root, "pkg");
 
-      // Confirms the fixture actually reproduces the failure this locale causes: unpinned, this listing is
-      // unparseable.
       const unpinned = await runCommand([archiveReaderFor("tar"), "-tvf", archive], {
         mirrorOutput: false,
         env: { LANG: "zh_CN.UTF-8", LC_ALL: "zh_CN.UTF-8" },
       });
       expect(totalUncompressedBytes(unpinned.stdout).ok).toBe(false);
 
-      // `extractSourceArchive` pins the reader's own locale internally, so it must succeed even when the
-      // calling process's environment is the one that reproduces the failure above.
       const previousLang = process.env.LANG;
       const previousLcAll = process.env.LC_ALL;
       process.env.LANG = "zh_CN.UTF-8";
@@ -573,7 +496,6 @@ describe("totalUncompressedBytes", () => {
   );
 });
 
-/** A real gzipped tar, for the nested cases. */
 async function tarGzFixture(root: string, entry: string, name: string): Promise<string> {
   const archive = join(root, name);
   const result = await runCommand(["tar", "-czf", archive, "-C", root, entry], { mirrorOutput: false });
@@ -583,9 +505,7 @@ async function tarGzFixture(root: string, entry: string, name: string): Promise<
   return archive;
 }
 
-/** The two numeric bounds, checked from **both** sides of the boundary. */
 describe("archive bounds at the exact boundary", () => {
-  /** Small enough to be free, large enough that an off-by-one is not hidden by a rounding accident. */
   const ENTRIES = 6;
 
   it("admits exactly `maxEntries` materialised entries and refuses one more", async () => {
@@ -593,8 +513,6 @@ describe("archive bounds at the exact boundary", () => {
     const source = join(root, "pkg");
     await mkdir(source, { recursive: true });
     await writeFile(join(source, "Cargo.toml"), "[package]\nname = \"pkg\"\n");
-    // `pkg/` itself strips to nothing under `--strip-components 1` and is not counted, so the materialised
-    // total is exactly the number of files.
     for (let i = 0; i < ENTRIES - 1; i += 1) await writeFile(join(source, `f${i}.txt`), "x");
     const archive = await tarFixture(root, "pkg");
 
@@ -603,8 +521,6 @@ describe("archive bounds at the exact boundary", () => {
       destRoot: await mkdtemp(join(tmpdir(), "scvs-extract-entry-at-")),
       limits: { ...DEFAULT_ARCHIVE_LIMITS, maxEntries: ENTRIES },
     });
-    // The negative control. Without it, `maxEntries: ENTRIES - 1` refusing proves only that something refuses
-    // things.
     expect(atLimit.ok).toBe(true);
 
     const overLimit = await extractSourceArchive({
@@ -615,7 +531,6 @@ describe("archive bounds at the exact boundary", () => {
     expect(overLimit.ok).toBe(false);
     if (!overLimit.ok) {
       expect(overLimit.reason).toBe("source_archive_too_many_entries");
-      // The bound, not the count: a submitter who cannot see the limit cannot act on the refusal.
       expect(overLimit.detail).toContain(String(ENTRIES - 1));
     }
   });
@@ -628,9 +543,7 @@ describe("archive bounds at the exact boundary", () => {
     await writeFile(join(source, "big.txt"), body);
     const archive = await tarFixture(root, "pkg");
 
-    // Read off the listing rather than assumed from `body.length`: `totalUncompressedBytes` sums *every* line,
-    // and whether the `pkg/` directory contributes a zero is the tar's business, not this test's. Pinned so a
-    // non-English locale can't turn this listing itself into a false negative unrelated to what's under test.
+    // LC_ALL pinned: a non-English locale changes tar's date column.
     const listing = await runCommand([archiveReaderFor("tar"), "-tvf", archive], {
       mirrorOutput: false,
       env: { LC_ALL: "C" },
@@ -646,7 +559,6 @@ describe("archive bounds at the exact boundary", () => {
       destRoot: await mkdtemp(join(tmpdir(), "scvs-extract-size-at-")),
       limits: { ...DEFAULT_ARCHIVE_LIMITS, maxUncompressedBytes: declared.bytes },
     });
-    // `>` and not `>=` in the implementation, which is the whole distinction this row exists for.
     expect(atLimit.ok).toBe(true);
 
     const overLimit = await extractSourceArchive({
@@ -662,7 +574,6 @@ describe("archive bounds at the exact boundary", () => {
   });
 });
 
-/** A source archive wrapped `peels` times: `pkg/Cargo.toml` -> `w0.tar.gz` -> `w1.tar.gz` -> … */
 async function wrapperChain(root: string, peels: number): Promise<string> {
   await mkdir(join(root, "pkg"), { recursive: true });
   await writeFile(join(root, "pkg", "Cargo.toml"), '[package]\nname = "pkg"\n');
@@ -676,10 +587,6 @@ async function wrapperChain(root: string, peels: number): Promise<string> {
   return archive;
 }
 
-/**
- * Splitting `extractSourceArchive` into a peel and an extraction gave each its own `tar -tf`, so every
- * submission paid one full listing more than before the split.
- */
 describe("the archive is listed once, not twice", () => {
   async function countReaderCalls(build: (root: string) => Promise<string>): Promise<string[]> {
     const root = await mkdtemp(join(tmpdir(), "scvs-listing-count-"));
@@ -687,7 +594,6 @@ describe("the archive is listed once, not twice", () => {
     const binDir = join(root, "bin");
     const log = join(root, "calls.log");
     await mkdir(binDir, { recursive: true });
-    // `tar` and `bsdtar` both, since the reader is chosen from the bytes.
     for (const name of ["tar", "bsdtar"]) {
       const real = (await runCommand(["sh", "-c", `command -v ${name} || true`], { mirrorOutput: false })).stdout.trim();
       if (!real) continue;
@@ -716,8 +622,6 @@ describe("the archive is listed once, not twice", () => {
       return tarGzFixture(root, "pkg", "counter.tar.gz");
     });
 
-    // One listing for the peel-and-validate decision, one verbose pass for the link and size checks, one
-    // extraction.
     expect(calls.filter((call) => call.endsWith(" -tf"))).toHaveLength(1);
     expect(calls.filter((call) => call.endsWith(" -tvf"))).toHaveLength(1);
     expect(calls.filter((call) => call.endsWith(" -xf"))).toHaveLength(1);
@@ -733,8 +637,6 @@ describe("the archive is listed once, not twice", () => {
       return archive;
     });
 
-    // The container and the archive inside it: one listing each, and the inner one is reused by the extraction
-    // rather than read a third time.
     expect(calls.filter((call) => call.endsWith(" -tf"))).toHaveLength(2);
   });
 });
@@ -742,7 +644,6 @@ describe("the archive is listed once, not twice", () => {
 describe("stripDepthFor", () => {
   it("strips one level when every entry shares a top-level directory", () => {
     expect(stripDepthFor("pkg/\npkg/Cargo.toml\npkg/src/\npkg/src/lib.rs\n")).toBe(1);
-    // GNU tar's `./`-prefixed listing is the same archive.
     expect(stripDepthFor("./pkg/Cargo.toml\n./pkg/src/lib.rs\n")).toBe(1);
   });
 
@@ -763,7 +664,6 @@ describe("stripDepthFor", () => {
   });
 });
 
-/** A file's bytes in the byte-preserving encoding `zipArchive` reads its member bodies as. */
 async function latin1(path: string): Promise<string> {
   return (await readFile(path)).toString("latin1");
 }
@@ -777,14 +677,12 @@ async function tarFixture(root: string, entry: string): Promise<string> {
   return archive;
 }
 
-/** An archive holding `../escape.txt`, written byte by byte rather than produced by `tar`. */
 async function traversalFixture(root: string, name = "traversal.bin"): Promise<string> {
   const archive = join(root, name);
   await writeFile(archive, ustarArchive("../escape.txt", "escaped\n"));
   return archive;
 }
 
-/** A single-member ustar archive. Enough of the format for the listing to be real. */
 function ustarArchive(memberName: string, body: string): Buffer {
   const header = Buffer.alloc(512, 0);
   const write = (value: string, offset: number, length: number) =>

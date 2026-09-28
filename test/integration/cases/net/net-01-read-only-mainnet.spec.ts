@@ -1,4 +1,3 @@
-/** E2E-NET-01/read_only_mainnet */
 import { caseBlock } from "../../support/gate.js";
 import { fixtures, missingFixture } from "../../support/fixtures.js";
 import { expectStatus, http } from "../../support/http.js";
@@ -46,7 +45,6 @@ caseBlock(
         rsver: EXPECTED_RSVER,
       });
 
-      // cli-legacy has no chain-provided source recipe, but it must never ask a client to supply an image.
       expect(body.missing_fields).toEqual(expect.arrayContaining(["source_sha256", "source_uri"]));
       expect(body.missing_fields).not.toContain("bldimg");
     });
@@ -77,8 +75,6 @@ caseBlock(
       const partitioned = unpartitioned.replace("/wasms/", "/wasms/mainnet/");
       expect(unpartitioned).not.toContain("/wasms/mainnet/");
 
-      // A result may not exist until SUB-01/mainnet is unlocked, so 404 is valid for the canonical
-      // unpartitioned document.
       expectStatus(await http(unpartitioned), 200, 404);
       expectStatus(await http(partitioned), 403, 404);
     });

@@ -8,7 +8,6 @@ import { LegalPageLoading, LegalPageUnavailable } from "../components/LegalPageS
 
 const SLUGS = ["terms", "privacy"] as const;
 
-/** Used before the operator's bundle has answered, so the heading and tab are never blank. */
 const FALLBACK_TITLES: Record<LegalDocument["slug"], string> = {
   terms: "Terms of Service",
   privacy: "Privacy Notice",

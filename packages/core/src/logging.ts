@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-/** Structured logging for every unit in this system. */
-
-/** The methods a caller uses. `log` is Nest's name for info level; the emitted record says `info`. */
 export type LogMethod = "log" | "error" | "warn" | "debug" | "verbose";
 
-/** What the record's `level` says. JSON log consumers expect these, not Nest's method names. */
 export type LogLevel = "info" | "error" | "warn" | "debug" | "verbose";
 
 const LEVEL_BY_METHOD: Readonly<Record<LogMethod, LogLevel>> = {
@@ -16,41 +12,26 @@ const LEVEL_BY_METHOD: Readonly<Record<LogMethod, LogLevel>> = {
   verbose: "verbose",
 };
 
-/** A field value that may appear in a record. Deliberately narrow — see the leak-path note above. */
 export type LogValue = string | number | boolean | null | undefined | readonly (string | number | boolean | null)[] | Error;
 
-/**
- * Fields a call site may attach. `component` is deliberately **not** one of them: it is the logger's identity
- * and travels as its own parameter, so a call site cannot claim to be a different component.
- */
 export type LogFields = {
   job_id?: string;
   request_id?: string;
   [key: string]: LogValue;
 };
 
-/** Keys the record owns. A caller cannot overwrite them — see `partitionFields`. */
 const RESERVED_KEYS = ["ts", "level", "component", "msg"] as const;
 
 const scope = new AsyncLocalStorage<LogFields>();
 
-/**
- * Runs `fn` with `fields` merged into the ambient log context, so **every** record emitted inside it — at any
- * call depth, across `await`s — carries them without being passed down.
- */
 export function runWithLogContext<T>(fields: LogFields, fn: () => T): T {
   return scope.run({ ...scope.getStore(), ...fields }, fn);
 }
 
-/** The ambient context, or `{}` outside any `runWithLogContext`. */
 export function currentLogContext(): LogFields {
   return scope.getStore() ?? {};
 }
 
-/**
- * Splits caller fields into what may be emitted and what may not, so the outcome is visible in the record
- * rather than silent:
- */
 function partitionFields(fields: LogFields): {
   emit: Record<string, string | number | boolean | null | readonly (string | number | boolean | null)[]>;
   droppedReserved: string[];
@@ -85,12 +66,10 @@ function partitionFields(fields: LogFields): {
   return { emit, droppedReserved, droppedFields };
 }
 
-/** Injected so a test can assert an exact record. Production passes nothing. */
 export type Clock = () => string;
 
 const systemClock: Clock = () => new Date().toISOString();
 
-/** One JSON object, no trailing newline. */
 export function formatLogRecord(
   level: LogLevel,
   message: string,
@@ -104,8 +83,6 @@ export function formatLogRecord(
   const record: Record<string, unknown> = {
     ts: clock(),
     level,
-    // A record that cannot be attributed to a component does not satisfy O1, so an empty component is named
-    // rather than omitted — an absent field reads as "not applicable", which it never is.
     component: component.trim() === "" ? "unknown" : component,
     msg: message,
   };
@@ -118,27 +95,20 @@ export function formatLogRecord(
   return JSON.stringify(record);
 }
 
-/** Where a formatted record goes. Injected so a test can capture instead of writing to the process. */
 export type LogSink = (level: LogLevel, line: string) => void;
 
-/** `warn`/`error` to stderr, everything else to stdout — the split Nest's own logger makes. */
 const processSink: LogSink = (level, line) => {
   const stream = level === "error" || level === "warn" ? process.stderr : process.stdout;
   stream.write(`${line}\n`);
 };
 
-/** Every record to stderr, whatever its level. **`services/builder` must use this one.** */
+/** Every record to stderr; `services/builder` must use this, as its stdout carries only the result. */
 export const stderrOnlySink: LogSink = (_level, line) => {
   process.stderr.write(`${line}\n`);
 };
 
 export type ScvsLoggerOptions = { clock?: Clock; sink?: LogSink };
 
-/**
- * One logger per **component**, which is the O1 requirement the current code misses: today every `new
- * Logger(...)` in this repo passes the *service* name, giving two distinct contexts across the whole
- * repository.
- */
 export class ScvsLogger {
   private readonly clock: Clock;
   private readonly sink: LogSink;
@@ -171,11 +141,7 @@ export class ScvsLogger {
     this.emit("verbose", message, fields);
   }
 
-  /**
-   * `fields` is typed but not trusted: when Nest itself logs through this instance it passes extra positional
-   * strings (a stack trace, a context name), and a logger that forwarded whatever an uncontrolled caller passed
-   * would be the leak path this module exists not to be.
-   */
+  /** Nest passes extra positional strings here, so `fields` is untrusted despite its type. */
   private emit(method: LogMethod, message: unknown, fields?: unknown): void {
     const level = LEVEL_BY_METHOD[method];
     const usable = typeof fields === "object" && fields !== null && !Array.isArray(fields) && !(fields instanceof Error);
@@ -195,10 +161,6 @@ export class ScvsLogger {
   }
 }
 
-/**
- * Nest's `LoggerService`, mirrored locally so `ScvsLogger` can be checked against it without `@nestjs/common`
- * becoming a dependency of the kernel — and therefore of the sandbox image.
- */
 type NestLoggerServiceShape = {
   log(message: unknown, ...optionalParams: unknown[]): unknown;
   error(message: unknown, ...optionalParams: unknown[]): unknown;

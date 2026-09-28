@@ -10,8 +10,6 @@ const SERVICE_TEST_DIRS = ["services/verification-svc/test", "services/orchestra
 const REAL_CONNECTION_PATTERN =
   /\bcreatePrismaClient\s*\(|\bnew PrismaClient\s*\(|\bmoduleRef\.get\s*\(\s*PRISMA_CLIENT\s*\)/;
 const CREATED_ROWS_IMPORT_PATTERN = /from\s+["']@scvs\/db\/testing["']/;
-// A hand-rolled cleanup counts only if it scopes the delete to rows this file owns — `in:` on some column
-// inside a `deleteMany` — inside an `afterAll`/`afterEach` hook.
 const LIFECYCLE_HOOK_PATTERN = /\b(afterAll|afterEach)\s*\(/;
 const SCOPED_DELETE_MANY_PATTERN = /\.deleteMany\s*\(\s*\{[^}]*\bin\s*:/s;
 
@@ -43,8 +41,6 @@ for (const dir of SERVICE_TEST_DIRS) {
           `deleteMany (\`in:\`) — see ADR-015`,
       );
     } else if (!opensRealConnection && importsCreatedRows) {
-      // Not a defect — a suite may import it defensively, or share a fixture module with one that needs it —
-      // but worth a human glance if the list ever needs pruning.
       notes.push(`${path} imports CreatedRows but this script found no real Prisma connection in it`);
     }
   }

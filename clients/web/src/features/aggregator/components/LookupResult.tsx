@@ -8,14 +8,12 @@ import { UnavailableVerifiers } from "./UnavailableVerifiers";
 
 type LookupResultProps = {
   state: LookupState & { refresh: () => void };
-  /** `hash` / `contract` — the suite queries `<prefix>-invalid`, `-failed`, `-empty`. */
   testIdPrefix: string;
   invalidCopy: ReactNode;
   loadingCopy: string;
   failureCopy: (failure: QueryApiFailure) => string;
 };
 
-/** The outcome of either lookup, so the two tabs cannot answer the same situation differently. */
 export const LookupResult = ({
   state,
   testIdPrefix,

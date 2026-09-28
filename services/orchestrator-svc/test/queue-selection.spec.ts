@@ -1,7 +1,6 @@
 import { isConfigurationError } from "../src/config/configuration-error.js";
 import { selectJobQueue } from "../src/modules/verification-pipeline/queue-selection.util.js";
 
-/** Pure, so these cases need no registry, no container and no Nest container. */
 const ARM_QUEUE = "arn:aws:batch:ap-southeast-2:111:job-queue/arm";
 const X86_QUEUE = "arn:aws:batch:ap-southeast-2:111:job-queue/x86";
 const BOTH = { arm64: ARM_QUEUE, amd64: X86_QUEUE };
@@ -52,8 +51,6 @@ describe("selectJobQueue", () => {
   });
 
   it("falls back to the default when the registry could not establish an architecture", () => {
-    // A registry outage must not stall verification — the worst case of guessing is the failure that happens
-    // anyway, and `reason` is what makes the guess visible in the dispatch log line.
     expect(
       selectJobQueue({ architectures: [], defaultArch: "arm64", queueArns: BOTH, jobDefinitions: DEFS })
     ).toEqual({
@@ -82,8 +79,6 @@ describe("selectJobQueue", () => {
   });
 
   it("throws naming the missing variable rather than using the other architecture's queue", () => {
-    // The other queue cannot run this image, so falling back would fail inside the sandbox with a pull or exec
-    // error that reads like a build failure.
     expect(() =>
       selectJobQueue({
         architectures: ["amd64"],
@@ -106,8 +101,6 @@ describe("selectJobQueue", () => {
 
 describe("selectJobQueue — the builder job definition", () => {
   it("returns the family belonging to the same architecture as the queue", () => {
-    // The pairing, stated as a property rather than as two literals: whichever arch is chosen, both coordinates
-    // must come from that arch's column.
     for (const architectures of [["arm64"], ["amd64"]] as const) {
       const selected = selectJobQueue({
         architectures: [...architectures],
@@ -121,8 +114,6 @@ describe("selectJobQueue — the builder job definition", () => {
   });
 
   it("throws naming the missing variable rather than dispatching the other architecture's family", () => {
-    // Before this, an unset amd64 family was not even a concept: the one family was used unconditionally, so an
-    // amd64 dispatch silently carried arm64's image.
     expect(() =>
       selectJobQueue({
         architectures: ["amd64"],
@@ -163,7 +154,6 @@ describe("selectJobQueue — the builder job definition", () => {
   });
 
   it("reports a missing queue ARN as a ConfigurationError too", () => {
-    // Same class for the same reason.
     let thrown: unknown;
     try {
       selectJobQueue({
@@ -179,8 +169,6 @@ describe("selectJobQueue — the builder job definition", () => {
   });
 
   it("checks the queue before the job definition when both are missing", () => {
-    // Not arbitrary: one failure names one variable, and naming the queue first matches the order an operator
-    // fixes them in (a family with no queue to run on is not actionable on its own).
     expect(() =>
       selectJobQueue({
         architectures: ["amd64"],
@@ -192,14 +180,8 @@ describe("selectJobQueue — the builder job definition", () => {
   });
 });
 
-/**
- * A composed environment lives in private ECR, which the architecture probe declines to authenticate against by
- * design.
- */
 describe("selectJobQueue — a recorded architecture", () => {
   it("wins over a probe that says something else", () => {
-    // Not a realistic disagreement — it is the assertion that precedence is real rather than incidental to the
-    // probe usually being empty on this path.
     expect(
       selectJobQueue({
         architectures: ["amd64"],
@@ -234,8 +216,6 @@ describe("selectJobQueue — a recorded architecture", () => {
   });
 
   it("reports a reason distinct from every probe outcome", () => {
-    // `image_single_arch` was the tempting reuse and would have been a lie: it means the *registry* said the
-    // image publishes one architecture.
     const recorded = selectJobQueue({
       architectures: [],
       defaultArch: "arm64",
@@ -262,7 +242,6 @@ describe("selectJobQueue — a recorded architecture", () => {
   });
 
   it("still refuses to use the other queue when its own ARN is missing", () => {
-    // Recorded evidence makes the architecture certain; it does not make the missing variable optional.
     expect(() =>
       selectJobQueue({
         architectures: [],

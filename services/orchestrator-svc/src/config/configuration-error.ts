@@ -1,4 +1,3 @@
-/** A required environment variable is absent — an operator's mistake, not a submission's. */
 export class ConfigurationError extends Error {
   constructor(
     readonly envName: string,

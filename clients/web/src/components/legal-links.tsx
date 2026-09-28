@@ -2,11 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { legalLinks } from "@/config/site";
 import { cn } from "@/lib/utils";
 
-/** Terms · Privacy, wherever a footer needs them. */
-
 type LegalLinksProps = {
   className?: string;
-  /** Open each document in a new tab instead of navigating this one. */
   newTab?: boolean;
 };
 
@@ -17,9 +14,6 @@ export const LegalLinks = ({ className, newTab = false }: LegalLinksProps) => (
         {index > 0 && <span aria-hidden>·</span>}
         <Link
           to={to}
-          // `@tanstack/react-router`'s `Link` only intercepts the click when the target is absent or `_self`
-          // (link.js's `handleClick`), so this really does hand the navigation to the browser rather than
-          // routing in place.
           {...(newTab
             ? {
                 target: "_blank" as const,

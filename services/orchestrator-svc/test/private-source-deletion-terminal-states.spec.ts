@@ -15,10 +15,6 @@ import {
 import { CreatedRows } from "@scvs/db/testing";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/**
- * ── Why this suite exists next to `delete-staged-upload-sibling.spec.ts` ────────────────────────── That suite
- * asks whether the sibling check works, and answers it with one `private` job left `queued`.
- */
 const CEILING_MS = 4 * 60 * 60 * 1000;
 const prisma = createPrismaClient(readDbEnv());
 const jobs = new JobsRepository(prisma);
@@ -56,7 +52,6 @@ async function seedUpload(): Promise<string> {
     expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
   });
   await uploads.markUploadReceived(uploadId, {
-    // The layout `stagingUploadKey` produces.
     path: `staging/uploads/${uploadId}/source.tar.gz`,
     filename: "source.tar.gz",
     sizeBytes: 64,
@@ -66,7 +61,6 @@ async function seedUpload(): Promise<string> {
   return uploadId;
 }
 
-/** A `private_tarball` job referencing `uploadId` — the only source type that stages anything. */
 async function seedPrivateJob(uploadId: string) {
   const sourceSha256 = createHash("sha256").update(randomBytes(64)).digest("hex");
   const jobId = createdRows.job(randomUUID());
@@ -94,7 +88,6 @@ async function seedPrivateJob(uploadId: string) {
   return { jobId, sourceRef };
 }
 
-/** The four terminal states a private upload can reach, plus `evaluated`. */
 const TERMINAL_STATES: {
   label: string;
   status: Extract<JobStatus, "published" | "failed" | "evaluated">;
@@ -145,18 +138,15 @@ describe("a private upload is retained only while a terminal job still owes a re
     });
   }
 
-  /** The state that is terminal in practice and owes no deletion. */
   it("keeps the upload while a public sibling still owes a source publish", async () => {
     const uploadId = await seedUpload();
     const { sourceRef } = await seedPrivateJob(uploadId);
 
-    // A second job on the same upload, public, parked in `publish_pending` with the obligation set.
     const sibling = await seedPrivateJob(uploadId);
     await prisma.job.update({
       where: { id: sibling.jobId },
       data: {
         status: "publish_pending",
-        // A JSON column, so the shape is not checked by Prisma's generated types.
         sourceRef: { ...sibling.sourceRef, visibility: "public" } as never,
         sourcePublishPendingSince: new Date(),
       },
@@ -173,7 +163,6 @@ describe("a private upload is retained only while a terminal job still owes a re
 
     await service().deleteStagedUpload(sourceRef);
 
-    // Deferral, not a second copy of the decision: the sweep re-checks the same predicate every tick.
     expect(await uploads.getUpload(uploadId)).toBeDefined();
   });
 });

@@ -1,14 +1,5 @@
 #!/usr/bin/env node
-/**
- * Checks a live CI descriptor against every `value_from_output:` path the manifest declares.
- *
- *   node eng-tools/check-descriptor-fields.mjs --env dev [--descriptor @file]
- *
- * ADR-025 resolves infrastructure identifiers from the descriptor at deploy time, so a field DevOps
- * has not published is a variable reaching the process unset, with nothing failing. This is the only
- * acceptance test `docs/design/ci-descriptor-v3-request.md` names, so neither repository keeps a list
- * by hand. Read-only; needs `ssm:GetParameter` on the descriptor path.
- */
+/** Checks a live CI descriptor against every `value_from_output:` path the manifest declares. Needs `ssm:GetParameter`. */
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { loadManifest, resolveManifest, entriesOf } from "./env-manifest.mjs";
@@ -53,11 +44,9 @@ const readPath = (source, path) => {
   return cursor;
 };
 
-// Every declaration site, so a path declared in a group is checked once per the services inheriting it
-// — but reported once, because DevOps publishes one field, not one per consumer.
 const manifest = loadManifest(process.cwd());
 const { effective, services } = resolveManifest(manifest);
-const wanted = new Map(); // path -> Set of "service.VAR" needing it
+const wanted = new Map();
 
 for (const [service] of services) {
   for (const [name, entry] of effective.get(service).allowed) {

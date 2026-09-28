@@ -1,7 +1,6 @@
 import { FadeUp } from "@/components/ui/fade-up";
 import { trustStripItems } from "../content";
 
-/** The thin band of claims directly under the hero. */
 export const TrustStrip = () => (
   <div className="border-b border-line bg-surface px-4 py-[18px] md:px-20">
     <FadeUp>

@@ -4,7 +4,6 @@ import {
   DeterministicBuildEnvironmentResolver,
 } from "../src/modules/build-environments/deterministic-build-environment-resolver.service.js";
 
-/** Phase 2's own tests — chain-derived-input classification only, per `build-environment-resolver.ts`'s header. */
 const VALID_STELLAR_CLI_IMAGE = "docker.io/stellar/stellar-cli@sha256:" + "a".repeat(64);
 const OTHER_DIGEST_PINNED_IMAGE = "docker.io/library/debian@sha256:" + "b".repeat(64);
 
@@ -21,8 +20,6 @@ describe("DeterministicBuildEnvironmentResolver", () => {
   });
 
   it("fails closed, rather than misrouting, when a sep58Image fails image policy", async () => {
-    // A caller must run evaluateBuildImage() before ever asking about a sep58Image at all — see the resolver's
-    // own doc comment.
     await expect(resolver.resolve({ sep58Image: OTHER_DIGEST_PINNED_IMAGE })).rejects.toThrow(
       BuildEnvironmentResolutionError,
     );
@@ -51,12 +48,9 @@ describe("DeterministicBuildEnvironmentResolver", () => {
       intent: { pair, template_version: CURRENT_COMPOSE_TEMPLATE_VERSION },
       trustLevel: "upstream_pinned",
     });
-    // The point of the resolve/materialize split: nothing on this branch requires having fetched a component
-    // checksum, so there is no `components`/`recipe` field to assert the absence of.
   });
 
   it("treats a chain-named image as taking precedence over a pair when both were derived", async () => {
-    // Both cannot legitimately co-occur in practice.
     const resolution = await resolver.resolve({
       sep58Image: VALID_STELLAR_CLI_IMAGE,
       pair: { cliver: "25.1.0", rsver: "1.95.0" },

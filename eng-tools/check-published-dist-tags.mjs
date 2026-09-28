@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-/**
- * Proves the CHANNEL landed, not merely that npm exited 0: the dist-tag this run wrote must resolve to the
- * version it published, and `latest` must never hold a prerelease — that pairing is what stops
- * `npm install soroban-verification-client` from handing a consumer a dev build.
- */
+/** Proves the dist-tag this run wrote resolves to the version it published, and `latest` holds no prerelease. */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,7 +10,6 @@ function argOf(name, fallback) {
   return at === -1 ? fallback : Number(process.argv[at + 1]);
 }
 
-// Overridable so the failure path can be exercised without waiting out the real budget.
 const ATTEMPTS = argOf("attempts", 12);
 const WAIT_MS = argOf("wait-ms", 5000);
 
@@ -30,11 +25,7 @@ function fail(reason) {
 
 if (!version || !distTag) fail("SDK_VERSION and DIST_TAG must both be set — resolve-release-channel.mjs sets them");
 
-/**
- * A throwaway cache, because `npm publish --dry-run` fetches the packument first and leaves the PRE-publish
- * copy in npm's cache. Reading through that cache is what made this check report an empty dist-tag two
- * seconds after a publish that had in fact succeeded.
- */
+/** A throwaway cache: `npm publish --dry-run` leaves the pre-publish packument in npm's own cache. */
 const cache = mkdtempSync(join(tmpdir(), "scvs-disttags-"));
 
 function distTags() {
@@ -77,7 +68,6 @@ if (!landed) {
   );
 }
 
-// A prerelease here is the exact confusion this channel model exists to prevent.
 if (tags.latest && /-/.test(tags.latest)) {
   fail(`dist-tag \`latest\` points at ${tags.latest}, a prerelease — \`npm install ${pkg}\` would hand a consumer a prerelease`);
 }
@@ -85,10 +75,6 @@ if (tags.latest && /-/.test(tags.latest)) {
 console.log(`── dist-tags  ${JSON.stringify(tags)}`);
 console.log(`✓ \`${distTag}\` = ${version}, and \`latest\` = ${tags.latest ?? "nothing"} is not a prerelease`);
 
-/**
- * The version a run published is the one thing a reader wants without opening a log, and the two install
- * lines answer "newest on this channel" and "exactly this build" without anyone reading the channel table.
- */
 if (process.env.GITHUB_STEP_SUMMARY) {
   const sha = (process.env.SDK_COMMIT || process.env.GITHUB_SHA || "").slice(0, 7);
   const rows = [

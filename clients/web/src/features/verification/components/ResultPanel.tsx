@@ -70,7 +70,6 @@ const ArtifactLink = ({
   </div>
 );
 
-/** The two documents a verification publishes. */
 const PublishedResults = ({
   reportUrl,
   reportSha256,
@@ -117,7 +116,6 @@ type ResultPanelProps = {
   result: Record<string, unknown>;
 };
 
-/** The published verification result: why it failed, how to act on it, and the report it produced. */
 export const ResultPanel = ({ state, result }: ResultPanelProps) => {
   const reason = "reason" in result ? formatValue(result.reason) : "";
   const detail = "detail" in result ? formatValue(result.detail) : "";
@@ -125,7 +123,6 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
   const wasmCompare = getWasmCompare(diagnostics);
   const likelyCauses = stringArray(diagnostics?.likely_causes);
   const troubleshooting = troubleshootingMessage(state, result);
-  // The verifier's own `likely_causes` are more specific than our static advice — prefer them.
   const showTroubleshooting = Boolean(troubleshooting && !likelyCauses.length);
   const summary = resultSummaryEntries(result);
   const artifactUrl =
@@ -138,7 +135,6 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
     artifactUrl,
     typeof result.wasm_hash === "string" ? result.wasm_hash : undefined
   );
-  // A verified job's diagnostics are the verifier's own configuration; a failed job's are the evidence.
   const isSettledFailure = state !== "verified" && state !== "queued";
 
   return (
@@ -173,8 +169,6 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
         </AdviceBox>
       )}
 
-      {/* The published documents first: a reader who has just been told the verdict wants what it
-          was published as, before the fields the comparison produced. */}
       <PublishedResults
         {...(artifactUrl ? { reportUrl: artifactUrl } : {})}
         {...(artifactSha ? { reportSha256: artifactSha } : {})}
@@ -191,7 +185,6 @@ export const ResultPanel = ({ state, result }: ResultPanelProps) => {
               key={key}
               label={resultLabel(key)}
               value={formatValue(value)}
-              // A 64-character digest must not wrap mid-digest in a half-width column.
               {...(key === "rebuilt_wasm_hash" ? { className: "md:col-span-2" } : {})}
             />
           ))}

@@ -2,10 +2,6 @@ import { buildRecipeArtifact } from "../src/modules/builder/recipe.js";
 import type { RunCliResult } from "../src/modules/builder/run-cli.types.js";
 import { BUILD_ARTIFACT_SCHEMA_VERSION, type BuildRecipe } from "@scvs/core";
 
-/**
- * `recipe.json` is the **only** channel out of the sandbox — `orchestrator-svc` reconstructs the whole outcome
- * from this file and never reads the container's logs.
- */
 const RECIPE: BuildRecipe = {
   image: `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`,
   workspace_path: "/tmp/scvs-manual-src-DmEa85/source",
@@ -13,7 +9,6 @@ const RECIPE: BuildRecipe = {
   bldopt: ["--locked", "--package=verified-demo", "--optimize"],
 } as BuildRecipe;
 
-/** Shaped exactly like `cliFailure("manifest_path_not_found", ...)`'s return value. */
 const manifestNotFound: RunCliResult = {
   outcome: "cli_failure",
   runner: "docker_build_image_rebuild",
@@ -27,7 +22,6 @@ const manifestNotFound: RunCliResult = {
   },
 };
 
-/** The other side of the same function: a clean rebuild, no reason and no context. */
 const success: RunCliResult = {
   outcome: "verified",
   runner: "stellar_contract_verify",
@@ -48,7 +42,6 @@ describe("buildRecipeArtifact failure reporting", () => {
       source_root: "/tmp/scvs-manual-src-DmEa85/source",
       manifest_path: "/tmp/scvs-manual-src-DmEa85/source/Cargo.toml",
     });
-    // This path genuinely has no schema-conformant diagnostics — that is the case being covered.
     expect(artifact.diagnostics).toBeUndefined();
   });
 
@@ -58,7 +51,6 @@ describe("buildRecipeArtifact failure reporting", () => {
       reason: "dependency_prefetch_failed",
       diagnostics: {
         reason: "dependency_prefetch_failed",
-        // Stands in for an embedded CommandResult carrying a whole build's stderr.
         prefetch: { stderr: "x".repeat(20_000) },
       },
     });
@@ -70,10 +62,6 @@ describe("buildRecipeArtifact failure reporting", () => {
     });
   });
 
-  /**
-   * `schema_version` is `@IsOptional()` on the DTO — a reader must go on accepting the pre-versioning documents
-   * already in S3 — so nothing in the type system says the builder always writes it.
-   */
   it("stamps the contract version on every artifact, whatever the outcome", () => {
     for (const result of [manifestNotFound, success]) {
       expect(buildRecipeArtifact(RECIPE, result).schema_version).toBe(BUILD_ARTIFACT_SCHEMA_VERSION);

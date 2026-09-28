@@ -1,19 +1,5 @@
 #!/usr/bin/env node
-/**
- * The one place that decides what a git ref releases. Runnable locally against any ref
- * (`--ref refs/tags/v0.2.0`) so the rule can be read before a tag is pushed, not after.
- *
- * | ref                      | channel | version                    | dist-tag | assets |
- * | ------------------------ | ------- | -------------------------- | -------- | ------ |
- * | `refs/heads/main`        | dev     | `<next>-dev.<n>.g<sha>`    | dev      | no     |
- * | `refs/tags/vX.Y.Z-<pre>` | staging | `X.Y.Z-<pre>`              | staging  | yes    |
- * | `refs/tags/vX.Y.Z`       | stable  | `X.Y.Z`                    | latest   | yes    |
- * | anything else            | none    | —                          | —        | no     |
- *
- * A dispatched run has no tag (`github.ref` is a branch), so the dispatch's `version` input is read as if
- * it were the tag name — `v0.1.2` or `0.1.2`, the `v` normalized in — and the run resolves to whichever
- * tag row it spells. An empty input keeps the old dispatch behavior: the dev row, run by hand.
- */
+/** Decides what a git ref releases: main → dev, `vX.Y.Z-<pre>` → staging, `vX.Y.Z` → stable, else nothing. */
 import { appendFileSync } from "node:fs";
 import { PRERELEASE, SDK_SURFACE, STABLE, fail, git, requireOnMain } from "./release-channels.mjs";
 
@@ -22,12 +8,6 @@ function argOf(name) {
   return at === -1 ? undefined : process.argv[at + 1];
 }
 
-/**
- * A dispatched run has no tag: `github.ref` is a branch. The `version` input lets a human name the
- * version that run releases. Only a dispatch may supply it — a tag push's ref is the tag and cannot be
- * overridden. The run pins the ancestor check to `GITHUB_SHA` (main's HEAD), so the input cannot point
- * a release away from main.
- */
 function dispatchRef() {
   if ((argOf("event") ?? process.env.EVENT_NAME ?? "") !== "workflow_dispatch") return null;
   const version = (process.env.DISPATCH_VERSION ?? "").trim();
@@ -35,10 +15,6 @@ function dispatchRef() {
   return `refs/tags/${version.startsWith("v") ? version : `v${version}`}`;
 }
 
-/**
- * A dispatch may name the commit to release instead of taking the checked-out one, which is how a release is
- * cut at the commit an environment actually runs. It is still proved an ancestor of main.
- */
 function dispatchCommit() {
   if ((argOf("event") ?? process.env.EVENT_NAME ?? "") !== "workflow_dispatch") return null;
   const commit = (process.env.DISPATCH_COMMIT ?? "").trim();
@@ -58,11 +34,7 @@ let changeReason = "";
 
 const NO_PARENT = /^0{40}$/;
 
-/**
- * The range this push actually delivered, so a push carrying several commits cannot hide an SDK change behind
- * a later one that touches nothing. `github.event.before` is all-zeros on a force-push or a new branch, and
- * the first parent is the honest fallback.
- */
+/** `github.event.before` is all zeros on a force-push or a new branch; the first parent is the fallback. */
 function pushedRange() {
   const before = (argOf("since") ?? process.env.PUSH_BEFORE ?? "").trim();
   for (const candidate of [before, `${sha}^`]) {
@@ -70,17 +42,11 @@ function pushedRange() {
     try {
       return `${git("rev-parse", "--verify", `${candidate}^{commit}`)}..${sha}`;
     } catch {
-      // Try the fallback.
     }
   }
   return null;
 }
 
-/**
- * Whether this push touched anything the tarball is built from. A dispatched run never asks: that is the
- * escape hatch for republishing after a failed run, or for a change this list cannot see (the root
- * `tsconfig.base.json`, say).
- */
 function sdkChanged() {
   if ((argOf("event") ?? process.env.EVENT_NAME ?? "") === "workflow_dispatch") {
     changeReason = "dispatched by hand, so the change gate is bypassed";
@@ -103,7 +69,7 @@ function sdkChanged() {
   return true;
 }
 
-/** Prereleases are excluded on purpose: an open `v0.1.2-rc.1` must not push dev builds to `0.1.3`. */
+/** Stable tags only: an open `v0.1.2-rc.1` must not move dev builds to `0.1.3`. */
 function highestStableTag() {
   let listed;
   try {
@@ -114,10 +80,7 @@ function highestStableTag() {
   return listed.split("\n").find((tag) => STABLE.test(tag)) ?? null;
 }
 
-/**
- * `g` prefixes the sha because an all-digit identifier with a leading zero is invalid semver, and the
- * commit count leads it so two dev builds of the same target patch order monotonically.
- */
+/** `g` keeps an all-digit sha from being an invalid semver identifier; the count first keeps builds ordered. */
 function devVersion() {
   const base = highestStableTag();
   const [, major, minor, patch] = base ? STABLE.exec(base) : [null, "0", "0", "0"];
@@ -126,7 +89,6 @@ function devVersion() {
   return `${next}-dev.${count}.g${short}`;
 }
 
-/** The ancestor proof itself lives in `release-channels.mjs`; this records what it compared for the summary. */
 function proveOnMain(tag) {
   comparedAgainst = requireOnMain({ sha, subject: tag, act: "release", main: argOf("main") });
 }
@@ -181,7 +143,6 @@ console.log(
 );
 if (changeReason) console.log(`── sdk gate   ${changeReason}`);
 
-// A run that published nothing should say so where a reader looks first, not only in this step's log.
 if (process.env.GITHUB_STEP_SUMMARY && resolved.publish_sdk !== "true") {
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,

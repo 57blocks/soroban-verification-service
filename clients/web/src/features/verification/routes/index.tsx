@@ -13,7 +13,6 @@ const verifyRoute = createRoute({
     job_id: typeof search.job_id === "string" ? search.job_id : undefined,
     new: typeof search.new === "string" ? search.new : undefined,
   }),
-  // Legacy `?job_id=` links land on the canonical job page instead.
   beforeLoad: ({ search }) => {
     if (search.job_id) {
       throw redirect({

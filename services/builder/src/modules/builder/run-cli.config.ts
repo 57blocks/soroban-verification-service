@@ -1,6 +1,3 @@
-// Runtime configuration accessors: `RunCliRuntimeConfig` first, then `process.env`, then a hardcoded default —
-// the chain this module has always used.
-
 import type {
   DockerFinalSandboxOptions,
   DockerResourceLimits,
@@ -74,7 +71,6 @@ export function dockerResourceLimits(
   };
 }
 
-/** Who the sandboxed containers run as. */
 function sandboxUser(config?: RunCliRuntimeConfig): string {
   const configured = config?.dockerUser || process.env.SCVS_DOCKER_USER?.trim();
   if (configured) return configured;

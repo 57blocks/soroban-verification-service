@@ -7,10 +7,6 @@ import {
 } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 
-/**
- * What remains is `markTerminal`'s in-job form below, plus `requeueStaleCliFailure`, whose job is the opposite:
- * to stop a *stale* code outliving the attempt it describes.
- */
 let client: PrismaClient;
 let rebuilds: RebuildsRepository;
 const createdRows = new CreatedRows();
@@ -28,7 +24,6 @@ afterAll(async () => {
   await client.$disconnect();
 });
 
-/** A rebuild that ran `verify`, failed, and recorded everything such an attempt records. */
 async function burnedVerifyAttempt() {
   const sourceSha256 = randomBytes(32).toString("hex");
   const rebuildId = createdRows.rebuild(randomUUID());
@@ -63,23 +58,17 @@ describe("requeueStaleCliFailure — the reset that survived the retirement", ()
   it("★ a fresh full attempt starts with no reason, so a later success cannot publish a stale one", async () => {
     const rebuildId = await burnedVerifyAttempt();
 
-    // Passed by the caller rather than read off the row: the row may still say `verify` from before the
-    // retirement, and resetting to its own value would re-dispatch a mode nothing can run.
     expect(await rebuilds.requeueStaleCliFailure(rebuildId, "build")).toBe(true);
 
     const row = await rebuilds.getById(rebuildId);
     expect(row?.buildMode).toBe("build");
     expect(row?.status).toBe("pending");
-    // Keeping it would let an attempt that then *succeeds* publish `metadata_backed` beside a reason from an
-    // attempt that is no longer this rebuild's.
     expect(row?.verifyFailureCode).toBeUndefined();
-    // Cleared for the same reason the demotion cleared them: this attempt materialises again.
     expect(row?.outcome).toBeUndefined();
     expect(row?.errorCode).toBeUndefined();
     expect(row?.canonicalSourceSha256).toBeUndefined();
     expect(row?.canonicalSourceKey).toBeUndefined();
     expect(row?.sourceCanonicalisation).toBeUndefined();
-    // Chain-derived and immutable for a given Wasm, so it is not the retry's to re-establish.
     expect(row?.chainSourceSha256).toBe(CHAIN_SHA);
   });
 
@@ -87,16 +76,10 @@ describe("requeueStaleCliFailure — the reset that survived the retirement", ()
     const rebuildId = await burnedVerifyAttempt();
     expect(await rebuilds.requeueStaleCliFailure(rebuildId, "build")).toBe(true);
 
-    // The CAS requires `status: "done"` AND `outcome: "cli_failure"`, both of which the first call moved off —
-    // so a second SQS delivery matches no row.
     expect(await rebuilds.requeueStaleCliFailure(rebuildId, "build")).toBe(false);
     expect((await rebuilds.getById(rebuildId))?.status).toBe("pending");
   });
 
-  /**
-   * Asserted rather than deleted: a rebuild reaching `pending` with `buildMode: "verify"` would be a mode no
-   * builder image can run, and this is the cheapest place that fact is observable.
-   */
   it("nothing puts a rebuild back into verify mode", async () => {
     const rebuildId = await burnedVerifyAttempt();
     await rebuilds.requeueStaleCliFailure(rebuildId, "build");
@@ -107,10 +90,6 @@ describe("requeueStaleCliFailure — the reset that survived the retirement", ()
   });
 });
 
-/**
- * The builder runs the sandbox itself when the materialiser's record already settles that the CLI cannot
- * succeed, so the code arrives on `BuildArtifact.verify_attempt_reason` and `markTerminal` writes it.
- */
 describe("markTerminal, for a demotion that happened inside the job", () => {
   async function inJobDemotion() {
     const rebuildId = createdRows.rebuild(randomUUID());
@@ -125,7 +104,6 @@ describe("markTerminal, for a demotion that happened inside the job", () => {
         source_sha256: randomBytes(32).toString("hex"),
       },
       buildOptions: { bldopt: [], bldarg: [] },
-      // Dispatched verify — and never requeued, because the runner did the build itself.
       buildMode: "verify",
       mechanismReason: "on_chain_recipe_in_trusted_image",
       chainSourceSha256: CHAIN_SHA,
@@ -145,8 +123,6 @@ describe("markTerminal, for a demotion that happened inside the job", () => {
 
     const row = await rebuilds.getById(rebuildId);
     expect(row?.verifyFailureCode).toBe("source_archive_not_chain_recorded");
-    // The three facts `verdict.util.ts` reads, and the combination only the in-job form produces: dispatched
-    // verify, run by the sandbox, with a reason for the difference.
     expect(row?.buildMode).toBe("verify");
     expect(row?.runner).toBe("docker_build_image_rebuild");
   });

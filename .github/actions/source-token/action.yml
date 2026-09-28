@@ -27,9 +27,7 @@ outputs:
 runs:
   using: composite
   steps:
-    # An installation token is minted per job and expires in an hour. It cannot be passed between jobs:
-    # GitHub drops a job output whose value contains a registered secret, so each job that needs one
-    # mints its own.
+    # GitHub drops a job output containing a secret, so each job mints its own token.
     - name: Split the repository into owner and name
       if: inputs.app_id != '' && inputs.private_key != ''
       id: split

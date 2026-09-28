@@ -14,9 +14,7 @@ const AGGREGATION_SYNC_TIMEOUT_MS = 100_000;
 const AGGREGATION_SYNC_JEST_TIMEOUT_MS =
   AGGREGATION_SYNC_TIMEOUT_MS + env.requestTimeoutMs + env.pollIntervalMs + 10_000;
 
-/** The SDK walks the TVL, the hosted aggregate returns its own query order, and nothing promises the
- * two agree — so the verifier-keyed arrays compare as sets. Only those: `bldarg`/`bldopt` inside an
- * entry are order-significant (SEP-58). */
+/** Verifier arrays compare as sets; bldarg/bldopt inside an entry stay order-significant. */
 const byResultRoot = (left?: string, right?: string) =>
   normalizeResultRoot(left ?? "").localeCompare(normalizeResultRoot(right ?? ""));
 
@@ -43,7 +41,6 @@ function fixtureHash(): string {
   return fixtures.contracts["F-LEG-1"].wasm_hash!;
 }
 
-/** The active members' result roots — the identity. Not `display_name`: a relayed `verifier` block is the peer's own (CV11). */
 function activeVerifierRoots(tvl: TrustedVerifiersList): string[] {
   const roots = tvl.verifiers
     .filter((verifier) => verifier.status === "active")
@@ -74,7 +71,6 @@ caseBlock(
       expect(entryRoots(aggregate)).toEqual(expect.arrayContaining(expectedRoots));
       expect(result.requests.some((url) => url.startsWith(`${env.queryUrl}/api/query/v1/`))).toBe(false);
 
-      // `runSdkConsumer` also calls `discover()`, which legitimately reads each verifier's manifest and policy.
       const statusRequests = result.requests.filter((url) => new URL(url).pathname.includes("/wasms/"));
       expect(statusRequests).toHaveLength(tvl.verifiers.filter((verifier) => verifier.status === "active").length);
     });
@@ -160,8 +156,6 @@ caseBlock(
       });
       rmSync(tvlDir, { recursive: true, force: true });
       const result = objectResult;
-      // Correlated on the result root, through this file's own `activeVerifierRoots` — `id` is optional in
-      // the published schema, and this suite already treats the root as the identity everywhere else.
       const activeRoots = activeVerifierRoots(tvl);
       const relevant = result.discoveries.filter(({ resultRoot }) =>
         activeRoots.includes(normalizeResultRoot(resultRoot)),
@@ -176,12 +170,7 @@ caseBlock(
       expect(urlResult.requests).toContain(verifiersUrl());
       expect(relevant).toHaveLength(activeRoots.length);
       for (const discovery of relevant) {
-        // Every fixture verifier advertises a manifest, so every active one must discover as `available`;
-        // the other two outcomes are unit-tested in clients/sdk/test/sdk-test.ts.
         expect(discovery.outcome).toBe("available");
-        // Our own published list does carry an id (`verifier_id` is the table's primary key), and our
-        // manifests are named after it — asserted only when the entry has one, because the type does not
-        // promise it and a peer's list need not.
         if (discovery.verifierId !== undefined) {
           expect(discovery.manifestId).toBe(discovery.verifierId);
         }

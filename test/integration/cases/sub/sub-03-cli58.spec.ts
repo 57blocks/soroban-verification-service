@@ -38,8 +38,6 @@ caseBlock(
         );
         expect(submitted.jobId).toBeDefined();
 
-        // A target-only request must create a metadata job. The other 202 message means this test adopted a
-        // concurrently active caller-manifest job, whose provenance cannot answer SUB-03.
         const run = await waitForTerminal(submitted.jobId!);
         expect(run.body.status).toBe("verified");
         expect(run.body.result?.matched).toBe(true);

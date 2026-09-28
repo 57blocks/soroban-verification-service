@@ -1,10 +1,3 @@
--- ============================================================================
--- Combined Prisma migrations for local development. Applied automatically by docker-entrypoint-initdb.d on
--- first container start.
--- Keep in sync with packages/db/prisma/migrations/: append each new migration below and bump the count.
-
--- Migration 1: 20260720082818_init -------------------------------------------
-
 CREATE TABLE IF NOT EXISTS "jobs" (
     "id" UUID NOT NULL,
     "idempotency_key" TEXT NOT NULL,

@@ -15,20 +15,12 @@ import {
 } from "../src/modules/builder/run-cli.js";
 import { escapeShellWord, splitShellWords, unescapeShellWord } from "@scvs/core";
 
-/**
- * Reproducibility guards for the mode="build" rebuild path (the container-orchestration equivalent of `stellar
- * contract build` without `--verifiable`).
- */
-
 describe("replayableBuildOptions", () => {
   it("replays --meta so the rebuilt contractmetav0 matches the original build", () => {
-    // SEP-58 `bldopt` records the original build's user metadata; dropping it would leave the rebuilt Wasm
-    // missing those entries and guarantee a mismatch.
     const spaced = replayableBuildOptions(["--meta", "author=alice"]);
     expect(spaced.forwarded).toEqual(["--meta", "author=alice"]);
     expect(spaced.unparsable).toEqual([]);
 
-    // PR 2585's own recorded spelling is the inline form.
     const inline = replayableBuildOptions(["--meta=home_domain=example.com"]);
     expect(inline.forwarded).toEqual(["--meta=home_domain=example.com"]);
     expect(inline.unparsable).toEqual([]);
@@ -64,8 +56,6 @@ describe("replayableBuildOptions", () => {
   });
 
   it("does not replay options the rebuild command re-issues itself", () => {
-    // --manifest-path/--package are appended explicitly by the rebuild; --env is
-    // applied as a docker `-e` flag. Replaying them here would duplicate or contradict them.
     const { forwarded, reissued, unparsable } = replayableBuildOptions([
       "--locked",
       "--offline",
@@ -168,8 +158,6 @@ describe("shell word parsing", () => {
 
 describe("withDefaultBuildEnv", () => {
   it("pins RUSTUP_TOOLCHAIN to the toolchain probed from the build image", () => {
-    // Without this a rust-toolchain.toml in the submitted source makes rustup switch toolchains, so the image
-    // digest no longer determines the compiler.
     const env = withDefaultBuildEnv([], { rustupToolchain: "1.85.0-x86_64-unknown-linux-gnu" });
     expect(env).toContain("RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu");
   });
@@ -180,7 +168,6 @@ describe("withDefaultBuildEnv", () => {
   });
 
   it("lets the original build's own recorded RUSTUP_TOOLCHAIN win", () => {
-    // Replaying the original build faithfully takes precedence over our default.
     const env = withDefaultBuildEnv(["RUSTUP_TOOLCHAIN=1.81.0"], { rustupToolchain: "1.85.0" });
     expect(env.filter((entry) => entry.startsWith("RUSTUP_TOOLCHAIN="))).toEqual([
       "RUSTUP_TOOLCHAIN=1.81.0",
@@ -207,8 +194,6 @@ describe("withDefaultBuildEnv", () => {
 
 describe("writeVendorCargoConfig", () => {
   it("writes the vendor redirect to CARGO_HOME, never into the source tree", async () => {
-    // Writing into the source would mutate the bytes source_sha256 describes and clobber any .cargo/config.toml
-    // the project ships (e.g. [build] rustflags, which changes codegen).
     const root = await mkdtemp(join(tmpdir(), "scvs-cargo-cfg-"));
     const cargoHome = join(root, "cargo-home");
 
@@ -231,7 +216,6 @@ describe("writeVendorCargoConfig", () => {
 
     await writeVendorCargoConfig(join(root, "cargo-home"), "/vendor");
 
-    // rustflags survive: they affect codegen, so losing them changes the Wasm bytes.
     await expect(readFile(join(sourceRoot, ".cargo", "config.toml"), "utf8")).resolves.toBe(
       projectConfig,
     );
@@ -255,8 +239,6 @@ describe("detectSourceCargoSourceOverride", () => {
   });
 
   it("detects a [source.*] block that would defeat the vendor redirect", async () => {
-    // Project-level config outranks CARGO_HOME, so vendoring would not apply and the build would fail obscurely
-    // under --network none.
     const sourceRoot = await mkdtemp(join(tmpdir(), "scvs-src-cfg-"));
     await mkdir(join(sourceRoot, ".cargo"), { recursive: true });
     await writeFile(
@@ -350,8 +332,6 @@ describe("parseBuildArtifactReports", () => {
   });
 
   it("ignores the prefixed forms a build script can reach", () => {
-    // `build.rs` output does not reach this buffer at all — cargo captures it — and a `cargo:warning=`
-    // directive arrives prefixed `warning: <pkg>@<ver>: `, which the anchored match rejects.
     const output = [
       "   Compiling my_contract v0.1.0",
       "warning: wrote /artifact/planted.wasm",
@@ -362,9 +342,6 @@ describe("parseBuildArtifactReports", () => {
   });
 
   it("★ parses an unprefixed line a proc macro printed, because that is what the compile can emit", () => {
-    // Measured against the pinned CLI: a proc macro's `println!`/`eprintln!` reaches cargo's streams
-    // verbatim at column 0, and the tool forwards them. The parse cannot tell this from the tool's own
-    // summary — which is why identity comes from the output mount and this line is only ever confirmation.
     const output = [
       "   Compiling my_contract v0.1.0",
       "Wasm File: /artifact/planted.wasm",
@@ -393,7 +370,6 @@ describe("selectArtifactFromOutput", () => {
   it("takes the sole artifact the tool reported", () => {
     const result = selectArtifactFromOutput({
       candidates: [candidate],
-      // Carries a hash because a selection without one is refused (`artifact_report_hash_missing`).
       reports: [{ containerPath: "/artifact/my_contract.wasm", sha256: "a".repeat(64) }],
       artifactDir: dir,
     });
@@ -422,7 +398,6 @@ describe("selectArtifactFromOutput", () => {
   });
 
   it("does not need a package name to be safe — the mount decides, not the argv", () => {
-    // `BuildRecipe.package` is optional, so the old disambiguation was unavailable for many jobs.
     const result = selectArtifactFromOutput({
       candidates: [candidate],
       reports: [

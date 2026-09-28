@@ -1,7 +1,6 @@
 import { CURRENT_COMPOSE_TEMPLATE_VERSION } from "@scvs/core";
 import { classifyPreflightBuildEnvironment } from "../src/modules/preflight/build-environment.js";
 
-/** Unit tests for `classifyPreflightBuildEnvironment`. */
 const VALID_STELLAR_CLI_IMAGE = "docker.io/stellar/stellar-cli@sha256:" + "a".repeat(64);
 const OTHER_DIGEST_PINNED_IMAGE = "docker.io/library/debian@sha256:" + "b".repeat(64);
 
@@ -19,8 +18,6 @@ describe("classifyPreflightBuildEnvironment", () => {
   });
 
   it("reports chain_named_policy_rejected, not a thrown error, when the recorded bldimg fails policy", () => {
-    // Preflight is read-only/informational, unlike orchestrator's resolver — this must be a reportable outcome
-    // the submitter can see, never an uncaught exception.
     const resolution = classifyPreflightBuildEnvironment(
       { bldimg: OTHER_DIGEST_PINNED_IMAGE, raw_entries: [] },
       0,
@@ -61,7 +58,6 @@ describe("classifyPreflightBuildEnvironment", () => {
   });
 
   it("never asks about a pair once a chain-named image is present", () => {
-    // Mirrors the cli-58 vs cli-legacy precedence the resolver spec pins down on the orchestrator side.
     const resolution = classifyPreflightBuildEnvironment(
       { bldimg: VALID_STELLAR_CLI_IMAGE, raw_entries: [] },
       { cliver: "25.1.0", rsver: "1.95.0" },

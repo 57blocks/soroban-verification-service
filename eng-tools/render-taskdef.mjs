@@ -1,24 +1,5 @@
 #!/usr/bin/env node
-/**
- * Renders a service's ECS task definition from the deployment contract.
- *
- *   node eng-tools/render-taskdef.mjs --env dev --service query-svc \
- *     --image <digest-or-ref> [--descriptor @file] [--baseline @file] > /tmp/td.json
- *
- * ADR-025's write half. It takes the family's newest ACTIVE revision as its baseline (not necessarily
- * the running one; see `baseline` below) and replaces only the two things this repository owns — the
- * container image, and every environment variable — leaving everything else byte-for-byte.
- *
- * **Baseline-and-replace, not render-from-scratch, and that is the load-bearing decision here.** A
- * task definition carries cpu, memory, the port mapping, the health check command, the log group, the
- * runtime platform, and two role ARNs. None of that is configuration; it is infrastructure Terraform
- * owns, and no descriptor field carries it. Generating it here would be a second implementation of
- * someone else's contract, drifting silently — the failure ADR-006 exists to prevent, and the reason
- * ADR-025 scopes this repository to *configuration* rather than to the whole document.
- *
- * So the split is mechanical: fields this repo owns are overwritten, every other field is passed
- * through untouched, and a field appearing in neither list is a hard error rather than a silent drop.
- */
+/** Renders a service's ECS task definition: its family's newest ACTIVE revision with only image and secrets replaced. */
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
@@ -39,10 +20,6 @@ if (!service || !image) {
   process.exit(2);
 }
 
-// An unresolved shell variable produces a reference that registers cleanly and then fails at task
-// start with an ECR pull error, several layers from the cause — which is exactly what a caller
-// composing the registry hostname from a stripped `account_id` field would have produced. Cheaper to
-// reject the shape here than to debug it from a rollout.
 if (!/^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/\S+$/.test(image)) {
   console.error(
     `::error::--image "${image}" is not an ECR reference ` +
@@ -67,9 +44,6 @@ const loadJson = (raw, what) => {
   }
 };
 
-// ── Inputs ──────────────────────────────────────────────────────────────────────────────────────
-
-// See check-taskdef-boundary.mjs: the contract belongs to the deployment, not to this repository.
 const contractPath = flag("contract") ?? `config/deploy/${targetEnv}/${service}.json`;
 const contract = (() => {
   try {
@@ -92,24 +66,18 @@ const family = descriptor?.task_definition_families?.[service.replaceAll("-", "_
 if (!family) die(`the ${targetEnv} descriptor names no task_definition_families entry for ${service}`);
 
 
-// A bare family resolves to its newest ACTIVE revision, deliberately not the running one: Terraform
-// never moves a service onto a revision it mints (cpu, memory, a role, a renamed family's revision 1
-// and its credential secrets), so those reach tasks only as this baseline. The one other gap, a CI
-// revision whose rollout failed, is harmless: copied fields are identical between two CI revisions.
+// The newest ACTIVE revision, not the running one: Terraform-minted changes reach tasks only through it.
 const baseline =
   loadJson(flag("baseline"), "baseline") ??
   JSON.parse(aws(["ecs", "describe-task-definition", "--task-definition", family, "--query", "taskDefinition", "--output", "json"]));
 
 const baselineContainer = baseline.containerDefinitions?.find((c) => c.name === service);
 
-/** What the running definition already uses for a variable, if anything. */
 const baselineValueFrom = new Map(
   (baselineContainer?.secrets ?? []).map((s) => [s.name, s.valueFrom])
 );
 
-// ── Resolve every variable's valueFrom ──────────────────────────────────────────────────────────
-// A secret's ARN carries the account id and the six random characters AWS appends, so it is resolved
-// here and never committed (ADR-012 `decided: Q2`). One lookup per distinct secret, not per variable.
+// ARNs carry the account id, so they are resolved here and never committed.
 
 const secretArns = new Map();
 function arnOf(secretName) {
@@ -134,11 +102,7 @@ const missing = [];
 
 for (const [name, entry] of Object.entries(contract.secrets?.variables ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
   if (entry.store === "credential") {
-    // Carried over from the running definition rather than resolved. CI holds NO grant on a
-    // credential secret — not even DescribeSecret — which is ADR-016's blast-radius argument working
-    // as intended, and it is why resolving the ARN here failed the first real deploy. The ARN is
-    // already in the baseline, put there by whoever provisioned the secret, so reusing it needs no
-    // grant and cannot drift from what the service currently reads.
+    // Reused from the baseline, not resolved: CI holds no grant on a credential secret, not even DescribeSecret.
     const existing = baselineValueFrom.get(name);
     if (!existing) {
       if (entry.required) {
@@ -152,11 +116,7 @@ for (const [name, entry] of Object.entries(contract.secrets?.variables ?? {}).so
     secrets.push({ name, valueFrom: existing });
     continue;
   }
-  // store: config — one key per variable in the service's own config secret, and ONLY for a variable
-  // sync-secrets actually writes. The two must agree or the reference dangles; what decides is a
-  // recorded value, never `source:` (see the note there).
-  // `generate:` is a third way for the config secret to hold a key: sync-secrets minted it rather than
-  // copying a recorded value, so there is nothing in the contract to point at — only a key that exists.
+  // Only keys sync-secrets writes (a recorded value, a source path, or `generate:`); anything else would dangle.
   if (entry.value === undefined && !entry.value_from_output && !entry.generate) {
     if (entry.required) {
       missing.push(`${name} is required but the contract records neither a value nor a source path`);
@@ -169,10 +129,6 @@ for (const [name, entry] of Object.entries(contract.secrets?.variables ?? {}).so
 
 if (missing.length) die(`cannot render ${service}: ${missing.join("; ")}`);
 
-// ECS resolves every `valueFrom` before the container starts, so a key referenced here but absent
-// from the secret is a task that cannot boot — surfacing minutes later as a rollout failure with the
-// cause several layers down. Reading the secret back turns that into a render-time error naming the
-// keys. It caught seven on the first real render, before anything was registered.
 if (configSecret && secrets.some((s) => s.valueFrom.includes(`${configSecret}-`))) {
   let stored;
   try {
@@ -193,8 +149,6 @@ if (configSecret && secrets.some((s) => s.valueFrom.includes(`${configSecret}-`)
   }
 }
 
-// Every variable now arrives by reference. A leftover plaintext entry means the contract and this
-// renderer disagree, which is worth failing over rather than shipping a half-migrated definition.
 const plaintext = Object.entries(contract.environment ?? {});
 if (plaintext.length) {
   die(
@@ -202,8 +156,6 @@ if (plaintext.length) {
       `(${plaintext.map(([n]) => n).join(", ")}) — regenerate with \`pnpm run generate:deploy-env\``
   );
 }
-
-// ── Compose ─────────────────────────────────────────────────────────────────────────────────────
 
 const container = baseline.containerDefinitions?.find((c) => c.name === service);
 if (!container) {

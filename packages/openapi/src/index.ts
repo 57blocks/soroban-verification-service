@@ -1,24 +1,16 @@
 import "reflect-metadata";
 import { validationMetadatasToSchemas } from "class-validator-jsonschema";
 import { getMetadataStorage } from "class-validator";
-// Nested shapes resolve only with this: `@ValidateNested` says a property is a class, and class-transformer's
-// `@Type(() => X)` is the only place X is recorded.
+// Nested shapes resolve only with class-transformer's `@Type` storage.
 // @ts-expect-error -- untyped entry point; only passed through to the converter
 import { defaultMetadataStorage } from "class-transformer/cjs/storage.js";
 import type { OpenAPIObject } from "@nestjs/swagger";
 import { schemaHintsFor } from "@scvs/core";
 
-// Derives OpenAPI schemas from the class-validator metadata the DTOs already carry, so no shared package needs
-// a Nest dependency to be documented.
-
 const REF_PREFIX = "#/components/schemas/";
 
 type Schema = Record<string, unknown>;
 
-/**
- * Replaces the schemas Nest registered from route models with ones derived from validation, then pulls in every
- * schema those reference, transitively.
- */
 export function applyDerivedSchemas(document: OpenAPIObject): OpenAPIObject {
   const derived = validationMetadatasToSchemas({
     refPointerPrefix: REF_PREFIX,
@@ -37,7 +29,6 @@ export function applyDerivedSchemas(document: OpenAPIObject): OpenAPIObject {
     seen.add(name);
 
     const schema = derived[name];
-    // A name with no derived schema is a DTO Nest documented by hand with no validators.
     if (schema !== undefined) {
       schemas[name] = merge(schemas[name], withHints(classes.get(name), { type: "object", ...schema }));
     }
@@ -47,7 +38,6 @@ export function applyDerivedSchemas(document: OpenAPIObject): OpenAPIObject {
   return document;
 }
 
-/** Fails generation rather than publishing a document that is wrong in a way no consumer can work around. */
 function assertSound(schemas: Record<string, Schema>): void {
   const problems: string[] = [];
 
@@ -70,10 +60,7 @@ function assertSound(schemas: Record<string, Schema>): void {
   }
 }
 
-/**
- * Declared wins, **per property**. A service may still write `@ApiProperty` on its own DTOs, and what it states
- * by hand is more specific than what validation implies.
- */
+/** Declared wins per property: a hand-written `@ApiProperty` is more specific than what validation implies. */
 function merge(declared: Schema | undefined, derivedSchema: Schema): Schema {
   if (declared === undefined) return derivedSchema;
 
@@ -88,8 +75,6 @@ function merge(declared: Schema | undefined, derivedSchema: Schema): Schema {
     ...derivedSchema,
     ...declared,
     properties: { ...derivedProperties, ...declaredProperties },
-    // A property Nest never saw is required only if validation says so; Nest's own answer stands for everything
-    // it did document.
     required: [...declaredRequired, ...derivedRequired.filter((key) => onlyDerived.includes(key))],
   };
 }
@@ -109,7 +94,6 @@ function referencedNames(value: unknown): string[] {
   return found;
 }
 
-/** The decorated classes, by name — the same key a schema is registered under. */
 function decoratedClasses(): Map<string, Function> {
   const storage = getMetadataStorage() as unknown as { validationMetadatas?: Map<unknown, unknown> };
   const targets = [...(storage.validationMetadatas?.keys() ?? [])];
@@ -129,8 +113,7 @@ function withHints(target: Function | undefined, schema: Schema): Schema {
         `@SchemaHint on ${target?.name ?? "?"}.${property}, which has no derived schema property`,
       );
     }
-    // A shape hint replaces what was derived: the property only has one because its validator was opaque to the
-    // converter, and what it derived (`$ref: Array`) is the thing being corrected.
+    // A shape hint replaces the derived schema, which is wrong (`$ref: Array`) for an opaque validator.
     const { $ref: _dropped, ...derived } = properties[property];
     const base = hint.type !== undefined || hint.oneOf !== undefined ? derived : properties[property];
     properties[property] = { ...base, ...hint };

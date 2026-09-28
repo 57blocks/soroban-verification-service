@@ -5,17 +5,12 @@ import { cn } from "@/lib/utils";
 
 type CollapsibleSectionProps = {
   title: string;
-  /**
-   * Shown in the badge. Collapsed, this is the only thing the section still says — so `undefined` renders an
-   * ellipsis rather than `0`, which would claim the list is empty before it is known.
-   */
   count: number | undefined;
   testId: string;
   defaultOpen?: boolean;
   children: ReactNode;
 };
 
-/** A section that keeps saying something once folded away. */
 export const CollapsibleSection = ({
   title,
   count,

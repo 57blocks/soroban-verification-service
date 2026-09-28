@@ -30,7 +30,6 @@ test("mainnet with a configured endpoint never says --network", () => {
 });
 
 test("the endpoint and the passphrase always travel together", () => {
-  // The CLI rejects either one alone. A caller cannot get half of this pair from this function.
   const args = stellarNetworkArgs("mainnet", RPC);
   assert.equal(
     args.includes("--rpc-url"),
@@ -40,14 +39,10 @@ test("the endpoint and the passphrase always travel together", () => {
 
 test("testnet keeps the built-in entry, which has a real endpoint", () => {
   assert.deepEqual(stellarNetworkArgs("testnet"), ["--network", "testnet"]);
-  // Even when a mainnet endpoint is configured: it is mainnet's, and pointing a testnet lookup at it would
-  // silently answer about the wrong chain.
   assert.deepEqual(stellarNetworkArgs("testnet", RPC), ["--network", "testnet"]);
 });
 
 test("mainnet with no configured endpoint falls back to the CLI's own loud failure", () => {
-  // Not an invented endpoint and not a throw from here — the CLI's `Invalid URL Bring Your Own` names the
-  // missing configuration better than anything this function could synthesise.
   assert.deepEqual(stellarNetworkArgs("mainnet"), ["--network", "mainnet"]);
   assert.deepEqual(stellarNetworkArgs("mainnet", ""), ["--network", "mainnet"]);
 });

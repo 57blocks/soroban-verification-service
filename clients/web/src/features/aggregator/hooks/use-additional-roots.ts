@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 
 export type AdditionalRoot = { id: string; url: string };
 
-/** Result roots the reader adds for this session only. */
 export const useAdditionalRoots = () => {
   const [roots, setRoots] = useState<AdditionalRoot[]>([]);
 
@@ -20,14 +19,11 @@ export const useAdditionalRoots = () => {
       return "A result root must be an http(s) URL.";
     }
 
-    // Normalised the way the SDK resolves a root — query and fragment dropped, host lower-cased, trailing slash
-    // trimmed.
     parsed.search = "";
     parsed.hash = "";
     const url = parsed.toString().replace(/\/+$/, "");
 
-    // Checked against the rendered list, not read back out of the updater — React may call an updater twice, so
-    // a flag set inside one is not a value you can return.
+    // Checked against the rendered list, not inside the updater: React may call an updater twice.
     if (roots.some((root) => root.url === url)) return "That root is already in the list.";
     setRoots((current) =>
       current.some((root) => root.url === url) ? current : [...current, { id: url, url }],

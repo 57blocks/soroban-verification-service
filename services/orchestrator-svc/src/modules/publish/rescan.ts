@@ -1,6 +1,4 @@
 import "reflect-metadata";
-// Same side-effect import, and for the same reason, as main.ts — this is a second entrypoint into the same DI
-// graph, and it reads the jobs table.
 import "@scvs/config/load-env";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
@@ -13,15 +11,12 @@ import { PublishModule } from "./publish.module.js";
 import { PublishService } from "./publish.service.js";
 import { OrchestratorSvcEnvDto } from "../../config/env.dto.js";
 
-/** Minimal module for the one-shot rescan CLI. */
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
       envFilePath: envFilePaths(),
-      // Runs BEFORE the `load` factory below, so a malformed variable is reported ahead of any single-variable
-      // throw inside configuration.ts.
       validate: createEnvValidator(OrchestratorSvcEnvDto, "orchestrator-svc (rescan)"),
     }),
     DbModule.forRootAsync({
@@ -34,19 +29,12 @@ import { OrchestratorSvcEnvDto } from "../../config/env.dto.js";
 })
 class RescanModule {}
 
-/**
- * Distinct from `main.ts`, which drives the primary hand-off path (batch-events publishing as soon as a build's
- * terminal event arrives, backstopped by a low-frequency recovery scan).
- */
-// A module-level logger: this file is a one-shot CLI entrypoint plus a free function, not a provider
-// (AGENTS.md's rule for stateless helpers).
 const logger = new ScvsLogger("publish-rescan");
 
 export async function publishAllStoredResults(
   publishService: PublishService,
   jobsRepository: JobsRepository,
 ): Promise<{ scanned: number; published: number; failed: number }> {
-  // Only jobs whose comparison actually produced a verdict.
   const jobs = await jobsRepository.listJobsByStatus(["published"]);
   const candidates = jobs.filter((job) => job.result?.matched !== undefined && job.manifest);
 

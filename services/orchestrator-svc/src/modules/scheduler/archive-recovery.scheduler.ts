@@ -35,10 +35,7 @@ export class ArchiveRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
     await this.detached.drain();
   }
 
-  /**
-   * It does not hold *within this same process* across ticks: `retryPendingArchive` is dispatched unawaited
-   * below, and this method's own interval fires again before a large backlog's prior tick is done.
-   */
+  // Retries run unawaited, so the next tick can overlap a job still in flight.
   async recoverPendingArchives(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingArchive();

@@ -11,7 +11,6 @@ import {
 import { isWasmHash } from "./use-hash-lookup";
 import type { AdditionalRoot } from "./use-additional-roots";
 
-/** The policy these fetches run under. */
 const policy = normalizePolicy({ allowedSchemes: ["https:", "http:"], blockPrivateRanges: false });
 
 export type RootResult =
@@ -22,22 +21,18 @@ export type RootResult =
 
 class NotPublishedError extends Error {}
 
-/** A root answered with a document about different bytes. Its own claim, not a transport problem. */
 class WrongSubjectError extends Error {
   constructor(readonly answered: string) {
     super(`answered for ${answered}, which is not the hash that was asked about`);
   }
 }
 
-/** Each additional root asked directly, in parallel, for one hash. */
 export const useRootLookups = (
   roots: readonly AdditionalRoot[],
   wasmHash: string | null,
-  /** Bumped with the aggregate's, so one Refresh re-asks both sources rather than one. */
   attempt = 0,
 ): RootResult[] => {
   const hash = wasmHash?.trim().toLowerCase() ?? "";
-  // The same gate the aggregate lookup applies, not merely "non-empty".
   const askable = isWasmHash(hash);
 
   const results = useQueries({
@@ -49,20 +44,17 @@ export const useRootLookups = (
         const guarded = createGuardedFetch(policy, fetch);
         const document = await readStatusObject(root.url, hash, async (url) => {
           const response = await guarded(url);
-          // SO4 forbids an empty entry list, so a root says "nothing for this hash" with a 404.
           if (response.status !== 200) {
             await response.body?.cancel();
             if (response.status === 404) throw new NotPublishedError();
             throw new Error(`answered ${response.status}`);
           }
-          // `policy.maxResponseBytes` is enforced here and nowhere else — `createGuardedFetch` checks the URL,
-          // the redirect mode and the timeout, none of which bound a body.
+          // The only place `policy.maxResponseBytes` is enforced: `createGuardedFetch` does not bound a body.
           const bytes = await readBoundedBytes(response, policy.maxResponseBytes);
           return JSON.parse(new TextDecoder().decode(bytes));
         });
 
-        // The check `aggregateWasmStatus` makes and this path would otherwise skip: a root does not get to
-        // answer for a hash nobody asked about.
+        // A root must not answer for a hash nobody asked about.
         if (document.wasm_hash.toLowerCase() !== hash) {
           throw new WrongSubjectError(document.wasm_hash);
         }

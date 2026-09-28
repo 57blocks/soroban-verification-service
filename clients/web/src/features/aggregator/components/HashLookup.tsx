@@ -8,13 +8,11 @@ import { useRootLookups } from "../hooks/use-root-lookups";
 import { LookupResult } from "./LookupResult";
 import { RootResults } from "./RootResults";
 
-/** Look up one Wasm hash, in two places that must not be conflated. */
 export const HashLookup = ({ additionalRoots = [] }: { additionalRoots?: readonly AdditionalRoot[] }) => {
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const state = useHashLookup(submitted);
-  // The same nonce reaches both sources, so one press re-asks the roots as well as the aggregate.
   const rootResults = useRootLookups(additionalRoots, submitted, attempt);
 
   const refreshAll = () => {
@@ -46,9 +44,6 @@ export const HashLookup = ({ additionalRoots = [] }: { additionalRoots?: readonl
         </Button>
       </form>
 
-      {/* Nothing below the form until something was asked — an empty section is a heading with no
-          subject. And the headings only earn their place once there are two sources to tell apart:
-          with no additional roots there is one answer, and naming its origin is noise. */}
       {state.phase !== "idle" && (
         <div className="mt-8">
           {hasRoots && (
@@ -71,9 +66,6 @@ export const HashLookup = ({ additionalRoots = [] }: { additionalRoots?: readonl
         </div>
       )}
 
-      {/* Its own section, never merged into the aggregate above. The aggregate is a claim about a
-          curated set; these are roots the reader added a minute ago, and folding them in would put
-          words in this deployment's mouth. */}
       {hasRoots && state.phase !== "idle" && state.phase !== "invalid" && (
         <section className="mt-10" aria-labelledby="roots-answer-heading">
           <h2

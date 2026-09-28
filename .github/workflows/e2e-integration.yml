@@ -1,9 +1,7 @@
 name: E2E integration
 
-# The run title carries the environment under test.
 run-name: E2E integration → ${{ inputs.environment }}
 
-# Called by the operations repository, which owns the trigger and the live environment it runs against.
 on:
   workflow_call:
     inputs:
@@ -89,34 +87,24 @@ permissions:
   id-token: write
   contents: read
 
-# No `concurrency:` here — see deploy.yml's note. The caller must serialize per environment: one service
-# deployment and one Batch queue, so a second runner turns quota and queue contention into failures that
-# say nothing about either commit.
+# No `concurrency:` (it would deadlock the caller); the caller must serialise per environment.
 
 jobs:
   e2e:
-    # This workflow intentionally exercises contracts built on the AMD64 fixture image.
+    # An amd64 runner on purpose: the fixtures and the installed CLI are amd64.
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
     timeout-minutes: ${{ inputs.test_suite == 'perf' && 360 || inputs.e2e_scope == 'all' && 240 || inputs.e2e_scope == 'slow' && 90 || 180 }}
     env:
-      # The selected environment's role can access only that environment's CI cache. Set per
-      # GitHub Environment by the caller; there is no fallback, because a deployment identifier
-      # is never a literal in this repository.
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
-      # An off-main run has no bucket to read, and the script treats `off` as the normal case rather
-      # than a fault — the same path the public build takes.
       SCVS_CI_CACHE: ${{ inputs.on_main && 's3' || 'off' }}
       SCVS_E2E: "1"
-      # Where this deployment answers. Supplied per GitHub Environment; the guard step below
-      # fails loudly rather than letting an unset variable read as an empty URL.
       SCVS_E2E_VERIFY_URL: ${{ vars.SCVS_E2E_VERIFY_URL }}
       SCVS_E2E_QUERY_URL: ${{ vars.SCVS_E2E_QUERY_URL }}
       SCVS_E2E_WEB_URL: ${{ vars.SCVS_E2E_WEB_URL }}
       SCVS_E2E_RESULT_ROOT: ${{ vars.SCVS_E2E_RESULT_ROOT }}
       SCVS_E2E_VERIFIER_NAME: ${{ vars.SCVS_E2E_VERIFIER_NAME }}
-      # Do not set SCVS_E2E_ENV here. It binds the harness to `config/deploy/<env>/` in the checkout,
-      # which the quota step below explains is never on the runner, and the miss throws at import.
+      # Never set SCVS_E2E_ENV here: it binds the harness to config/deploy/<env>/, which is not on the runner.
       SCVS_E2E_NETWORK: testnet
       SCVS_E2E_AUTO_SCOPE: ${{ inputs.e2e_scope }}
       SCVS_E2E_FIXTURES: ${{ github.workspace }}/artifacts/e2e-fixtures/e2e-fixtures.ci.json
@@ -124,7 +112,6 @@ jobs:
       SCVS_E2E_RUN_ID: ci-${{ inputs.environment || 'dev' }}-${{ github.run_id }}-${{ github.run_attempt }}
       SCVS_FIXTURE_DEPLOYMENT_SCOPE: ci-${{ inputs.environment || 'dev' }}-${{ github.run_id }}-${{ github.run_attempt }}
       SCVS_FIXTURE_DEPLOYMENTS: ${{ github.workspace }}/artifacts/e2e-fixtures/testnet-deployments.ci.ndjson
-      # Every suite writes its Jest/Playwright JSON report here, and the summary step renders them.
       SCVS_E2E_REPORT_DIR: ${{ github.workspace }}/artifacts/e2e-reports
       SCVS_E2E_JOB_TIMEOUT_MS: "1200000"
       SCVS_E2E_POLL_INTERVAL_MS: "3000"
@@ -135,7 +122,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -158,7 +145,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The SDK cases run `clients/sdk`'s package entry (`dist/index.js`) from a separate consumer process.
       - name: Build the SDK consumed by the E2E cases
         if: ${{ inputs.test_suite != 'perf' }}
         run: pnpm exec turbo run build --filter=soroban-verification-client
@@ -167,8 +153,7 @@ jobs:
         if: ${{ inputs.test_suite != 'perf' }}
         run: pnpm --filter @scvs/e2e-tests exec playwright install --with-deps chromium
 
-      # Fixture inventory hashes were generated with BSD tar. Use the same implementation in CI; GNU tar
-      # produces different USTAR bytes even when owner metadata is equivalent.
+      # Fixture hashes were made with BSD tar; GNU tar produces different USTAR bytes.
       - name: Install BSD tar for deterministic fixture archives
         if: ${{ inputs.test_suite != 'perf' }}
         shell: bash
@@ -178,18 +163,12 @@ jobs:
           command -v bsdtar
           bsdtar --version
 
-      # Generated archives are intentionally ignored reproducible inputs. This downloads only
-      # byte-pinned public source and does not receive the signing credential. It has no Stellar
-      # CLI dependency, so run it before fetching the pinned CLI to fail fast on source or tar
-      # reproducibility errors.
       - name: Prepare local source fixtures
         if: ${{ inputs.test_suite != 'perf' }}
         env:
           SCVS_E2E_FIXTURES: test/integration/fixtures/e2e-fixtures.dev.json
         run: bash test/fixtures/e2e/prepare-ci-sources.sh
 
-      # The only thing this suite uses AWS for. An off-main ref therefore runs the whole suite against the
-      # deployed environment without ever assuming the deploy role.
       - name: Configure AWS credentials for CLI cache
         if: ${{ inputs.test_suite != 'perf' && inputs.on_main }}
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -203,7 +182,6 @@ jobs:
           DESC=$(bash scripts/ci/load-ci-descriptor.sh "${{ inputs.environment || 'dev' }}" 2,3)
           echo "SCVS_CI_CACHE_BUCKET=$(jq -r '.artifacts_bucket' <<<"$DESC")" >> "$GITHUB_ENV"
 
-      # Fetches the official release pinned by version and tarball/binary digest in docker/stellar-cli.pin.
       - name: Fetch pinned official Stellar CLI
         if: ${{ inputs.test_suite != 'perf' }}
         env:
@@ -215,8 +193,6 @@ jobs:
           stellar contract fetch --help >/dev/null
           stellar contract info meta --help >/dev/null
 
-      # The run-local inventory contains adversarial, timeout, and retention fixtures in addition to the core
-      # source archives.
       - name: Generate full E2E source fixture corpus
         if: ${{ inputs.test_suite != 'perf' }}
         env:
@@ -231,8 +207,6 @@ jobs:
           SCVS_FIXTURE_OUTPUT_ROOT: ${{ github.workspace }}/artifacts/e2e-fixtures
         run: bash test/fixtures/e2e/build-purpose-contracts.sh
 
-      # F-UPG's two deterministic source archives are required by the run-local inventory and by the separately
-      # triggered upgrade lifecycle.
       - name: Build upgrade source fixtures
         if: ${{ inputs.test_suite != 'perf' }}
         env:
@@ -257,7 +231,6 @@ jobs:
         if: ${{ inputs.test_suite != 'perf' }}
         run: pnpm run e2e:generate-inventory
 
-      # PERF-01 uses committed targets and deliberately skips the run-local deploy step.
       - name: Check persistent PERF fixture inventory
         if: ${{ inputs.test_suite == 'perf' }}
         env:
@@ -330,8 +303,7 @@ jobs:
           export_parameter SCVS_E2E_MAX_JOB_RETRY_ATTEMPTS max_job_retry_attempts
 
           echo "$TARGET_ENV — accepted deployment evidence for E2E scope $E2E_SCOPE"
-          # No variable carries this one: the query throttler's window is the `ttl` hardcoded beside the limit
-          # in results.controller.ts, so it is fixed rather than configured.
+          # Fixed, not configured: the query throttler's window is a hardcoded ttl.
           echo "SCVS_E2E_WINDOW_QUERY_MS=60000" >> "$GITHUB_ENV"
 
       - name: Run smoke cases
@@ -352,7 +324,6 @@ jobs:
           set -o pipefail
           pnpm --filter @scvs/e2e-tests run test:auto 2>&1 | tee artifacts/e2e-auto.log
 
-      # PERF-01 uses the committed, persistent F-PERF-VERIFIED pool.
       - name: Run Locust E2E-PERF-01
         if: ${{ inputs.test_suite == 'perf' }}
         env:
@@ -406,10 +377,6 @@ jobs:
           pnpm run test:perf:locust 2>&1 | tee artifacts/e2e-perf.log
 
       - name: Run normal upgrade lifecycle E2E
-        # The harness (run-e2e-test.mjs → run-upgrade-normal-lifecycle.sh) is self-contained: it
-        # builds, deploys v1 at a run-scoped salt, upgrades, and validates its own inventory. Running
-        # it under always() keeps a failed test:auto step from skipping this independent, run-scoped
-        # case and losing its signal.
         if: ${{ always() && (inputs.test_suite == 'e2e' || inputs.test_suite == 'both') && inputs.e2e_scope != 'slow' }}
         env:
           SCVS_FIXTURE_TESTNET_ACCOUNT: ${{ secrets.SCVS_FIXTURE_TESTNET_SECRET_KEY }}
@@ -418,16 +385,8 @@ jobs:
         run: |
           set -o pipefail
           export SCVS_FIXTURE_STELLAR_BIN="$HOME/.cargo/bin/stellar"
-          # No `-t`: the file holds exactly one case, so the filter added nothing but a second place for the
-          # test's name to live. It had already gone stale — it read "normal upgrade lifecycle" while the case
-          # is `normal_upgrade_lifecycle`, matched nothing, and Jest reported "1 skipped" with exit code 0.
           pnpm --filter @scvs/e2e-tests run test -- \
             cases/upg/upg-normal-lifecycle.spec.ts 2>&1 | tee artifacts/e2e-upgrade-jest.log
-          # A suite that selects nothing exits 0 and reads as a benign conditional skip. Only the harness's own
-          # gate may skip this case, and it says so in the test name; anything else is a filter that has gone
-          # stale again. F-UPG-V1/F-UPG-V2 are the exception: run-upgrade-normal-lifecycle.sh builds, deploys
-          # and registers them within this step, so a gate skip naming them is that script never running —
-          # the one skip reason this step is not allowed to accept from itself.
           node -e '
             const report = require(`${process.env.SCVS_E2E_REPORT_DIR}/upgrade-lifecycle-jest.json`);
             const ran = report.numPassedTests + report.numFailedTests;
@@ -448,8 +407,6 @@ jobs:
             process.exit(1);
           '
 
-      # Rendered from the suites' own JSON reports rather than the logs, so a dispatch can be read without
-      # opening four thousand lines of Jest output.
       - name: Publish test results to the job summary
         if: always()
         env:

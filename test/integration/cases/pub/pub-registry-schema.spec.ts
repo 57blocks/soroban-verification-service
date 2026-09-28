@@ -1,4 +1,3 @@
-/** A Registry consumer reads `<result-root>/wasms/{hash}.json` instead. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -22,7 +21,6 @@ caseBlock(
       const run = await submitAndWait(await submissionFor("F-LEG-1"));
       const wasmHash = run.body.result?.wasm_hash ?? fixtures.contracts["F-LEG-1"].wasm_hash;
       if (!wasmHash) throw new Error("F-LEG-1 has no wasm_hash in the response or fixture inventory");
-      // requireStatusObject reads the static result root, never verification-svc or query-svc.
       status = await requireStatusObject(wasmHash);
     }, env.jobTimeoutMs + 120_000);
 

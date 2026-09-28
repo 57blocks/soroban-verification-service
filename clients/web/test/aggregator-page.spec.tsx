@@ -94,13 +94,10 @@ describe("the aggregator page", () => {
     expect(screen.getByTestId("query-tab-contract")).toBeInTheDocument();
   });
 
-  // Collapsed, the badge is the only thing a section still says — so it has to say the number that changes what
-  // the answers below are made of.
   test("both sections start collapsed and carry their count", async () => {
     stub(route);
     renderPage(<AggregatorPage />);
 
-    // "…" until the list arrives — a collapsed section showing 0 would claim it aggregates across nobody.
     expect(screen.getByTestId("tvl-section-badge").textContent).toBe("…");
     await waitFor(() => expect(screen.getByTestId("tvl-section-badge").textContent).toBe("2"));
     expect(screen.getByTestId("roots-section-badge").textContent).toBe("0");
@@ -153,8 +150,6 @@ describe("the aggregator page", () => {
     expect(screen.getByTestId("roots-section-badge").textContent).toBe("1");
   });
 
-  // The two sources answer different questions and must not be summarised together: an aggregate is a claim
-  // about a curated set, an ad-hoc list is not.
   test("a hash lookup reports the aggregate and the added roots in separate sections", async () => {
     const calls = stub(route);
     renderPage(<AggregatorPage />);
@@ -172,14 +167,12 @@ describe("the aggregator page", () => {
 
     const roots = await screen.findByTestId("additional-root-results");
     expect(within(roots).getByText(/An Outside Verifier/)).toBeInTheDocument();
-    // The outside verifier's answer is NOT folded into the aggregate.
     expect(aggregate.textContent).not.toContain("An Outside Verifier");
 
     expect(calls.some((url) => url === `${ROOT}/wasms/${WASM_HASH}.json`)).toBe(true);
     expect(calls.some((url) => url.includes(`/api/query/v1/wasms/${WASM_HASH}`))).toBe(true);
   });
 
-  // Owner call: address resolution is query-svc's, so the contract tab has no roots section.
   test("the contract tab has no additional-roots section", async () => {
     stub(route);
     renderPage(<AggregatorPage />);
@@ -195,8 +188,6 @@ describe("the aggregator page", () => {
     expect(within(contractPanel).queryByTestId("additional-root-results")).not.toBeInTheDocument();
   });
 
-  // A heading with nothing under it is not a section. Nothing below the form until something is asked, and the
-  // source headings only once there are two sources to tell apart.
   test("no section headings before a lookup", async () => {
     stub(route);
     renderPage(<AggregatorPage />);
@@ -239,8 +230,6 @@ describe("the aggregator page", () => {
     expect(panel.getByText("Additional result roots")).toBeInTheDocument();
   });
 
-  // A failed read is not a count. Collapsed, the badge is all the section says, and `0` would assert this
-  // deployment aggregates across nobody when the truth is the list could not be read.
   test("the badge stays unknown when the TVL cannot be read", async () => {
     stub((url) => (url.includes("/verifiers") ? new Response("", { status: 503 }) : json({})));
     renderPage(<AggregatorPage />);
@@ -258,7 +247,6 @@ describe("the aggregator page", () => {
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
   });
 
-  // One press must re-ask both sources, or the two sections drift apart with nothing saying so.
   test("Look up on an unchanged hash re-asks the added roots too", async () => {
     const calls = stub(route);
     renderPage(<AggregatorPage />);
@@ -278,7 +266,6 @@ describe("the aggregator page", () => {
     await waitFor(() => expect(calls.filter((url) => url.startsWith(ROOT)).length).toBeGreaterThan(before));
   });
 
-  // Variants that resolve to one document must not become two rows claiming two publishers agree.
   test("a root that resolves identically is refused as a duplicate", async () => {
     stub(route);
     renderPage(<AggregatorPage />);

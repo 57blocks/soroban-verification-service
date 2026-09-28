@@ -24,7 +24,6 @@ export const readRecentJobs = (): RecentJob[] => {
     if (raw === cachedRecentJobsRaw) return cachedRecentJobs;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return EMPTY_RECENT_JOBS;
-    // Backfill created_at for legacy entries so sorting is stable.
     const normalized: RecentJob[] = parsed.map((item: RecentJob) => ({
       ...item,
       created_at: item.created_at || item.updated_at,
@@ -49,17 +48,14 @@ const writeRecentJobs = (jobs: RecentJob[]) => {
   }
 };
 
-/** Records a job in this browser's recent list and marks it as the last one visited. */
 export const rememberJob = (job: RecentJob) => {
   if (typeof window === "undefined") return;
   const jobs = readRecentJobs();
   const existing = jobs.find((item) => item.job_id === job.job_id);
-  // Preserve the original verification time so re-visiting a job doesn't reorder it.
   const merged: RecentJob = {
     ...job,
     created_at: existing?.created_at || job.created_at,
-    // Write-once, for the same reason `created_at` is preserved — but the reason it *has* to be write-once is
-    // stronger.
+    // Write-once: a later `updated_at` is a later write to a finished row, not a later finish.
     ...(existing?.finished_at || job.finished_at
       ? { finished_at: existing?.finished_at || job.finished_at }
       : {}),
@@ -76,7 +72,6 @@ export const rememberJob = (job: RecentJob) => {
   window.dispatchEvent(new Event(RECENT_JOBS_CHANGED_EVENT));
 };
 
-/** `useSyncExternalStore` subscription for the recent-jobs list. */
 export const subscribeToRecentJobs = (
   onStoreChange: () => void,
 ): (() => void) => {

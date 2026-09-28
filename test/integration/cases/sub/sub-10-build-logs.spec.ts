@@ -1,4 +1,3 @@
-/** E2E-SUB-10 — complete, redacted logs for every build terminal state. */
 import { deploymentParameters, env } from "../../support/env.js";
 import { fixture, missingFixture, missingRunScopedTarget, submissionFor } from "../../support/fixtures.js";
 import { caseBlock } from "../../support/gate.js";
@@ -44,7 +43,7 @@ const cases: readonly LogCase[] = [
     suffix: "build_timeout",
     fixtureId: "F-BUILD-TIMEOUT",
     expectedStatus: "build_failed",
-    // Cargo need not forward `build.rs` stderr before the timeout kills its parent process.
+    // Cargo need not forward a running build script's stderr once its parent is killed.
     contentLabel: "timed-out command",
     contentPatterns: [/\[timed out\]/],
     requiresWallclock: true,
@@ -78,10 +77,8 @@ for (const row of cases) {
         );
         const run = await submitAndWait(body, {
           timeoutMs: timeout,
-          // A reused target-level job can have a different source and failure class, making its log a false
-          // substitute for this row's state-specific evidence.
           requireFreshTargetJob: row.suffix === "build_timeout",
-          // `build_timeout` is retryable, so settling would follow the retry instead of reading this timeout.
+          // build_timeout is retryable; settling would read the retry instead.
           settleMs: row.suffix === "build_timeout" ? 0 : undefined,
         });
         expect(run.body.status).toBe(row.expectedStatus);
@@ -94,8 +91,6 @@ for (const row of cases) {
         }
         if (row.suffix === "build_failed") expect(run.body.error).toBe("rebuild_command_failed");
         if (row.suffix === "build_timeout") {
-          // `error` carries the builder's raw command outcome. The trusted side classifies it as a retryable
-          // timeout from this diagnostics fact, rather than rewriting the raw code.
           expect(run.body.error).toBe("rebuild_command_failed");
           expect(run.body.result?.sandbox_diagnostics).toEqual(
             expect.objectContaining({ timed_out: true }),

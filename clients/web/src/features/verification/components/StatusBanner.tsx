@@ -8,15 +8,11 @@ import { MonoLabel } from "./MonoLabel";
 type StatusBannerProps = {
   state: SubmissionState;
   meta: { title: string; description: string; tone: ResultTone };
-  /** Already resolved by the hook. */
   view: BannerView;
-  /** Shown when the API echoes a target without a network. */
   fallbackNetwork: string;
-  /** Off where a card elsewhere already names the job — the job page's `CurrentJobBar` does. */
   showJobId?: boolean;
 };
 
-/** The headline verdict for the current submission, colour-coded by tone. */
 export const StatusBanner = ({
   state,
   meta,
@@ -47,8 +43,6 @@ export const StatusBanner = ({
                 toneBadge[meta.tone],
               )}
             >
-              {/* A rotating text glyph wobbles — its box centre is not its optical centre — so a
-                  running job gets a real SVG spinner instead. */}
               {isRunning ? (
                 <Loader2 className="size-3.5 animate-spin" strokeWidth={2.5} />
               ) : (
@@ -87,8 +81,6 @@ export const StatusBanner = ({
         )}
       </div>
 
-      {/* One field per row: a 64-character digest in half this width wraps mid-digest, which is the one
-          place a hash must not break. */}
       {target && (
         <div className="mt-4 grid gap-4 rounded-lg bg-surface/70 p-4">
           <CopyableField

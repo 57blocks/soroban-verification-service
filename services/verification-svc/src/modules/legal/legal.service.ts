@@ -12,14 +12,12 @@ import {
 import { loadLegalDocumentsSource } from "./legal.source.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** What a submission's `accepted_terms_version` resolved to. */
 export type AcceptanceCheck =
   | { accepted: true; version?: string; contentSha256?: string }
   | { accepted: false; error: "terms_acceptance_required" | "terms_version_outdated"; message: string };
 
 type LoadedBundle = {
   bundle: LegalDocumentsBundle;
-  /** The bytes as loaded. Served verbatim and hashed, so "the hash of the text shown" needs no canonical form. */
   raw: string;
   contentSha256: string;
 };
@@ -34,7 +32,6 @@ export class LegalService implements OnModuleInit {
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
   ) {}
 
-  /** Every failure here is fatal: a console that takes submissions while showing nobody any terms is the defect. */
   async onModuleInit(): Promise<void> {
     const configured = this.configService.get("legalDocumentsSource", { infer: true });
     const { label, raw } = await loadLegalDocumentsSource(configured);
@@ -62,10 +59,6 @@ export class LegalService implements OnModuleInit {
     });
   }
 
-  /**
-   * TA-5, and it needs the database, so it is called from `main.ts`'s bootstrap rather than `onModuleInit` —
-   * the same seam that lets `generate-openapi.ts` boot this app with no database at all.
-   */
   async assertNoVersionConflict(): Promise<void> {
     const { bundle, contentSha256 } = this.require();
     const conflicting = await this.jobs.findConflictingTermsHash(bundle.version, contentSha256);
@@ -93,15 +86,10 @@ export class LegalService implements OnModuleInit {
     return this.require().bundle.version;
   }
 
-  /** True once the operator's document declares an effective date (TA-7). */
   isEnforced(): boolean {
     return Boolean(this.require().bundle.effective_date);
   }
 
-  /**
-   * TA-2 and TA-7 together. A version we do not serve is refused whether or not enforcement is on: accepting
-   * it would bind a job to words nobody was shown.
-   */
   checkAcceptance(supplied: string | undefined): AcceptanceCheck {
     const { bundle, contentSha256 } = this.require();
     const version = supplied?.trim();
@@ -150,7 +138,6 @@ function assertOneOfEachSlug(bundle: LegalDocumentsBundle, label: string): void 
   }
 }
 
-/** The block union has no class-validator equivalent, so the shape the console renders is asserted here. */
 function assertRenderableBlocks(bundle: LegalDocumentsBundle, label: string): void {
   for (const document of bundle.documents) {
     for (const section of document.sections) {

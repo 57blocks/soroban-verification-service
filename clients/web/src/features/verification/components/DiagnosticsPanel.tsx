@@ -44,14 +44,9 @@ const CopyBlock = ({
 type DiagnosticsPanelProps = {
   diagnostics: Record<string, unknown>;
   wasmCompare?: Record<string, unknown>;
-  /** A failed job opens this by default — it is the reason someone opened the job at all. */
   defaultOpen?: boolean;
 };
 
-/**
- * The exact command and the raw JSON, behind one disclosure — for whoever is debugging a failure, which is why
- * `defaultOpen` follows the verdict rather than being constant.
- */
 export const DiagnosticsPanel = ({
   diagnostics,
   wasmCompare,

@@ -1,34 +1,10 @@
 #!/usr/bin/env node
-/**
- * Refuses a literal reference to one deployment's data. This repository holds the SHAPE of the
- * deployment contract (`config/env-manifest.yaml`, `config/deploy/_EXAMPLE/`); the values belong to
- * whoever runs a deployment, and reach the pipeline as an argument and the container as its own
- * configuration.
- *
- * Two regressions this exists to stop, both of which passed every other gate:
- *   - a tool resolving `config/deploy/<env>/<service>.json` from its own tree, which cannot be there
- *   - a workflow composing `config/trusted-verifiers.<env>.json` for the container to read, which
- *     made the image a function of whose deployment it was
- *
- * Scope is code, tooling and workflows. `config/env-manifest.yaml` is NOT scanned by that pass and today
- * would fail it: 54 of its variables carry an `envs:` map naming this organisation's two environments,
- * which is the shape/values line being crossed in the other direction. Widening the NAME pass is the
- * second half of that fix, not a prerequisite for it.
- *
- * The manifest does get a second, narrower pass, for a third regression:
- *   - a manifest value naming a file in this tree that is not in this tree. `check:env` proves a
- *     declared variable is READ in code; nothing proved a declared PATH resolves, so a value can
- *     outlive its file and only a deployment finds out. Existence, not naming — this pass says
- *     nothing about whose data a value is.
- *
- *   node eng-tools/check-deployment-data.mjs
- */
+/** Static: refuses a literal reference to one deployment's data, and a manifest path missing from the tree. */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { MANIFEST_PATH, loadManifest } from "./env-manifest.mjs";
 
 const SCAN = ["eng-tools", "scripts", ".github/workflows", "services", "packages", "clients", "docker"];
-/** A path segment naming somebody's environment. `local` and `_EXAMPLE` name nobody's. */
 const ENVIRONMENTS = /^(dev|staging|prod|production|test)$/;
 const SELF = "eng-tools/check-deployment-data.mjs";
 
@@ -37,7 +13,6 @@ const tracked = execFileSync("git", ["ls-files", "-z", ...SCAN], { encoding: "ut
   .filter(Boolean)
   .filter((f) => f !== SELF);
 
-/** `config/…` up to whitespace or a quote. Template expressions are the point, so they are kept. */
 const REFERENCE = /config\/[A-Za-z0-9_.${}()\-/]*/g;
 
 const findings = [];
@@ -46,11 +21,10 @@ for (const file of tracked) {
   try {
     text = readFileSync(file, "utf8");
   } catch {
-    continue; // binary or unreadable: nothing to match
+    continue;
   }
   text.split("\n").forEach((line, i) => {
     for (const hit of line.match(REFERENCE) ?? []) {
-      // An expression resolves at run time and names no one environment.
       if (/[$][{(]|[$][A-Za-z_]/.test(hit)) continue;
       const named = hit
         .split("/")
@@ -62,10 +36,6 @@ for (const file of tracked) {
   });
 }
 
-// ── Pass 2: a path the manifest declares must be a path the image has ──────────────────────────
-// `docker/service.Dockerfile` is `COPY . .`, so what the checkout has is what `/app/` has.
-// Narrow on purpose: a URL, an absolute path, a glob or anything with a shell or template expression
-// names something resolved elsewhere. Only a plain relative path claims this tree holds a file.
 const isTreePath = (v) =>
   typeof v === "string" &&
   v.includes("/") &&
@@ -73,7 +43,6 @@ const isTreePath = (v) =>
   !v.startsWith("/") &&
   !/[$*{}<>]/.test(v);
 
-/** Every `default:` and `envs.<env>:` value in the manifest, with a label for the error message. */
 function declaredPaths(node, trail = []) {
   const out = [];
   if (!node || typeof node !== "object") return out;

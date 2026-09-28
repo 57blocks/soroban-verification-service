@@ -7,11 +7,6 @@ export const securityHead: SectionCopy = {
     "Submitted Rust can execute code via build.rs, proc macros, and dependency scripts. The service is designed for that reality.",
 };
 
-/**
- * Four claims, each enforced somewhere in `services/builder` or the job's teardown. Two earlier cards were
- * dropped rather than restyled: seccomp and AppArmor profiles were advertised and configured nowhere, and the
- * abuse-control card described a rate limiter, which is not what a visitor is here to evaluate.
- */
 export const securityCapabilities: Capability[] = [
   {
     title: "Sandbox isolation",

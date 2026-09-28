@@ -15,7 +15,6 @@ afterAll(async () => {
   await app?.close();
 });
 
-/** O2's pre-job leg. `job_id` covers submission → build → publication on its own. */
 describe("x-request-id", () => {
   it("mints one when the caller sends none, and echoes it", async () => {
     const res = await request(server).get("/health");
@@ -31,7 +30,6 @@ describe("x-request-id", () => {
   });
 
   it("replaces a hostile id rather than echoing it", async () => {
-    // The header is submitter-controlled text that lands in a log record and in a response header.
     const res = await request(server)
       .get("/health")
       .set("x-request-id", 'evil" }{ "level":"error","msg":"forged');
@@ -58,7 +56,6 @@ describe("sanitizeRequestId", () => {
   });
 
   it("rejects an over-long id rather than truncating it", () => {
-    // Truncating would map two different requests onto the same id, which is worse than minting one.
     expect(sanitizeRequestId("a".repeat(128))).toBe("a".repeat(128));
     expect(sanitizeRequestId("a".repeat(129))).toBeUndefined();
   });

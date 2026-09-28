@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-/**
- * Packs `clients/sdk`, installs the tarball into a scratch project OUTSIDE the workspace, and runs one
- * aggregation through it.
- */
+/** Packs `clients/sdk`, installs the tarball outside the workspace, and runs one aggregation through it. */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,7 +19,6 @@ function manifestAt(dir) {
   return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
 }
 
-/** Workspace package name → is it `private`. */
 function workspacePackages() {
   const globs = readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8")
     .split("\n")
@@ -42,7 +38,6 @@ function workspacePackages() {
         const { name, private: isPrivate } = manifestAt(dir);
         if (name) names.set(name, Boolean(isPrivate));
       } catch {
-        // A workspace glob entry without a manifest is not this gate's business.
       }
     }
   }
@@ -63,7 +58,6 @@ if (manifest.private) {
   );
 }
 
-// Deterministic and network-free, so the diagnosis does not depend on parsing npm's error text.
 const internal = workspacePackages();
 const unresolvable = Object.entries(manifest.dependencies ?? {})
   .filter(([name, range]) => internal.get(name) === true || /^(workspace|link|file):/.test(range))
@@ -77,20 +71,17 @@ if (unresolvable.length) {
   );
 }
 
-// Only worth paying for once the manifest itself is sound; otherwise this repeats the finding above as an npm
-// stack trace.
 let scratch;
 if (!findings.length) {
   try {
     scratch = mkdtempSync(join(tmpdir(), "scvs-pack-install-"));
 
-    // `npm pack`, not `pnpm pack`: release.yml publishes with npm, so this is the artifact.
+    // `npm pack`, not `pnpm pack`: releases publish with npm.
     run("npm", ["pack", "--pack-destination", scratch], packageDir);
     const tarball = readdirSync(scratch).find((entry) => entry.endsWith(".tgz"));
     if (!tarball) throw new Error("npm pack produced no tarball");
 
-    // Outside the workspace on purpose: inside it, pnpm's links resolve `@scvs/*` and the tarball's manifest is
-    // never tested against a registry at all.
+    // Outside the workspace: inside it, pnpm links resolve `@scvs/*` and the tarball's manifest goes untested.
     const consumer = join(scratch, "consumer");
     mkdirSync(consumer);
     writeFileSync(
@@ -98,8 +89,6 @@ if (!findings.length) {
       JSON.stringify({ name: "scvs-pack-install-consumer", version: "0.0.0", type: "module", private: true }),
     );
 
-    // Resolving is not running: an aggregation over a real fixture is what proves the bundled copies of core
-    // and storage-layout came along, decorator metadata included.
     writeFileSync(
       join(consumer, "run.mjs"),
       [
@@ -117,8 +106,6 @@ if (!findings.length) {
     run("npm", ["install", join(scratch, tarball), "--no-audit", "--no-fund", "--ignore-scripts"], consumer);
     run("node", ["run.mjs"], consumer);
 
-    // Here rather than only in the registry gate: this reader runs on every branch and PR, while that one runs
-    // after a published version exists and can never be replaced. `0.1.0` shipped broken through this gap.
     const finding = typecheckInstalledDeclarations({
       consumerDir: consumer,
       packageName: manifest.name,

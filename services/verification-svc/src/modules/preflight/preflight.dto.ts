@@ -22,14 +22,8 @@ import {
   ValidateNested,
 } from "class-validator";
 
-/**
- * Composes `@scvs/core`'s `networks`/`Network` (the shared, single-source-of-truth field type) with a
- * request-local `@AtLeastOneOf` for the "need at least one of contract_id/wasm_hash" rule.
- */
 export class PreflightRequestDto {
-  // `@AtLeastOneOf` lives here, not on `contract_id`/`wasm_hash` themselves, because `@IsOptional()` on a
-  // property makes `class-validator` skip *every* decorator on that same property (not just its own type check)
-  // whenever the value is missing.
+  // Here, not on the optional fields: `@IsOptional()` skips every decorator on its property when the value is missing.
   @ApiProperty({ enum: networks })
   @IsIn(networks)
   @AtLeastOneOf(["contract_id", "wasm_hash"])
@@ -40,7 +34,6 @@ export class PreflightRequestDto {
   @IsString()
   contract_id?: string;
 
-  /** Normalised and shape-checked exactly as `SubmitTargetDto`'s — see its note on the same field. */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
@@ -50,17 +43,12 @@ export class PreflightRequestDto {
   })
   wasm_hash?: string;
 
-  /** Accepted and never read — see `SubmitTargetDto`'s note on the same field. */
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
   network_passphrase?: string;
 }
 
-/**
- * Reshapes `class-validator` errors into the exact error body the old hand-rolled `if` checks (and, before
- * that, the Zod-based `ZodBodyPipe`) returned.
- */
 export function mapPreflightIssues(errors: ValidationError[]) {
   const issues = flattenValidationErrors(errors);
   const networkIssue = issues.find((issue) => issue.constraints.isIn);
@@ -91,21 +79,9 @@ export function mapPreflightIssues(errors: ValidationError[]) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// POST /v1/preflight response. Moved out of the retired `@scvs/schema`; only this service produces it.
-
-/**
- * `PreflightBuildEnvironment`'s four arms as OpenAPI schemas: `@scvs/core`'s `BuildEnvironmentResolution` plus
- * `build-environment.ts`'s preflight-only `chain_named_policy_rejected`.
- */
-// Typed through `ApiProperty`'s own parameter rather than by importing `SchemaObject`: that type lives behind
-// @nestjs/swagger's `exports` map and is not re-exported from the package root, and the annotation is what
-// makes TypeScript read the literals below as the narrow strings the schema type wants instead of widening them
-// to `string`.
+// Typed via `ApiProperty`'s parameter: `SchemaObject` is not a root export, and this keeps the literals narrow.
 const buildEnvironmentSchema: Parameters<typeof ApiProperty>[0] = {
-  // `type` is the `Object` constructor, not the string: without it @nestjs/swagger reflects this property's
-  // TypeScript type, fails to resolve `Record<string, unknown>` to a model, and reports a false circular
-  // dependency.
+  // The `Object` constructor, not the string: otherwise @nestjs/swagger reports a false circular dependency.
   type: Object,
   oneOf: [
     {
@@ -171,7 +147,6 @@ export class PreflightResponse {
   @ValidateNested()
   @Type(() => PreflightMetadata)
   metadata!: PreflightMetadata;
-  // Duplicates `metadata.available`/`metadata.missing` under snake_case top-level keys.
   @ApiProperty({ type: Object }) @IsObject() available_fields!: Record<
     string,
     string
@@ -189,9 +164,6 @@ export class PreflightResponse {
   @IsOptional()
   @IsObject()
   prefill?: Record<string, unknown>;
-  // `PreflightBuildEnvironment` (build-environment.ts) is a discriminated union, not a class, so the TypeScript
-  // side stays loose here the same way `available_fields`/`prefill` are, rather than inventing a
-  // `class-validator` hierarchy for a classification-only response.
   @ApiProperty(buildEnvironmentSchema) @IsObject() build_environment!: Record<
     string,
     unknown

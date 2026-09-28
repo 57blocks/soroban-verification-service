@@ -1,9 +1,3 @@
-/**
- * Fixtures are deployment state, not code: `F-LEG-1` is a specific contract on a specific network whose source
- * archive sits at a specific URL, and `test/fixtures/e2e/` already holds the scripts that build and deploy them
- * (`build-purpose-contracts.sh`, `deploy-testnet.sh`, `generate-fixtures.sh`) plus `registry.yaml`, which
- * records what is currently `ready`.
- */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
@@ -21,55 +15,41 @@ const sourceTreeZipFixturePath = join(repoRoot, sourceTreeZipFixtureRelativePath
 const publicSourceTreeZipFixtureRelativePath = "artifacts/e2e-fixtures/archives/f58-public-source-tree.zip";
 const publicSourceTreeZipFixturePath = join(repoRoot, publicSourceTreeZipFixtureRelativePath);
 
-/** One verification target plus everything needed to submit a complete recipe for it. */
 export interface ContractFixture {
-  /** `F-LEG-1`, `F-58`, … */
   readonly id: string;
   readonly network: "mainnet" | "testnet";
   readonly contract_id?: string;
   readonly wasm_hash?: string;
-  /** Public archive location. Omitted for upload-only fixtures. */
   readonly source_uri?: string;
-  /** A local archive, for a fixture that has no public URL. */
   readonly source_path?: string;
   readonly source_sha256?: string;
-  /** Prepared replacement hash for an upgradeable contract such as F-UPG. */
   readonly prepared_new_wasm_hash?: string;
   readonly bldarg?: string[];
   readonly bldopt?: string[];
-  /** Add a run/case-scoped inert build option so a fresh E2E run cannot adopt historical results. */
   readonly run_scoped_recipe?: boolean;
-  /** A target deployed with this harness run's salt, rather than a stable shared address. */
   readonly run_scoped_target?: boolean;
-  /** Compatibility field; never selects the environment. */
   readonly bldimg?: string;
-  /** Printed on skip. */
   readonly note?: string;
 }
 
 export interface FixtureInventory {
   readonly contracts: Record<string, ContractFixture>;
-  /** PERF-01/02 deploy-time evidence: distinct targets carrying F-LEG-1's known-good Wasm. */
   readonly performance_verified?: {
     readonly fixture_id: string;
     readonly wasm_hash: string;
     readonly targets: readonly { readonly contract_id: string; readonly wasm_hash: string }[];
   };
-  /** Distinct local archives retained for SEC-08 host-isolation fixture preparation. */
   readonly bulk?: {
     readonly target_fixture: string;
     readonly archive_directory: string;
     readonly count: number;
   };
-  /** A digest that `policy.json` accepts, and one that is valid but outside the accepted set. */
   readonly images?: {
     readonly accepted?: string;
     readonly digest_pinned_untrusted?: string;
     readonly tag_only?: string;
   };
-  /** Two public URLs serving the *same* bytes — `E2E-DEDUP-02/same_bytes_different_url`. */
   readonly mirrored_source?: { readonly url_a: string; readonly url_b: string; readonly sha256: string };
-  /** A URL guaranteed to 404 — `E2E-SUB-09/source_unreachable`, `E2E-DEDUP-06`. */
   readonly unreachable_source_uri?: string;
 }
 
@@ -99,7 +79,6 @@ function loadInventory(): FixtureInventory {
 
 export const fixtures: FixtureInventory = loadInventory();
 
-/** The prepared Finder-style ZIP of F-58's source directory, not a nested tarball. */
 export function sourceTreeZipFixture(): { bytes: Buffer; filename: string } {
   if (!existsSync(sourceTreeZipFixturePath)) {
     throw new Error(
@@ -112,14 +91,12 @@ export function sourceTreeZipFixture(): { bytes: Buffer; filename: string } {
   };
 }
 
-/** `undefined` when the prepared ZIP fixture is available for an E2E case. */
 export function sourceTreeZipFixtureProblem(): string | undefined {
   return existsSync(sourceTreeZipFixturePath)
     ? undefined
     : `ZIP fixture ${sourceTreeZipFixtureRelativePath} is absent; run test/fixtures/e2e/prepare-ci-sources.sh`;
 }
 
-/** The public-visibility ZIP variant, with an inert canary and a distinct cli-58 recipe. */
 export function publicSourceTreeZipFixture(): { bytes: Buffer; filename: string } {
   if (!existsSync(publicSourceTreeZipFixturePath)) {
     throw new Error(
@@ -138,14 +115,12 @@ export function publicSourceTreeZipFixtureProblem(): string | undefined {
     : `ZIP fixture ${publicSourceTreeZipFixtureRelativePath} is absent; run test/fixtures/e2e/prepare-ci-sources.sh`;
 }
 
-/** `undefined` when present — the shape `caseBlock`'s `unless` wants. */
 export function missingFixture(...ids: string[]): string | undefined {
   const absent = ids.filter((id) => !fixtures.contracts[id]);
   if (absent.length === 0) return undefined;
   return `fixture ${absent.join(", ")} is not in the inventory (see fixtures/e2e-fixtures.example.json and test/fixtures/e2e/registry.yaml)`;
 }
 
-/** Present in the inventory *and* pointing at something deployed. */
 export function missingDeployedTarget(...ids: string[]): string | undefined {
   const absent = missingFixture(...ids);
   if (absent) return absent;
@@ -162,7 +137,6 @@ export function missingDeployedTarget(...ids: string[]): string | undefined {
   );
 }
 
-/** A timeout retry must not occupy a target reused by a later harness invocation. */
 export function missingRunScopedTarget(...ids: string[]): string | undefined {
   const missing = missingDeployedTarget(...ids);
   if (missing) return missing;
@@ -178,7 +152,6 @@ export function fixture(id: string): ContractFixture {
   return found;
 }
 
-/** Turns a fixture into a complete submission body. */
 async function uploadedArchive(path: string) {
   const resolved = isAbsolute(path) ? path : join(here, "..", "..", "..", path);
   if (!existsSync(resolved)) {
@@ -191,8 +164,6 @@ async function uploadedArchive(path: string) {
   const bytes = readFileSync(resolved);
   const uploaded = await uploadSource(bytes, path.split("/").pop() ?? "source.tar.gz");
 
-  // The service computes the hash over what it received; if that disagrees with what was read off disk, the
-  // bytes changed in transit and every later assertion would be about the wrong archive.
   if (uploaded.source_sha256 !== sha256Hex(bytes)) {
     throw new Error(
       `Upload of ${resolved} came back with source_sha256 ${uploaded.source_sha256}, but the local ` +
@@ -203,7 +174,6 @@ async function uploadedArchive(path: string) {
   return { upload_id: uploaded.upload_id, source_sha256: uploaded.source_sha256 };
 }
 
-/** Uploads a fixture's local archive and returns the **whole** upload response. */
 export async function uploadFixtureArchive(id: string) {
   const f = fixture(id);
   if (!f.source_path) {
@@ -317,10 +287,6 @@ function optionalManifestStringArray(manifest: Record<string, unknown>, field: s
 
 const RECIPE_SCOPE_PREFIX = "--env=SCVS_E2E_RECIPE_SCOPE=";
 
-/**
- * Adds an inert, deterministic option that is stable within one Jest test but distinct across tests and harness
- * runs.
- */
 export function runScopedBldopt(
   bldopt: readonly string[],
   runId: string,
@@ -338,10 +304,6 @@ export function runScopedBldopt(
   ];
 }
 
-/**
- * The scope's per-case half. `testPath` keeps a hook's scope distinct per spec file, which is what result
- * ownership needs.
- */
 export function recipeScopeLabel(
   state: { currentTestName?: string; testPath?: string } = expect.getState()
 ): string {
@@ -360,8 +322,6 @@ export async function submissionFor(
     upload_id: string;
     is_public: boolean;
   }> = {}
-  // The conditional spreads below inferred a UNION of manifest shapes, one per combination of present keys, so
-  // a caller could not read `manifest.source_uri` at all.
 ): Promise<{ target: VerificationTarget; manifest: SubmittedManifest }> {
   const f = fixture(id);
   const requestedBldopt = overrides.bldopt ?? f.bldopt;
@@ -369,8 +329,6 @@ export async function submissionFor(
     ? runScopedBldopt(requestedBldopt ?? [], env.runId, recipeScopeLabel(), id)
     : requestedBldopt;
 
-  // E2E-DEDUP-02 and E2E-DEDUP-04 ran that way and asserted nothing: the mismatched pair fails before any
-  // build, and both observations then collapsed onto one published report.
   for (const key of ["source_uri", "upload_id", "source_sha256"] as const) {
     if (key in overrides && overrides[key] === undefined) {
       throw new Error(
@@ -383,7 +341,6 @@ export async function submissionFor(
 
   const overrodeSource = "source_uri" in overrides || "upload_id" in overrides;
 
-  // A fixture with only a local archive reaches the service through the upload endpoint.
   const uploaded =
     !overrodeSource && !f.source_uri && f.source_path ? await uploadedArchive(f.source_path) : undefined;
 
@@ -415,7 +372,6 @@ export async function submissionFor(
   };
 }
 
-/** The source a fixture actually carries, in the shape `submissionFor`'s overrides expect. */
 export async function sourceOf(
   id: string
 ): Promise<{ source_sha256: string } & ({ source_uri: string } | { upload_id: string })> {
@@ -433,10 +389,6 @@ export async function sourceOf(
   );
 }
 
-/**
- * A target-only submission. Use this for a cli-58 case that must have verification-svc infer the complete
- * manifest from immutable on-chain metadata, rather than accepting a caller manifest.
- */
 export function metadataSubmissionFor(id: string): SubmitBody {
   const f = fixture(id);
   if (f.contract_id) {

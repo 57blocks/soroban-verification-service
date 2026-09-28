@@ -13,8 +13,6 @@ const unavailable = (over: Partial<BuildLogUnavailableResponse> = {}): BuildLogU
 });
 
 describe("a job with no build log (UI2, and the common case today)", () => {
-  // `not_attempted` is what an `unsupported` job reports: the route maps through `toWireVerificationStatus`, so
-  // this carries the external vocabulary and never the internal `JobStatus`.
   test("renders the reason rather than an empty pane", () => {
     render(
       <BuildLogPanel
@@ -63,7 +61,6 @@ describe("a log that exists", () => {
     expect(screen.getByTestId("build-log-text").textContent).toBe("line one\nline two");
   });
 
-  // The log is the sandbox's output — the untrusted side of the trust boundary.
   test("is text, never markup", async () => {
     const hostile = '<img src=x onerror="alert(1)"><script>alert(2)</script>';
     render(<BuildLogPanel state={{ phase: "log", text: hostile }} />);
@@ -75,7 +72,6 @@ describe("a log that exists", () => {
     expect(pane.querySelector("script")).toBeNull();
   });
 
-  // The folding is a display concern and must never drop a byte.
   test("folds routine lines into an expandable row, and says how many", async () => {
     const text = [
       "$ cargo vendor",
@@ -87,7 +83,6 @@ describe("a log that exists", () => {
     expect(screen.getByText(/12 routine lines folded/)).toBeInTheDocument();
     await openLog();
 
-    // The signal line is visible without expanding the folded run.
     expect(screen.getByTestId("build-log-text").textContent).toMatch(/✅ Build Complete/);
     expect(screen.getByText("Downloaded 12 crates")).toBeInTheDocument();
   });

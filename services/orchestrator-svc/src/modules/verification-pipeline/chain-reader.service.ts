@@ -10,11 +10,6 @@ import type { AppConfigService } from "../../config/configuration.js";
 
 export type { ChainLookupResult, WasmMetadata } from "@scvs/core/chain-reader";
 
-/**
- * This service's `ConfigService` wrapper around the shared chain reader (`@scvs/core/chain-reader`), which
- * `verification-svc` calls with a plain config object instead. The class stays because it is the DI boundary
- * the pipeline injects and the seam `pipeline-e2e.spec.ts` stubs; the reading itself is no longer here.
- */
 @Injectable()
 export class ChainReaderService {
   constructor(@Inject(ConfigService) private readonly configService: AppConfigService) {}

@@ -3,14 +3,10 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Walks the built graph from the `@scvs/*` entry points this package imports and names any file that reaches a
-// Node builtin or a Nest package.
-
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkSrc = resolve(here, "../src");
 const workspace = resolve(here, "../../..");
 
-/** `@scvs/<pkg>/<subpath>` and `@scvs/<pkg>` → the built file a consumer would resolve. */
 function resolveWorkspaceSpecifier(specifier: string): string | undefined {
   const match = /^@scvs\/([^/]+)(?:\/(.+))?$/.exec(specifier);
   if (!match) return undefined;
@@ -19,8 +15,7 @@ function resolveWorkspaceSpecifier(specifier: string): string | undefined {
   return resolve(workspace, dir, "dist/src", `${subpath ?? "index"}.js`);
 }
 
-// Three forms, and the third is not optional: `import "reflect-metadata"` names no binding, and a walker that
-// requires `from` cannot see `import "node:crypto"` either.
+// Three forms: `import "reflect-metadata"` names no binding, so a walker requiring `from` misses bare imports.
 const IMPORT_PATTERN =
   /(?:^|[\s;])(?:import|export)\s[^;]*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)|(?:^|[\s;])import\s*["']([^"']+)["']/gm;
 
@@ -33,7 +28,6 @@ function specifiersIn(source: string): string[] {
   return found;
 }
 
-/** The `@scvs/*` entry points this package's own sources import, resolved to their built files. */
 async function sdkEntryPoints(): Promise<string[]> {
   const files = await readdir(sdkSrc);
   const entries = new Set<string>();
@@ -84,7 +78,6 @@ export async function assertBrowserSafeGraph(): Promise<string[]> {
         queue.push(workspaceFile);
         continue;
       }
-      // Third-party deps are browser-safe by construction; walking node_modules would test the lockfile.
     }
   }
 

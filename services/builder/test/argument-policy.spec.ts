@@ -56,8 +56,6 @@ describe("assembleBuildCommand", () => {
   });
 
   it("names the CLI as the entrypoint, on the docker side of the image", () => {
-    // An image whose ENTRYPOINT wraps the CLI in a dbus/keyring script never execs it under a uid
-    // with no passwd entry, and `contract build` would land on whatever the wrapper is instead of the CLI.
     const image = "example@sha256:" + "c".repeat(64);
     const command = assembleBuildCommand({
       dockerArgs: ["docker", "run", "--rm"],

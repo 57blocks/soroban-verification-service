@@ -1,4 +1,3 @@
-/** E2E-SRC-01 — retain and serve public source E2E-SRC-02. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { benignArchive } from "../../support/archives.js";
@@ -37,7 +36,7 @@ function publishedBldopt(artifact: VerificationArtifact): string[] | undefined {
     : undefined;
 }
 
-/** Mirrors publish-time `deriveExtension()` so private-source probes address the actual key. */
+/** Must match publish-time `deriveExtension()`. */
 function declaredSourceFileName(sourceSha256: string, uploadedFileName: string): string {
   const match = /(\.tar\.[a-z0-9]+|\.[a-z0-9]+)$/i.exec(uploadedFileName);
   return `${sourceSha256}${match ? match[1].toLowerCase() : ".tar.gz"}`;
@@ -63,7 +62,6 @@ caseBlock(
 
         let { artifact } = await readReportByUrl(run.body.result!.artifact_url!);
 
-        // Local E2E runs use stable contract targets.
         const submittedBldopt = body.manifest.bldopt ?? [];
         const returnedBldopt = publishedBldopt(artifact);
         if (
@@ -76,20 +74,15 @@ caseBlock(
           ({ artifact } = await readReportByUrl(run.body.result!.artifact_url!));
         }
 
-        // The report is what tells a consumer the file name — the extension is not fixed, so
-        // `sources/<hash>.tar.gz` is a guess and `source.source_file_name` is the answer.
         expect(artifact.source).toBeDefined();
         expect(artifact.source!.is_public).toBe(true);
         expect(artifact.source!.source_sha256).toBe(target.source_sha256);
         expect(artifact.source!.source_file_name).toBeDefined();
 
-        // HA1/HA2 — retrievable, and the bytes are the bytes.
         const fetched = await http(staticSourceUrl(artifact.source!.source_file_name!));
         expectStatus(fetched, 200);
         expect(sha256Hex(fetched.bytes)).toBe(target.source_sha256);
 
-        // HA3 — addressed by source hash. The wasm hash must not reach it: many sources can compile to one
-        // Wasm, so a wasm-keyed source object would have to pick one arbitrarily.
         const byWasmHash = await http(staticSourceUrl(`${target.wasm_hash}.tar.gz`));
         expect([403, 404]).toContain(byWasmHash.status);
       },
@@ -269,8 +262,6 @@ caseBlock(
     it(
       "retains the uploaded bytes when the submitted manifest explicitly declares them public",
       async () => {
-        // F-LEG-3 is a compilable mismatch fixture. A mismatch remains a completed verification, so it proves
-        // that retention follows the submitter's declaration rather than the verdict.
         const body = await submissionFor("F-LEG-3", { is_public: true });
         expect("upload_id" in body.manifest).toBe(true);
         expect("source_uri" in body.manifest).toBe(false);
@@ -287,7 +278,6 @@ caseBlock(
         expect(artifact.source!.source_sha256).toBe(body.manifest.source_sha256);
         expect(artifact.source!.source_file_name).toBeDefined();
 
-        // The stored copy, rather than the transient upload, is the public retention evidence.
         const fetched = await http(staticSourceUrl(artifact.source!.source_file_name!));
         expectStatus(fetched, 200);
         expect(sha256Hex(fetched.bytes)).toBe(body.manifest.source_sha256);
@@ -311,13 +301,10 @@ caseBlock(
       const archive = benignArchive("src-04-default-private");
       const upload = await uploadSource(Buffer.from(archive.bytes), "src-04.tar.gz");
 
-      // The service hashes what it received; the submitted manifest has to match it, which is what makes
-      // `source_sha256` a commitment rather than a claim.
       expect(upload.source_sha256).toBe(sha256Hex(archive.bytes));
       expect(typeof upload.upload_id).toBe("string");
       expect(Date.parse(upload.expires_at)).toBeGreaterThan(Date.now());
 
-      // HA1/HA3 — omit `is_public` entirely.
       const body = await submissionFor("F-LEG-1", {
         upload_id: upload.upload_id,
         source_sha256: upload.source_sha256,
@@ -327,15 +314,12 @@ caseBlock(
 
       const run = await submitAndWait(body);
 
-      // HA2 — nothing under `sources/` for it. Whatever the verdict was, the bytes were not published.
       const privateKey = declaredSourceFileName(upload.source_sha256, "src-04.tar.gz");
       const fetched = await http(staticSourceUrl(privateKey));
       expect([403, 404]).toContain(fetched.status);
 
       if (run.body.result?.artifact_url) {
         const { artifact } = await readReportByUrl(run.body.result.artifact_url);
-        // The commitment survives even though the bytes do not: `source_sha256` stays on the record so a
-        // submitter can later prove which archive was verified.
         expect(artifact.source?.is_public ?? false).toBe(false);
       }
     }, env.jobTimeoutMs + 60_000);
@@ -357,8 +341,6 @@ caseBlock(
         body: JSON.stringify(body),
       });
 
-      // HA3 — `null` must not be read as truthy-by-presence. Either the service rejects it as a non-boolean, or
-      // it treats it as absent; both are safe.
       if (outcome.status >= 400) {
         expect(outcome.json.error).toBe("invalid_manifest");
         return;
@@ -386,17 +368,13 @@ caseBlock(
         const privateSourceHash = target.source_sha256!;
         const run = await submitAndWait(await submissionFor("F-PRIV", { is_public: false }));
 
-        // HA1 — the verdict does not depend on retention. Verification is about bytes, and the bytes were
-        // present during the build.
         expect(run.body.status).toBe("verified");
 
-        // HA2 — published on the same surface, with no marker of being lesser.
         const hash = run.body.result!.wasm_hash!;
         const status = await requireStatusObject(hash);
         const ours = ownEntryOf(status.source_code_verifications, await ownVerifierIdentity());
         expect(ours?.status).toBe("verified");
 
-        // HA3 — and the commitment remains.
         const { artifact } = await readReportByUrl(run.body.result!.artifact_url!);
         expect(artifact.result.wasm_hash).toBe(hash);
         expect(artifact.source).toBeDefined();
@@ -404,10 +382,8 @@ caseBlock(
         expect(artifact.source!.source_sha256).toBe(privateSourceHash);
         expect(artifact.source!.source_file_name).toBeUndefined();
 
-        // HA4 — the only structural difference is the absence of a retained-source link.
         expect(ours?.verified_source_code_uris).toBeUndefined();
 
-        // Probe the precise static key that publication would have used.
         const uploadFileName = target.source_path?.split("/").pop();
         expect(uploadFileName).toBeDefined();
         const privateKey = declaredSourceFileName(privateSourceHash, uploadFileName!);
@@ -450,9 +426,6 @@ caseBlock(
 
         const status = await requireStatusObject(run.body.result!.wasm_hash!);
         const ours = ownEntryOf(status.source_code_verifications, await ownVerifierIdentity());
-        // Retargeted 2026-09-04: this read `out_of_band === false`, the boolean the
-        // Results SEP replaced with `recipe_source`. The claim is unchanged and now literal — a
-        // private upload does not make the chain's own recipe any less the chain's.
         expect(ours?.recipe_source).toBe("on_chain_metadata");
       },
       env.jobTimeoutMs + 120_000
@@ -473,8 +446,6 @@ caseBlock(
     it(
       "returns different content for each, and nothing for the wasm hash",
       async () => {
-        // One entry per verifier per Wasm hash is now the rule, so no deployment can ever show two records here
-        // and the case cannot be run as literally written.
         const first = await submitAndWait(await submissionFor("F-LEG-3", { is_public: true }));
         const second = await submitAndWait(await submissionFor("F-MISMATCH-ALT", { is_public: true }));
 
@@ -485,7 +456,6 @@ caseBlock(
           reports.push(await readReportByUrl(run.body.result!.artifact_url!));
         }
 
-        // HA1/HA2 — two archives, two hashes, two different byte streams.
         const fileNames = reports.map((report) => report.artifact.source?.source_file_name);
         expect(fileNames.every(Boolean)).toBe(true);
         expect(new Set(fileNames).size).toBe(2);
@@ -494,20 +464,15 @@ caseBlock(
         for (const report of reports) {
           const response = await http(staticSourceUrl(report.artifact.source!.source_file_name!));
           expectStatus(response, 200);
-          // Each retrieval hashes to the identifier it was fetched by — the commitment holds.
           expect(sha256Hex(response.bytes)).toBe(report.artifact.source!.source_sha256);
           fetched.push(sha256Hex(response.bytes));
         }
         expect(new Set(fetched).size).toBe(2);
 
-        // HA3 — the Wasm hash is not a source address. Many sources compile to one Wasm, so a wasm-keyed source
-        // object would have to pick one of them arbitrarily.
         const wasmHash = first.body.result?.wasm_hash ?? fixtures.contracts["F-LEG-3"].wasm_hash!;
         const byWasmHash = await http(staticSourceUrl(`${wasmHash}.tar.gz`));
         expect([403, 404]).toContain(byWasmHash.status);
 
-        // HA5 — exactly one record from this verifier, and that is the point rather than a caveat: the two
-        // archives stayed independently addressable *even though* the index kept only one of them.
         const status = await requireStatusObject(wasmHash);
         const identity = await ownVerifierIdentity();
         const ours = status.source_code_verifications.filter((entry) => isOwnEntry(entry, identity));

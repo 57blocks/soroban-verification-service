@@ -5,8 +5,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-// GitHub truncates a step summary at 1 MiB and says nothing about it, so keep well clear and drop the per-case
-// tables first — the failure and skip sections are the part nobody can reconstruct.
+// GitHub silently truncates a step summary at 1 MiB.
 const SUMMARY_BUDGET_BYTES = 900_000;
 const MAX_FAILURE_DETAILS = 25;
 const MAX_FAILURE_LINES = 40;
@@ -27,14 +26,11 @@ const configuredOpenLocustSummaryPath = process.env.SCVS_E2E_PERF_OPEN_LOCUST_SU
 const openLocustSummaryPath = configuredOpenLocustSummaryPath
   ? resolveFromRepo(configuredOpenLocustSummaryPath)
   : undefined;
-// Repository-relative when it is inside the checkout, absolute otherwise — a chain of `..` tells the reader
-// nothing about where to look.
 const reportDirRelative = relative(repoRoot, reportDir);
 const reportDirLabel =
   !reportDirRelative || reportDirRelative.startsWith("..") ? reportDir : reportDirRelative;
 
 function stripAnsi(text) {
-  // Jest failure messages arrive with the terminal colouring the default reporter applied.
   return text.replace(/\u001B\[[0-9;]*[A-Za-z]/g, "");
 }
 
@@ -47,7 +43,6 @@ function formatDuration(ms) {
   return `${minutes}m ${Math.round(seconds - minutes * 60)}s`;
 }
 
-/** Forced-rebuild console tables are intentionally compact enough to compare individual jobs by eye. */
 function formatPerfDuration(ms) {
   if (!Number.isFinite(ms)) return "-";
   if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -80,19 +75,12 @@ function readPerf02LocustSummary() {
   }
 }
 
-/**
- * Case names are free text from spec files, and this repository's read like prose: they carry `|`, `<hash>`,
- * `&`.
- */
-/** Inside a backtick code span or a fenced block, where nothing is interpreted. */
 function plain(text) {
   return String(text).replace(/\r?\n/g, " ").trim();
 }
-/** Inside `<summary>` or list prose, where GitHub parses inline HTML — `<hash>` would disappear. */
 function html(text) {
   return plain(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-/** Inside a table cell, where an unescaped pipe would also split the row. */
 function cell(text) {
   return html(text).replace(/\|/g, "\\|");
 }
@@ -120,8 +108,6 @@ function jestCases(report) {
       name:
         assertion.fullName ||
         [...(assertion.ancestorTitles ?? []), assertion.title ?? "(unnamed)"].join(" › "),
-      // Jest reports a skip as pending, todo or disabled depending on how it was written; for a summary they
-      // are one outcome — the case did not run.
       status:
         assertion.status === "passed" ? "passed" : assertion.status === "failed" ? "failed" : "skipped",
       ms: assertion.duration ?? 0,
@@ -139,8 +125,7 @@ function playwrightCases(suites, parents = []) {
         const results = test.results ?? [];
         return {
           name: [...path, spec.title ?? "(unnamed)"].join(" › "),
-          // Playwright reports the outcome against the test's own expectation: `expected` covers a passing test
-          // and a legitimately failing `test.fail()`, `flaky` passed on a retry.
+          // Playwright's `expected` includes a passing `test.fail()`; `flaky` passed on a retry.
           status:
             test.status === "expected" || test.status === "flaky"
               ? "passed"
@@ -160,7 +145,6 @@ function playwrightCases(suites, parents = []) {
   });
 }
 
-/** `smoke-web-playwright.json` → `smoke web (playwright)`. */
 function reportLabel(fileName) {
   const base = fileName.replace(/\.json$/, "");
   const match = base.match(/^(.*)-(jest|playwright)$/);

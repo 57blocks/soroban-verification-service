@@ -17,37 +17,20 @@ export type MaterializedSource = {
   mode: "public_repo" | "hosted_tarball" | "private_uploaded_tarball" | "source_uri";
   visibility: "public" | "private";
   source_uri?: string;
-  /**
-   * Optional because the git arm has no archive to hash: a checkout is a tree, and there is no canonical
-   * serialisation of it whose sha256 would mean anything.
-   */
   source_sha256?: string;
   workspace_path: string;
   local_path?: string;
-  /** **The archive `stellar contract verify` must be handed**. */
   canonical_path?: string;
-  /** Absent when the submitted bytes were already the canonical archive. */
   canonicalisation?: SourceCanonicalisation;
   retained_after_verification: false;
 };
 
-/**
- * The legacy `materializeSource` called `getUpload(upload_id)` from `@scvs/db` to resolve a `private_tarball`;
- * this file cannot.
- */
-/**
- * Sourced from `ConfigService` by the one Nest-managed caller in this chain (builder.service.ts) and passed
- * down through `MaterializeSourceInput.config`.
- */
 export type FetchSourceConfig = {
   artifactDir?: string;
   sourceFetchTimeoutMs?: number;
-  /** The bound on the *compressed* bytes we download. The uncompressed bound is an ArchiveLimit. */
   maxSourceArchiveBytes?: number;
 };
 
-// Intersected with `config` (rather than repeated on all 4 arms) since it's the same field regardless of which
-// `sourceRef.type` this input carries.
 export type MaterializeSourceInput = (
   | { sourceRef: Extract<SourceReference, { type: "git" }> }
   | { sourceRef: Extract<SourceReference, { type: "hosted_tarball" }> }
@@ -70,7 +53,6 @@ export type SourceFetchResult =
 export async function materializeSource(input: MaterializeSourceInput): Promise<SourceFetchResult> {
   const source = input.sourceRef;
 
-  // `orchestrator-svc` refuses them at dispatch too; this arm is what stops the refusal depending on it.
   if (source.type === "git" || source.type === "hosted_tarball") {
     return {
       ok: false,
@@ -83,9 +65,6 @@ export async function materializeSource(input: MaterializeSourceInput): Promise<
   }
 
   if (source.type === "private_tarball") {
-    // No `@scvs/db` lookup here: `resolvedLocalPathOf(input)` is a location the caller already resolved from
-    // `upload_id` (typically the same value it wrote into `source_ref.source_uri` before submitting the Batch
-    // job).
     return materializeArchiveSource(
       {
         mode: "private_uploaded_tarball",
@@ -97,7 +76,6 @@ export async function materializeSource(input: MaterializeSourceInput): Promise<
     );
   }
 
-  // source.type === "source_uri"
   return materializeArchiveSource(
     {
       mode: "source_uri",
@@ -109,10 +87,6 @@ export async function materializeSource(input: MaterializeSourceInput): Promise<
   );
 }
 
-/**
- * `input` itself is never narrowed by checking the *aliased* `source` variable above (TS only narrows the exact
- * expression it tested, not a copy of one of its properties).
- */
 function resolvedLocalPathOf(input: MaterializeSourceInput): string | undefined {
   return "resolvedLocalPath" in input ? input.resolvedLocalPath : undefined;
 }
@@ -155,22 +129,17 @@ async function materializeArchiveSource(
     };
   }
 
-  // No tarball inspection here.
-
-  // This gives the same bytes a name the CLI accepts.
   const aligned = await alignArchiveNameForCli({ localPath, artifactRoot: artifactRoot(config) });
 
   return sourceOk(
     input.mode,
     input.visibility,
     aligned.path,
-    // `actualHash`, not the submitted value.
     actualHash,
     aligned.path,
   );
 }
 
-/** The one outbound request this container still makes. */
 async function downloadSourceArchive(
   sourceUri: string,
   config?: FetchSourceConfig,
@@ -198,8 +167,6 @@ async function downloadSourceArchive(
   const root = artifactRoot(config);
   await mkdir(root, { recursive: true });
   const downloadDir = await mkdtemp(join(root, "download-"));
-  // `alignArchiveNameForCli` renames from the magic number downstream, so this name carries no meaning and
-  // needs none — the staging key's basename has no extension.
   const localPath = join(downloadDir, basename(new URL(sourceUri).pathname) || "source.tar.gz");
 
   try {
@@ -213,8 +180,7 @@ async function downloadSourceArchive(
         detail: `Staged source fetch returned HTTP ${response.status}.`,
       };
     }
-    // Metered while it arrives rather than buffered and measured afterwards: `validateSourceSize` below still
-    // checks the file, but by then the bytes are already in memory and on disk.
+    // Metered while streaming: `validateSourceSize` below only runs once the bytes are in memory and on disk.
     await writeFile(localPath, await readBoundedBytes(response, maxBytes));
     return { ok: true, path: localPath };
   } catch (error) {
@@ -226,8 +192,6 @@ async function downloadSourceArchive(
         detail: error.message,
       };
     }
-    // Collapsed into `source_uri_not_materialized` it reads as "the staging bucket was down", which is what a
-    // reader would go and check instead.
     if (error instanceof FetchPolicyError) {
       return {
         ok: false,
@@ -245,7 +209,6 @@ async function downloadSourceArchive(
   }
 }
 
-/** Whether a URL carries the SigV4 query parameters a presigned S3 GET has. */
 function isPresignedObjectUrl(value: string): boolean {
   let url: URL;
   try {
@@ -294,12 +257,10 @@ function sourceOk(
   };
 }
 
-/** Where this container may write. */
 export function artifactRoot(config?: FetchSourceConfig): string {
   return config?.artifactDir || process.env.SCVS_ARTIFACT_DIR || join(tmpdir(), "scvs-artifacts");
 }
 
-/** The ceiling on the *compressed* bytes this container will take. */
 function maxSourceArchiveBytes(config?: FetchSourceConfig): number {
   return config?.maxSourceArchiveBytes || Number(process.env.SCVS_MAX_SOURCE_ARCHIVE_BYTES || 50 * 1024 * 1024);
 }

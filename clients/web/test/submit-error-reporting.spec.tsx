@@ -14,7 +14,6 @@ vi.mock("@scvs/verify-api-client", async () => ({
   useSubmitVerification: () => ({ mutateAsync: submitVerification }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
   AXIOS_INSTANCE: { defaults: {} },
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
 }));
@@ -24,8 +23,6 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
 
-// The real `errorMessage`/`isHttpError` are what this suite is about, so only the two environment-reading
-// helpers are replaced.
 vi.mock("@/lib/http", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/http")>()),
   isApiBaseConfigured: () => true,
@@ -41,7 +38,6 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 
-/** The `SubmitErrorResponse` envelope as `errorBody()` actually puts it on the wire: 400, no `status`. */
 const submitErrorRejection = (body: Record<string, unknown>, status = 400) => {
   const config = { headers: new AxiosHeaders() };
   return new AxiosError("Request failed with status code 400", "ERR_BAD_REQUEST", config, {}, {
@@ -77,8 +73,6 @@ const runToSubmit = async (availableFields: Record<string, string> = {}) => {
   act(() => {
     result.current.form.setValue("source_sha256", "b".repeat(64));
     result.current.form.setValue("source_uri", "https://example.org/src.tar.gz");
-    // The console refuses a submission with no accepted terms, so every spec that means to reach the endpoint
-    // has to make the act first.
     result.current.terms.onAcceptedChange(true);
   });
   await act(async () => {
@@ -119,8 +113,6 @@ describe("a synchronous submit rejection keeps the server's explanation", () => 
     );
   });
 
-  // Same envelope, an arm with no `detail` of its own — the code must still reach the submitter rather than
-  // being flattened into the generic copy.
   test("upload_expired keeps its own sentence too", async () => {
     submitVerification.mockRejectedValue(
       submitErrorRejection({
@@ -137,9 +129,6 @@ describe("a synchronous submit rejection keeps the server's explanation", () => 
     expect(toast.error).toHaveBeenCalledWith("upload_id abc has expired. Upload the source archive again.");
   });
 
-  // The browser refuses this at the picker when preflight read a hash (`chain-source-gate.spec.tsx`), but that
-  // gate is off whenever the chain could not be read, and a contract can be redeployed between preflight and
-  // submit.
   test("source_archive_not_chain_recorded arrives with the server's own explanation", async () => {
     const detail =
       "The source archive you submitted hashes to " + "b".repeat(64) + ", but this contract records " +
@@ -162,13 +151,10 @@ describe("a synchronous submit rejection keeps the server's explanation", () => 
     expect(toast.error).toHaveBeenCalledWith(detail);
   });
 
-  // The complaint this closes: the console showed the refusal *after* asking for it.
   test("a form hash the chain does not record never reaches the endpoint", async () => {
     const result = await runToSubmit({ source_sha256: "a".repeat(64) });
 
     expect(submitVerification).not.toHaveBeenCalled();
-    // The banner is set too, not just a toast: skipping the round trip must not cost the submitter the durable
-    // half of the message the server's own refusal would have produced.
     expect(result.current.submissionState).toBe("error");
     expect(result.current.banner.code).toBe("source_archive_not_chain_recorded");
     expect(result.current.banner.detail).toContain("a".repeat(64));
@@ -186,14 +172,11 @@ describe("a synchronous submit rejection keeps the server's explanation", () => 
       },
     });
 
-    // `runToSubmit` sets the form's source_sha256 to "b" * 64.
     await runToSubmit({ source_sha256: "b".repeat(64) });
 
     expect(submitVerification).toHaveBeenCalledTimes(1);
   });
 
-  // The generated union requires `status` on both submit variants, so `normalizeStatus`'s guesswork — and the
-  // `data.reason` read inside it — has no remaining input.
   test("an accepted submission is not routed through the failure path", async () => {
     submitVerification.mockResolvedValue({
       status: 202,

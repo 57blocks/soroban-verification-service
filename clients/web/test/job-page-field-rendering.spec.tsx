@@ -16,7 +16,6 @@ const REPORT_URL = `https://results.dev.sv.example.com/reports/${ARTIFACT_SHA}.j
 const SOURCE_URI =
   "https://github.com/reflector-network/reflector-contract/archive/refs/tags/v6.0.0_reflector-pulse-contract_cli25.1.0.tar.gz";
 
-/** The real `sandbox_diagnostics` off dev job `9cfbfecd`, trimmed to the fields the display reads. */
 const DIAGNOSTICS = {
   runner: "docker_build_image_rebuild",
   build_image:
@@ -39,8 +38,6 @@ const DIAGNOSTICS = {
   rustup_toolchain: "1.94.0-aarch64-unknown-linux-gnu",
   timed_out: false,
   exit_code: 0,
-  // The verifier's own pin. Must never reach the page as this build's CLI — it is 28.0.0 while the contract
-  // declares, and the image installs, 25.1.0.
   reference_alignment: {
     repo: "stellar/stellar-cli",
     version: "v28.0.0",
@@ -48,7 +45,6 @@ const DIAGNOSTICS = {
   },
 };
 
-/** `build_recipe` off the same job's published report — the only place the pair is published. */
 const RECIPE: ArtifactRecipeFacts = {
   recipeSource: "submitted",
   buildIsolation: "network_isolated",
@@ -116,10 +112,6 @@ const groupsFor = (recipe: ArtifactRecipeFacts = RECIPE) =>
 const renderRebuild = (recipe: ArtifactRecipeFacts = RECIPE) =>
   render(<RebuildCard groups={groupsFor(recipe)} />);
 
-/**
- * Rendering the pin among the build inputs said this contract was built with 28.0.0, which the image itself
- * contradicts.
- */
 describe("the CLI shown is the one that built the contract", () => {
   test("names the declared cliver, and never the verifier's reference pin", () => {
     const { container } = renderRebuild();
@@ -130,8 +122,6 @@ describe("the CLI shown is the one that built the contract", () => {
     expect(container.textContent).not.toContain("stellar-cli.pin");
   });
 
-  // The composed image's own component list agrees with the declared pair, which is why showing the pin was
-  // wrong rather than merely confusing.
   test("the composed image installed the declared CLI, not the pin", () => {
     const cli = RECIPE.components.find((component) => component.kind === "stellar_cli");
 
@@ -140,10 +130,6 @@ describe("the CLI shown is the one that built the contract", () => {
   });
 });
 
-/**
- * A reader must be able to tell what the contract declared — which a submitter cannot influence — from what the
- * verifier constructed to reproduce it.
- */
 describe("parameters are grouped by who chose them", () => {
   test("the pair and the chain-recorded metadata are the contract's own", () => {
     const declared = groupsFor().find((group) => group.key === "declared");
@@ -157,8 +143,6 @@ describe("parameters are grouped by who chose them", () => {
     expect(declared?.origin).toMatch(/on-chain contractmetav0/);
   });
 
-  // The verifier's own environment is no longer a group: it described the verifier rather than the contract,
-  // and the raw diagnostics keep every field of it.
   test("the card holds only the contract's declaration and the recipe", () => {
     expect(groupsFor().map((group) => group.key)).toEqual(["declared", "recipe"]);
   });
@@ -228,7 +212,6 @@ describe("both published documents are offered", () => {
     );
   });
 
-  // A guessed link is worse than no link: it would 404 under the reader's own verification.
   test("fails closed on anything that is not a report key", () => {
     expect(wasmStatusUrlFromReportUrl("https://example.com/elsewhere/x.json", WASM)).toBeUndefined();
     expect(wasmStatusUrlFromReportUrl("not a url", WASM)).toBeUndefined();
@@ -245,7 +228,6 @@ describe("both published documents are offered", () => {
     expect(screen.getByText(/integrity digest/i)).toBeInTheDocument();
   });
 
-  // The hashes agreeing is what the verdict says; repeating the rebuilt one added nothing.
   test("the rebuilt hash is not a result tile", () => {
     const { container } = render(<ResultPanel state="verified" result={VERIFIED_RESULT} />);
 
@@ -272,10 +254,6 @@ describe("both published documents are offered", () => {
   });
 });
 
-/**
- * The rendered sandbox configuration described the verifier rather than the contract; every field of it is
- * still in the JSON one click further in.
- */
 describe("the diagnostics disclosure keeps the command and the JSON", () => {
   test("renders no sandbox configuration", () => {
     const { container } = render(<ResultPanel state="verified" result={VERIFIED_RESULT} />);

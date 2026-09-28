@@ -15,20 +15,13 @@ import { reportKey, sourceKey, verifierManifestKey, verifierPolicyKey, wasmStatu
 import { parsePeerWasmStatus, rewriteWasmStatus } from "./registry-status.js";
 import type { ResultStorage } from "./storage-backend.js";
 
-/**
- * The ONE canonical byte serialization of a report artifact — pretty-printed, trailing newline, same as every
- * other document this package writes.
- */
+/** The one canonical byte serialization of a report artifact; its sha256 is the report's key. */
 export function serializeReport(artifact: VerificationArtifact): { bytes: string; sha256: string } {
   const bytes = `${JSON.stringify(artifact, null, 2)}\n`;
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   return { bytes, sha256 };
 }
 
-/**
- * Writes reports/{sha256}.json — sha256 computed by serializeReport over the exact bytes written, never a field
- * on the artifact itself (RA1).
- */
 export async function publishReport(
   storage: ResultStorage,
   artifact: VerificationArtifact,
@@ -40,25 +33,15 @@ export async function publishReport(
 
 export type PublishSourceParams = {
   sourceSha256: string;
-  bytes: Uint8Array; // the tarball bytes, read once from staging before job termination
-  /** The extension this was published under — e.g. ".tar.gz", ".zip". */
+  bytes: Uint8Array;
   extension: string;
-  /**
-   * Best-effort MIME type for the published object — not load-bearing (nothing in this codebase re-derives
-   * behavior from it), included only because `writeBytes` requires one.
-   */
   contentType: string;
 };
 
-/**
- * Idempotent by construction: re-publishing the same sha256+extension overwrites identical bytes at the same
- * content-addressed key, so a retry after a partial failure needs no pre-check.
- */
 export async function publishSource(storage: ResultStorage, params: PublishSourceParams): Promise<void> {
   await storage.writeBytes(sourceKey(params.sourceSha256, params.extension), params.bytes, params.contentType);
 }
 
-/** The source modes this verifier actually accepts, which is what its `policy.json` may claim. */
 export const SERVED_SOURCE_MODES = ["private_uploaded_tarball", "source_uri"] as const;
 
 export type WriteVerifierPolicyParams = {
@@ -71,7 +54,6 @@ export type WriteVerifierPolicyParams = {
   resultArtifactsRetained: boolean;
 };
 
-/** Same defect, third instance: nothing consults the value — `submit.service.ts` does not read it. */
 export async function writeVerifierPolicy(
   storage: ResultStorage,
   params: WriteVerifierPolicyParams,
@@ -105,10 +87,6 @@ export type WriteVerifierManifestParams = {
   resultRootUrl: string;
 };
 
-/**
- * Writes verifier-manifest.json — this verifier's self-description, generated from live configuration and this
- * file's key conventions.
- */
 export async function writeVerifierManifest(
   storage: ResultStorage,
   params: WriteVerifierManifestParams,
@@ -126,41 +104,23 @@ export async function writeVerifierManifest(
   return manifest;
 }
 
-/**
- * What became of one attempted update to `wasms/{hash}.json`. The caller needs the distinction to decide
- * whether the update is still owed: only `conflict` is worth retrying, only `invalid-document` and
- * `unrepresentable` need a human, and the rest are settled.
- */
+/** Only `conflict` is worth retrying; `invalid-document` and `unrepresentable` need a human; the rest are settled. */
 export type WasmStatusWriteResult =
-  /** The document now carries the update. */
   | "written"
-  /** No document to amend yet — the publish it belongs to has not landed, or the object is gone. */
   | "absent"
-  /** A newer verification replaced the entry this update was anchored to; nothing is owed. */
   | "superseded"
-  /** The update is already in the document. */
   | "already-present"
-  /** The stored entry cannot be re-emitted in the published shape — e.g. a legacy entry with no trust level. */
   | "unrepresentable"
-  /** The stored bytes are not a document we can read. Never overwritten: see `mutateWasmStatus`. */
   | "invalid-document"
-  /** Lost the compare-and-swap every attempt. */
   | "conflict";
 
-/** A settled outcome a mutation can return without writing anything. */
 type WasmStatusNoWrite = Extract<WasmStatusWriteResult, "absent" | "superseded" | "already-present" | "unrepresentable">;
 
 type WasmStatusMutation = { write: RegistryStatusObject } | { skip: WasmStatusNoWrite };
 
 const MUTATE_ATTEMPTS = 5;
 
-/**
- * The one way this package amends `wasms/{hash}.json`. A lost compare-and-swap re-reads and re-decides
- * rather than retrying a stale document.
- *
- * `mutate` sees `undefined` only when the object is genuinely absent: bytes that exist but will not parse
- * end the attempt as `invalid-document`, never as an absent object a create-if-absent write may replace.
- */
+/** `mutate` sees `undefined` only for a truly absent object; unparseable bytes end as `invalid-document` and are never overwritten. */
 export async function mutateWasmStatus(
   storage: ResultStorage,
   wasmHash: string,
@@ -203,20 +163,13 @@ function parseDocument(text: string): PeerRegistryStatusObject | undefined {
 }
 
 export type AppendArchiveReferenceParams = {
-  /** The HTTPS report URL this verification published — the key that finds our entry. */
   reportUrl: string;
-  /** The report's own sha256: the archive copy is the same bytes (AP1), so it anchors that link too (AU1). */
   reportSha256: string;
-  /** Directly fetchable (a gateway URL), never a bare `ar://` URI — nothing here resolves one for a consumer. */
+  /** A directly fetchable gateway URL, never a bare `ar://` URI. */
   archiveUrl: string;
-  /** What a legacy (draft-shape) entry of ours cannot carry itself, read from the report artifact. */
   legacyCustody?: LegacyCustody;
 };
 
-/**
- * Adds the archive copy to `reportUrl`'s own entry in `wasms/{wasmHash}.json` as a `results_urls` entry `{type:
- * "report", location: "arweave", url, sha256}` (AP5/AP6, AU1). **Appends**.
- */
 export async function appendArchiveReference(
   storage: ResultStorage,
   wasmHash: string,
@@ -232,13 +185,9 @@ export async function appendArchiveReference(
     const links = (entry.results_urls ?? []).map(toResultUrl);
     if (links.some((link) => link.url === params.archiveUrl)) return { skip: "already-present" };
 
-    // The entry was located by *our own* report URL, so custody is about this entry and no other: the trust
-    // level read from that report, and the result root we published under, which the draft shape had no field
-    // for.
     const upgraded = upgradeLegacyEntry(entry, { ...params.legacyCustody, verifierUrl: storage.publicRoot });
     if (!upgraded) return { skip: "unrepresentable" };
-    // `upgraded.results_urls`, not `links`: the upgrade is what narrows a peer's open link vocabulary to the
-    // producer's closed one, and the replacement is a producer entry. `links` above is only a dedupe read.
+    // `upgraded.results_urls`, not `links`: the upgrade narrows a peer's open link vocabulary to the producer's closed one.
     const replacement = {
       ...upgraded,
       results_urls: [
@@ -257,10 +206,6 @@ export type AppendVerifiedSourceCodeUriParams = {
   legacyCustody?: LegacyCustody;
 };
 
-/**
- * Same anchoring (`reportUrl`), same upgrade-on-write and `updated_at` behaviour, same "never touch a
- * verdict-bearing field" rule as `appendArchiveReference`.
- */
 export async function appendVerifiedSourceCodeUri(
   storage: ResultStorage,
   wasmHash: string,
@@ -277,9 +222,6 @@ export async function appendVerifiedSourceCodeUri(
     const before = (entry.verified_source_code_uris ?? (singular ? [singular] : [])).map(toSourceCodeUri);
     if (before.some((uri) => uri.url === params.sourceCodeUri.url)) return { skip: "already-present" };
 
-    // The entry was located by *our own* report URL, so custody is about this entry and no other: the trust
-    // level read from that report, and the result root we published under, which the draft shape had no field
-    // for.
     const upgraded = upgradeLegacyEntry(entry, { ...params.legacyCustody, verifierUrl: storage.publicRoot });
     if (!upgraded) return { skip: "unrepresentable" };
     const replacement = { ...upgraded, verified_source_code_uris: [...before, params.sourceCodeUri] };
@@ -288,28 +230,21 @@ export async function appendVerifiedSourceCodeUri(
   });
 }
 
-/** The index of the entry whose `results_urls` (either link form) names `reportUrl`, or -1. */
 function entryIndexByReport(document: PeerRegistryStatusObject, reportUrl: string): number {
   return document.source_code_verifications.findIndex((entry) =>
     (entry.results_urls ?? []).some((link) => toResultUrl(link).url === reportUrl),
   );
 }
 
-/**
- * An in-process fast path, not the guarantee: `mutateWasmStatus`'s compare-and-swap is what makes a
- * concurrent write safe. Same-hash contention is the common case — a publish schedules its own archive
- * backfill — and serialising it here costs one local await instead of a lost round trip to the store.
- */
+/** An in-process fast path only; the compare-and-swap in `mutateWasmStatus` is the actual guarantee. */
 const wasmStatusLocks = new Map<string, Promise<unknown>>();
 
 function withWasmStatusLock<T>(wasmHash: string, fn: () => Promise<T>): Promise<T> {
   const previous = wasmStatusLocks.get(wasmHash) ?? Promise.resolve();
   const next = previous.then(fn, fn);
-  // Swallow so a failed attempt does not poison the chain for the next caller on this hash — each caller still
-  // observes its own rejection via the returned `next`.
+  // Swallowed so one failure does not poison the chain; each caller still sees its own rejection via `next`.
   const tail = next.catch(() => undefined);
   wasmStatusLocks.set(wasmHash, tail);
-  // Evict once settled, but only if nobody chained onto this hash in the meantime.
   void tail.finally(() => {
     if (wasmStatusLocks.get(wasmHash) === tail) wasmStatusLocks.delete(wasmHash);
   });
@@ -320,7 +255,6 @@ async function writeJson(storage: ResultStorage, path: string, value: unknown): 
   await storage.writeText(path, serializeDocument(value), "application/json; charset=utf-8");
 }
 
-/** The one byte serialization every document this package writes uses — pretty-printed, trailing newline. */
 function serializeDocument(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }

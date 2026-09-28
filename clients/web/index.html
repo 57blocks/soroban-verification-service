@@ -9,17 +9,7 @@
       content="Hosted source verification for Stellar Soroban contracts: a sandboxed rebuild, a byte-for-byte Wasm comparison, and an attributed published result."
     />
     <link rel="icon" href="/favicon.png" sizes="32x32" type="image/png" />
-    <!-- Inter is the UI font and the only one headings use; JetBrains Mono carries hashes, commands and
-         build logs. Both are self-hosted and loaded from src/fonts.ts: a font request to a third party
-         disclosed every visitor's IP to it — see src/fonts.ts. -->
-    <!--
-      Runtime configuration, substituted by docker/web-entrypoint.sh at container start. Inline and
-      synchronous so a route guard can read it during the first navigation — a fetched config.json
-      would resolve after the router has already decided.
-
-      The dev server substitutes nothing and leaves the placeholder, which src/config/features.ts
-      reads as "not configured here" and falls back to the build-time value.
-    -->
+    <!-- Substituted at container start; inline and synchronous so the first route guard can read it. -->
     <script>
       window.__SCVS_RUNTIME_CONFIG__ = {
         enableAggregator: "__SCVS_ENABLE_AGGREGATOR__",

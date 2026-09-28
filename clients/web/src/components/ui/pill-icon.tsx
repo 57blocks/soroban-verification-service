@@ -3,10 +3,8 @@ import { cn } from "@/lib/utils";
 
 type PillIconProps = {
   children: ReactNode;
-  /** Inverted for the yellow `accent` pill: black circle, yellow glyph. */
   tone?: "yellow" | "ink";
   size?: "sm" | "md" | "lg";
-  /** Slides the glyph out right and back in from the left when the button is hovered. */
   animated?: boolean;
   className?: string;
 };
@@ -17,7 +15,6 @@ const sizeClass = {
   lg: "size-8",
 };
 
-/** The circular badge that terminates every pill button in the design. */
 export const PillIcon = ({
   children,
   tone = "yellow",

@@ -1,17 +1,11 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/**
- * The sandbox, drawn as the one box with a heavier edge and a label on its rim. The motif means "this happened
- * inside the sealed environment": the landing page's diagram uses it for the rebuild lane, and the console uses
- * it for the inputs a real rebuild ran on.
- */
 export const SealedBox = ({
   label,
   className,
   children,
 }: {
-  /** The chip on the rim — what the seal is. */
   label: string;
   className?: string;
   children: ReactNode;

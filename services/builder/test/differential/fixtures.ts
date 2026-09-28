@@ -30,7 +30,6 @@ export const SAMPLE_CONTRACTS_ROOT = join(
   "sample-contracts",
 );
 
-/** The oracle every fixture below is compared against. */
 const BASELINE_IMAGE = BASELINE_ORACLE_IMAGE;
 
 export const FIXTURES: readonly DifferentialFixture[] = [

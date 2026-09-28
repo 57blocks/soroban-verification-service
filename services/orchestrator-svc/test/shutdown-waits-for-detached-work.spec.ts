@@ -23,11 +23,8 @@ import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArchiveRecoveryScheduler } from "../src/modules/scheduler/archive-recovery.scheduler.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/** Work started without awaiting it must land before a module's shutdown closes the database under it. */
-
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
 
-// Fixtures and cleanup go through their own client, since each test closes the module it is testing.
 let client: PrismaClient;
 const createdRows = new CreatedRows();
 
@@ -63,14 +60,12 @@ async function buildModule(): Promise<TestingModule> {
   }).compile();
 }
 
-/** A promise the test opens by hand, so nothing here depends on how long anything takes. */
 function gate(): { opened: Promise<void>; open: () => void } {
   let open!: () => void;
   const opened = new Promise<void>((resolve) => (open = resolve));
   return { opened, open };
 }
 
-/** Records when the module's own client disconnects, which is the last thing its shutdown does. */
 function recordDisconnect(moduleRef: TestingModule, events: string[]): void {
   const prisma = moduleRef.get<PrismaClient>(PRISMA_CLIENT);
   const disconnect = prisma.$disconnect.bind(prisma);
@@ -80,7 +75,6 @@ function recordDisconnect(moduleRef: TestingModule, events: string[]): void {
   });
 }
 
-/** A private testnet job with its verdict written, ready for `publishJobResult`. */
 async function createComparedJob(): Promise<JobRecord> {
   const wasmHash = randomUUID().replace(/-/g, "").padEnd(64, "0");
   const sourceSha256 = randomUUID().replace(/-/g, "").padEnd(64, "1");
@@ -154,7 +148,6 @@ describe("closing the module waits for work nothing awaited", () => {
 
     let closing: Promise<void> | undefined;
     try {
-      // Returns with the report archive scheduled and held at its upload.
       await moduleRef.get(PublishService).publishJobResult(job.jobId);
       closing = moduleRef.close();
       await new Promise((resolve) => setImmediate(resolve));
@@ -176,7 +169,6 @@ describe("closing the module waits for work nothing awaited", () => {
     const events: string[] = [];
     recordDisconnect(moduleRef, events);
 
-    // Stubbed at the repository, so the scan never reads the shared table other suites write to.
     const pendingJob = { jobId: randomUUID() } as JobRecord;
     jest.spyOn(moduleRef.get(JobsRepository), "listJobsPendingArchive").mockResolvedValue([pendingJob]);
     const retry = gate();
@@ -187,7 +179,6 @@ describe("closing the module waits for work nothing awaited", () => {
 
     let closing: Promise<void> | undefined;
     try {
-      // Returns once the retry is dispatched, not once it is done.
       await moduleRef.get(ArchiveRecoveryScheduler).recoverPendingArchives();
       closing = moduleRef.close();
       await new Promise((resolve) => setImmediate(resolve));

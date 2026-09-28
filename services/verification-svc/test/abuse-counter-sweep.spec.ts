@@ -4,14 +4,6 @@ import { AbuseControlRepository, createPrismaClient, readDbEnv } from "@scvs/db"
 import { fingerprintRequest } from "../src/common/abuse-guard.js";
 import { AbuseControlSweepScheduler } from "../src/modules/abuse-control-sweep/abuse-control-sweep.scheduler.js";
 
-/**
- * RP-2: a counter row has no operational value outside its own window, so it is deleted rather than kept.
- *
- * The sweep itself is table-wide, which is correct for production code and is exactly the shape ADR-015
- * forbids in a suite — so nothing here calls it against rows it does not own. It writes its own rows under a
- * fingerprint nothing else can produce, sweeps with a cutoff chosen relative to those rows, and asserts on
- * them by key.
- */
 const prisma = createPrismaClient(readDbEnv());
 const abuseControl = new AbuseControlRepository(prisma);
 
@@ -22,7 +14,6 @@ const RETENTION_MS = 15 * 60_000;
 /** Far enough in the past that no other suite's rows sit near it, so the sweep's cutoff cannot reach them. */
 const OLD_WINDOW = new Date(Date.UTC(2020, 0, 1, 0, 0, 0));
 const FRESH_WINDOW = new Date(Date.UTC(2020, 0, 1, 1, 0, 0));
-/** `now` for the sweep: one retention period after the fresh window, so only the old one is out of bounds. */
 const SWEEP_AT = FRESH_WINDOW.getTime() + RETENTION_MS;
 
 const ownedFingerprints: string[] = [];
@@ -77,7 +68,6 @@ describe("abuse counter retention", () => {
     await abuseControl.incrementAbuseCounter(stale, ROUTE, OLD_WINDOW);
     await abuseControl.incrementAbuseCounter(live, ROUTE, FRESH_WINDOW);
 
-    // The scheduler reads `Date.now()`, so the clock is moved to the instant the two rows straddle.
     const realNow = Date.now;
     Date.now = () => SWEEP_AT;
     try {
@@ -95,7 +85,6 @@ describe("abuse counter retention", () => {
     const { abuseCounterRetentionMs, abuseWindowMs } = configuration();
 
     expect(abuseCounterRetentionMs).toBeLessThan(24 * 60 * 60_000);
-    // Above the enforcement window by an order of magnitude — the clock-skew margin RP-2 asks for.
     expect(abuseCounterRetentionMs).toBeGreaterThan(abuseWindowMs);
     expect(abuseWindowMs).toBe(WINDOW_MS);
   });

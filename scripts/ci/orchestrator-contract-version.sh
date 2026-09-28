@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# `read` echoes the MAJOR.MINOR that environment's orchestrator declared support for on its last rollout, or
-# `none` when no rollout has recorded one.
+# `read` echoes the MAJOR.MINOR an environment's orchestrator recorded on its last rollout, or `none`.
 set -euo pipefail
 
 ACTION="${1:?usage: orchestrator-contract-version.sh read|write <environment> [version]}"
@@ -22,7 +21,6 @@ case "$ACTION" in
           ;;
       esac
     }
-    # Validated on the way out, not just on the way in.
     [[ "$RAW" =~ ^[0-9]+\.[0-9]+$ ]] || {
       echo "::error::$PARAM holds '$RAW', which is not a MAJOR.MINOR contract version" >&2
       exit 4

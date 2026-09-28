@@ -43,12 +43,10 @@ async function preflight(page: Page, contractId: string) {
   expect((await response).status()).toBe(200);
 }
 
-// The console refuses every submission until the terms box is ticked.
 async function acceptTerms(page: Page) {
   await page.getByTestId("accept-terms").check();
 }
 
-// The log arrives folded; opening the panel is what renders its text.
 async function openBuildLog(page: Page) {
   const panel = page.getByTestId("build-log");
   await panel.getByRole("button", { name: "Build log" }).click({ timeout: env.requestTimeoutMs });
@@ -87,7 +85,7 @@ test.describe.serial("E2E-SUB-15 — public console submission journey [BROWSER]
   let verifiedJobId: string;
   let mismatchJobId: string;
 
-  // One browser for the whole journey: a job's build-log token is kept only by the browser that submitted it.
+  // One page for the whole journey: only the submitting browser keeps a job's build-log token.
   let page: Page;
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
@@ -172,8 +170,7 @@ test.describe.serial("E2E-SUB-15 — public console submission journey [BROWSER]
     await expect(page.getByRole("heading", { name: "Verification mismatch" })).toBeVisible({
       timeout: env.jobTimeoutMs,
     });
-    // The deployed console may lag this workspace's test-id additions, so assert the stable user-visible
-    // labels and values.
+    // Assert visible labels, not test ids: the deployed console may predate them.
     await expect(page.getByText(mismatch.wasm_hash!, { exact: true })).toBeVisible();
     await expect(page.getByText("Rebuilt Wasm hash", { exact: true }).first()).toBeVisible();
   });
@@ -181,7 +178,6 @@ test.describe.serial("E2E-SUB-15 — public console submission journey [BROWSER]
   test("E2E-SUB-15/console_build_log — exposes the terminal build log", async () => {
     test.setTimeout(env.jobTimeoutMs + 120_000);
 
-    // This source archive reaches rustc and fails there, so it cannot adopt a published verdict.
     await preflight(page, buildFailed.contract_id!);
     await page.getByLabel("Source access mode").click();
     await page.getByRole("option", { name: "Upload archive" }).click();
@@ -203,8 +199,6 @@ test.describe.serial("E2E-SUB-15 — public console submission journey [BROWSER]
     await expect(failedLog).not.toBeEmpty();
     await expect(failedLog).toContainText(/error\[E\d+\]|error:/i);
 
-    // A job that reused an earlier rebuild ran no build of its own, and the panel says so; any other
-    // state (no token, unreadable) fails. The logs' content is covered through the API by E2E-SUB-10.
     for (const jobId of [verifiedJobId, mismatchJobId]) {
       await page.goto(new URL(`/verify/jobs/${jobId}`, env.webUrl).toString(), {
         waitUntil: "networkidle",

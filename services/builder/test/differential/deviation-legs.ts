@@ -23,10 +23,6 @@ export type DifferentialLeg =
     };
 
 export type TestOnlyDeviationSwitch = {
-  /**
-   * Test-only switch for BE7 differential legs. This type deliberately lives under services/builder/test and
-   * must never be imported by production src.
-   */
   disable: Deviation;
 };
 

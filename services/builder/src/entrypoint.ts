@@ -5,11 +5,8 @@ import { ScvsLogger, stderrOnlySink } from "@scvs/core";
 import { AppModule } from "./app.module.js";
 import { BuilderService } from "./modules/builder/builder.service.js";
 
-/** services/builder's AWS Batch container entrypoint (`docker/builder.Dockerfile`). */
 async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, {
-    // `NODE_ENV` gates the Nest logger before the application context (and therefore `ConfigService`) exists —
-    // same bootstrap-time exception as the other services' main.ts.
     logger:
       process.env.NODE_ENV === "test"
         ? false

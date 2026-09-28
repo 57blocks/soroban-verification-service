@@ -15,22 +15,16 @@ import { TrustedVerifiersRepository } from "./trusted-verifiers.repo.js";
 import { AggregationRepository } from "./aggregation.repo.js";
 
 export type DbModuleAsyncOptions = Pick<ModuleMetadata, "imports"> & {
-  /**
-   * Resolves the connection. query-svc's `config/configuration.ts` reads the `query-postgres` manifest group's
-   * variables.
-   */
   useFactory: (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matches Nest's own factory typing
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ) => DbConnectionInput | Promise<DbConnectionInput>;
-  /** Injection tokens for `useFactory`'s parameters, same contract as Nest's own async options. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- as above
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inject?: any[];
 };
 
 const REPOSITORIES = [DbHealthService, TrustedVerifiersRepository, AggregationRepository];
 
-/** Owns the lifecycle of the Prisma client created by this module. */
 @Injectable()
 class PrismaClientLifecycle implements OnModuleDestroy {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
@@ -40,12 +34,9 @@ class PrismaClientLifecycle implements OnModuleDestroy {
   }
 }
 
-/** Provides this package's `PrismaClient` and its two repositories. */
 @Module({})
 export class DbModule {
   static forRootAsync(options: DbModuleAsyncOptions): DynamicModule {
-    // Resolved once; `DB_CONNECTION_STRING` and `DB_CONNECTION_INPUT` both derive from this rather than each
-    // re-invoking `options.useFactory` — see @scvs/db's own DbModule for why.
     const connectionInputProvider: Provider = {
       provide: DB_CONNECTION_INPUT,
       useFactory: options.useFactory,
@@ -66,7 +57,6 @@ export class DbModule {
 
     return {
       module: DbModule,
-      // Global, like @scvs/db's own DbModule — see that module's header for why.
       global: true,
       imports: options.imports ?? [],
       providers: [

@@ -2,7 +2,6 @@ import { arweaveModes, ResultStorageEnvDto } from "@scvs/config";
 import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUrl, Matches } from "class-validator";
 import { buildArchitectures } from "./configuration.js";
 
-/** This service's environment contract, validated once at boot by `ConfigModule.forRoot({ validate })`. */
 export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsNotEmpty({
     message:
@@ -38,32 +37,24 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   })
   SCVS_ARWEAVE_MODE?: string;
 
-  // Independent of SCVS_ARWEAVE_MODE (mainnet-source-archive design.md §8, MSA-5) — defaults off.
   @IsOptional()
   @IsIn(["true", "false"], { message: "SCVS_SOURCE_ARCHIVE_ENABLED must be true or false" })
   SCVS_SOURCE_ARCHIVE_ENABLED?: string;
 
-  // A deployment that should produce durable archives sets this to "mainnet" explicitly.
   @IsOptional()
   @IsIn(["mainnet", "devnet"], { message: "SCVS_ARWEAVE_NETWORK must be mainnet or devnet" })
   SCVS_ARWEAVE_NETWORK?: string;
 
-  // Ethereum RPC endpoint the archiving wallet signs through. Only meaningful with `SCVS_ARWEAVE_MODE=irys`;
-  // devnet has a working default (getArweaveConfig()) so this is unset in local dev.
   @IsOptional() @IsString()
   SCVS_ARWEAVE_RPC_URL?: string;
 
-  // Only meaningful with `SCVS_ARWEAVE_MODE=irys`.
   @IsOptional() @IsString()
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY?: string;
 
-  // The gateway an archived report's results_urls entry is built against (`${gatewayUrl}/${tx_id}`).
   @IsOptional()
   @IsUrl({ require_tld: false }, { message: "SCVS_ARWEAVE_GATEWAY_URL must be a URL" })
   SCVS_ARWEAVE_GATEWAY_URL?: string;
 
-  // Every field is optional with a working default matching what was hardcoded before, so an unset environment
-  // still publishes the same policy content this verifier always has.
   @IsOptional() @IsString()
   SCVS_POLICY_ACCEPTED_TRUST_LEVELS?: string;
 
@@ -86,22 +77,18 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsUrl({ require_tld: false }, { message: "SCVS_JOB_STATE_CHANGE_QUEUE_URL must be a URL" })
   SCVS_JOB_STATE_CHANGE_QUEUE_URL?: string;
 
-  // One queue ARN per architecture.
   @IsOptional() @IsString()
   SCVS_BATCH_JOB_QUEUE_ARN_ARM64?: string;
 
   @IsOptional() @IsString()
   SCVS_BATCH_JOB_QUEUE_ARN_AMD64?: string;
 
-  // Breaks the tie for an image that runs on both, and is the fallback when the registry cannot tell us at all.
   @IsOptional()
   @IsIn(buildArchitectures, {
     message: `SCVS_BATCH_DEFAULT_ARCH must be one of: ${buildArchitectures.join(", ")}`,
   })
   SCVS_BATCH_DEFAULT_ARCH?: string;
 
-  // Named with the same suffixes as that pair, so the four architecture-scoped dispatch variables read as one
-  // set.
   @IsOptional() @IsString()
   SCVS_BATCH_JOB_DEFINITION_ARN_ARM64?: string;
 
@@ -114,8 +101,6 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsString()
   SCVS_BATCH_RUNNER_CONTAINER_NAME?: string;
 
-  // Validated rather than defaulted-on-typo: a typo would silently keep the transport whose payload AWS was
-  // already rejecting in staging.
   @IsOptional()
   @IsIn(["env_json", "presigned_url"], {
     message: "SCVS_JOB_PARAMS_TRANSPORT must be one of: env_json, presigned_url",
@@ -125,7 +110,6 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_WORKER_CONCURRENCY must be a number" })
   SCVS_WORKER_CONCURRENCY?: string;
 
-  // Unset default: see clampTestnetConcurrency in configuration.ts.
   @IsOptional() @IsNumberString({}, { message: "SCVS_WORKER_CONCURRENCY_TESTNET must be a number" })
   SCVS_WORKER_CONCURRENCY_TESTNET?: string;
 
@@ -141,7 +125,6 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_MAX_PUBLISH_ATTEMPTS must be a number" })
   SCVS_MAX_PUBLISH_ATTEMPTS?: string;
 
-  // The ceiling and the cadence, mirroring the two above.
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_RETRY_INTERVAL_MS must be a number" })
   SCVS_JOB_RETRY_INTERVAL_MS?: string;
 
@@ -172,20 +155,16 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_REBUILD_RUN_TIMEOUT_MS must be a number" })
   SCVS_REBUILD_RUN_TIMEOUT_MS?: string;
 
-  // That object is written by the untrusted sandbox, so its size is attacker-chosen: without a bound, one PUT
-  // decides how much memory the orchestrator buffers.
+  // Bounds an object the untrusted sandbox writes, whose size is attacker-chosen.
   @IsOptional() @IsNumberString({}, { message: "SCVS_MAX_REBUILT_WASM_BYTES must be a number" })
   SCVS_MAX_REBUILT_WASM_BYTES?: string;
 
-  // ── Composed build environments (ADR-017) ──────────────────────────────────────────────────────
-  // The composer fleet's own queue and job definition, separate from the builder's above.
   @IsOptional() @IsString()
   SCVS_COMPOSER_JOB_QUEUE_ARN?: string;
 
   @IsOptional() @IsString()
   SCVS_COMPOSER_JOB_DEFINITION_ARN?: string;
 
-  // A bare ECR repository URI — no tag, no `@sha256:`.
   @IsOptional()
   @Matches(/^[^\s@:]+(?::\d+)?\/[^\s@:]+$/, {
     message:

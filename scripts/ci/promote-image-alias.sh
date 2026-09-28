@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# The alias is the only channel through which this repository tells Terraform's task definitions which image an
-# environment should run.
 set -euo pipefail
 
 REPOSITORY="${1:?usage: promote-image-alias.sh <repository-name> <image-digest>}"
 DIGEST="${2:?usage: promote-image-alias.sh <repository-name> <image-digest>}"
 ALIAS_TAG="${ALIAS_TAG:-deployed}"
 
-# Both media types are accepted because the default set excludes OCI, and buildx emits either.
+# Both media types: the default set excludes OCI, and buildx emits either.
 IMAGE=$(aws ecr batch-get-image \
   --repository-name "$REPOSITORY" \
   --image-ids "imageDigest=$DIGEST" \
@@ -27,8 +25,7 @@ fi
 PUT_ARGS=(--repository-name "$REPOSITORY" --image-tag "$ALIAS_TAG" --image-manifest "$MANIFEST")
 [ -n "$MEDIA_TYPE" ] && PUT_ARGS+=(--image-manifest-media-type "$MEDIA_TYPE")
 
-# ImageAlreadyExistsException means this exact manifest already carries this exact tag — the alias is already
-# where we want it, which is success, not a failure to be retried.
+# ImageAlreadyExistsException means the alias is already there, which is success.
 if OUTPUT=$(aws ecr put-image "${PUT_ARGS[@]}" 2>&1); then
   echo "$REPOSITORY:$ALIAS_TAG -> $DIGEST"
 else

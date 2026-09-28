@@ -1,36 +1,23 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-/**
- * The verifier-owned pins for one composition template, read from
- * `docker/composed-environments/<template_version>/template.json`.
- */
 export type CompositionTemplate = {
   templateVersion: string;
-  /** `docker build --platform`. */
   platform: string;
   baseImage: { reference: string; digest: string };
   rustup: { version: string; targetTriple: string; installerSha256: string };
   rust: { profile: string; targets: string[] };
   stellarCli: { repository: string; assetTargetTriple: string };
-  /**
-   * Shared libraries a pinned component needs at run time and the pinned base image does not supply. **Empty is
-   * the expected steady state**.
-   */
   runtimeLibraries: RuntimeLibraryPin[];
 };
 
-/** One pinned OS package supplying a runtime library the base image lacks. */
 export type RuntimeLibraryPin = {
-  /** Also the filename it lands under in the build context, hence the charset guard in `assertUsablePins`. */
   name: string;
-  /** Recorded so an operator reading the recipe sees which build of the library ran, not just a hash. */
   version: string;
   url: string;
   sha256: string;
 };
 
-/** Becomes `ComposerArtifact.reason`, and from there `Environment.errorCode`. */
 export type CompositionTemplateErrorReason = "composition_template_missing" | "composition_template_invalid";
 
 export class CompositionTemplateError extends Error {
@@ -45,12 +32,9 @@ export class CompositionTemplateError extends Error {
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-/** The all-zero placeholders `template.json` ships with. */
 const PLACEHOLDER_HEX = "0".repeat(64);
 
 export function templateDirFor(templateRoot: string, templateVersion: string): string {
-  // `template_version` reaches us from `ComposerJobParams`, which the orchestrator populated from its own
-  // `CURRENT_COMPOSE_TEMPLATE_VERSION` constant — not from anything submitted.
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(templateVersion)) {
     throw new CompositionTemplateError(
       `template_version ${JSON.stringify(templateVersion)} is not a valid directory segment.`,
@@ -70,7 +54,6 @@ export async function loadCompositionTemplate(
   try {
     raw = await readFile(path, "utf8");
   } catch (error) {
-    // Nothing is wrong with the template; it is not here. See `CompositionTemplateErrorReason`.
     throw new CompositionTemplateError(
       `Could not read composition template ${path}: ${error instanceof Error ? error.message : String(error)}. ` +
         "The composer image must ship every template version any orchestrator may ask for — if this " +
@@ -86,8 +69,6 @@ export async function loadCompositionTemplate(
     );
   }
   if (parsed.template_version !== templateVersion) {
-    // The directory name and the file's own declaration must agree, or `recipe_sha256` would record a version
-    // that does not describe the pins actually used.
     throw new CompositionTemplateError(
       `${path}: declares template_version ${JSON.stringify(parsed.template_version)} but lives in ` +
         `directory ${JSON.stringify(templateVersion)}.`,
@@ -114,7 +95,6 @@ export async function loadCompositionTemplate(
       repository: String(parsed.stellar_cli?.repository ?? ""),
       assetTargetTriple: String(parsed.stellar_cli?.asset_target_triple ?? ""),
     },
-    // Absent means none, so template `v1` — which declares no section — keeps loading exactly as before.
     runtimeLibraries: Array.isArray(parsed.runtime_libraries?.packages)
       ? parsed.runtime_libraries.packages.map((entry: Record<string, unknown>) => ({
           name: String(entry?.name ?? ""),
@@ -131,8 +111,7 @@ export async function loadCompositionTemplate(
 
 function assertUsablePins(path: string, template: CompositionTemplate): void {
   if (!/^linux\/[a-z0-9]+$/.test(template.platform)) {
-    // Not inferred from the build host, on purpose: the composed image is run by the *builder* fleet (arm64
-    // Graviton), so an image built for the host that happened to compose it would fail there rather than here.
+    // Never inferred from the build host: the builder fleet (arm64), not the composer, runs this image.
     throw new CompositionTemplateError(
       `${path}: platform must be an explicit linux/<arch> value such as linux/arm64, got ` +
         `${JSON.stringify(template.platform)}. See that field's own comment for why it is not inferred.`,
@@ -178,15 +157,10 @@ function assertUsablePins(path: string, template: CompositionTemplate): void {
   assertUsableRuntimeLibraries(path, template.runtimeLibraries);
 }
 
-/**
- * Every runtime-library pin, checked with the same severity as the rustup pin above and for the same reason:
- * these values go straight into the published recipe, and this is the last place a malformed one is cheap.
- */
 function assertUsableRuntimeLibraries(path: string, libraries: RuntimeLibraryPin[]): void {
   const seen = new Set<string>();
   for (const library of libraries) {
-    // `name` is interpolated into a filename in the build context and into the template's `COPY`, so it is
-    // constrained to what a package name can be rather than trusted for coming from a reviewed file.
+    // Interpolated into a build-context filename and the template's `COPY`, so constrained to a package-name charset.
     if (!/^[a-z0-9][a-z0-9.+-]*$/.test(library.name)) {
       throw new CompositionTemplateError(
         `${path}: runtime_libraries.packages[].name ${JSON.stringify(library.name)} is not a usable ` +
@@ -194,8 +168,6 @@ function assertUsableRuntimeLibraries(path: string, libraries: RuntimeLibraryPin
       );
     }
     if (seen.has(library.name)) {
-      // Two entries under one name would have the second overwrite the first in the context while both appeared
-      // in the recipe — a recipe describing bytes that are not in the image.
       throw new CompositionTemplateError(
         `${path}: runtime_libraries.packages[] names ${JSON.stringify(library.name)} twice.`,
       );

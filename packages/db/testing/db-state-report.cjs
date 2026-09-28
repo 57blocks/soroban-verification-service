@@ -1,21 +1,14 @@
-/**
- * The database-state banner behind every DB-touching service's Jest `globalSetup` (`db-state-setup.cjs`, which
- * exists only because Jest wants one default export per hook).
- */
 const { Client } = require("pg");
 
-// `abuse_control` is deliberately absent.
 const TABLES = ["jobs", "rebuilds", "uploads", "trusted_verifiers"];
 const CONNECT_TIMEOUT_MS = 3_000;
 
 async function countRows() {
-  // `@scvs/db`'s own resolution, not a second copy of it.
   require("./local-env.cjs");
   const { readDbEnv, toConnectionString } = await import("../dist/src/connection.js");
   const client = new Client({
     connectionString: toConnectionString(readDbEnv()),
-    // Without this a black-holed host (VPN up, container paused) hangs `pnpm run test` before the first test,
-    // with no output and no timeout to end it.
+    // Without this a black-holed host hangs the run before the first test.
     connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
   });
   await client.connect();
@@ -58,8 +51,6 @@ async function reportStateBeforeRun() {
       "  pnpm run db:reset:local",
     ]);
   } catch (error) {
-    // Never take a run down over its own diagnostics — the specs themselves report an unreachable database far
-    // more clearly than this would.
     process.stderr.write(`\n[db-state-report] could not read the database: ${error.message}\n\n`);
   }
 }

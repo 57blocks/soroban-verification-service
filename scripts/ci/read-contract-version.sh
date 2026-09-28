@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Read out of the source rather than the built package, the same way deploy.yml reads
-# CURRENT_COMPOSE_TEMPLATE_VERSION: both gates that need it run in jobs that set up neither pnpm nor
-# node_modules.
+# Read from the source, not the built package: its callers set up neither pnpm nor node_modules.
 set -euo pipefail
 
 SOURCE="packages/core/src/artifact-contract.ts"

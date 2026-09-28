@@ -6,7 +6,6 @@ import type { RecentJob } from "../types";
 import { formatDateTime, formatDuration, parseTimestamp } from "../utils/duration.util";
 import { getRecentJobTone, getTargetSummary } from "../utils/result.util";
 
-/** How long this job took, from the two timestamps the entry already stored. */
 const settledDuration = (job: RecentJob): string | null => {
   if (job.status === "queued" || job.status === "running") return null;
   const started = parseTimestamp(job.created_at);
@@ -21,7 +20,6 @@ const badgeVariant = {
   danger: "danger",
 } as const;
 
-/** Jobs this browser has seen. Kept in localStorage — there is no per-user account. */
 export const RecentJobsCard = ({ jobs }: { jobs: RecentJob[] }) => (
   <section className="mt-8 rounded-xl border border-line bg-surface p-5 shadow-panel">
     <h2 className="m-0 text-[1.35rem] font-semibold">

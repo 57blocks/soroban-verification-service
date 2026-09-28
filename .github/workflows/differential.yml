@@ -1,9 +1,5 @@
 name: Differential Harness
 
-# There is deliberately no oracle-digest `env:` wiring here; the eight oracles are committed literals.
-# The argument is in `services/builder/test/differential/oracles.ts`.
-
-# Called by the operations repository.
 on:
   workflow_call:
     inputs:
@@ -47,29 +43,23 @@ on:
         description: "That App's private key."
         required: false
 permissions:
-  id-token: write # OIDC -> AWS role assumption, for the stellar-cli cache read
+  id-token: write
   contents: read
 
-# No `concurrency:` here — see deploy.yml's note. `github.ref` under `workflow_call` is the caller's,
-# so a group built from it named one lock for every run whatever ref it was given.
+# No `concurrency:`: under workflow_call `github.ref` is the caller's, and repeating the caller's group deadlocks.
 
 jobs:
   differential:
-    # `vars.DEPLOY_ROLE_ARN` is per-environment and there is no repository-level one, so without this the role
-    # resolves empty. Account-wide work, so it pins dev's, exactly as stellar-cli.yml does for the same cache.
+    # vars.DEPLOY_ROLE_ARN exists only per environment; without this the role resolves empty.
     environment: dev
     runs-on: ubuntu-24.04-arm
     env:
-      # An off-main run has no bucket to read, and the script treats `off` as the normal case rather
-      # than a fault — the same path the public build takes.
       SCVS_CI_CACHE: ${{ inputs.on_main && 's3' || 'off' }}
-    # The run is now 8 base fixtures (`fixtures.ts`) plus 7 cross-oracle legs, and each leg is a reference build
-    # and a sandbox build of the same source.
     timeout-minutes: 150
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -81,9 +71,6 @@ jobs:
           token: ${{ steps.source_token.outputs.token }}
           ref: ${{ inputs.source_sha }}
 
-      # Without this the harness dies before its first test: fetch-or-build-stellar-cli.sh's first act is
-      # `s3api head-bucket`, and it exits 1 rather than confuse an unreachable cache with a miss. This
-      # workflow was the only one of that script's five callers with no credentials, so it had never run.
       - name: Configure AWS credentials (OIDC)
         if: inputs.on_main
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -101,10 +88,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # `packages/*` resolve to a gitignored `dist/`, so on a fresh runner `runner.ts`'s `@scvs/core` import
-      # has nothing to resolve — the harness failed here on its first-ever run. Filtered to the builder's own
-      # dependency closure (`@scvs/core` + itself): a full `pnpm run build` would drag in packages/db, whose
-      # build reads POSTGRES_* at prisma.config.ts's top level and which no differential spec imports.
       - name: Build the harness's dependency closure
         run: npx turbo run build --filter=@scvs/builder
 
@@ -115,9 +98,6 @@ jobs:
           AWS_REGION: ap-southeast-2
         run: bash scripts/ci/run-differential-harness.sh
 
-      # The manifest is the run's only durable output and T2's only input, and until now every run threw its
-      # own away — which is the whole reason `reproducibility.spec.ts` has never had two manifests to compare.
-      # `plan.md` §3 says they are *committed*, so this artifact is what a human commits.
       - name: Upload the host manifest
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

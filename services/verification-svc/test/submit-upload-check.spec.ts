@@ -13,10 +13,6 @@ import {
 import { CreatedRows } from "@scvs/db/testing";
 import { createTestApp } from "./bootstrap.js";
 
-/**
- * Seeds `uploads` rows directly via the repository rather than going through `POST
- * /api/verification/v1/uploads/source`.
- */
 const prisma = createPrismaClient(readDbEnv());
 const uploadsRepository = new UploadsRepository(prisma);
 const createdRows = new CreatedRows();
@@ -37,10 +33,6 @@ afterAll(async () => {
   }
 });
 
-/**
- * Mirrors what `uploads.service.ts`'s `receive()` writes for a real upload, minus the S3 PUT: a received row
- * with a real sha256 of some fixture bytes, expiring 30 minutes out by default.
- */
 async function seedUpload(options: { expiresInMs?: number } = {}): Promise<{ uploadId: string; sourceSha256: string }> {
   const uploadId = randomUUID();
   const sourceSha256 = createHash("sha256").update(randomBytes(64)).digest("hex");
@@ -78,7 +70,6 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("source_hash_mismatch");
-    // And no job was created for the dishonest claim.
     expect(res.body.job_id).toBeUndefined();
 
     await uploadsRepository.deleteUpload(uploadId);
@@ -113,7 +104,6 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
   });
 
   it("still returns the created job_id when recordReference fails (code review fix, 2026-08-14)", async () => {
-    // The job row is a separate, already-committed write by the time recordReference runs.
     const { uploadId, sourceSha256 } = await seedUpload();
     createdRows.upload(uploadId);
     const uploadJobReferences = app.get(UploadJobReferencesRepository);
@@ -134,7 +124,6 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
     recordSpy.mockRestore();
     createdRows.job(res.body?.job_id);
 
-    // The real assertion: still 202/queued with a real job_id, NOT a 500 that swallows it.
     expect(res.status).toBe(202);
     expect(res.body.status).toBe("queued");
     expect(res.body.job_id).toBeDefined();

@@ -1,11 +1,6 @@
 import { ImagePlatformService } from "../src/modules/verification-pipeline/image-platform.service.js";
 import { parseDigestPinnedImage } from "../src/modules/verification-pipeline/image-platform.util.js";
 
-/**
- * `fetch` is stubbed: these cases pin the *document reading* and the failure contract, not Docker Hub's
- * availability.
- */
-
 const ARM_ONLY_IMAGE =
   "docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43";
 const MULTI_ARCH_IMAGE =
@@ -13,7 +8,6 @@ const MULTI_ARCH_IMAGE =
 const ARM_MANIFEST_IMAGE =
   "docker.io/stellar/stellar-cli@sha256:80a667750133b88ed1a07c82ab80c5863db8f83145c4d98ac741b3e5c7b10841";
 
-/** The live shape, attestation manifest included — dropping it is what this fixture exists to prove. */
 const ARM_ONLY_INDEX = {
   schemaVersion: 2,
   mediaType: "application/vnd.oci.image.index.v1+json",
@@ -68,7 +62,6 @@ const errorResponse = (status: number, headers: Record<string, string> = {}): Re
     json: async () => ({}),
   }) as unknown as Response;
 
-/** Records every URL the service asks for, so "how many requests" is itself assertable. */
 const stubFetch = (
   handler: (url: string) => Response | Promise<Response>
 ): { calls: string[]; restore: () => void } => {
@@ -107,10 +100,9 @@ describe("parseDigestPinnedImage", () => {
   });
 
   it("rejects anything that is not host/repo@sha256:<64 hex>", () => {
-    // `bldimg` is submitter-influenced and this value reaches a URL, so the parse is the boundary.
     for (const reference of [
       "stellar/stellar-cli:latest",
-      `stellar-cli@sha256:${"a".repeat(64)}`, // no registry host — ambiguous
+      `stellar-cli@sha256:${"a".repeat(64)}`,
       `docker.io/stellar/stellar-cli@sha256:${"a".repeat(63)}`,
       `docker.io/stellar/stellar-cli@md5:${"a".repeat(32)}`,
       `docker.io/stellar/../../etc@sha256:${"a".repeat(64)}`,
@@ -127,7 +119,6 @@ describe("ImagePlatformService", () => {
     const stub = stubFetch(() => jsonResponse(ARM_ONLY_INDEX));
     try {
       const resolution = await new ImagePlatformService().resolveArchitectures(ARM_ONLY_IMAGE);
-      // The live arm64-only image: an index with one runnable platform.
       expect(resolution).toEqual({ architectures: ["arm64"], resolvedFrom: "index" });
       expect(stub.calls).toHaveLength(1);
     } finally {
@@ -164,8 +155,6 @@ describe("ImagePlatformService", () => {
       if (url.startsWith("https://auth.docker.io/token")) {
         return jsonResponse({ token: "issued-token" });
       }
-      // The registry only accepts the retry, so a failure to follow the challenge shows up as an unresolved
-      // probe rather than as a passing test.
       return stub.calls.filter((call) => call.includes("/manifests/")).length > 1
         ? jsonResponse(ARM_ONLY_INDEX)
         : errorResponse(401, {
@@ -230,8 +219,6 @@ describe("ImagePlatformService", () => {
       first.restore();
     }
 
-    // A digest is immutable, so a second probe could only ever confirm the first — and an unreadable private
-    // registry must not be re-probed on every dispatch either.
     const second = stubFetch(() => errorResponse(500));
     try {
       await expect(service.resolveArchitectures(ARM_ONLY_IMAGE)).resolves.toEqual({

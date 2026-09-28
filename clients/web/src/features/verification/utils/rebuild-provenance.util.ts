@@ -1,8 +1,6 @@
 import type { ArtifactRecipeFacts } from "../types";
 import { stringArray } from "./diagnostics.util";
 
-/** How one contract was rebuilt, grouped by **who chose each value**. */
-
 export type ProvenanceField = {
   key: string;
   label: string;
@@ -13,14 +11,12 @@ export type ProvenanceField = {
 export type ProvenanceGroup = {
   key: "declared" | "recipe";
   title: string;
-  /** One line on where the group's values come from. Provenance, not explanation of meaning. */
   origin: string;
   fields: ProvenanceField[];
 };
 
 const httpHref = (value: string) => (/^https?:\/\//.test(value) ? value : undefined);
 
-/** `github:owner/repo` is how contract metadata spells a repo; make it reachable. */
 const repoHref = (repo: string) => {
   const gh = /^github:([\w.-]+\/[\w.-]+)$/.exec(repo);
   return gh ? `https://github.com/${gh[1]}` : httpHref(repo);
@@ -38,10 +34,6 @@ const parsePairs = (entries: string[]): Map<string, string> => {
   return pairs;
 };
 
-/**
- * The second group's heading follows `provenance.recipe_source`, and is omitted when the document does not
- * state one.
- */
 const RECIPE_ORIGINS: Record<
   NonNullable<ArtifactRecipeFacts["recipeSource"]>,
   { title: string; origin: string }
@@ -60,14 +52,9 @@ type ProvenanceInput = {
   recipe: ArtifactRecipeFacts;
   sourceUri: string | null;
   sourceSha256: string | null;
-  /** The job's own sandbox diagnostics, for the fields the recipe does not carry. */
   diagnostics?: Record<string, unknown> | undefined;
 };
 
-/**
- * The three groups, in reading order. A group with no fields is dropped rather than rendered empty, and a field
- * the documents did not state is omitted rather than defaulted.
- */
 export const rebuildProvenance = ({
   recipe,
   sourceUri,
@@ -76,7 +63,6 @@ export const rebuildProvenance = ({
 }: ProvenanceInput): ProvenanceGroup[] => {
   const groups: ProvenanceGroup[] = [];
 
-  // ① The contract's own.
   const declared: ProvenanceField[] = [];
   if (recipe.pair?.cliver) {
     declared.push({
@@ -107,7 +93,6 @@ export const rebuildProvenance = ({
     });
   }
 
-  // ② The recipe, under whichever heading its own `recipe_source` earns.
   const recipeFields: ProvenanceField[] = [];
   if (sourceUri) {
     recipeFields.push({
@@ -141,7 +126,6 @@ export const rebuildProvenance = ({
   if (recipeFields.length && recipe.recipeSource) {
     groups.push({ key: "recipe", ...RECIPE_ORIGINS[recipe.recipeSource], fields: recipeFields });
   } else if (recipeFields.length) {
-    // No `recipe_source` to name, so the heading claims no provenance for these at all.
     groups.push({
       key: "recipe",
       title: "Build inputs",
@@ -153,7 +137,6 @@ export const rebuildProvenance = ({
   return groups;
 };
 
-/** The `/wasms/<hash>.json` companion to a `/reports/<sha>.json` URL. */
 export const wasmStatusUrlFromReportUrl = (
   reportUrl: string | undefined,
   wasmHash: string | undefined,

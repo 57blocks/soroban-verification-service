@@ -18,7 +18,6 @@ import type { LegalBundle, LegalDocument } from "@/lib/legal";
 const getLegalDocuments = vi.fn();
 vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: (signal?: AbortSignal) => getLegalDocuments(signal),
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
 }));
@@ -41,7 +40,6 @@ const document_ = (slug: LegalDocument["slug"], title: string): LegalDocument =>
   openItems: ["An item still open for review."],
 });
 
-/** A bundle in the shape the hook produces, so no case depends on anyone's real legal text. */
 const bundle = (overrides: Partial<LegalBundle> = {}): LegalBundle => ({
   version: "TEST-2026-09-08",
   effectiveDate: null,
@@ -77,7 +75,6 @@ const wireFrom = (source: LegalBundle) => ({
   })),
 });
 
-/** Renders a real legal route, so the loading and error states are exercised through the router. */
 const renderRoute = async (path: string) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createRouter({
@@ -104,8 +101,6 @@ describe("the two documents are reachable from every page that needs them", () =
     await renderRoute(path);
 
     expect((await screen.findByRole("heading", { level: 1 })).textContent).toBe(title);
-    // The heading alone cannot tell this page from the unavailable one — that shell renders the same `h1`
-    // by design, so an assertion on it only proves the route matched. These prove the bundle arrived.
     expect(await screen.findByRole("navigation", { name: /contents/i })).toBeInTheDocument();
     expect(screen.getByTestId("legal-version").textContent).toBe(`Version ${bundle().version}`);
     expect(screen.queryByTestId("legal-unavailable")).toBeNull();
@@ -125,8 +120,6 @@ describe("the two documents are reachable from every page that needs them", () =
     expect(footerLegal).not.toMatch(/MIT/);
   });
 
-  // The console is where the act of submitting happens, so consent is stated there, not only in a footer three
-  // screens down.
   test("the submission control carries the agreement line with both links", async () => {
     await renderInRouter(<SubmissionAgreement />);
     const line = screen.getByTestId("submission-agreement");
@@ -135,10 +128,6 @@ describe("the two documents are reachable from every page that needs them", () =
     expect(hrefs()).toEqual(expect.arrayContaining(["/terms", "/privacy"]));
   });
 
-  /**
-   * None of it is in the URL and none of it is persisted, so an in-place navigation to `/terms` and a press of
-   * Back returns the submitter to an empty form having lost a preflight round trip.
-   */
   test("the consent line's links leave the submission where it is", async () => {
     await renderInRouter(<SubmissionAgreement />);
 
@@ -157,8 +146,6 @@ describe("the two documents are reachable from every page that needs them", () =
     }
     unmount();
 
-    // The default: on the landing and legal pages there is nothing to lose, and an in-place navigation is what
-    // a reader expects.
     await renderInRouter(<LegalLinks />);
     for (const link of screen.getAllByRole("link")) {
       expect(link).not.toHaveAttribute("target");
@@ -239,7 +226,6 @@ describe("a legal page that cannot load its text says so", () => {
     const panel = await screen.findByTestId("legal-unavailable");
     expect(panel.textContent).toMatch(/could not be loaded/);
     expect(panel.textContent).toMatch(/Submissions are blocked/);
-    // The heading still names the document, so the page is recognisable rather than blank.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Terms of Service");
     expect(screen.queryByRole("navigation", { name: /contents/i })).toBeNull();
   });
@@ -251,15 +237,6 @@ describe("a legal page that cannot load its text says so", () => {
   });
 });
 
-/**
- * The reference deployment's actual bundle, rendered by the actual renderer.
- *
- * The two suites either side of this one use a small fixture, which is right for asserting behaviour and
- * wrong for asserting that ~22 KB of recovered text survives the trip. This one renders the real thing:
- * every section anchored, both inline marks resolved, and nothing leaking as literal markup. It is the
- * console-side half of `services/verification-svc/test/legal-reference-bundle.spec.ts`, which checks the
- * same file's wording against what the code does.
- */
 describe("the configured bundle renders", () => {
   const reference = JSON.parse(
     readFileSync(resolve(__dirname, "../../../config/legal-documents.json"), "utf8"),
@@ -299,11 +276,9 @@ describe("the configured bundle renders", () => {
     }
 
     const article = screen.getByRole("article");
-    // `**bold**` and `[label](href)` became markup rather than surviving as characters.
     expect(article.querySelector("strong")).not.toBeNull();
     expect(article.textContent).not.toMatch(/\*\*/);
     expect(article.textContent).not.toMatch(/\]\(/);
-    // And no template literal went unevaluated on its way out of TypeScript.
     expect(article.textContent).not.toContain("${");
   });
 
@@ -316,20 +291,9 @@ describe("the configured bundle renders", () => {
   });
 });
 
-/**
- * AC6, as a test rather than a convention. The text is the operator's and arrives over HTTP; what must never
- * come back is a copy of it compiled into this bundle.
- *
- * NOTE: the content assertions this file used to carry — counsel's exact wording on retention, the two
- * build-log tiers, the fingerprint description — moved with the text they guard, to
- * `services/verification-svc/test/legal-reference-bundle.spec.ts`, which asserts them against the
- * configured bundle `dev` and `staging` actually serve. They are not lost, and they are not here: nothing
- * in this bundle knows the text any more.
- */
 describe("this repository ships the mechanism and no operator's legal text", () => {
   test("the legal feature exports no document content", async () => {
     const content = await import("@/features/legal/content/shared");
-    // Only page chrome about draft state survives here.
     expect(Object.keys(content).sort()).toEqual(["draftBannerCopy", "openItemsHeading"]);
   });
 

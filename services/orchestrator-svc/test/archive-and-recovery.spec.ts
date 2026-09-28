@@ -22,11 +22,6 @@ import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.se
 import { ArchiveRecoveryScheduler } from "../src/modules/scheduler/archive-recovery.scheduler.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/**
- * Two things are real here and nowhere else: `JobsRepository`'s new archive-pending queries against actual
- * Postgres, and `ArweaveArchiveService`'s duplicate-content guard.
- */
-
 const WASM_HASH = "3".repeat(64);
 const REBUILT_HASH = WASM_HASH;
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
@@ -55,14 +50,11 @@ beforeAll(async () => {
   process.env.SCVS_RESULT_ROOT = resultRoot;
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4998";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
-  // This assertion must depend only on what THIS test sets, never on ambient machine state.
   process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
 
   moduleRef = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
-      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
-      // needs the module that provides it.
       ScheduleModule.forRoot(),
       DbModule.forRootAsync({
         inject: [ConfigService],
@@ -80,11 +72,9 @@ beforeAll(async () => {
   prisma = moduleRef.get(PRISMA_CLIENT);
 });
 
-// A suite removes what it created, and only what it created.
 afterAll(async () => {
-  // `prisma` is unset when `beforeAll` threw; cleaning up then would bury the real error under a TypeError.
   try {
-    // Scan retries and scheduled archives write to the rows cleanup deletes, so they finish first.
+    // Stop background archive work before deleting the rows it writes.
     if (scheduler) await scheduler.onModuleDestroy();
     if (arweaveArchive) await arweaveArchive.onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
@@ -93,10 +83,6 @@ afterAll(async () => {
   }
 });
 
-/**
- * Polls until `condition` holds. `scheduleArweaveBackfill` and `recoverPendingArchives` both dispatch the
- * archive without awaiting it, so its postcondition is the only thing there is to observe.
- */
 async function waitUntil(condition: () => Promise<boolean>, what: string): Promise<void> {
   const deadline = Date.now() + 4_000;
   for (;;) {
@@ -106,18 +92,15 @@ async function waitUntil(condition: () => Promise<boolean>, what: string): Promi
   }
 }
 
-/** The archive obligation is discharged — `recordArchiveOutcome` cleared `archivePendingSince`. */
 async function archiveSettled(jobId: string): Promise<boolean> {
   const job = await jobs.getJobById(jobId);
   return job !== undefined && !job.archivePendingSince;
 }
 
-/** One attempt has been made and recorded, whether it succeeded or failed. */
 async function archiveAttempted(jobId: string): Promise<boolean> {
   return ((await jobs.getJobById(jobId))?.archiveAttempts ?? 0) >= 1;
 }
 
-/** Every archive reference now on the published status object for this Wasm. */
 async function archiveUrlsFor(wasmHash: string): Promise<string[]> {
   const storage = createResultStorage({
     kind: "filesystem",
@@ -234,9 +217,6 @@ describe("published_updated_at (IMPLEMENTATION-SPEC §F.1 / BL1) — set on a re
     const after = await jobs.getJobById(job.jobId);
     expect(after?.publishedUpdatedAt).toBeDefined();
 
-    // `publishJobResult` always ends with an unawaited `scheduleArweaveBackfill`, and in this suite's dry-run
-    // mode that backfill *succeeds*, so it finishes with a `prisma.job.update` (`recordArchiveOutcome`'s
-    // `archived: true` branch).
     await waitUntil(() => archiveSettled(job.jobId), "this publish's backfill to settle");
   });
 
@@ -244,8 +224,6 @@ describe("published_updated_at (IMPLEMENTATION-SPEC §F.1 / BL1) — set on a re
     const wasmHash = "5".repeat(64);
     const verifiedJob = await createJob({ matched: true, wasmHash });
     await publish.publishJobResult(verifiedJob.jobId);
-    // writePublication's own fire-and-forget archive backfill (dry-run mode, always "succeeds") also advances
-    // this job's published_updated_at once, on its own schedule.
     await waitUntil(
       () => archiveSettled(verifiedJob.jobId),
       "the first publish's backfill to settle before capturing a published_updated_at baseline",
@@ -268,29 +246,21 @@ describe("published_updated_at (IMPLEMENTATION-SPEC §F.1 / BL1) — set on a re
     const mismatchedJob = await createJob({ matched: false, wasmHash, rebuiltWasmHash: "6".repeat(64) });
     await publish.publishJobResult(mismatchedJob.jobId);
 
-    // wasms/<hash>.json itself is untouched — still the first job's verified entry, byte-identical updated_at
-    // (buildWasmStatus's own no-op branch returns `existing` unchanged).
     const statusAfterSecond = await readWasmStatus(storage, wasmHash);
     expect(statusAfterSecond?.source_code_verifications[0]?.status).toBe("verified");
     expect(statusAfterSecond?.updated_at).toBe(mtimeAfterFirst);
 
-    // The SECOND job's own row never gets a published_updated_at — writePublication never wrote
-    // wasms/<hash>.json on its behalf, so there is nothing for it to have advanced.
     const mismatchedReloaded = await jobs.getJobById(mismatchedJob.jobId);
     expect(mismatchedReloaded?.publishedUpdatedAt).toBeUndefined();
 
-    // The FIRST job's own row is untouched by the second publish — this test only asserts the second job's own
-    // bookkeeping is honest, not a cross-job side effect.
     const verifiedReloaded = await jobs.getJobById(verifiedJob.jobId);
     expect(verifiedReloaded?.publishedUpdatedAt).toBe(publishedUpdatedAtAfterFirst);
 
-    // The second publish has its own unawaited backfill — same reason as the test above.
     await waitUntil(() => archiveSettled(mismatchedJob.jobId), "the second publish's backfill to settle");
   });
 });
 
 describe("ArweaveArchiveService — duplicate-content guard runs on every attempt", () => {
-  /** Reaches into the private methods, the same convention `withBrokenPublishing` already uses. */
   function internals(service: ArweaveArchiveService) {
     return service as unknown as {
       findExistingUpload: (reportSha256: string) => Promise<{ tx_id: string; archive_url: string } | undefined>;
@@ -310,7 +280,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
 
     try {
       await publish.publishJobResult(job.jobId);
-      // Inside the try, so the backfill finishes while the counting stub is still in place.
       await waitUntil(() => archiveSettled(job.jobId), "the live backfill to settle");
     } finally {
       internals(arweaveArchive).findExistingUpload = real;
@@ -354,15 +323,10 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   it("the retry path (retryPendingArchive) reuses this report's own claim, and skips both findExistingUpload and uploadToIrys", async () => {
     const job = await createVerifiedJob();
     await publish.publishJobResult(job.jobId);
-    // The publish above schedules its own live backfill, which claims this reportSha256 in
-    // report_archive_uploads and marks it "done" with a real (dry-run) txId — that claim, not
-    // findExistingUpload, is now what a retry for the SAME report consults first (report-archive
-    // claim dedup: archive-and-recovery/decisions/report-archive-dedup-needs-a-claim-row-too.md).
     await waitUntil(() => archiveSettled(job.jobId), "the initial publish's backfill to settle");
     const published = (await jobs.getJobById(job.jobId))!;
     const firstTxId = published.archivedTxId;
     expect(firstTxId).toMatch(/^dryrun-/);
-    // Simulate "archived, but we forgot" — as if a prior attempt's recordArchiveOutcome never ran.
     await jobs.updateJob(job.jobId, { archivePendingSince: new Date() });
 
     let uploadToIrysCalls = 0;
@@ -375,8 +339,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     };
     internals(arweaveArchive).findExistingUpload = async (...args: unknown[]) => {
       findExistingUploadCalls += 1;
-      // Deliberately a DIFFERENT tx than firstTxId — proves the retry never reaches this call at all
-      // (the claim short-circuits before findExistingUpload), rather than merely happening to agree.
       return { tx_id: "tx-should-never-be-used", archive_url: "https://gateway.irys.xyz/tx-should-never-be-used" };
     };
 
@@ -416,10 +378,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     expect(afterFailedAttempt?.archivedTxId).toBeUndefined();
     expect(afterFailedAttempt?.archiveAttempts).toBeGreaterThanOrEqual(1);
 
-    // The recovery scan's tick, run directly (not waiting for the real @Interval timer). recoverPendingArchives
-    // still fires retryPendingArchive off without awaiting it per job (ArchiveRecoveryScheduler's own doc
-    // comment), so the outer await only waits for the scan loop to finish dispatching, not for the archive
-    // itself to settle.
     await scheduler.recoverPendingArchives();
     await waitUntil(() => archiveSettled(job.jobId), "the recovered archive to settle");
 
@@ -429,8 +387,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   });
 
   it("re-delivers a recovered archive after its pre-backfill cursor, so a mirror upserts one hash", async () => {
-    // PUB-12's service-side half. The real publisher, Postgres repository, recovery scheduler and status-object
-    // writer run here; only the Irys boundary is controlled to fail once then succeed.
     const wasmHash = `${"8".repeat(63)}c`;
     const job = await createJob({ matched: true, wasmHash });
     let uploadAttempts = 0;
@@ -460,8 +416,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       expect(initialUrls).toHaveLength(1);
       expect(initialUrls.some((url) => url.startsWith("https://gateway.irys.xyz/"))).toBe(false);
 
-      // BL1 uses milliseconds. Ensure the recovered write receives a strictly later key than C0, rather than
-      // depending on two real writes happening to span a clock tick.
       const initialMs = new Date(initialUpdatedAt).getTime();
       await waitUntil(async () => Date.now() > initialMs, "the next publication-update millisecond");
 
@@ -490,8 +444,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     const record = redelivered.find((entry) => entry.wasmHash === wasmHash);
     expect(record).toEqual({ wasmHash, publishedUpdatedAt: recovered.publishedUpdatedAt });
 
-    // A bulk record tells the mirror that H changed; the mirror re-reads its static status object and upserts
-    // by H.
     const mirror = new Map<string, { updatedAt: string; urls: string[] }>();
     mirror.set(wasmHash, { updatedAt: initialUpdatedAt!, urls: initialUrls! });
     mirror.set(record!.wasmHash, { updatedAt: record!.publishedUpdatedAt, urls: recoveredUrls });
@@ -501,8 +453,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   });
 
   it("regression (2026-08-07, F2): a second recovery tick does not re-dispatch a job whose retry from the first tick is still in flight", async () => {
-    // Reproduces the actual finding: with a large backlog, @Interval fires again before the previous tick's
-    // unawaited retryPendingArchive calls finish.
     const job = await createVerifiedJob();
 
     const realUpload = internals(arweaveArchive).uploadToIrys;
@@ -520,8 +470,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     const pending = await jobs.getJobById(job.jobId);
     expect(pending?.archivePendingSince).toBeDefined();
 
-    // findExistingUpload never finds anything (simulates indexer lag: the in-flight upload below hasn't been
-    // indexed yet), and uploadToIrys hangs until released.
     const realFind = internals(arweaveArchive).findExistingUpload;
     internals(arweaveArchive).findExistingUpload = async () => undefined;
     let uploadCalls = 0;
@@ -536,13 +484,11 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     };
 
     try {
-      await scheduler.recoverPendingArchives(); // first tick: dispatches retryPendingArchive, not awaited
-      await scheduler.recoverPendingArchives(); // second tick, "next @Interval fires" — same job still pending
-      // Wait for the condition, not a guessed duration: first tick's dispatch crosses real DB round-trips
-      // (findOrCreate) before reaching the mocked uploadToIrys, and a fixed sleep races that under CI load.
+      await scheduler.recoverPendingArchives();
+      await scheduler.recoverPendingArchives();
       await waitUntil(() => Promise.resolve(uploadCalls >= 1), "the first tick's dispatch to reach uploadToIrys");
-      await new Promise((resolve) => setTimeout(resolve, 20)); // let the second tick's dispatch loop run too
-      expect(uploadCalls).toBe(1); // the guard, not a race, is what keeps this at 1
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(uploadCalls).toBe(1);
 
       releaseUpload?.();
       await waitUntil(() => archiveSettled(job.jobId), "the single in-flight upload to settle");
@@ -587,8 +533,6 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   });
 
   it("regression (2026-08-05): a real concurrent duplicate publish of the SAME job never leaves two archive URLs behind", async () => {
-    // The original bug report: the immediate batch-event path and PublishRecoveryScheduler's recovery scan
-    // could both call publishJobResult(jobId) for the same job before either had written status: "published".
     const job = await createVerifiedJob();
 
     let completedBackfills = 0;
@@ -604,32 +548,24 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     try {
       await Promise.all([publish.publishJobResult(job.jobId), publish.publishJobResult(job.jobId)]);
       await waitUntil(async () => completedBackfills >= 1, "the backfill to settle");
-      // A short settle window makes "exactly one" a real assertion rather than a race the first `waitUntil`
-      // happened to win.
+      // Settle window, so "exactly one" is not a race the `waitUntil` above happened to win.
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(completedBackfills).toBe(1);
     } finally {
       internals(arweaveArchive).backfill = realBackfill;
     }
 
-    // And exactly one report object, not two with different `verified_at`s for one verdict.
     expect((await jobs.getJobById(job.jobId))?.status).toBe("published");
 
     const urls = await archiveUrlsFor(WASM_HASH);
     const archiveUrls = urls.filter((url) => url.startsWith("https://gateway.irys.xyz/"));
 
     expect(archiveUrls.length).toBeLessThanOrEqual(1);
-    // Exactly two elements when an archive completed: [reportUrl, archiveUrl] — never a growing array of stale
-    // entries from whichever of the two concurrent publishes ran first.
     expect(urls.length).toBeLessThanOrEqual(2);
   });
 });
 
 describe("archive_backlog gauge (O4)", () => {
-  /**
-   * Reaches into the private `metrics` field, the same convention `internals()` above uses for
-   * ArweaveArchiveService's private methods.
-   */
   function metricsOf(service: ArchiveRecoveryScheduler) {
     return (service as unknown as { metrics: { gauge: (name: string, value: number) => void } }).metrics;
   }
@@ -662,7 +598,6 @@ describe("archive_backlog gauge (O4)", () => {
   });
 
   it("emits archive_backlog on an empty tick too — silence must not read as zero backlog", async () => {
-    // Drain whatever this test file's own fixtures left pending, so this tick's count is knowable.
     const pending = await jobs.listJobsPendingArchive();
     await Promise.all(
       pending.map((job) => jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "tx-drained-for-test", statusLink: { state: "complete", advancePublished: true } })),

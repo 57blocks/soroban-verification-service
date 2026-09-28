@@ -10,6 +10,4 @@ module.exports = {
     "^.+\\.tsx?$": ["ts-jest", { useESM: true }],
   },
   testMatch: ["**/test/**/*.spec.ts"],
-  // This config was copied from orchestrator-svc's, which needs one to assemble a Postgres connection string
-  // and to park placeholder AWS variables before any provider is constructed.
 };
