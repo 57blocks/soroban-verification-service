@@ -16,10 +16,9 @@
  * Value resolution, in the order the manifest's `source:` implies:
  *
  *   literal       the artifact's `value` — this repository is the authority
- *   terraform     `value_from_output`, a path into the CI descriptor, resolved fresh every deploy.
- *                 No value is committed for these: an identifier carrying an account id, region, or
- *                 revision goes stale and then misleads (ADR-012 `decided: Q2`, the `infra/cdk/`
- *                 failure). That prohibition is why this indirection exists.
+ *   terraform     `value_from_output`, a path into the CI descriptor, resolved fresh every deploy. An
+ *                 identifier carrying an account id, region, or revision is never committed; a stable
+ *                 name may be, as `value` with `value_is_authoritative: false`, and the descriptor wins.
  *   image-build   skipped — the image supplies it
  *
  * Idempotent: it reads the current secret first and writes only on a real difference, so a redeploy
@@ -164,11 +163,8 @@ for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.local
     continue;
   }
 
-  if (entry.value !== undefined) {
-    payload[name] = String(entry.value);
-    continue;
-  }
-
+  // Ahead of `value`: a recorded value beside a descriptor path is a name kept for grep, and falling
+  // back to it would write a stale name after a rename with nothing failing.
   if (entry.value_from_output) {
     if (!descriptor) {
       unresolved.push(`${name} needs descriptor path "${entry.value_from_output}" but none was given`);
@@ -183,6 +179,11 @@ for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.local
       continue;
     }
     payload[name] = String(value);
+    continue;
+  }
+
+  if (entry.value !== undefined) {
+    payload[name] = String(entry.value);
     continue;
   }
 
