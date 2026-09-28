@@ -72,7 +72,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -302,7 +302,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -345,7 +345,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -392,7 +392,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -490,7 +490,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -534,7 +534,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -621,7 +621,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -761,7 +761,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
@@ -823,7 +823,7 @@ jobs:
     steps:
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@4737d08e8da2c26adf8635a9619f19017ba2602e
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
