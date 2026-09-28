@@ -1,4 +1,3 @@
-/** The three rules together say something precise about what a verdict *is*. */
 import { caseBlock, rowTest } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, sourceOf, submissionFor } from "../../support/fixtures.js";
@@ -44,8 +43,6 @@ caseBlock(
       async () => {
         const h1 = fixtures.contracts["F-LEG-1"];
 
-        // H₂ is the dedicated cli-legacy mismatch target. It records the same (cliver, rsver) pair as H₁, so
-        // changing only the target really does reuse the same effective recipe.
         const h2 = fixtures.contracts["F-LEG-3"];
         if (h2.contract_id === h1.contract_id || h2.wasm_hash === h1.wasm_hash) {
           throw new Error(
@@ -59,7 +56,6 @@ caseBlock(
         const firstReport = await reportForJob(firstRun.body.result, firstRun.body.result?.wasm_hash);
         const first = await observeBuild(firstRun.jobId, firstRun, firstReport?.artifact);
 
-        // Recipe R unchanged; only the target moves.
         const rAgainstH2 = await submissionFor("F-LEG-1");
         rAgainstH2.target = {
           network: h2.network,
@@ -73,16 +69,12 @@ caseBlock(
         );
         const second = await observeBuild(secondRun.jobId, secondRun, secondReport?.artifact);
 
-        // HA1 — never `verified`. This is the assertion the case exists for.
         expect(secondRun.body.status).toBe("mismatch");
 
-        // HA2 — and it got there without building again.
         expectNoSecondBuild(evaluateNoSecondBuild(first, second));
 
         const identity = await ownVerifierIdentity();
 
-        // Step 3 — H₂'s published record carries the rebuilt hash (SO2), and it is R's output, not H₂'s
-        // deployed bytes.
         const h2Hash = secondRun.body.result?.wasm_hash ?? h2.wasm_hash!;
         const h2Status = await requireStatusObject(h2Hash);
         const h2Entry = ownEntryOf(h2Status.source_code_verifications, identity);
@@ -91,8 +83,6 @@ caseBlock(
         expect(h2Entry!.rebuilt_hash).not.toBe(h2Hash);
         expect(h2Entry!.rebuilt_hash).toBe(first.artifact?.result?.rebuilt_wasm_hash);
 
-        // Step 5 — H₁ is untouched. A verdict recomputation that overwrote the earlier result would silently
-        // retract a published `verified`.
         const h1Hash = firstRun.body.result?.wasm_hash ?? h1.wasm_hash!;
         const h1Status = await requireStatusObject(h1Hash);
         expect(ownEntryOf(h1Status.source_code_verifications, identity)?.status).toBe("verified");
@@ -133,7 +123,6 @@ caseBlock(
 
         const secondRun = await submitAndWait(body);
 
-        // HA1 — verified, no second report artifact, and neither published document changes.
         expect(secondRun.body.status).toBe("verified");
         expect(secondRun.body.result?.artifact_url).toBe(beforeReportUrl);
 
@@ -150,7 +139,6 @@ caseBlock(
         expect(sha256Hex(afterStatus.result.bytes)).toBe(sha256Hex(beforeStatus.result.bytes));
         expect(afterStatus.result.bytes).toEqual(beforeStatus.result.bytes);
 
-        // HA3 — the answer arrives through the *job*, not the submit response.
         expect(secondRun.jobId).toBeDefined();
         expect(secondRun.jobId).not.toBe(firstRun.jobId);
       },
@@ -159,17 +147,11 @@ caseBlock(
 
     rowTest(
       "a genuinely different source for the same hash is its own job, not an adopted verdict",
-      // This row needs a second source that is genuinely different *bytes* for the SAME target, and F-URI-PRIV
-      // is exactly that: GitHub's archive of 7bd0765, same contract source as F-LEG-1 against the same
-      // contract, a distinct full-archive hash because its README revision differs.
       missingFixture("F-URI-PRIV"),
       async () => {
-        // HA2, and the reason the rule was rescoped: source-to-bytes is many-to-one.
         const base = await submissionFor("F-LEG-1");
         const alternative = await submissionFor("F-LEG-1", await sourceOf("F-URI-PRIV"));
 
-        // The row's premise, asserted rather than assumed. Without this, a fixture that silently stops carrying
-        // its own source degrades this negative control into a tautology.
         expect(alternative.manifest.source_sha256).not.toBe(base.manifest.source_sha256);
         expect(alternative.manifest.source_uri ?? alternative.manifest.upload_id).toBeDefined();
         expect(alternative.manifest.bldopt).toEqual(base.manifest.bldopt);
@@ -186,8 +168,6 @@ caseBlock(
         );
         const second = await observeBuild(secondRun.jobId, secondRun, secondReport?.artifact);
 
-        // Before the reuse evidence: a job that failed early has no verdict to have adopted, and would
-        // otherwise reach `expectSecondBuildHappened` looking indistinguishable from reuse.
         expect(["verified", "mismatch"]).toContain(secondRun.body.status);
         expect(secondRun.jobId).not.toBe(firstRun.jobId);
 
@@ -212,7 +192,6 @@ caseBlock(
       "/identical_input_not_rerun — the same mismatching input returns the existing result",
       async () => {
         const firstRun = await submitAndWait(await submissionFor("F-LEG-3"));
-        // HA1 — and note this is `mismatch` on the job surface, not `failed`: the run succeeded.
         expect(firstRun.body.status).toBe("mismatch");
         const hash = firstRun.body.result?.wasm_hash ?? fixtures.contracts["F-LEG-3"].wasm_hash!;
         const beforeStatus = await requirePublishedStatus(hash);
@@ -224,7 +203,6 @@ caseBlock(
         const firstArtifactUrl = firstRun.body.result?.artifact_url;
         expect(firstArtifactUrl).toBeDefined();
 
-        // Upload IDs are single-use service capabilities.
         const secondRun = await submitAndWait(await submissionFor("F-LEG-3"));
         const secondReport = await reportForJob(secondRun.body.result, hash);
         if (!secondReport) {
@@ -232,10 +210,8 @@ caseBlock(
         }
         const second = await observeBuild(secondRun.jobId, secondRun, secondReport?.artifact);
 
-        // Rerunning it would burn a build slot to reproduce a result nobody disputed.
         expectNoSecondBuild(evaluateNoSecondBuild(first, second));
 
-        // HA3 — a repeated mismatch reuses the same immutable evidence and does not rewrite the status object.
         expect(secondRun.body.status).toBe("mismatch");
         expect(secondRun.body.result?.rebuilt_wasm_hash).toBe(firstRun.body.result?.rebuilt_wasm_hash);
         expect(secondRun.body.result?.artifact_url).toBe(firstArtifactUrl);
@@ -256,8 +232,6 @@ caseBlock(
       async () => {
         const hashOwner = fixtures.contracts["F-LEG-3"];
 
-        // Both public, so step 5 can retrieve them. A private candidate is not retained, and the case would
-        // then be asserting the absence of something it never asked to be stored.
         const s1 = await submissionFor("F-LEG-3", { is_public: true });
         const s2 = await submissionFor("F-MISMATCH-ALT", { is_public: true });
         expect(s2.manifest.source_sha256).not.toBe(s1.manifest.source_sha256);
@@ -276,11 +250,8 @@ caseBlock(
         );
         const second = await observeBuild(secondRun.jobId, secondRun, secondReport?.artifact);
 
-        // HA1 — a different `source_sha256` is a different key, so this really is a new build.
         expectSecondBuildHappened(evaluateNoSecondBuild(first, second));
 
-        // HA2 as written in the case file asserts "**two** mismatched records from this verifier, one per
-        // source".
         const hash = secondRun.body.result?.wasm_hash ?? hashOwner.wasm_hash!;
         const statusObject = await requireStatusObject(hash);
         expect(statusObject.source_code_verifications).toHaveLength(1);
@@ -289,18 +260,13 @@ caseBlock(
         expect(ours).toBeDefined();
         expect(ours!.status).toBe("mismatched");
 
-        // The entry describes S2, not S1 — which is what makes the second submission a real job rather than a
-        // no-op that returned the first one's answer.
         expect(ours!.rebuilt_hash).toBe(second.artifact?.result?.rebuilt_wasm_hash);
         expect(ours!.rebuilt_hash).not.toBe(first.artifact?.result?.rebuilt_wasm_hash);
 
-        // Both reports still resolve.
         expect(firstReport?.sha256).toBeDefined();
         expect(secondReport?.sha256).toBeDefined();
         expect(firstReport!.sha256).not.toBe(secondReport!.sha256);
 
-        // HA4 — each candidate archive is still retrievable by its own `source_sha256`, including the one the
-        // index no longer points at.
         for (const report of [firstReport!, secondReport!]) {
           const fileName = report.artifact.source?.source_file_name;
           expect(fileName).toBeDefined();

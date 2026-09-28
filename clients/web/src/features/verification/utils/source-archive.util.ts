@@ -1,9 +1,4 @@
-/**
- * `uploadArchiveFormat` (`packages/core/src/archive-format.ts`) is the authority and is deliberately copied
- * rather than imported: the web bundle does not depend on `@scvs/core`.
- */
-
-/** Enough for every marker below: `ustar` sits at offset 257, the other two at 0. */
+/** `ustar` sits at offset 257; the gzip and zip markers at 0. */
 export const archiveHeadBytes = 262;
 
 export type PickedArchiveFormat = "gzip" | "zip" | "tar" | "unknown";
@@ -25,17 +20,9 @@ const latin1 = (bytes: Uint8Array): string => {
   return out;
 };
 
-/** Only the head is materialised; the archive itself may be 50 MB. */
 export const readArchiveHead = async (file: File): Promise<Uint8Array> =>
   new Uint8Array(await file.slice(0, archiveHeadBytes).arrayBuffer());
 
-/**
- * Why the picked bytes are not an archive this door admits, or `null`.
- *
- * Judged on the magic number and never on the name, because that is what `POST /v1/uploads/source` does —
- * a name rule here is strictly narrower than the endpoint it guards, and refuses uploads the API accepts
- * (`archive.tar(2).gz`, the name a browser gives a re-downloaded tarball).
- */
 export const archiveFormatRefusal = (head: Uint8Array): string | null => {
   switch (sniffArchiveFormat(head)) {
     case "gzip":
@@ -48,15 +35,12 @@ export const archiveFormatRefusal = (head: Uint8Array): string | null => {
   }
 };
 
-/** The code verification-svc answers with when the submitted archive is not the one the deployed Wasm records. */
 export const sourceArchiveNotChainRecorded = "source_archive_not_chain_recorded";
 
-/** Why a picked archive cannot be the chain's. */
 export const chainSourceMismatchMessage = (chain: string, computed: string): string =>
   `The source archive you selected hashes to ${computed.toLowerCase()}, but this contract records ` +
   `source_sha256=${chain.toLowerCase()} on chain.`;
 
-/** Returns the refusal, or `null` when there is nothing to refuse. */
 export const chainSourceRefusal = (
   chainSourceSha256: string | undefined,
   computedSha256: string | undefined,

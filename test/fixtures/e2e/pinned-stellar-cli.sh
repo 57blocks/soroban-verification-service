@@ -1,25 +1,5 @@
 #!/usr/bin/env bash
 
-# Prints an executable, host-native Stellar CLI matching docker/stellar-cli.pin. Callers may override
-# it with SCVS_FIXTURE_STELLAR_BIN; otherwise each host downloads the pinned official release once and
-# reuses it from a local cache.
-#
-# ── There is no build here any more ───────────────────────────────────────────────────
-# This used to shallow-clone `stellar/stellar-cli`, merge PRs #2585 and #2586 into a pinned main
-# baseline, and `cargo install` the result — the same three-commit merge CI did, because the service
-# needed subcommands that exist in no release. Both mechanisms are retired and the pin is a plain
-# version, so the three variables this keyed its cache on (`MAIN_SHA`, `PR_2585_SHA`, `PR_2586_SHA`)
-# no longer exist. Its one caller, run-upgrade-normal-lifecycle.sh, needs `contract info meta` — a
-# released, stable command.
-#
-# ── Verified, not merely downloaded ─────────────────────────────────────────────────────────────
-# Upstream publishes no checksum asset, so the pin carries our own digests and both are checked, the
-# cache path included: a local cache directory is as mutable as the S3 one, and re-verifying is a
-# hash of 30 MB. Same rule and same reasoning as scripts/ci/fetch-or-build-stellar-cli.sh, which does
-# this for the images; this exists separately because that one is linux-only by design and writes into
-# docker/prebuilt/ for a COPY.
-#
-# Requires: curl, tar, shasum. No Rust toolchain, no git, no AWS credentials.
 scvs_pinned_stellar_cli() {
   local repo_root="$1"
   local cache_root="${SCVS_FIXTURE_STELLAR_CACHE_DIR:-$repo_root/artifacts/e2e-fixtures/stellar-cli-cache}"
@@ -36,8 +16,6 @@ scvs_pinned_stellar_cli() {
   source "$pin_file"
   : "${STELLAR_CLI_VERSION:?docker/stellar-cli.pin must set STELLAR_CLI_VERSION}"
 
-  # Host-native, because the caller executes what this prints. The pin names linux digests
-  # unsuffixed (the images' platform) and darwin ones with a DARWIN segment.
   case "$(uname -s)" in
     Darwin) platform=apple-darwin;      suffix=DARWIN_ ;;
     Linux)  platform=unknown-linux-gnu; suffix=        ;;
@@ -60,8 +38,7 @@ scvs_pinned_stellar_cli() {
   local expected_tarball="${!tarball_var:?docker/stellar-cli.pin must set $tarball_var}"
   local expected_binary="${!binary_var:?docker/stellar-cli.pin must set $binary_var}"
 
-  # Keyed on the pinned binary digest rather than on the version, so a pin bump that keeps the tag
-  # (a re-cut release) still misses, and two checkouts on different tags coexist.
+  # Keyed on the binary digest, so a re-cut release under the same tag still misses the cache.
   cache_dir="$cache_root/$expected_binary"
   cli_bin="$cache_dir/stellar"
   if [[ -x "$cli_bin" ]]; then

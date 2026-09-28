@@ -2,14 +2,6 @@ import { jest } from "@jest/globals";
 import { ScvsLogger } from "@scvs/core";
 import { BatchEventHandlerService } from "../src/modules/batch-events/batch-event-handler.service.js";
 
-/**
- * The router that turns "Batch job X finished" into "rebuild R produced these bytes". It had no test of its
- * own, and one of its branches *consumes the message* — an event routed into it is gone, so a wrong turn here
- * loses the only notification that a rebuild ended.
- *
- * The real parser runs: these are the event shapes Batch actually delivers, not a stand-in for them.
- */
-
 const JOB_ID = "b1f0c9a2-0000-4000-8000-000000000001";
 
 const batchEvent = (over: Record<string, unknown> = {}) => ({
@@ -37,11 +29,7 @@ function router() {
   return { handler, getRebuild, getEnvironment, recordRebuild, recordEnvironment };
 }
 
-/**
- * What the handler asked its logger to write. A spy on the prototype, not on `process.stdout` — patching the
- * streams fights jest's own per-test output capture, and doing so measurably slowed the suites that run after
- * this one in the same `--runInBand` process.
- */
+/** Spies on the logger prototype: patching `process.stdout` fights jest's per-test output capture. */
 function warnings(): { calls: string[] } {
   const captured: string[] = [];
   jest
@@ -111,8 +99,6 @@ describe("a Batch job no rebuild is tracking", () => {
     },
   );
 
-  // The ordering the source comments call out: the drop below *consumes the message*, so the composition
-  // lookup has to happen first. A refactor that reorders these two loses every composition's terminal event.
   it("asks the compositions before dropping it, and only then drops it", async () => {
     const { handler, getEnvironment, recordRebuild, recordEnvironment } = router();
 
@@ -144,8 +130,6 @@ describe("an event this build cannot parse", () => {
     expect(recordEnvironment).not.toHaveBeenCalled();
   });
 
-  // A Batch job-state-change event carries `detail.container.environment`, which is where the job's
-  // **presigned S3 PUT URL** lives. The unparsed-event log summarises the shape and must never echo it.
   it("never echoes the event, which carries the job's presigned upload URL", async () => {
     const { handler } = router();
     const secret = "https://sv-staging.s3.amazonaws.com/x?X-Amz-Signature=deadbeefdeadbeefdeadbeef";
@@ -180,7 +164,6 @@ describe("an event this build cannot parse", () => {
 
     const logs = warned.calls.join("\n");
     expect(logs).toContain("Something Else");
-    // Eight keys at most, so an event that is not ours cannot flood the log with its own shape.
     const described = /keys: ([^"\\]*)/.exec(logs)?.[1] ?? "";
     expect(described.split(",").length).toBeLessThanOrEqual(8);
   });

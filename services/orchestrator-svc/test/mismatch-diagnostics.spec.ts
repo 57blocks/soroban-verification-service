@@ -10,8 +10,6 @@ import {
 } from "../src/modules/verification-pipeline/wasm-compare.util.js";
 import type { AppConfigService } from "../src/config/configuration.js";
 
-/** Why a mismatch happened. */
-
 const getObjectBytesBounded = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.unstable_mockModule("@scvs/aws", () => ({
@@ -30,7 +28,6 @@ const { MismatchDiagnosticsService } = await import(
 
 const MAX_BYTES = 16 * 1024 * 1024;
 
-/** Two real, minimal Wasm binaries — a header plus one custom section — differing only in that section's name. */
 function wasmWithCustomSection(name: string): Uint8Array {
   const nameBytes = Buffer.from(name, "utf8");
   const payload = Buffer.concat([Buffer.from([nameBytes.length]), nameBytes]);
@@ -93,7 +90,6 @@ describe("describeWasmMismatch", () => {
   it("still summarises the rebuilt side when there is nothing to diff against", () => {
     const compare = describeWasmMismatch(undefined, REBUILT);
 
-    // The half we have is worth publishing: "your build produced this" is actionable alone.
     expect(compare.rebuilt?.custom_sections).toEqual(["contractspecv0"]);
     expect(compare.deployed).toBeUndefined();
     expect(compare.parse_errors?.deployed).toContain("not available");
@@ -104,7 +100,6 @@ describe("describeWasmMismatch", () => {
 
     expect(compare.parse_errors?.rebuilt).toBeDefined();
     expect(compare.rebuilt).toBeUndefined();
-    // The readable side survives, so the submitter still learns something.
     expect(compare.deployed?.custom_sections).toEqual(["contractmetav0"]);
   });
 
@@ -135,7 +130,6 @@ describe("MismatchDiagnosticsService", () => {
     expect(explained?.build_image).toBe(EXISTING.build_image);
     expect(explained?.wasm_compare?.custom_section_diff?.only_rebuilt).toEqual(["contractspecv0"]);
     expect(explained?.likely_causes?.length).toBeGreaterThan(0);
-    // Fetched from this rebuild's own key, at the same ceiling the verdict's hash used.
     expect(getObjectBytesBounded).toHaveBeenCalledWith(
       expect.anything(),
       "scvs-staging",
@@ -154,8 +148,6 @@ describe("MismatchDiagnosticsService", () => {
       deployedWasmPath: deployedPath,
     });
 
-    // Required field, and the column is validated at publication — so this must be present or the whole object
-    // must be withheld.
     expect(explained?.runner).toBe("stellar_contract_verify");
     expect(() => parseDto(SandboxDiagnostics, explained)).not.toThrow();
   });
@@ -171,7 +163,6 @@ describe("MismatchDiagnosticsService", () => {
     });
 
     expect(explained).toBeUndefined();
-    // And it does not waste the fetch discovering that.
     expect(getObjectBytesBounded).not.toHaveBeenCalled();
   });
 
@@ -209,7 +200,6 @@ describe("MismatchDiagnosticsService", () => {
       existing: EXISTING,
     });
 
-    // The CLI's workdir is a temp directory; losing it costs one half of the diff, not the diagnostics.
     expect(explained?.wasm_compare?.rebuilt?.custom_sections).toEqual(["contractspecv0"]);
     expect(explained?.wasm_compare?.parse_errors?.deployed).toBeDefined();
   });

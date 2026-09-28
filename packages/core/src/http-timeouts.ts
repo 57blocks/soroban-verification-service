@@ -1,29 +1,13 @@
 import type { Server } from "node:http";
 
-/**
- * The three `http.Server` deadlines every serving entrypoint sets after `listen()`. Left unset, Node supplies
- * its own — which is not a neutral default: `keepAliveTimeout` is 5 s, below every load balancer's idle
- * timeout, and that mismatch is what produces intermittent 502s under an ALB.
- */
 export type HttpServerTimeouts = {
-  /** From the first byte of a request to the last byte of its body. Bounds how long one connection may hold a buffered upload. */
   requestTimeoutMs: number;
-  /** How long the request head may take to arrive. */
   headersTimeoutMs: number;
-  /** How long an idle connection is kept for reuse. Must exceed the idle timeout of whatever fronts this server. */
   keepAliveTimeoutMs: number;
-  /**
-   * The idle timeout of the proxy or balancer in front of this server, which `keepAliveTimeoutMs` is checked
-   * against. `0` declares that nothing fronts it and skips that check — a loopback-only listener, or a
-   * self-hosted deployment exposing the port directly.
-   */
+  /** `0` means nothing fronts this server and skips the keep-alive check. */
   frontingProxyIdleTimeoutMs: number;
 };
 
-/**
- * Rejected rather than clamped: every one of these means the operator asked for a deadline that cannot hold,
- * and a server that silently substituted a working value would be back to an unreviewed default.
- */
 export class HttpTimeoutConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -33,31 +17,14 @@ export class HttpTimeoutConfigError extends Error {
 
 const FIELDS = ["requestTimeoutMs", "headersTimeoutMs", "keepAliveTimeoutMs"] as const;
 
-/**
- * Node's timer ceiling. Above it the duration is silently truncated to this value — roughly 24 days, not the
- * ~1 ms that `setTimeout`'s own overflow rule would give — and the configured number stops meaning anything.
- * Measured, not assumed: `TimeoutOverflowWarning` says "truncated to 2147483647".
- */
+/** Node's timer ceiling; larger values are silently truncated to it. */
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
-/**
- * Applies the three deadlines to an already-listening server.
- *
- * Call it *after* `listen()`: Nest has no `http.Server` to hand out before then.
- *
- * Only one relationship between them is enforced, and it is the one with a real failure mode — see
- * `frontingProxyIdleTimeoutMs`. `requestTimeout` and `headersTimeout` are independent: a stalled request head
- * is closed at whichever of the two is shorter, so neither ordering between them is required. Measured, because
- * the opposite is widely repeated and this module used to assert it.
- *
- * Both are swept on `connectionsCheckingInterval` (Node's default: 30_000 ms), not armed per socket, so the
- * effective kill time for a stalled request is its deadline plus up to one sweep.
- */
+/** Call after `listen()`: Nest has no `http.Server` before then. */
 export function applyHttpServerTimeouts(server: Server, timeouts: HttpServerTimeouts): void {
   for (const field of FIELDS) {
     const value = timeouts[field];
-    // Zero is Node's spelling of "no deadline", so it has to be refused here rather than passed through — it is
-    // the exact fail-open this function exists to remove.
+    // Node reads 0 as "no deadline", so it is refused.
     if (!Number.isInteger(value) || value <= 0) {
       throw new HttpTimeoutConfigError(
         `${field} must be a positive whole number of milliseconds; got ${JSON.stringify(value)}`,
@@ -84,9 +51,6 @@ export function applyHttpServerTimeouts(server: Server, timeouts: HttpServerTime
 
   const { requestTimeoutMs, headersTimeoutMs, keepAliveTimeoutMs, frontingProxyIdleTimeoutMs } = timeouts;
 
-  // The 502 this whole module exists for, enforced rather than left to the default: a balancer that holds an
-  // idle connection longer than the server does will reuse one the server has already closed. `0` is how a
-  // deployment with nothing in front of it says so — it is not a disabled check by accident.
   if (frontingProxyIdleTimeoutMs > 0 && keepAliveTimeoutMs <= frontingProxyIdleTimeoutMs) {
     throw new HttpTimeoutConfigError(
       `keepAliveTimeoutMs (${keepAliveTimeoutMs}) must exceed the fronting proxy's idle timeout ` +
@@ -100,27 +64,13 @@ export function applyHttpServerTimeouts(server: Server, timeouts: HttpServerTime
   server.keepAliveTimeout = keepAliveTimeoutMs;
 }
 
-/**
- * The idle timeout of the load balancer in front of the public services, in milliseconds.
- *
- * It is an AWS default this deployment has never overridden, and it lives here as a number because
- * `keepAliveTimeoutMs` below has to be compared against something. Terraform owns the real value in another
- * repository; if it is ever raised, this constant and the default under it move in the same change.
- */
+/** The ALB idle timeout (AWS default); must track the value the infrastructure sets. */
 export const FRONTING_PROXY_IDLE_TIMEOUT_MS = 60_000;
 
-/**
- * The defaults all three serving entrypoints fall back to, in one place so the three services cannot drift
- * apart and so a change to any of them is a change to a single reviewed line.
- */
 export const HTTP_TIMEOUT_DEFAULTS: HttpServerTimeouts = {
-  // Bounds the whole request, so it is also what bounds a connection holding verification-svc's buffered
-  // upload. 30 s against a 50 MiB ceiling asks ~14 Mbit/s of a submitter; that trade was made deliberately
-  // when the upload path was hardened, and this only carries it to the other two services.
   requestTimeoutMs: 30_000,
   headersTimeoutMs: 10_000,
-  // NOT Node's 5 s. Below the balancer's idle timeout, the balancer reuses a connection Node has already
-  // closed and answers 502 to a client that did nothing wrong — the whole reason this module exists.
+  // Must exceed the balancer's idle timeout, or it reuses connections Node has closed and answers 502.
   keepAliveTimeoutMs: 65_000,
   frontingProxyIdleTimeoutMs: FRONTING_PROXY_IDLE_TIMEOUT_MS,
 };

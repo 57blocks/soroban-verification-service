@@ -4,12 +4,6 @@ import { join } from "node:path";
 import { resultStorageConfigFromEnv } from "./result-storage-env.js";
 import type { ResultStorageConfig, S3ResultStorageConfig } from "./storage-backend.js";
 
-/**
- * The reader answers with the exact shape `createResultStorage` takes, or throws. What it must never do is
- * return something a caller has to translate or null-assert its way through — that is what produced two
- * translators with two different failure behaviours.
- */
-
 const KEYS = [
   "SCVS_PUBLISHER_STORAGE",
   "SCVS_PUBLIC_RESULT_ROOT",
@@ -41,7 +35,6 @@ function test(name: string, env: Record<string, string>, fn: () => void): void {
   }
 }
 
-/** The union's object arm, so a case can read `bucket` without a null assertion — the thing this replaced. */
 function objectArm(config: ResultStorageConfig): S3ResultStorageConfig {
   assert.notEqual(config.kind, "filesystem");
   if (config.kind === "filesystem") throw new Error("unreachable");
@@ -79,7 +72,6 @@ test("the public root loses its trailing slashes", { SCVS_PUBLIC_RESULT_ROOT: "h
 test("s3 with a bucket is a complete object config", { SCVS_PUBLISHER_STORAGE: "s3", SCVS_PUBLISHER_BUCKET: "sv-dev-results" }, () => {
   const config = objectArm(resultStorageConfigFromEnv());
   assert.equal(config.bucket, "sv-dev-results");
-  // The empty prefix is load-bearing: the result tree sits at the bucket root.
   assert.equal(config.prefix, "");
   assert.equal(config.endpoint, undefined);
 });
@@ -96,8 +88,6 @@ test("the kind is normalised before it is judged", { SCVS_PUBLISHER_STORAGE: "S3
   assert.equal(resultStorageConfigFromEnv().kind, "s3");
 });
 
-// Both of these used to pass boot. One service then threw on its first publish and the other logged an error
-// and answered 503 to every wasm-status read for the life of the process.
 test("an object backend with no bucket throws", { SCVS_PUBLISHER_STORAGE: "s3" }, () => {
   assert.throws(() => resultStorageConfigFromEnv(), /requires SCVS_PUBLISHER_BUCKET/);
 });

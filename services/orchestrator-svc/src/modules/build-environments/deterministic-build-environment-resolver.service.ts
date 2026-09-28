@@ -10,7 +10,6 @@ import { BuildEnvironmentResolver } from "./build-environment-resolver.js";
 
 export { CURRENT_COMPOSE_TEMPLATE_VERSION };
 
-/** Thrown when `resolve()` is called with a `sep58Image` that fails image policy. */
 export class BuildEnvironmentResolutionError extends Error {
   constructor(message: string) {
     super(message);
@@ -18,10 +17,6 @@ export class BuildEnvironmentResolutionError extends Error {
   }
 }
 
-/**
- * No network call, no database read, no submitter-reachable input — the property that makes it safe to run on
- * every preparing tick.
- */
 @Injectable()
 export class DeterministicBuildEnvironmentResolver extends BuildEnvironmentResolver {
   async resolve(input: {

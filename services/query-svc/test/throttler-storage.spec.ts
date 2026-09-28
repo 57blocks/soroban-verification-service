@@ -1,10 +1,5 @@
 import { FixedWindowThrottlerStorage } from "../src/common/fixed-window-throttler.storage.js";
 
-/**
- * The bundled `ThrottlerStorageService` keys its decay timers by throttler NAME, so unblocking one caller
- * cancels every caller's pending decrement — and `increment` refreshes the window's end without resetting
- * `totalHits`, so those counts never come down. The first two cases fail against it.
- */
 const NAME = "default";
 const TTL = 200;
 const BLOCK = 100;
@@ -21,20 +16,15 @@ const hit = (key: string) => storage.increment(key, TTL, LIMIT, BLOCK, NAME);
 
 describe("one caller's counter is its own", () => {
   it("does not inherit a neighbour's count when that neighbour leaves the blocked state", async () => {
-    // A spends its budget and is blocked.
     for (let i = 0; i < LIMIT + 1; i += 1) await hit("attacker");
     expect((await hit("attacker")).isBlocked).toBe(true);
 
-    // B is well inside its own budget while A's block is still standing.
     await sleep(BLOCK + 20);
     await hit("bystander");
     await hit("bystander");
 
-    // The request that takes A out of the blocked state. Against the bundled storage this is what cancels B's
-    // pending decrements and freezes its count.
     await hit("attacker");
 
-    // Two full windows later B's count must have gone with them.
     await sleep(TTL * 2 + 20);
 
     const verdicts: boolean[] = [];
@@ -43,7 +33,6 @@ describe("one caller's counter is its own", () => {
   });
 
   it("survives the attacker cycling in and out of the block repeatedly", async () => {
-    // The escalation the single cycle above only hints at: each cycle ratcheted every other count upward.
     for (let cycle = 0; cycle < 3; cycle += 1) {
       for (let i = 0; i < LIMIT + 1; i += 1) await hit("attacker");
       await hit("bystander");
@@ -77,7 +66,6 @@ describe("the window itself", () => {
     const blocked = await hit("caller");
     expect(blocked.isBlocked).toBe(true);
 
-    // Hammering while blocked is not counted, so the block still expires on schedule.
     for (let i = 0; i < 20; i += 1) await hit("caller");
     await sleep(BLOCK + 20);
 
@@ -98,8 +86,6 @@ describe("records do not accumulate forever", () => {
     for (let i = 0; i < 50; i += 1) await hit(`caller-${i}`);
     expect(inspect().size).toBe(50);
 
-    // The sweep runs at most once per window, on the next request through — never on a timer, which would
-    // hold the event loop open and reintroduce the background state this class avoids.
     await sleep(TTL + 20);
     await hit("someone-else");
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Callers: deploy.yml (deploy-service, deploy-web) and rollback.yml.
 set -euo pipefail
 
 CLUSTER="${1:?usage: roll-service-to-alias.sh <cluster> <expected-digest> <service>...}"
@@ -14,16 +13,7 @@ POLL_SECONDS="${ROLLOUT_POLL_SECONDS:-15}"
 SETTLE_ATTEMPTS="${ROLLOUT_SETTLE_ATTEMPTS:-12}"
 SETTLE_SECONDS="${ROLLOUT_SETTLE_SECONDS:-10}"
 
-# invariants.md rule 29: CI owns the task definition, and every revision pins an exact commit's digest.
-# deploy.yml passes TASK_DEFINITION_ARN to point a service at the revision it just registered.
-# rollback.yml passes it too now, pointing at the ACTIVE revision that pins the commit being rolled
-# back to — found by scanning the family, not by an alias. Neither caller relies on the alias tag to
-# determine what a service is running; it is deploy-time bookkeeping only.
-#
-# An env var rather than a positional argument, deliberately: rollback.yml passes N service names
-# positionally ("$CLUSTER" "$DIGEST" $SERVICES), so a fourth positional would be read as a service.
-# It is also single-service by construction — one ARN cannot serve a multi-service call — hence the
-# guard below rather than a silent mis-assignment.
+# An env var, not a positional: callers pass service names positionally.
 ROLL_ARGS=(--force-new-deployment)
 if [ -n "${TASK_DEFINITION_ARN:-}" ]; then
   if [ "${#SERVICES[@]}" -ne 1 ]; then
@@ -33,7 +23,6 @@ if [ -n "${TASK_DEFINITION_ARN:-}" ]; then
   ROLL_ARGS=(--task-definition "$TASK_DEFINITION_ARN")
 fi
 
-# Poll the deployment this run created, by id.
 declare -a DEPLOYMENT_IDS=()
 for SERVICE in "${SERVICES[@]}"; do
   ID=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" "${ROLL_ARGS[@]}" \
@@ -65,7 +54,6 @@ for i in "${!SERVICES[@]}"; do
         exit 1
         ;;
       None|"")
-        # The deployment is gone from the service's list: a circuit-breaker rollback superseded it.
         echo "::error::$SERVICE: $DEPLOYMENT is no longer listed — it was superseded, most likely by a rollback"
         exit 1
         ;;

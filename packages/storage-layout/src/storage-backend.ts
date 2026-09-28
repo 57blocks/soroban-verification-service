@@ -15,14 +15,8 @@ import {
   type S3Client,
 } from "@scvs/aws";
 
-/**
- * Storage-backend abstraction used by publish.ts/read.ts — same shape as the old
- * `apps/api/src/publisher-storage.ts` `PublisherStorage` type.
- */
-/** An opaque token identifying the exact stored bytes a conditional write may be pinned to. */
 export type StorageVersion = string;
 
-/** `conflict` means someone else wrote since the version was read — re-read, recompute, retry. */
 export type StorageWriteResult = "written" | "conflict";
 
 export type ResultStorage = {
@@ -30,18 +24,12 @@ export type ResultStorage = {
   publicRoot: string;
   readText(path: string): Promise<string | undefined>;
   writeText(path: string, content: string, contentType: string): Promise<void>;
-  // Binary sibling of readText/writeText — for content that isn't UTF-8 text (e.g. the source tarball this
-  // package's publishSource writes).
   readBytes(path: string): Promise<Uint8Array | undefined>;
   writeBytes(path: string, content: Uint8Array, contentType: string): Promise<void>;
-  // Existence check with no content transfer — for a caller that only needs to know "is this already
-  // published", not read it.
   exists(path: string): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
-  // Whether this backend's conditional writes hold ACROSS processes. `filesystem` serialises writers within
-  // one process but cannot reach past it.
+  // Whether conditional writes hold across processes; `filesystem` serialises only within one process.
   readonly crossProcessAtomicWrites: boolean;
-  /** Reads text with the version token `writeTextIfUnchanged` pins against. */
   readTextVersioned(path: string): Promise<{ text: string; version: StorageVersion } | undefined>;
   /** Writes only if the stored bytes are still at `expected`; `null` requires the object to be absent. */
   writeTextIfUnchanged(
@@ -66,7 +54,6 @@ export type S3ResultStorageConfig = {
   accessKeyId?: string;
   secretAccessKey?: string;
   forcePathStyle?: boolean;
-  /** Reuse an already-constructed client instead of building one from the fields above. */
   client?: S3Client;
 };
 
@@ -74,7 +61,6 @@ export type ResultStorageConfig =
   | ({ kind: "filesystem" } & FilesystemResultStorageConfig)
   | ({ kind: "s3" | "r2" } & S3ResultStorageConfig);
 
-/** Builds the local-disk or S3-backed `ResultStorage` implementation for the given config. */
 export function createResultStorage(config: ResultStorageConfig): ResultStorage {
   if (config.kind === "filesystem") {
     return new FilesystemResultStorage(config.root, config.publicRoot);
@@ -86,9 +72,7 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
     secretAccessKey: config.secretAccessKey,
     forcePathStyle: config.forcePathStyle,
   });
-  // `kind` names the config shape, not the service answering: `getResultStorageConfig` fills `endpoint` from
-  // the R2 variables for every non-filesystem kind, and an injected `client`'s endpoint cannot be read back
-  // from here. Only AWS S3's conditional writes have been measured.
+  // Only real AWS S3 (no custom endpoint, no injected client) is known to honour conditional writes.
   const conditionalWritesVerified = config.kind === "s3" && !config.endpoint && !config.client;
   return new S3ResultStorage(
     config.kind,
@@ -103,8 +87,6 @@ export function createResultStorage(config: ResultStorageConfig): ResultStorage 
 class FilesystemResultStorage implements ResultStorage {
   readonly kind = "filesystem" as const;
 
-  // POSIX has no compare-and-swap-replace, and a lock file's staleness cannot distinguish a dead holder
-  // from a slow one, so the serialisation below reaches no further than this process.
   readonly crossProcessAtomicWrites = false;
 
   constructor(
@@ -162,8 +144,7 @@ class FilesystemResultStorage implements ResultStorage {
     expected: StorageVersion | null,
   ): Promise<StorageWriteResult> {
     const target = join(this.root, path);
-    // The compare and the rename below are several await points apart: unserialised, two writers pinned to
-    // one version both pass the compare and the loser's bytes replace the winner's.
+    // The compare and the rename are await points apart, so writers to one path must be serialised.
     return withFilesystemWriteLock(resolve(target), async () => {
       const current = await this.readText(path);
       const actual = current === undefined ? null : versionOf(current);
@@ -193,7 +174,6 @@ class S3ResultStorage implements ResultStorage {
     private readonly bucket: string,
     private readonly prefix: string,
     readonly publicRoot: string,
-    /** Decided by `createResultStorage`, the only place that sees the whole config. */
     readonly crossProcessAtomicWrites: boolean,
   ) {}
 
@@ -236,7 +216,6 @@ class S3ResultStorage implements ResultStorage {
       expected,
       cacheControlForPath(path),
     );
-    // A vanished object carries the same instruction for the caller as a conflict: re-read and recompute.
     return result === "written" ? "written" : "conflict";
   }
 
@@ -266,28 +245,21 @@ function cacheControlForPath(path: string): string {
   return "public, max-age=60";
 }
 
-/**
- * Serialises this process's conditional writes to one target path. Module scope, not per instance:
- * `buildResultStorage` hands out a fresh `ResultStorage` on several orchestrator paths. The key is
- * `resolve`d but not realpath'd, so two roots reaching one directory through a symlink are two keys.
- */
+/** Module scope, not per instance: callers construct several storages over one root. */
 const filesystemWriteLocks = new Map<string, Promise<unknown>>();
 
 function withFilesystemWriteLock<T>(target: string, fn: () => Promise<T>): Promise<T> {
   const previous = filesystemWriteLocks.get(target) ?? Promise.resolve();
   const next = previous.then(fn, fn);
-  // Swallow so a failed attempt does not poison the chain for the next caller on this path — each caller
-  // still observes its own rejection via the returned `next`.
+  // Swallowed so one failure does not poison the chain; each caller still sees its own rejection via `next`.
   const tail = next.catch(() => undefined);
   filesystemWriteLocks.set(target, tail);
-  // Evict once settled, but only if nobody chained onto this path in the meantime.
   void tail.finally(() => {
     if (filesystemWriteLocks.get(target) === tail) filesystemWriteLocks.delete(target);
   });
   return next;
 }
 
-/** The filesystem backend's version token: derived from the content, so it cannot drift from the bytes. */
 function versionOf(content: string): StorageVersion {
   return createHash("sha256").update(content).digest("hex");
 }

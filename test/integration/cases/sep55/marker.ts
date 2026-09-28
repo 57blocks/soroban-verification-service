@@ -1,27 +1,19 @@
-/**
- * The read path every SEP-55 case shares: submit → poll to terminal → the report the job's own pointer names →
- * `trust.sep55_attestation_present`.
- */
 import { env } from "../../support/env.js";
 import { fixture, submissionFor } from "../../support/fixtures.js";
 import { submitAndWait, type TerminalJob } from "../../support/job.js";
 import { reportForJob } from "../../support/result-tree.js";
 import type { SubmitBody, VerificationArtifact } from "../../support/types.js";
 
-/** The job statuses that mean the deployment published a result, and therefore wrote a report. */
 const PUBLISHING_JOB_STATUSES: readonly string[] = ["verified", "mismatch"];
 
 export interface MarkerObservation {
   readonly terminal: TerminalJob & { readonly jobId: string };
   readonly artifact: VerificationArtifact;
-  /** The report's own published bytes, for the single-representation check. */
   readonly artifactJson: string;
   readonly wasmHash: string;
-  /** `trust.sep55_attestation_present`, read without narrowing its type first. */
   readonly marker: unknown;
 }
 
-/** A published verdict is a **precondition**, not an assertion. */
 export function requirePublishedVerdict(
   terminal: TerminalJob,
   fixtureId: string,
@@ -44,12 +36,10 @@ export function requirePublishedVerdict(
   );
 }
 
-/** Submits a fixture and returns the report its own job pointer names. */
 export async function observeMarker(
   fixtureId: string,
   caseId: string,
   options: {
-    /** A target-only body, for a cli-58 fixture whose manifest must be inferred from chain metadata. */
     readonly body?: SubmitBody;
     readonly isPublic?: boolean;
   } = {},
@@ -93,18 +83,15 @@ export async function observeMarker(
   };
 }
 
-/** Asserts the marker's value *and* that it is a boolean. */
 export function expectMarker(observation: MarkerObservation, expected: boolean): void {
   expect(typeof observation.marker).toBe("boolean");
   expect(observation.marker).toBe(expected);
 }
 
-/** The marker has exactly **one** representation in the published report. */
 export function expectSingleMarkerRepresentation(observation: MarkerObservation): void {
   const occurrences = observation.artifactJson.match(/sep55/gi)?.length ?? 0;
   expect(occurrences).toBe(1);
   expect(Object.keys(observation.artifact.trust)).toContain("sep55_attestation_present");
 }
 
-/** A generous ceiling: one submission, one real rebuild, one publication. */
 export const MARKER_CASE_TIMEOUT_MS = env.jobTimeoutMs + 120_000;

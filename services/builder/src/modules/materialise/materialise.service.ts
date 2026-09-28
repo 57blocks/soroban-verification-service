@@ -32,30 +32,19 @@ import { jobParamsInput, readJobParams } from "../builder/job-params.js";
 import { toMaterializeSourceInput } from "../builder/materialize-input.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** It downloads, clones and extracts, then writes a handoff document and exits. */
-/** The materialiser's own bound on a `tar` listing, independent of the CLI's 600s budget. */
 const TAR_TIMEOUT_DEFAULT_MS = 30_000;
 
-/**
- * A limit only counts when it is a positive number. `@IsNumberString` accepts `0` and `-1`, and `??` would pass
- * either straight through.
- */
+/** `@IsNumberString` accepts `0` and `-1`, and `??` would pass either straight through. */
 function positiveOr(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-/**
- * The refusal for an archive that is not the one the deployed Wasm records — pure, so its wording is testable
- * without a filesystem.
- */
 function chainSourceRefusal(hashes: { expected: string; canonical: string; depth: number }): {
   ok: false;
   reason: RebuildErrorCode;
   status: string;
   detail: string;
 } {
-  // A peel happened, so the hash being reported is one the submitter never computed — name the file it came
-  // from, or the number reads as though we hashed something else than what they sent.
   const measured =
     hashes.depth > 0
       ? `the archive inside what you submitted hashes to ${hashes.canonical}`
@@ -80,7 +69,6 @@ export class MaterialiseService {
 
   constructor(@Inject(ConfigService) private readonly configService: AppConfigService) {}
 
-  /** Exit code. Non-zero means a crash — a source that cannot be fetched is a successful `ok: false`. */
   async run(): Promise<number> {
     const job = await readJobParams(
       MaterialiseJobParams,
@@ -101,8 +89,7 @@ export class MaterialiseService {
       await writeHandoff(path, handoff);
 
       this.logger.log("handoff written", { ok: handoff.ok, handoff_path: path });
-      // Always 0 on a written handoff: `dependsOn: SUCCESS` gates the runner, and a non-zero exit here would
-      // stop it from ever emitting the `cli_failure` artifact the trusted side reads.
+      // Always 0 on a written handoff: the runner starts only on SUCCESS and must still emit the `cli_failure` artifact.
       return 0;
     });
   }
@@ -137,8 +124,6 @@ export class MaterialiseService {
       };
     }
 
-    // Peeling and extraction, both out of the runner. The runner now requires a directory for the build path
-    // and says so loudly if it gets anything else — see run-cli.ts.
     const prepared = await this.prepareSource(result.source, job);
     if (!prepared.ok) {
       return {
@@ -146,8 +131,6 @@ export class MaterialiseService {
         schema: HANDOFF_SCHEMA,
         job_id: jobId,
         reason: prepared.reason,
-        // The chain-source refusal below names its own status; everything else that fails in `prepareSource`
-        // really is an extraction fault.
         status: prepared.status ?? "extraction_failed",
         detail: prepared.detail,
       };
@@ -156,7 +139,6 @@ export class MaterialiseService {
     return { ok: true, schema: HANDOFF_SCHEMA, job_id: jobId, source: prepared.source };
   }
 
-  /** Turn what was fetched into the two things the runner needs: an extracted tree for the build path, and. */
   private async prepareSource(
     source: MaterializedSource,
     job: MaterialiseJobParams,
@@ -172,13 +154,10 @@ export class MaterialiseService {
         detail: "The materialized source path no longer exists.",
       };
     }
-    // A git checkout is already a tree: nothing to peel, and no archive for the verify path to hash.
     if (info.isDirectory()) return { ok: true, source };
 
     const extractRoot = await mkdtemp(join(this.handoffRoot(), "scvs-src-"));
     const limits = this.archiveLimits();
-    // `extractCanonicalArchive` takes the runtime config only for its `tar` timeout; nothing else on it is read
-    // here, and this container has no runtime to configure.
     const config = {
       cliTimeoutMs: this.configService.get("tarTimeoutMs", { infer: true }) ?? TAR_TIMEOUT_DEFAULT_MS,
     };
@@ -195,7 +174,6 @@ export class MaterialiseService {
       const extracted = await extractCanonicalArchive({
         archivePath: canonical.archivePath,
         destRoot: extractRoot,
-        // Already read by the peel, on this exact archive — see CanonicaliseResult.listing.
         listing: canonical.listing,
         // Charged, not reset: peeling has already spent part of the ceiling.
         limits: canonical.limits,
@@ -218,8 +196,6 @@ export class MaterialiseService {
         });
       }
 
-      // Depth 0 means the canonical archive IS the submitted archive, whose hash the trusted side has already
-      // verified.
       const differsFromSubmitted = canonical.canonicalisation.depth > 0;
       const uploaded = differsFromSubmitted
         ? await this.uploadCanonicalArchive(canonicalPath, job.canonical_source_upload_url)
@@ -230,11 +206,7 @@ export class MaterialiseService {
         outer_format: canonical.canonicalisation.outer_format,
         canonical_format: canonical.canonicalisation.canonical_format,
         canonical_sha256: canonicalSha256,
-        // Echoed so the record names what it compared against, and so the runner can tell the CLI's source-hash
-        // refusal is coming without reading the CLI's prose for it.
         ...(expectedSourceSha256 ? { expected_source_sha256: expectedSourceSha256 } : {}),
-        // The only two the gate above leaves reachable. `adopted`/`hash_mismatch`/`failed` stay in the contract
-        // for rows already written; remapping them would rewrite their meaning.
         reconstruction: expectedSourceSha256 ? "not_attempted" : "no_oracle",
         uploaded,
       };
@@ -253,23 +225,18 @@ export class MaterialiseService {
           ...source,
           workspace_path: extracted.source_root,
           canonical_path: canonicalPath,
-          // Reported whenever it says something: a peel happened, or a rebuild was considered.
           ...(canonical.canonicalisation.depth > 0 || record.reconstruction !== "no_oracle"
             ? { canonicalisation: record }
             : {}),
         },
       };
     } finally {
-      // The tree is out and any peeled archive has been adopted, so the intermediate levels have no reader
-      // left.
       await canonical.dispose();
     }
   }
 
-  /** PUT the canonical archive to the one write target this container is granted. */
   private async uploadCanonicalArchive(archivePath: string, uploadUrl?: string): Promise<boolean> {
     if (!uploadUrl) {
-      // A dispatch that predates this field, or a local run with no staging.
       this.logger.warn("no canonical-source upload target; the peeled archive stays in the sandbox");
       return false;
     }
@@ -291,7 +258,6 @@ export class MaterialiseService {
     return true;
   }
 
-  /** Move a peeled archive out of the peel staging and give it a name the CLI accepts. */
   private async adoptPeeledArchive(archivePath: string): Promise<string> {
     const root = artifactRoot(this.fetchSourceConfig());
     const adopted = await adoptArchive({ localPath: archivePath, artifactRoot: root }).catch(
@@ -301,7 +267,6 @@ export class MaterialiseService {
     return aligned.path;
   }
 
-  /** The shared mount both containers see at the same path, and which is a real path on the host. */
   private handoffRoot(): string {
     return this.configService.get("handoffRoot", { infer: true }) || tmpdir();
   }
@@ -314,7 +279,6 @@ export class MaterialiseService {
     };
   }
 
-  /** Operator-tunable, like the compressed-size bound beside it. */
   private archiveLimits(): ArchiveLimits {
     return {
       maxEntries: positiveOr(

@@ -16,7 +16,6 @@ export type PresignGetOptions = {
 
 const DEFAULT_EXPIRES_IN_SECONDS = 15 * 60;
 
-/** Produces a one-shot, time-limited PUT URL for `bucket`/`key`. */
 export async function presignPutUrl(
   client: S3Client,
   bucket: string,

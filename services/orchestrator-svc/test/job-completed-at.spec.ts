@@ -9,7 +9,6 @@ import {
 import { CreatedRows } from "@scvs/db/testing";
 import { terminalJobStatuses } from "@scvs/core";
 
-/** The invariant: non-null iff `status` is terminal, and once written only a re-settle moves it. */
 const IMAGE = `docker.io/example/img@sha256:${"c".repeat(64)}`;
 
 let client: PrismaClient;
@@ -78,7 +77,6 @@ describe("a job records when it settled", () => {
     }
   });
 
-  // From the exported set, so a terminal status added later without the write fails here.
   it.each(terminalJobStatuses)("records one on the transition to %s", async (terminal) => {
     const jobId = await seedQueuedJob();
     const before = Date.now();
@@ -99,8 +97,6 @@ describe("a job records when it settled", () => {
     expect(completedMs).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
-  // The dry-run arm has no `verified_at` to read a finish time off: `publish.service.ts` writes that field and
-  // this arm never publishes.
   it("records one for a dry run, which publishes nothing to read it off", async () => {
     const jobId = await seedQueuedJob();
     expect(
@@ -124,7 +120,6 @@ describe("a job records when it settled", () => {
   });
 });
 
-/** That is why `updated_at` cannot be read as a finish time. */
 describe("nothing but a status transition moves it", () => {
   const settle = async (): Promise<{ jobId: string; completedAt: string; updatedAt: string }> => {
     const jobId = await seedQueuedJob();
@@ -175,7 +170,6 @@ describe("nothing but a status transition moves it", () => {
 
     const after = await read(jobId);
     expect(after.archivedTxId).toBeDefined();
-    // BL1's clock legitimately moves on a backfill (AP5); the job's own completion does not.
     expect(after.publishedUpdatedAt).toBeDefined();
     expect(after.completedAt).toBe(completedAt);
   });

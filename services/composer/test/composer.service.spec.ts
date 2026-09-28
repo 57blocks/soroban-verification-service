@@ -5,10 +5,6 @@ import { contextWithMessage, evaluateSmokeTest } from "../src/modules/composer/c
 import { ImageError } from "../src/modules/composer/image.js";
 import { ComponentError } from "../src/modules/composer/components.js";
 
-/**
- * `excerpt(result)` — see `image.ts`'s `reportedVersion`). The persisted `composer.json` never carried anything
- * more specific than the generic wrapper message.
- */
 describe("contextWithMessage", () => {
   it("keeps context.detail intact rather than overwriting it with error.message", () => {
     const error = new ImageError(
@@ -51,7 +47,6 @@ describe("contextWithMessage", () => {
   });
 });
 
-/** **The push gate.** `image.ts`'s `reportsExpectedRev` already has six unit cases for the *predicate*. */
 describe("evaluateSmokeTest", () => {
   const pair: RecordedToolchainPair = {
     cliver: "27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4",
@@ -72,8 +67,6 @@ describe("evaluateSmokeTest", () => {
   });
 
   it("refuses a disagreeing image under the reason the receipt is read by", () => {
-    // `EnvironmentOutcomeService` keys off this exact string, and `isPermanentCompositionFailure` decides from
-    // it whether the row is retried.
     const verdict = evaluateSmokeTest(pair, smokeTest({ matches_pair: false }));
 
     expect(verdict.agreed).toBe(false);
@@ -81,8 +74,6 @@ describe("evaluateSmokeTest", () => {
   });
 
   it("★ carries both sides of both halves, which is the only way an operator can see how it differed", () => {
-    // "smoke test disagreed" without the requested *and* reported values is a fact nobody can act on: a wrong
-    // rustc and a wrong stellar-cli send an operator to two different places.
     const verdict = evaluateSmokeTest(
       pair,
       smokeTest({
@@ -93,7 +84,7 @@ describe("evaluateSmokeTest", () => {
     );
 
     expect(verdict.agreed).toBe(false);
-    if (verdict.agreed) return; // narrowing; the assertion above is the real gate
+    if (verdict.agreed) return;
     expect(verdict.context).toEqual({
       requested_cliver: "27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4",
       requested_rsver: "1.96.0",
@@ -103,7 +94,6 @@ describe("evaluateSmokeTest", () => {
   });
 
   it("★ treats a same-version, different-rev image as a disagreement, not a near-miss", () => {
-    // The corpus has this for real: `registry.yaml` records both `27.0.0#5a7c5fe…` and `27.0.0#93e1b16…`.
     const verdict = evaluateSmokeTest(
       pair,
       smokeTest({ matches_pair: false, reported_cliver: "stellar 27.0.0 (93e1b167…)" }),
@@ -113,10 +103,6 @@ describe("evaluateSmokeTest", () => {
   });
 });
 
-/**
- * The ordering above is a *control*, and a control that only exists as a `return` statement can be removed by
- * an edit that looks like a refactor.
- */
 describe("the composed image is pushed only after the smoke test agreed", () => {
   const SOURCE = readFileSync(
     fileURLToPath(new URL("../src/modules/composer/composer.service.ts", import.meta.url)),

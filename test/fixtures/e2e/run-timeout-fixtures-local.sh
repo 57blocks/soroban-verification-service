@@ -56,8 +56,6 @@ scope="${SCVS_E2E_RUN_ID:-timeout-$(date +%Y%m%d%H%M%S)-$RANDOM-$RANDOM}"
 [[ "$scope" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "SCVS_E2E_RUN_ID must be filesystem-safe" >&2; exit 1; }
 output_root="$repo_root/artifacts/e2e-fixtures/timeout/$scope"
 
-# `deploy-testnet.sh` reads the already-built purpose Wasm from the shared artifact root; only the
-# deployment evidence and generated inventory are per-run.
 export SCVS_FIXTURE_OUTPUT_ROOT="$repo_root/artifacts/e2e-fixtures"
 export SCVS_FIXTURE_DEPLOYMENT_SCOPE="$scope"
 export SCVS_FIXTURE_DEPLOYMENTS="$output_root/testnet-deployments.ndjson"
@@ -74,6 +72,5 @@ pnpm run e2e:generate-inventory
 pnpm run e2e:check-fixtures
 
 echo "running timeout E2E with fixture scope $scope"
-# `pnpm run <script>` already forwards trailing arguments. A second `--` reaches Jest literally,
-# making its `-t` filter positional text and allowing unrelated suites to run.
+# `pnpm run` already forwards trailing arguments; a second `--` would reach Jest literally.
 pnpm --filter @scvs/e2e-tests run test:jest "${jest_args[@]}"

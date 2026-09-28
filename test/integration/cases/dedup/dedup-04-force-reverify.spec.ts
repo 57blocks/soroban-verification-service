@@ -1,4 +1,3 @@
-/** Inventing an admin route in this black-box suite would only test the harness. */
 import { evaluateNoSecondBuild, expectNoSecondBuild, observeBuild } from "../../support/dedup.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -93,7 +92,6 @@ caseBlock(
       const spec = await http(`${env.verifyUrl}/api/verification/v1/openapi.json`);
       expectStatus(spec, 200);
 
-      // Walk the whole document so request-body schemas reached through `$ref` are included too.
       for (const name of advertisedInputNames(spec.json)) {
         expect(name.toLowerCase()).not.toMatch(/force|reverify/);
       }
@@ -102,8 +100,6 @@ caseBlock(
     it(
       "rejects or ignores every public force form without starting a second build",
       async () => {
-        // The run-scoped option on F-LEG-1 makes this first answer a real build for this test, while keeping
-        // the exact same recipe stable for every force-like attempt below.
         const body = await submissionFor("F-LEG-1");
         const firstRun = await submitAndWait(body);
         expect(firstRun.body.status).toBe("verified");
@@ -124,12 +120,9 @@ caseBlock(
           const response = await attempt.send(body);
 
           if (response.status >= 400) {
-            // A future strict DTO may reject unknown public fields. That is a valid implementation of the
-            // requirement, but it must use the public invalid-request contract.
             expectStatus(response, 400);
             expect(expectErrorEnvelope(response).error).toBe("invalid_request");
           } else {
-            // Today's DTO ignores unknown fields/query/header values.
             expectStatus(response, 202);
             const jobId = requireQueuedJobId(response, attempt.label);
             expect(jobId).not.toBe(firstRun.jobId);
@@ -146,8 +139,6 @@ caseBlock(
             expectNoSecondBuild(evaluateNoSecondBuild(first, observation));
           }
 
-          // Reusing the verdict must not republish it. This also covers the rejection branch: a rejected
-          // force-like request has no observable side effect on the existing result.
           const after = await requireStatusObject(hash);
           expect(after.updated_at).toBe(before.updated_at);
         }

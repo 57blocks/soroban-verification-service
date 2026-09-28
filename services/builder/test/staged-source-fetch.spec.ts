@@ -1,9 +1,5 @@
 import { materializeSource } from "../src/modules/builder/fetch-source.js";
 
-/**
- * After it, `orchestrator-svc` overwrites `source_uri` on every arm before SubmitJob, so the only URL that
- * reaches here is a presigned GET on the staging bucket.
- */
 const PRESIGNED_QUERY = "X-Amz-Signature=deadbeef&X-Amz-Credential=AKIAEXAMPLE%2F20260902%2Fap-southeast-2%2Fs3%2Faws4_request";
 
 function ref(source_uri: string) {
@@ -28,10 +24,6 @@ describe("the sandbox fetches only a presigned staging URL", () => {
     }
   });
 
-  /**
-   * The one that matters most, because it is the shape an attacker would reach for: a URL carrying the query
-   * parameters of a presigned GET, aimed at an address inside the VPC.
-   */
   it("refuses a presigned-looking URL aimed at a private address", async () => {
     const result = await materializeSource(ref(`https://10.0.0.5/staging/x/build/fetched-source?${PRESIGNED_QUERY}`));
 
@@ -46,10 +38,6 @@ describe("the sandbox fetches only a presigned staging URL", () => {
     if (!result.ok) expect(result.reason).toBe("source_uri_refused");
   });
 
-  /**
-   * A well-formed staging URL is not refused by the gate — it is attempted and fails on the network, which is a
-   * different reason code.
-   */
   it("attempts a well-formed presigned URL rather than refusing it", async () => {
     const result = await materializeSource(
       ref(`https://sv-dev-scratch.s3.ap-southeast-2.invalid/staging/rb/build/fetched-source?${PRESIGNED_QUERY}`),

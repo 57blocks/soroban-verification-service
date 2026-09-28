@@ -1,12 +1,10 @@
-/** Folding the build log's `cargo vendor` / `docker pull` bookkeeping into expandable summary rows. */
-
 export type LogSegment =
   | { kind: "lines"; text: string }
   | { kind: "folded"; label: string; text: string; lineCount: number };
 
 type Boilerplate = { id: string; summary: (count: number) => string };
 
-/** Ordered, and the order matters: the first match wins, so a narrower pattern must precede a wider one. */
+/** First match wins, so a narrower pattern must precede a wider one. */
 const BOILERPLATE: (Boilerplate & { match: (line: string) => boolean })[] = [
   {
     id: "registry-auth",
@@ -45,15 +43,10 @@ const BOILERPLATE: (Boilerplate & { match: (line: string) => boolean })[] = [
   },
 ];
 
-/**
- * A run shorter than this stays inline. Folding two lines behind a disclosure that is itself one line saves
- * nothing and costs the reader a click.
- */
 const MIN_RUN_TO_FOLD = 4;
 
 const classify = (line: string) => BOILERPLATE.find((rule) => rule.match(line));
 
-/** Splits a build log into inline text and folded runs of boilerplate. */
 export const foldBuildLog = (text: string): LogSegment[] => {
   if (!text) return [];
   const lines = text.split("\n");
@@ -63,7 +56,6 @@ export const foldBuildLog = (text: string): LogSegment[] => {
   let run: { rule: Boilerplate; lines: string[]; matched: number } | null = null;
 
   const flushPlain = () => {
-    // Trailing blank lines belong to whatever follows, not to the block being closed.
     while (plain.length && plain[plain.length - 1].trim() === "") plain.pop();
     if (plain.length) segments.push({ kind: "lines", text: plain.join("\n") });
     plain = [];
@@ -95,12 +87,10 @@ export const foldBuildLog = (text: string): LogSegment[] => {
         run.matched += 1;
         continue;
       }
-      // A blank line is held rather than ending the run, in case the run resumes after it.
       if (!rule && line.trim() === "") {
         run.lines.push(line);
         continue;
       }
-      // The run really has ended. Any blank lines held at its tail go back to the plain block.
       const held: string[] = [];
       while (run.lines.length && run.lines[run.lines.length - 1].trim() === "") {
         held.unshift(run.lines.pop() as string);
@@ -110,8 +100,7 @@ export const foldBuildLog = (text: string): LogSegment[] => {
     }
 
     if (rule) {
-      // Deliberately not flushing `plain` here: a run too short to fold is pushed back into it by `flushRun`,
-      // and flushing first splits the log around lines that never became a disclosure.
+      // Not flushing `plain` here: `flushRun` pushes a run too short to fold back into it.
       run = { rule, lines: [line], matched: 1 };
       continue;
     }

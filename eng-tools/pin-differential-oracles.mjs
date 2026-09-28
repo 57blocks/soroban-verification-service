@@ -21,7 +21,6 @@ function arg(name) {
   return at === -1 ? undefined : process.argv[at + 1];
 }
 
-/** Reads the oracle table out of the TypeScript rather than duplicating it here. */
 async function readOracles() {
   const source = await readFile(ORACLES_TS, "utf8");
 
@@ -58,7 +57,6 @@ async function readOracles() {
   return oracles;
 }
 
-/** Which of the two non-finding/finding failure classes a registry error belongs to. */
 function classify(message) {
   const text = String(message ?? "");
   if (/\b(not found|manifest unknown|repository does not exist|no such manifest)\b/i.test(text)) {
@@ -74,13 +72,11 @@ function classify(message) {
   return "gone";
 }
 
-/** The index digest the tag currently resolves to, or a classified failure. */
 async function resolveDigest(tag) {
   const read = (stdout) => {
     const trimmed = stdout.trim();
     if (/^sha256:[0-9a-f]{64}$/.test(trimmed)) return trimmed;
-    // Older buildx ignores `--format` and prints the human block instead of failing, so the template path
-    // cannot be trusted by exit code alone.
+    // Older buildx ignores `--format` and prints the human block, so parse that too.
     return /^Digest:\s*(sha256:[0-9a-f]{64})/m.exec(stdout)?.[1];
   };
 
@@ -99,7 +95,6 @@ async function resolveDigest(tag) {
     const message = error?.stderr || error?.message || String(error);
     const kind = classify(message);
     if (kind === "gone") return { ok: false, kind, message: firstLine(message) };
-    // Fall through: a transport hiccup on the templated call is worth one plain retry.
   }
 
   try {
@@ -117,7 +112,6 @@ function firstLine(text) {
   return String(text).split("\n").map((line) => line.trim()).filter(Boolean)[0] ?? String(text);
 }
 
-/** Returns `undefined` when the image declares none. */
 async function declaredRustVersion(reference) {
   await run("docker", ["pull", "--quiet", reference], { maxBuffer: 8 * 1024 * 1024 });
   const { stdout } = await run("docker", [
@@ -133,7 +127,6 @@ function repositoryOf(tag) {
   return tag.split(":")[0];
 }
 
-/** `--check`: does each committed digest still match what its tag resolves to? Changes nothing. */
 async function check(oracles) {
   const rows = [];
   for (const oracle of oracles) {
@@ -178,7 +171,6 @@ async function check(oracles) {
     );
   }
   if (findings.length === 0) {
-    // Say what was actually measured.
     const matched = rows.filter((row) => row.state === "match").length;
     if (matched === 0) {
       console.log(
@@ -208,7 +200,6 @@ async function check(oracles) {
   process.exitCode = 1;
 }
 
-/** Default and `--all`: resolve, verify, and print exports for the rows that need them. */
 async function pin(oracles) {
   const wanted = oracles.filter((oracle) => (has("all") ? true : !oracle.image));
 

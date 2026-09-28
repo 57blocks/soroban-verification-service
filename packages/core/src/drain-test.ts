@@ -24,7 +24,6 @@ test("a fresh process is not draining", () => {
 test("beginDrain is idempotent — SIGTERM can arrive twice", () => {
   const drain = new DrainState();
   assert.equal(drain.beginDrain(NOW), true);
-  // A second signal must not restart the clock: the grace period is measured from the first.
   assert.equal(drain.beginDrain(LATER), false);
   assert.equal(drain.since, NOW);
 });
@@ -65,7 +64,6 @@ test("draining wins over healthy checks — live, but must not receive new work"
   drain.beginDrain(NOW);
   const report = readiness(drain, { database: { ok: true } });
 
-  // The whole point of the split: a readiness failure deregisters, a liveness failure restarts.
   assert.equal(report.ready, false);
   assert.equal(report.draining, true);
   assert.equal(report.draining_since, NOW);
@@ -78,8 +76,6 @@ test("draining_since is absent, not null, when not draining", () => {
 });
 
 test("a service with no probed dependencies reports an empty check set, not a fake pass", () => {
-  // query-svc's case: its database is out of scope for this implementation, and it must not report a Postgres
-  // check that would read as "checked and healthy" while nothing looked.
   const report = readiness(new DrainState(), {});
   assert.deepEqual(report.checks, {});
   assert.equal(report.ready, true);

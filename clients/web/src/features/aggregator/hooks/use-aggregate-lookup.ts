@@ -2,10 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { queryApiFailureOf, type AggregatedWasmStatus } from "soroban-verification-client";
 import type { LookupState } from "../types";
 
-/**
- * One subject looked up in this deployment's aggregate. The caller supplies the question as a thunk over the
- * SDK client, so this hook holds the states and knows nothing about routes.
- */
 export const useAggregateLookup = (
   queryKey: readonly unknown[],
   ask: (() => Promise<AggregatedWasmStatus>) | null,
@@ -18,8 +14,6 @@ export const useAggregateLookup = (
     queryFn: async () => ask!(),
   });
 
-  // `refetch`, not a nonce in the key: an unchanged subject must re-ask, but minting a key per press makes
-  // every lookup a cache miss.
   const refresh = () => {
     if (query.isFetched) void query.refetch();
   };

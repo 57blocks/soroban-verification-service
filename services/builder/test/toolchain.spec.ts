@@ -10,8 +10,7 @@ jest.unstable_mockModule("@scvs/core/process", () => ({
   byteSize: jest.fn(),
 }));
 
-// Both symbols come from the dynamic import: a static one would load the real module — and its real
-// `@scvs/core/process` — before the mock is registered.
+// Dynamic import: a static one would load the real module, and its real `@scvs/core/process`, before the mock.
 const { detectRustToolchainFile, resolveTrustedToolchain } = await import(
   "../src/modules/builder/toolchain.js"
 );
@@ -27,10 +26,6 @@ const result = (over: Record<string, unknown>) => ({
 
 beforeEach(() => runCommand.mockReset());
 
-/**
- * The distinction the whole function exists for: a probe we could not *complete* leaves the compiler
- * undetermined and must fail.
- */
 describe("resolveTrustedToolchain", () => {
   it("pins the image's active toolchain", async () => {
     runCommand.mockResolvedValue(result({ stdout: "1.85.0-x86_64-unknown-linux-gnu (default)\n" }));
@@ -41,10 +36,6 @@ describe("resolveTrustedToolchain", () => {
     if (resolved.ok) expect(resolved.toolchain).toBe("1.85.0-x86_64-unknown-linux-gnu");
   });
 
-  /**
-   * The distinction the function exists for. A probe that could not be *completed* leaves the compiler
-   * undetermined; only one that ran and reported "no rustup here" is safe to proceed on.
-   */
   it.each([
     ["a timeout", { exit_code: null, timed_out: true }],
     ["a spawn failure", { exit_code: null, error: "spawn ENOENT" }],
@@ -68,7 +59,6 @@ describe("resolveTrustedToolchain", () => {
 
     const resolved = await resolveTrustedToolchain("img@sha256:x", await emptySource());
 
-    // Nothing to pin against, and nothing an in-source rust-toolchain.toml could redirect.
     expect(resolved.ok).toBe(true);
     if (resolved.ok) expect(resolved.toolchain).toBeUndefined();
   });
@@ -90,7 +80,6 @@ describe("resolveTrustedToolchain", () => {
 
     const resolved = await resolveTrustedToolchain("img@sha256:x", await sourceWithToolchainFile());
 
-    // T4: the in-source selector is reported, and does not change the answer.
     expect(resolved.ok).toBe(true);
     if (resolved.ok) {
       expect(resolved.toolchain).toBe("1.85.0");
@@ -106,7 +95,6 @@ describe("resolveTrustedToolchain", () => {
       dockerCheckTimeoutMs: 10_000,
     });
 
-    // The probe now pays for the image pull, so it must not inherit the 10 s check budget.
     const [, options] = runCommand.mock.calls[0] as [string[], { timeout_ms: number }];
     expect(options.timeout_ms).toBe(600_000);
   });

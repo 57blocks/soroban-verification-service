@@ -6,7 +6,6 @@ export type { ValidationError };
 
 export type ClassConstructor<T> = new (...args: unknown[]) => T;
 
-/** Thrown by `parseDto` — carries the raw `class-validator` errors for callers that want them. */
 export class DtoValidationError extends Error {
   constructor(public readonly errors: ValidationError[]) {
     super(
@@ -18,7 +17,6 @@ export class DtoValidationError extends Error {
   }
 }
 
-/** Throws `DtoValidationError` on failure — a drop-in replacement for Zod's `.parse()`. */
 export function parseDto<T extends object>(cls: ClassConstructor<T>, value: unknown): T {
   const instance = plainToInstance(cls, value);
   const errors = validateSync(instance as object, { forbidUnknownValues: false });
@@ -26,7 +24,6 @@ export function parseDto<T extends object>(cls: ClassConstructor<T>, value: unkn
   return instance;
 }
 
-/** Never throws — a drop-in replacement for Zod's `.safeParse()`. */
 export function safeParseDto<T extends object>(
   cls: ClassConstructor<T>,
   value: unknown,
@@ -38,10 +35,6 @@ export function safeParseDto<T extends object>(
 
 export type FlatValidationIssue = { property: string; constraints: Record<string, string> };
 
-/**
- * Flattens `class-validator`'s nested `ValidationError.children` tree (produced by `@ValidateNested()`) into a
- * flat list with dotted property paths.
- */
 export function flattenValidationErrors(errors: ValidationError[], prefix = ""): FlatValidationIssue[] {
   const flat: FlatValidationIssue[] = [];
   for (const error of errors) {
@@ -52,7 +45,6 @@ export function flattenValidationErrors(errors: ValidationError[], prefix = ""):
   return flat;
 }
 
-/** Factories for the plain `as const` string-literal unions that replace Zod's `z.enum(...)` (see job.ts). */
 export function createEnumGuard<T extends string>(values: readonly T[]) {
   const set = new Set<string>(values);
   return (value: unknown): value is T => typeof value === "string" && set.has(value);

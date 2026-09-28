@@ -9,10 +9,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const TEMPLATE_ROOT = join(ROOT, "docker/composed-environments");
 
-/** The image this template claims to mirror. */
 const OFFICIAL_CLI_IMAGE = "docker.io/stellar/stellar-cli:latest";
 
-/** The pair the gate composes when none is given. */
 const DEFAULT_PAIR = {
   cliver: "23.2.1#496ac35be7a7d8d923fcde9bbbc650ee593d1f6f",
   rsver: "1.90.0",
@@ -24,7 +22,6 @@ function arg(name, fallback) {
 }
 
 async function main() {
-  // Imported from the built output, like every other consumer in this repository.
   const { CURRENT_COMPOSE_TEMPLATE_VERSION } = await import("../packages/core/dist/src/index.js");
   const composer = "../services/composer/dist/modules/composer";
   const { loadCompositionTemplate, templateDirFor } = await import(`${composer}/template.js`);
@@ -33,7 +30,6 @@ async function main() {
 
   const templateVersion = arg("template-version", CURRENT_COMPOSE_TEMPLATE_VERSION);
   const pair = { cliver: arg("cliver", DEFAULT_PAIR.cliver), rsver: arg("rsver", DEFAULT_PAIR.rsver) };
-  // Not a real environment id — nothing here is persisted or published. It only names the local tag.
   const environmentId = `template-gate-${templateVersion}`;
 
   console.log(`template_version : ${templateVersion}`);
@@ -50,12 +46,9 @@ async function main() {
     }`,
   );
 
-  // Both halves have to agree, and neither file can see the other.
   await assertDockerfileInstallsEveryPin(templateVersion, template);
   console.log("✓ every runtime_libraries pin has a matching COPY, and no COPY is unpinned");
 
-  // The two checks above need no Docker, no network, and ~no time — so they are worth running on every push,
-  // while the build below is path-filtered.
   if (process.argv.includes("--pins-only")) {
     console.log(`\n✓ Template ${templateVersion} is internally consistent (pins-only mode; nothing built).`);
     return;
@@ -93,7 +86,6 @@ async function main() {
     console.log(`  stellar : ${smokeTest.reported_cliver.replace(/\n/g, "\n            ")}`);
 
     if (!smokeTest.matches_pair) {
-      // Thrown rather than exited, so the `finally` below still runs — see the catch's note.
       throw Object.assign(
         new Error(
           `the composed image does not report the pair it was asked to produce (requested ` +
@@ -112,19 +104,14 @@ async function main() {
 
     console.log(`\n✓ Template ${templateVersion} is usable.`);
   } catch (error) {
-    // `ComponentError`/`ImageError` carry the reason that would have reached the receipt.
     const reason = error?.reason ? ` [${error.reason}]` : "";
     console.error(`\n✗ Template ${templateVersion} failed${reason}: ${error?.message ?? error}`);
     if (error?.context?.detail) console.error(`\n${error.context.detail}`);
-    // `process.exitCode`, never `process.exit()`: the latter terminates synchronously without unwinding, so the
-    // `finally` below would not run and every failing run would leave ~110 MB of verified components in the
-    // temp dir plus an unusable image on the daemon.
+    // `process.exitCode`, never `process.exit()`: exit() skips the `finally` cleanup below.
     process.exitCode = 1;
   } finally {
     await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     if (!process.argv.includes("--keep-image")) {
-      // The runner moved out of `services/composer` and into `@scvs/core`; both reach this script through
-      // built output, so the path follows it rather than the package specifier.
       const { runCommand } = await import("../packages/core/dist/src/process.js");
       await runCommand(["docker", "image", "rm", "-f", `scvs-composed:${environmentId}`], {
         timeout_ms: 60_000,
@@ -134,7 +121,6 @@ async function main() {
   }
 }
 
-/** Asserts the composed image's *docker-level* runtime surface, the part `stellar version` cannot see. */
 async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
   const { runCommand } = await import("../packages/core/dist/src/process.js");
 
@@ -151,15 +137,11 @@ async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
     return { entrypoint, cmd, workdir };
   };
 
-  // Pulled rather than assumed present; the surface being compared to is the thing this template claims to
-  // mirror, so reading it from the actual image is the point.
   const pull = await runCommand(["docker", "pull", "-q", OFFICIAL_CLI_IMAGE], {
     timeout_ms: 900_000,
     mirrorOutput: false,
   });
   if (pull.exit_code !== 0) {
-    // A warning, not a failure: this comparison must not turn a Docker Hub outage into a red gate on our own
-    // template.
     console.warn(
       `  ⚠ could not pull ${OFFICIAL_CLI_IMAGE} to compare against; skipping the surface comparison`,
     );
@@ -177,15 +159,13 @@ async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
   console.log(`  composed : entrypoint=${composed.entrypoint} cmd=${composed.cmd} workdir=${composed.workdir}`);
 
   const differences = [];
-  // ENTRYPOINT and WORKDIR must match: the builder's `docker run <image> <bldarg…>` depends on both.
   if (composed.entrypoint !== official.entrypoint) {
     differences.push(`entrypoint ${composed.entrypoint} != official ${official.entrypoint}`);
   }
   if (composed.workdir !== official.workdir) {
     differences.push(`workdir ${composed.workdir} != official ${official.workdir}`);
   }
-  // CMD is compared as "carries no inherited command", not for equality: the official image has none, and
-  // `buildpack-deps` leaves `["bash"]` behind, which ENTRYPOINT does not clear.
+  // Emptiness, not equality: the official CMD is `null`; the base image leaves `["bash"]`, which ENTRYPOINT does not clear.
   if (composed.cmd !== "null" && composed.cmd !== "[]") {
     differences.push(`cmd ${composed.cmd} should be empty, as the official image's is`);
   }
@@ -199,7 +179,6 @@ async function assertRuntimeSurfaceMatchesOfficial(environmentId) {
   console.log("  ✓ entrypoint, workdir and cmd match the official image");
 }
 
-/** Compiles an actual Soroban contract inside the composed image. */
 async function assertBuildsAContract(environmentId) {
   const { runCommand } = await import("../packages/core/dist/src/process.js");
 
@@ -209,13 +188,11 @@ async function assertBuildsAContract(environmentId) {
       "docker",
       "run",
       "--rm",
-      // Since template v3 the image declares `ENTRYPOINT ["stellar"]` to mirror the official one, so `docker
-      // run <image> sh -c …` becomes `stellar sh -c …` → "unrecognized subcommand 'sh'".
+      // The image's ENTRYPOINT is `stellar`; without this override `sh -c …` runs as `stellar sh -c …`.
       "--entrypoint",
       "sh",
       `scvs-composed:${environmentId}`,
       "-c",
-      // `-e` so a failing `init` cannot be papered over by a later command succeeding.
       "set -e; " +
         "stellar contract init /tmp/probe >/dev/null; " +
         "cd /tmp/probe; " +
@@ -239,16 +216,11 @@ async function assertBuildsAContract(environmentId) {
   console.log(`  emitted: ${wasm.join(", ") || "(none reported)"}`);
 }
 
-/** Same stderr-first, bounded shape the composer's own diagnostics use. */
 function excerptOf(result) {
   const text = (result.stderr || result.stdout || result.error || "").trim();
   return text.length > 2_000 ? `${text.slice(0, 2_000)}...` : text;
 }
 
-/**
- * Every `runtime_libraries` pin has a matching `COPY <name>.deb` in the same template's Dockerfile, and every
- * such `COPY` has a matching pin.
- */
 async function assertDockerfileInstallsEveryPin(templateVersion, template) {
   const { readFile } = await import("node:fs/promises");
   const dockerfile = await readFile(

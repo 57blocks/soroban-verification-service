@@ -69,7 +69,6 @@ describe("the plugin puts the stamp where a browser and a curl both find it", ()
     ]);
   });
 
-  // At construction, not at bundle time: a build that got this far would already have produced output.
   test("a malformed stamp fails the config, not the bundle", () => {
     expect(() => buildStampPlugin({ SCVS_BUILD_COMMIT: COMMIT })).toThrow(BuildStampError);
   });

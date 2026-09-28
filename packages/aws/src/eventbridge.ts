@@ -32,10 +32,6 @@ export type BatchJobStateChangeEvent = {
   statusReason?: string;
 };
 
-/**
- * Defensively parses an AWS "Batch Job State Change" EventBridge event's `detail` block (`detail.jobId` /
- * `detail.status` / `detail.statusReason`).
- */
 export function parseBatchJobStateChangeEvent(raw: unknown): BatchJobStateChangeEvent | undefined {
   if (!isRecord(raw)) return undefined;
   const detail = raw.detail;

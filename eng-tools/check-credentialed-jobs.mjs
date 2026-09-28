@@ -1,29 +1,5 @@
 #!/usr/bin/env node
-/**
- * Two rules over the jobs that assume an AWS role.
- *
- * Rule 1 refuses a job that assumes an AWS role without first proving the ref it is running is on main.
- *
- * The pipeline is pull-based: the operations repository hands this one a ref, this one checks it out and
- * runs it. `assert-deploy-ref.mjs` is what makes that safe, and it is only worth anything when it runs
- * BEFORE the credentials — after them the untrusted tree has already had them.
- *
- * A job satisfies the rule three ways:
- *   1. it runs the assertion itself, at a step index below its first credentials step;
- *   2. a job it transitively `needs` does — a failed `needs` skips this one;
- *   3. every credentials step in it is conditioned on `inputs.on_main`, the graded path: a ref that is
- *      not on main still runs, and gets no credentials at all.
- *
- * Rule 2 refuses `${{ inputs.* }}` inside the `run:` of such a job. An expression is substituted into the
- * shell's source text before the shell ever sees it, so a crafted input is code, not a value; `env:` plus
- * a quoted shell variable is the form that is not. A `workflow_call` input can only be declared `string`,
- * `boolean` or `number` — the `choice` enumerations that constrain today's callers live on their dispatch
- * surfaces, not in this contract, and a different caller inherits none of them.
- *
- * Rule 2 is a ratchet against `credentialed-job-inputs.json`, not an allowlist: a job may hold no more
- * than the baseline records, a job the baseline does not name may hold none, and an entry above reality
- * is stale. `-- --write-baseline` can only shrink it.
- */
+/** Static: credentialed jobs prove their ref is on main first and keep `${{ inputs.* }}` out of `run:`. */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
@@ -41,7 +17,6 @@ const firstIndex = (job, pred) => stepsOf(job).findIndex(pred);
 const isCreds = (s) => String(s.uses ?? "").includes(CREDS);
 const isAssert = (s) => String(s.run ?? "").includes(ASSERT);
 
-/** Rule 1, including the ordering the whole thing turns on. */
 function guardsItself(job) {
   const assertAt = firstIndex(job, isAssert);
   if (assertAt === -1) return false;
@@ -50,9 +25,7 @@ function guardsItself(job) {
 }
 
 let failures = 0;
-/** Every rule-2 occurrence, so a failure can name the step it is in. */
 const sites = [];
-/** file → job → number of `${{ inputs.* }}` occurrences in that job's `run:` bodies. */
 const observed = {};
 for (const file of readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort()) {
   const path = join(DIR, file);
@@ -70,7 +43,6 @@ for (const file of readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort()) {
     const credsSteps = stepsOf(job).filter(isCreds);
     if (credsSteps.length === 0) continue;
 
-    // Rule 2's inventory. Credentials are per-job, so a job that only `needs` a credentialed one holds none.
     for (const [index, step] of stepsOf(job).entries()) {
       for (const hit of String(step.run ?? "").match(INPUT_EXPRESSION) ?? []) {
         const counts = (observed[file] ??= {});
@@ -81,7 +53,6 @@ for (const file of readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort()) {
 
     if (guardsItself(job)) continue;
 
-    // Way 2. An assertion in an ancestor is load-bearing because a failed `needs` skips this job.
     const seen = new Set();
     const stack = asList(job.needs);
     let inherited = false;
@@ -97,7 +68,7 @@ for (const file of readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort()) {
     }
     if (inherited) continue;
 
-    // Way 3. Every one of them, not just the first: one unconditioned step is the whole hole.
+    // Every credentials step must be gated; one ungated step is enough to leak them.
     if (credsSteps.every((s) => String(s.if ?? "").includes("inputs.on_main"))) continue;
 
     const assertAt = firstIndex(job, isAssert);
@@ -110,7 +81,7 @@ for (const file of readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort()) {
   }
 }
 
-// Both rules report before either exits: a rule-1 failure must not hide a rule-2 one.
+// Report both checks before exiting, so the first cannot hide the second.
 let unproven = false;
 if (failures) {
   console.error(
@@ -122,7 +93,6 @@ if (failures) {
   console.log(`✓ every job that assumes an AWS role proves its ref is on main first, or takes no credentials`);
 }
 
-// ── Rule 2: the expression may not reach the script ─────────────────────────────────────────────
 const baseline = JSON.parse(readFileSync(BASELINE_FILE, "utf8"));
 const pending = baseline.pending ?? {};
 const findings = [];

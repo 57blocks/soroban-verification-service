@@ -5,7 +5,6 @@ import type { VerifyFormValues } from "../types";
 import { sourceSha256Refusal } from "../utils/evidence-rules.util";
 import { FieldShell } from "./FieldShell";
 
-/** The build recipe the rebuild needs. */
 export const EvidenceFields = ({
   form,
 }: {
@@ -27,8 +26,6 @@ export const EvidenceFields = ({
           id="source_sha256"
           className="font-mono text-[0.85rem]"
           placeholder="28a14827..."
-          // The rule is shared with the console's own pre-submit check rather than restated here — see
-          // `evidence-rules.util.ts`.
           {...form.register("source_sha256", {
             validate: (value) => sourceSha256Refusal(value) ?? true,
           })}

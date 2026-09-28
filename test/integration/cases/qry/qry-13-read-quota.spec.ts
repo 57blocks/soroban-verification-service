@@ -1,42 +1,28 @@
-/** E2E-QRY-13 — the read surface refuses excess cleanly, through the balancer. */
 import { caseBlock } from "../../support/gate.js";
 import { deploymentParameters, env } from "../../support/env.js";
 import { expectErrorEnvelope, http, sleep } from "../../support/http.js";
 import type { HttpResult } from "../../support/http.js";
 import { aggregatedByAddressUrl } from "../../support/routes.js";
 
-/**
- * Malformed, not merely undeployed: a CRC-valid address resolves over Soroban RPC once per admitted request,
- * which at this burst size would point thousands of them at the upstream. This one is counted by the quota
- * gate and refused before any `fetch`.
- */
+/** Malformed on purpose: a valid address costs one Soroban RPC call per admitted request. */
 const MALFORMED_ADDRESS = "not-a-contract-address";
 
 const WINDOW_MS = deploymentParameters.windowQueryMs ?? 60_000;
 const CONCURRENCY = Number(process.env.SCVS_E2E_PROBE_CONCURRENCY ?? 64);
 
-/**
- * How many times the declared ceiling this burst sends. The quota is per process with no shared tier, so the
- * ceiling a caller meets behind the balancer is the task count times the declared one — unknown here, and the
- * reason `quota + margin` refuses nothing on two tasks. Sized to exceed it below this many tasks; the case
- * asserts refusal, never the ceiling.
- */
+/** The quota is per task, so the ceiling behind the balancer is unknown; oversend by this factor. */
 const PROBE_MULTIPLIER = Number(process.env.SCVS_E2E_QUERY_PROBE_MULTIPLIER ?? 4);
 
-/** Slack on top of the idle below. Not clock skew — no clock but the deployment's own is involved. */
 const WINDOW_START_MARGIN_MS = 5_000;
 
 const PROBE_TIMEOUT_MS = 2 * WINDOW_MS + 2 * env.requestTimeoutMs + 30_000;
 
-/** Jest allows a hook 5 s by default, and the idle alone outlasts that. */
 const IDLE_TIMEOUT_MS = WINDOW_MS + WINDOW_START_MARGIN_MS + 30_000;
 
 interface Probe {
-  /** Requests the route did not refuse with `429`. */
   readonly admitted: number;
   readonly limited: number;
   readonly limitedResponses: readonly HttpResult[];
-  /** A quota that sheds load by falling over is not a quota. `503` is excluded — see the assertion. */
   readonly serverErrors: number;
   readonly serverErrorResponses: readonly HttpResult[];
   readonly attempts: number;
@@ -52,7 +38,6 @@ async function sendBurst(
   const transportFailures: string[] = [];
   let next = 0;
 
-  // `next++` needs no lock: one JS thread, and no `await` between the read and the increment.
   const worker = async (): Promise<void> => {
     for (;;) {
       const index = next++;
@@ -70,12 +55,7 @@ async function sendBurst(
   return { results, transportFailures };
 }
 
-/**
- * This tier anchors a window to its key's first hit, not to a wall-clock boundary — SEC-11 waits for a
- * boundary because `AbuseGuard` floors to one, and that helper does nothing here. Any spec that drives this
- * route leaves windows part-spent with an unknown remainder, so a burst starting there would straddle an
- * expiry and meet the ceiling twice. One full window of silence retires them.
- */
+/** This tier's window starts at a key's first hit, so only a full idle window guarantees fresh ones. */
 async function idleUntilEveryWindowHasLapsed(): Promise<void> {
   await sleep(WINDOW_MS + WINDOW_START_MARGIN_MS);
 }
@@ -88,7 +68,6 @@ async function probeCeiling(attempts: number): Promise<Probe> {
   );
   const completedAt = Date.now();
 
-  // A burst the client could not deliver is not an observation of the server, and must not be reported as one.
   if (transportFailures.length > 0) {
     throw new Error(
       `${transportFailures.length}/${attempts} requests never reached the deployment ` +
@@ -100,7 +79,7 @@ async function probeCeiling(attempts: number): Promise<Probe> {
   }
 
   const limitedResponses = results.filter((response) => response.status === 429);
-  // 503 is this service's honest "the aggregation index is still building", not a failure under load.
+  // 503 means the aggregation index is still building, not a failure under load.
   const serverErrorResponses = results.filter(
     (response) => response.status >= 500 && response.status !== 503,
   );
@@ -124,7 +103,6 @@ function describeProbe(probe: Probe): string {
   );
 }
 
-/** The other half: a burst outlasting the window it opened is counted twice from zero on that task. */
 function expectBurstInsideOneWindow(probe: Probe): void {
   const elapsed = probe.completedAt - probe.startedAt;
   if (elapsed < WINDOW_MS) return;
@@ -151,9 +129,6 @@ caseBlock(
           "than inventing a number",
   },
   () => {
-    // The burst spends every window it opens, and the next spec's first read would be refused for a quota
-    // it never approached — a `429` that reads as that spec's own defect. In `afterAll` and not after the
-    // probe: a burst that throws leaves the windows just as spent.
     afterAll(idleUntilEveryWindowHasLapsed, IDLE_TIMEOUT_MS);
 
     it(
@@ -162,7 +137,6 @@ caseBlock(
         const declared = deploymentParameters.quotaQuery!;
         const attempts = declared * PROBE_MULTIPLIER + Math.max(20, Math.ceil(declared * 0.05));
 
-        // Both halves of the window condition — see each helper for what it rules out.
         await idleUntilEveryWindowHasLapsed();
         const probe = await probeCeiling(attempts);
         expectBurstInsideOneWindow(probe);
@@ -182,9 +156,6 @@ caseBlock(
           );
         }
 
-        // A quota that sheds load by falling over is not a quota. This is the assertion that holds whatever
-        // the task count is, and the reason the case is worth running at all: the refusal has to survive the
-        // balancer as the service's own answer, not as the front door giving up.
         if (probe.serverErrors > 0) {
           const shown = probe.serverErrorResponses.slice(0, 3).map((response) => {
             const body = response.json
@@ -204,8 +175,6 @@ caseBlock(
           );
         }
 
-        // …and it says why, in the vocabulary RC6 defines — not `request_failed`, which is what a bare
-        // ThrottlerException would have produced.
         for (const response of probe.limitedResponses) {
           expect(expectErrorEnvelope(response).error).toBe("rate_limited");
         }

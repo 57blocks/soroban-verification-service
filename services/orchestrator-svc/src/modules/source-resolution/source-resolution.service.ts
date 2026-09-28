@@ -15,11 +15,7 @@ import { MAX_ARCHIVE_BYTES } from "./fetch-source-bytes.util.js";
 import { fetchThroughDestinationPolicy } from "@scvs/core/policy-bound-fetch";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/**
- * The destination policy for the dispatch-path fetch: deliberately the same shape as
- * `fetch-source-bytes.util.ts`'s, down to sharing its `MAX_ARCHIVE_BYTES`, because two policies over
- * one destination set is how one of them quietly stops matching the other.
- */
+// Must stay the same policy as fetch-source-bytes.util.ts's: one destination set, one policy.
 const DISPATCH_SOURCE_POLICY = normalizePolicy({
   allowedSchemes: ["https:"],
   blockPrivateRanges: true,
@@ -27,18 +23,12 @@ const DISPATCH_SOURCE_POLICY = normalizePolicy({
   timeoutMs: 120_000,
 });
 
-/** Same budget as the publish path's, and for the same reason: GitHub archive URLs take a hop. */
 const MAX_REDIRECTS = 5;
 
-/** The message of a thrown value, for a `detail` a submitter reads. */
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * `resolveSourceRefForDispatch` is the entry point; `resolvePrivateUploadSourceRef` is its upload arm, still
- * called directly by tests.
- */
 @Injectable()
 export class SourceResolutionService {
   private readonly logger = new ScvsLogger("source-resolution");
@@ -49,7 +39,6 @@ export class SourceResolutionService {
     @Inject(UploadJobReferencesRepository) private readonly uploadJobReferences: UploadJobReferencesRepository
   ) {}
 
-  /** | arm | outcome | | :-- | :-- | | `private_tarball` | unchanged. */
   async resolveSourceRefForDispatch(
     sourceRef: SourceReferenceDto,
     rebuildId: string,
@@ -73,11 +62,6 @@ export class SourceResolutionService {
     return this.stageRemoteSource(sourceRef, rebuildId, mode);
   }
 
-  /**
-   * Fetches a submitter-supplied `source_uri` under the destination policy, checks the bytes against the hash
-   * the submission declared, stages them, and returns the ref with `source_uri` replaced by a presigned GET of
-   * the staged object.
-   */
   protected async stageRemoteSource(
     sourceRef: SourceReferenceDto,
     rebuildId: string,
@@ -95,9 +79,6 @@ export class SourceResolutionService {
       };
     }
 
-    // `checkUrl` covers the three refusals a submitter can act on without knowing anything about our network: a
-    // non-absolute URI (the bare-path form `SOURCE_URI_PATTERN` still admits at submit), a scheme that is not
-    // `https:`, and an IP-literal host in a blocked range.
     try {
       checkUrl(DISPATCH_SOURCE_POLICY, uri);
     } catch (error) {
@@ -115,15 +96,12 @@ export class SourceResolutionService {
       if (error instanceof ResponseTooLargeError) {
         return { ok: false, reason: "source_archive_too_large", detail: describeError(error) };
       }
-      // `UpstreamNotDeliveredError` is deliberately not caught here — an admitted peer that delivered nothing
-      // falls through below.
       if (error instanceof FetchPolicyError) {
         return { ok: false, reason: "source_uri_refused", detail: describeError(error) };
       }
       return { ok: false, reason: "source_uri_not_materialized", detail: describeError(error) };
     }
 
-    // This is the cheaper refusal: the bytes are already in hand here, so a mismatch costs no Batch job.
     const digest = createHash("sha256").update(bytes).digest("hex");
     const declared = sourceRef.source_sha256?.toLowerCase();
     if (declared && digest !== declared) {
@@ -147,8 +125,6 @@ export class SourceResolutionService {
       });
       return { ok: true, sourceRef: { ...sourceRef, source_uri: stagedUri } };
     } catch (error) {
-      // Our own storage failed, not the submitter's source. Named separately so it is not read as "your URL is
-      // bad" by someone who would then go and check a URL that was fine.
       return {
         ok: false,
         reason: "source_stage_copy_failed",
@@ -189,7 +165,6 @@ export class SourceResolutionService {
     return { ok: true, sourceRef: { ...sourceRef, source_uri: sourceUri } };
   }
 
-  /** The outbound half of `stageRemoteSource`, and the S3 write beside it. */
   protected fetchUnderPolicy(uri: string): Promise<{ bytes: Uint8Array; finalUrl: string }> {
     return fetchThroughDestinationPolicy(uri, {
       policy: DISPATCH_SOURCE_POLICY,
@@ -203,15 +178,11 @@ export class SourceResolutionService {
     key: string,
     bytes: Uint8Array,
   ): Promise<void> {
-    // `application/octet-stream` deliberately, never a type derived from the submitter's URL: that would be
-    // their claim about their own bytes, stored where a later reader could take it for ours.
+    // Never a content type derived from the submitter's URL.
     return putObjectBytes(s3, bucket, key, bytes, "application/octet-stream");
   }
 
-  /**
-   * The one S3 touchpoint on the resolve path, isolated as a method so the e2e suite can substitute it
-   * (`jest.spyOn`).
-   */
+  // Isolated as a method so tests can substitute it.
   protected presignUploadGet(
     s3: ReturnType<typeof createS3Client>,
     bucket: string,
@@ -220,10 +191,6 @@ export class SourceResolutionService {
     return presignGetUrl(s3, bucket, key);
   }
 
-  /**
-   * `orchestrator-svc` already holds direct S3 access, so this reads the object straight rather than presigning
-   * a URL and then fetching it back over HTTP.
-   */
   async readStagedUploadBytes(
     sourceRef: SourceReferenceDto
   ): Promise<{ bytes: Uint8Array; filename?: string } | undefined> {
@@ -241,8 +208,6 @@ export class SourceResolutionService {
     return { bytes, filename: upload.filename };
   }
 
-  /** Returns `undefined` for a missing upload row, never throws. */
-  /** Bytes at a staging key this service was told about, rather than one it resolved from an upload row. */
   async readStagingObjectBytes(key: string): Promise<Uint8Array | undefined> {
     const staging = this.configService.get("stagingStorage", { infer: true });
     const s3 = createS3Client({ region: staging.region });
@@ -254,10 +219,6 @@ export class SourceResolutionService {
     return upload?.filename;
   }
 
-  /**
-   * Deletes a private upload's staged bytes (S3 object + `uploads` row) — the termination-time counterpart to
-   * `UploadCleanupService`'s 30-minute sweep.
-   */
   async deleteStagedUpload(sourceRef: SourceReferenceDto): Promise<void> {
     if (sourceRef.type !== "private_tarball" || !sourceRef.upload_id) {
       return;
@@ -291,10 +252,6 @@ export class SourceResolutionService {
     }
   }
 
-  /**
-   * Isolated for the same reason `presignUploadGet` is: substituting it leaves `deleteStagedUpload` itself real,
-   * so a suite can keep asserting on that call while no request leaves the process.
-   */
   protected deleteStagedObject(
     s3: ReturnType<typeof createS3Client>,
     bucket: string,

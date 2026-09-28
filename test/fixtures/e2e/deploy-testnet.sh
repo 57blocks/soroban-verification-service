@@ -124,12 +124,9 @@ deploy_one() {
 
 if [[ "$deploy_set" == "all" || "$deploy_set" == "core" ]]; then
   deploy_one "F-LEG-1-testnet" "f-leg-1-official.wasm" "cli-legacy"
-  # Each timeout assertion leaves Rule D retries live, so they need separate targets even within
-  # one test:auto run. A shared timeout address only moves active-job dedup between those cases.
+  # Each timeout case leaves its retry live, so each needs its own target, apart from F-LEG-1.
   deploy_one "F-SUB09-TIMEOUT-testnet" "f-leg-1-official.wasm" "cli-legacy"
   deploy_one "F-SUB10-TIMEOUT-testnet" "f-leg-1-official.wasm" "cli-legacy"
-  # Rule D leaves its timed-out retry live after the assertion. Keep that active job off F-LEG-1,
-  # which the ordinary submission and log cases share.
   deploy_one "F-RULE-D-TIMEOUT-testnet" "f-leg-1-official.wasm" "cli-legacy"
   deploy_one "F-LEG-3-target" "f-leg-3-target.wasm" "cli-legacy"
   deploy_one "F-S55-E-testnet" "f-s55-e.wasm" "cli-legacy"
@@ -147,10 +144,6 @@ if [[ "$deploy_set" == "zip" ]]; then
   deploy_one "F-58-ZIP-testnet" "f-58-zip-source.wasm" "cli-58"
   deploy_one "F-58-ZIP-PUBLIC-testnet" "f-58-public-zip-source.wasm" "cli-58"
 fi
-# PERF-01/02 need both a different target and a different rebuild recipe per request. Different
-# salts make target-level in-flight dedup create separate jobs; the E2E request adds the distinct
-# inert bldopt that creates separate rebuild identities. All addresses deliberately deploy the
-# known-good F-LEG-1 Wasm so each correct verdict remains verified.
 if [[ "$deploy_set" == "perf" ]]; then
   for sequence in $(seq 1 "$perf_target_count"); do
     fixture_id="$(printf 'F-PERF-VERIFIED-%03d' "$sequence")"
@@ -172,20 +165,8 @@ fi
 if [[ "$deploy_set" == "all" || "$deploy_set" == "multi-package" ]]; then
   deploy_one "F-MULTIPKG-testnet" "f-multipkg-contract-b.wasm" "cli-legacy"
 fi
-# Its own set rather than a member of `all`, mirroring the build side: these Wasm files only exist
-# after a `compose-only` build, and `all` cannot produce one. `deploy_one` would abort on a missing
-# file, which is correct but reads as a broken script rather than a scope that was never run.
-#
-# ── Why this one skips instead of aborting, and why it still says so ──────────────────────────────
-# Each compose target needs its own composed image, so they are built one run at a time and a partial
-# set is the *normal* state, not an error. Aborting on the first one nobody has built yet would make
-# the fixture you did build undeployable. But a silent skip is the failure this repo keeps designing
-# out — "a Docker-gated test is `describe.skip` on every machine without one, which is
-# indistinguishable from having no test at all". So every absence is named, with the command that
-# fixes it, and the summary line at the end is the checklist.
 if [[ "$deploy_set" == "compose-only" ]]; then
   compose_pending=()
-  # id | wasm — must stay in step with build-purpose-contracts.sh's `compose_targets`.
   for compose_row in \
     "F-COMPOSE-ONLY|f-compose-only.wasm" \
     "F-DEMAND-01|f-demand-01.wasm" \

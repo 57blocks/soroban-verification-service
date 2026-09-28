@@ -2,26 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Global element rules only. Every colour, radius, and font is a token in `tailwind.config.js`,
- * applied as a utility class on the element that needs it — there are no feature stylesheets and
- * no colour custom properties here, deliberately.
- */
-
 @layer base {
   html,
   body {
     @apply m-0 min-h-full w-full bg-surface p-0 font-sans leading-normal text-ink antialiased;
   }
 
-  /* Links are plain text that darkens on hover; underlines are opt-in per link. */
   a {
     @apply text-inherit no-underline;
   }
 
-  /* `:where()` keeps this at element-only specificity so any colour utility on the anchor wins.
-     Without it, `a:hover` (0,1,1) outranks a plain `text-white` (0,1,0) and a solid ink CTA turns
-     black-on-black on hover. Plain links, which carry no colour class, still darken. */
+  /* `:where()` keeps element-only specificity so a colour utility on the anchor still wins on hover. */
   a:where(:hover) {
     @apply text-ink;
   }
@@ -35,18 +26,12 @@
 }
 
 @layer components {
-  /* Interactive dot-field background — the canvas sits inside this and is sized from it.
-     `pointer-events: none` lets mouse events pass through to content on top. */
   .dot-field-container {
     position: absolute;
     inset: 0;
     overflow: hidden;
     pointer-events: none;
   }
-
-  /* ── Scroll-triggered fade-up (see components/ui/fade-up.tsx) ──
-     The hidden/visible pair lives here rather than in inline styles so the
-     reduced-motion override below can switch the whole effect off in one place. */
 
   .fade-up {
     opacity: 0;
@@ -72,8 +57,6 @@
 }
 
 @layer utilities {
-  /* Long hashes and contract ids scroll inside their cell rather than wrapping; hiding the bar
-     keeps the row height stable in the tight result grids. */
   .scroll-x-hidden {
     scrollbar-width: none;
   }

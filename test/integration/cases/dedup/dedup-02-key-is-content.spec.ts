@@ -1,4 +1,3 @@
-/** E2E-DEDUP-02 — the idempotency key is over content, not location or spelling */
 import { caseBlock, rowTest } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixture, fixtures, missingFixture, sourceOf, submissionFor } from "../../support/fixtures.js";
@@ -49,7 +48,6 @@ caseBlock(
 
         expectNoSecondBuild(verdict);
 
-        // So the shared report names URL-A, the location the one build actually read.
         expect(firstReport?.artifact.source?.source_uri).toBe(mirror.url_a);
         expect(secondReport?.artifact.source?.source_uri).toBe(mirror.url_a);
         expect(secondReport?.sha256).toBe(firstReport?.sha256);
@@ -63,8 +61,6 @@ caseBlock(
         ? undefined
         : "F-LEG-1 carries fewer than three bldopt entries, so reversing them is a swap rather than a permutation; add entries to the fixture",
       async () => {
-        // F-LEG-1's OWN options, reversed — not the illustrative `--package=foo` triple that E2E-DEDUP.md's
-        // table spells out.
         const ordered = fixture("F-LEG-1").bldopt!;
         const reordered = [...ordered].reverse();
 
@@ -73,8 +69,6 @@ caseBlock(
           await submissionFor("F-LEG-1", { bldopt: reordered })
         );
 
-        // A new build here would mean `bldopt` entered the hash without being sorted first — exactly what K2
-        // forbids, and a submitter reordering flags harmlessly would pay for a full rebuild.
         expectNoSecondBuild(verdict);
       },
       DOUBLE_JOB_TIMEOUT
@@ -99,14 +93,11 @@ caseBlock(
 
     rowTest(
       "/same_url_changed_content — K1, inverted: different bytes are a different key",
-      // F-LEG-3's own guard, not `mirrored_source`'s: this row does not use the mirror at all.
       missingFixture("F-LEG-3"),
       async () => {
-        // The negative control for this whole case.
         const base = await submissionFor("F-LEG-1");
         const changed = await submissionFor("F-LEG-1", await sourceOf("F-LEG-3"));
 
-        // The row's premise, asserted rather than assumed.
         expect(changed.manifest.source_sha256).not.toBe(base.manifest.source_sha256);
         expect(changed.manifest.source_uri ?? changed.manifest.upload_id).toBeDefined();
         expect(changed.manifest.bldopt).toEqual(base.manifest.bldopt);
@@ -114,8 +105,6 @@ caseBlock(
 
         const { verdict, b } = await runPair(base, changed);
 
-        // A job that failed before building has no rebuilt artifact and is indistinguishable from a fast reuse
-        // hit.
         expect(["verified", "mismatch"]).toContain(b.terminal.body.status);
         expect(b.artifactIsOwn).toBe(true);
 

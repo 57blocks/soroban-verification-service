@@ -1,10 +1,6 @@
 #!/usr/bin/env node
-/**
- * Installs the SDK from a **registry** into a scratch project outside this workspace, then asserts what an
- * installing consumer can actually see.
- */
+/** Installs the SDK from a registry into a scratch project outside the workspace and asserts what a consumer sees. */
 
-/** Why this exists next to `check-sdk-pack-install.mjs`, which also installs outside the workspace: */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,10 +30,6 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-/**
- * A registry endpoint that carries one puts it in the leftmost label, and dropping it leaves the host still
- * legible.
- */
 function describeRegistry(url) {
   try {
     const { host, pathname } = new URL(url);
@@ -48,10 +40,7 @@ function describeRegistry(url) {
   }
 }
 
-/**
- * npm's own view of where the scope resolves, read from OUTSIDE the workspace so the repository's own `.npmrc`
- * cannot answer for a consumer's.
- */
+/** Run from outside the workspace, so the repository's own `.npmrc` cannot answer for a consumer's. */
 function registryFor(scope, cwd) {
   for (const key of scope ? [`${scope}:registry`, "registry"] : ["registry"]) {
     const value = run("npm", ["config", "get", key], cwd).trim();
@@ -60,7 +49,6 @@ function registryFor(scope, cwd) {
   return "";
 }
 
-/** Where the consumer installs from: an override, or the public registry npm already defaults to. */
 function configureRegistry(consumer, scope) {
   const scopedKey = scope ? `${scope}:registry` : "registry";
   const explicit = process.env.SCVS_SDK_REGISTRY?.trim();
@@ -68,8 +56,6 @@ function configureRegistry(consumer, scope) {
     writeFileSync(join(consumer, ".npmrc"), `${scopedKey}=${explicit}\n`, { mode: 0o600 });
     return explicit;
   }
-  // No credential and no endpoint lookup: the package is public. That is the whole point of the
-  // check — it installs the way a stranger does, so anything that needs our account would fail here.
   return registryFor(scope, consumer);
 }
 
@@ -93,8 +79,7 @@ let addedPackages;
 let registry = "";
 
 try {
-  // `tmpdir()` on purpose: inside the workspace, pnpm's links answer for `@scvs/*` and no registry is consulted
-  // at all — the defect this gate exists to catch.
+  // Outside the workspace: inside it, pnpm links answer for `@scvs/*` and no registry is consulted.
   scratch = mkdtempSync(join(tmpdir(), "scvs-registry-install-"));
   const consumer = join(scratch, "consumer");
   mkdirSync(consumer);
@@ -123,8 +108,6 @@ try {
     findings.push(`${name}@${version} does not install from ${describeRegistry(registry)}: ${diagnose(error)}`);
   }
 
-  // The package count is a diagnostic, so a change in npm's `--json` shape must never be reported as a failed
-  // install — a gate that fails for a reason it does not name is worse than no gate.
   if (installOutput !== undefined) {
     try {
       addedPackages = JSON.parse(installOutput).added;
@@ -140,7 +123,6 @@ try {
   }
 
   if (!findings.length) {
-    // The lockfile is the only place that records WHERE each package came from.
     const lock = readJson(join(consumer, "package-lock.json"));
     const resolved = lock.packages?.[`node_modules/${name}`]?.resolved ?? "";
     if (!/^https?:\/\//.test(resolved)) {
@@ -175,7 +157,6 @@ try {
     }
   }
 
-  // Resolving is not running.
   if (!findings.length) {
     writeFileSync(
       join(consumer, "run.mjs"),
@@ -250,8 +231,6 @@ assert.equal(computeAgreement(parsed.source_code_verifications), "disputed");
     if (finding) findings.push(finding);
   }
 
-  // Everything else that bundles for a browser bundles `dist/`; this is the only reader that bundles what a
-  // consumer installed.
   if (!findings.length) {
     const esbuild = binary("esbuild");
     if (!esbuild) {

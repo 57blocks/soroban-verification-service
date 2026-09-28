@@ -177,14 +177,7 @@ export function resolveAddedEnvironment(input: ResolveAddedEnvironmentInput): Re
   return { ok: true, env: [...env, ...input.recordedEnv], skipped };
 }
 
-/**
- * The image's `ENTRYPOINT` is not ours to trust. `bldarg` (`contract build`) only reaches the CLI if the
- * entrypoint *is* the CLI, and the official images now wrap it in a script that starts a session bus and
- * unlocks a keyring — neither of which can start under a uid with no `/etc/passwd` entry, so the `26.0.0`
- * oracle failed before the CLI ever ran. The prefetch and toolchain stages already name their own
- * entrypoint; this makes the rule uniform. Deliberately not a tunable: a configurable entrypoint is a way to
- * run a different binary inside the sandbox.
- */
+/** Never configurable: the image's ENTRYPOINT is untrusted, and a tunable one could run any binary in the sandbox. */
 export const CONTAINER_CLI_ENTRYPOINT = "stellar";
 
 export type AssembleBuildCommandInput = {
@@ -217,13 +210,10 @@ export function assembleBuildCommand(input: AssembleBuildCommandInput): string[]
 }
 
 export type RejectedBuildArgument = {
-  /** The flag as the CLI named it, with any `=value` stripped — see `flagName`. */
   flag: string;
-  /** `recorded_bldopt` — the recipe asked for it and this image's CLI does not accept it. */
   origin: "recorded_bldopt" | "verifier_added";
 };
 
-/** Which argument the build image's CLI rejected, when it rejected one. */
 export function rejectedBuildArgument(input: {
   stderr: string;
   argv: string[];
@@ -235,8 +225,6 @@ export function rejectedBuildArgument(input: {
       if (!captured?.startsWith("-")) continue;
 
       const flag = flagName(captured);
-      // Cross-check: we must actually have issued it. `argv` carries `--flag value` and `--flag=value` forms
-      // both, so compare on the name.
       if (!input.argv.some((token) => flagName(token) === flag)) continue;
 
       return {
@@ -250,7 +238,6 @@ export function rejectedBuildArgument(input: {
   return undefined;
 }
 
-/** clap's two rejection wordings. */
 const REJECTED_ARGUMENT_PATTERNS: readonly RegExp[] = [
   // clap 4: error: unexpected argument '--locked' found
   /unexpected argument ['"]([^'"]+)['"]/gi,
@@ -258,10 +245,7 @@ const REJECTED_ARGUMENT_PATTERNS: readonly RegExp[] = [
   /found argument ['"]([^'"]+)['"] which wasn't expected/gi,
 ];
 
-/**
- * A flag without its value. **Load-bearing for secrecy, not for tidiness.** The result reaches
- * `SandboxDiagnostics` and, through `rebuildFailureDetail`, the public job-status endpoint and SSE.
- */
+/** Strips any `=value`: the result reaches the public job-status endpoint and SSE. */
 function flagName(token: string): string {
   const at = token.indexOf("=");
   return at === -1 ? token : token.slice(0, at);

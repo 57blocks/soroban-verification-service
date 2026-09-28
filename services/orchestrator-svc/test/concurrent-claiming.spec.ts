@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { JobsRepository, createPrismaClient, readDbEnv, type PrismaClient } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 
-/** **T12 — concurrent claiming (DB1).** "Two instances never dispatch the same job." */
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
 
 let clientA: PrismaClient;
@@ -60,15 +59,12 @@ describe("T12 — two instances never claim the same job (DB1)", () => {
     async (from, to) => {
       const jobId = await seedQueuedJob();
       if (from !== "queued") {
-        // Walk the row to the state under test through the same conditional writes, so the setup cannot
-        // accidentally prove something the production path would not do.
         const path = ["queued", "preparing", "building", "comparing"] as const;
         for (let i = 1; i <= path.indexOf(from); i += 1) {
           expect(await repoA.advanceJob(jobId, path[i - 1]!, path[i]!)).toBe(true);
         }
       }
 
-      // Both instances reach for the same row in the same moment.
       const [wonByA, wonByB] = await Promise.all([
         repoA.advanceJob(jobId, from, to),
         repoB.advanceJob(jobId, from, to),
@@ -77,14 +73,11 @@ describe("T12 — two instances never claim the same job (DB1)", () => {
       expect([wonByA, wonByB].filter(Boolean)).toHaveLength(1);
       expect((await repoA.getJobById(jobId))?.status).toBe(to);
 
-      // And the loser stays a loser: a second attempt from the state it thought it was in still matches
-      // nothing, so a retry cannot turn one claim into two.
       expect(await repoB.advanceJob(jobId, from, to)).toBe(false);
     },
   );
 
   it("a job re-queued by Rule D is claimed once, not once per instance", async () => {
-    // A version that re-queued straight to `preparing` would hand the job to whichever replica ran the scan.
     const jobId = await seedQueuedJob();
     expect(await repoA.advanceJob(jobId, "queued", "failed", { failureReason: "internal_error" })).toBe(true);
 
@@ -114,12 +107,9 @@ describe("T12 — two instances never claim the same job (DB1)", () => {
     const jobId = await seedQueuedJob();
     expect(await repoA.advanceJob(jobId, "queued", "publishing", { verdict: "verified" })).toBe(true);
 
-    // Fresh: a healthy publish in flight must not be taken away from the worker doing it.
     expect(await repoA.releaseStalePublishing(new Date(Date.now() - 60_000), [jobId])).toEqual([]);
     expect((await repoA.getJobById(jobId))?.status).toBe("publishing");
 
-    // Stale: the worker is gone, and nothing else would ever move this row — `publishing` is the one
-    // non-terminal state outside the dispatch poll loop.
     await clientA.$executeRawUnsafe(
       `UPDATE jobs SET updated_at = now() - interval '1 hour' WHERE id = $1::uuid`,
       jobId,

@@ -1,15 +1,9 @@
 import { jest } from "@jest/globals";
 import type { JobsRepository } from "@scvs/db";
 
-/**
- * The sweep's own logic, with no database: it deletes table-wide, and ADR-015 forbids a suite to run one
- * against the shared Postgres. What is left to prove is that the bytes go before the pointer does, and that
- * a failed delete keeps both.
- */
 const deleteObject = jest.fn<(...args: unknown[]) => Promise<void>>();
 
-// The rest are `@scvs/storage-layout`'s, reached because `configuration.ts` now reads the result-storage
-// environment. A partial mock of an ESM module is a load-time SyntaxError, not a missing-function error.
+// An ESM mock must provide every export the import graph links; a missing one is a load-time SyntaxError.
 jest.unstable_mockModule("@scvs/aws", () => ({
   createS3Client: () => ({}),
   deleteObject,
@@ -76,7 +70,6 @@ describe("BuildLogExpiryScheduler", () => {
     const { scheduler, order } = schedulerOver(["build-logs/a/build.log"]);
 
     expect(await scheduler.sweep(NOW)).toBe(1);
-    // The reverse order would leave an object nothing points at — retained, and unreachable for deletion.
     expect(order).toEqual(["delete:build-logs/a/build.log", "clear:build-logs/a/build.log"]);
   });
 

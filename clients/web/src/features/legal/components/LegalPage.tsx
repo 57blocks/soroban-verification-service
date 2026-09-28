@@ -9,7 +9,6 @@ import { LegalBlocks } from "./LegalBlocks";
 const statusLine = (effectiveDate: string | null) =>
   effectiveDate === null ? "Draft, pending legal review" : `In effect from ${effectiveDate}`;
 
-/** Yellow because a draft is a warning to the reader, not an error. */
 const DraftBanner = () => (
   <aside
     role="note"
@@ -44,7 +43,6 @@ const OpenItems = ({ items }: { items: string[] }) => (
   </section>
 );
 
-/** The other documents, so a reader who arrived at one can find the rest. */
 const SeeAlso = ({ current }: { current: LegalDocument["slug"] }) => {
   const others = legalLinks.filter(({ to }) => to !== `/${current}`);
   if (others.length === 0) return null;
@@ -55,10 +53,6 @@ const SeeAlso = ({ current }: { current: LegalDocument["slug"] }) => {
   );
 };
 
-/**
- * `bundle` supplies everything that used to be a build-time constant: the operator's name, whether the text
- * is a draft, and where its revision history lives.
- */
 export const LegalPage = ({ doc, bundle }: { doc: LegalDocument; bundle: LegalBundle }) => {
   const isDraft = bundle.effectiveDate === null;
   return (

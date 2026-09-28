@@ -28,10 +28,6 @@ const BASE_CONFIG: ChainReaderConfig = {
 const MAINNET_RPC_URL = "https://mainnet.sorobanrpc.com";
 const WASM_PATH = "/tmp/scvs-chain-reader-test/target.wasm";
 
-// ── Which network arguments the CLI receives ───────────────────────────────────────────────────────
-// These four moved here from `verification-svc`'s own spec, along with the reader. They were the only test
-// either copy had, and they guarded one of the two services that make this call.
-
 test("mainnet without a configured RPC URL keeps the CLI default (--network mainnet)", () => {
   const command = buildFetchCommand(MAINNET_TARGET, BASE_CONFIG, WASM_PATH);
   assert.ok(command.includes("--network"));
@@ -43,7 +39,6 @@ test("mainnet without a configured RPC URL keeps the CLI default (--network main
 test("mainnet with a configured RPC URL passes --rpc-url and the passphrase, not --network", () => {
   const command = buildFetchCommand(MAINNET_TARGET, { ...BASE_CONFIG, mainnetRpcUrl: MAINNET_RPC_URL }, WASM_PATH);
   assert.ok(command.includes("--rpc-url"));
-  // checkUrl normalises before the CLI sees the value — the trailing slash is its toString().
   assert.ok(command.includes(new URL(MAINNET_RPC_URL).toString()));
   assert.ok(command.includes("--network-passphrase"));
   assert.ok(command.includes("Public Global Stellar Network ; September 2015"));
@@ -78,10 +73,6 @@ test("a target given by hash rather than id is fetched by --wasm-hash", () => {
   assert.equal(command.includes("--id"), false);
 });
 
-// ── How a failed fetch is read ─────────────────────────────────────────────────────────────────────
-// Both copies kept these private, so neither was tested. They decide what the submitter is told, and the
-// first of them decides whether the answer is a 404.
-
 const failed = (over: Partial<CommandResult>): CommandResult => ({
   command: ["stellar"],
   exit_code: 1,
@@ -105,7 +96,6 @@ test("the summary prefers the spawn error, then stderr, then stdout, and always 
   assert.equal(summarizeCommandFailure(failed({})), "Stellar CLI command failed.");
 });
 
-// CLI output reaches an API response, so it is bounded. 500 characters plus the ellipsis.
 test("a long failure is truncated", () => {
   const summary = summarizeCommandFailure(failed({ stderr: "x".repeat(900) }));
   assert.equal(summary.length, 503);

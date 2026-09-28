@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-/**
- * Diffs what the job rows say this verifier published against what `wasms/{hash}.json` carries. Reports by
- * default; `--apply` marks missing links pending and touches nothing else. See eng-tools/README.md.
- */
+/** Diffs what the job rows say this verifier published against `wasms/{hash}.json`; `--apply` marks missing links pending. */
 import { readFile } from "node:fs/promises";
 import { argv, env, exit } from "node:process";
 
@@ -18,7 +15,6 @@ function requireEnv(name) {
   return value;
 }
 
-/** The published document, or a marker for why it could not be read. */
 async function readDocument(root, wasmHash) {
   const url = `${root.replace(/\/+$/, "")}/wasms/${wasmHash}.json`;
   if (url.startsWith("file://") || url.startsWith("/")) {
@@ -38,7 +34,6 @@ async function readDocument(root, wasmHash) {
   }
 }
 
-/** Our own entry, by result root — the same identity rule the writer uses (AU2). */
 function ownEntry(document, publicRoot) {
   const root = `${publicRoot.replace(/\/+$/, "")}/`;
   return (document?.source_code_verifications ?? []).find(

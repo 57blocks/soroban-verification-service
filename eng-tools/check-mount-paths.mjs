@@ -6,7 +6,6 @@ import { dirname, join } from "node:path";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** One workflow file's job-definition registration to check. */
 const TARGETS = [
   { label: "builder", path: ".github/workflows/deploy-builder.yml" },
   { label: "composer", path: ".github/workflows/deploy-composer.yml" },
@@ -25,15 +24,11 @@ for (const { label, path } of TARGETS) {
     continue;
   }
 
-  // The registration call's JSON blob is embedded in a shell heredoc with `${...}` interpolations, so it is not
-  // valid JSON on its own.
+  // The blob sits in shell with `${...}` interpolations, so it is not valid JSON; match it by regex.
   const scannable = text
     .split("\n")
     .filter((line) => !/^\s*#/.test(line))
     .join("\n");
-  // Two spellings, because the properties are now assigned to a shell variable and asserted by
-  // check-taskdef-boundary.mjs before being passed to register-job-definition (invariants.md rule 23).
-  // The flag form is kept so this keeps working if a workflow ever inlines the blob again.
   const blobMatch =
     scannable.match(/--(?:ecs|container)-properties\s+"\{([\s\S]*?)\}"\s*\\/) ??
     scannable.match(/(?:ECS|CONTAINER)_PROPERTIES="\{([\s\S]*?)\}"\s*$/m);
@@ -46,7 +41,6 @@ for (const { label, path } of TARGETS) {
   }
   const blob = blobMatch[1];
 
-  // Every volume this blob declares that carries a host bind path: { name -> sourcePath }.
   const hostVolumes = new Map();
   for (const m of blob.matchAll(
     /\\"name\\":\s*\\"([^"\\]+)\\",\s*\\"host\\":\s*\{\\"sourcePath\\":\s*\\"([^"\\]+)\\"\}/g,
@@ -54,13 +48,10 @@ for (const { label, path } of TARGETS) {
     hostVolumes.set(m[1], m[2]);
   }
 
-  // Every volume name declared at all, host-backed or not — so a mount pointing at a Docker-managed volume is
-  // told apart from one pointing at a name that does not exist.
   const declaredVolumes = new Set(
     [...blob.matchAll(/\\"name\\":\s*\\"([^"\\]+)\\",\s*\\"host\\":/g)].map((m) => m[1]),
   );
 
-  // Every mount point: { sourceVolume, containerPath }.
   const mountPoints = [
     ...blob.matchAll(
       /\\"sourceVolume\\":\s*\\"([^"\\]+)\\",\s*\\"containerPath\\":\s*\\"([^"\\]+)\\"/g,
@@ -104,8 +95,6 @@ for (const { label, path } of TARGETS) {
     }
   }
 }
-
-// ── report ──────────────────────────────────────────────────────────────────────────────────────
 
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
 for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);

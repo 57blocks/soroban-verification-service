@@ -1,6 +1,3 @@
-// The other half of TRD §8.3: the same queries, answered by a hosted Public Query API instead of by a
-// client-side fan-out over result roots. Same output shape, so a consumer switches modes without rewriting
-// the code that reads the answer.
 import {
   parseDto,
   flattenValidationErrors,
@@ -20,13 +17,10 @@ import {
 } from "./fetch-policy.js";
 import { definedOnly } from "./client.js";
 
-/** Every route below hangs off this. The prefix is the client's to add, not the deployment's to configure. */
+/** The path prefix every route hangs off; the client adds it, not the deployment. */
 export const QUERY_API_V1 = "/api/query/v1";
 
-/**
- * Why a read did not answer. `code` is the machine-readable one — query-svc's own (`invalid_contract_id`,
- * `contract_not_found`, …) where it answered, and one of this client's where it did not.
- */
+/** `code` is query-svc's own error code when it answered, otherwise one of this client's. */
 export type QueryApiFailure = {
   /** The HTTP status, or `0` when there was no response at all. */
   status: number;
@@ -56,23 +50,17 @@ export function queryApiFailureOf(error: unknown): QueryApiFailure {
 }
 
 export type HostedClientOptions = {
-  /**
-   * The API's origin. Absolute anywhere; relative — `""` meaning "same origin as this page" — only in a
-   * browser, which is what resolves it.
-   */
+  /** The API's origin; a relative base (`""` meaning same origin) works only in a browser. */
   baseUrl: string;
   fetch?: typeof fetch;
   /** Applied to every request. Default 5_000. */
   timeoutMs?: number;
   maxResponseBytes?: number;
-  /**
-   * Defaults to the base URL's own scheme and origin, with the private-range check off: this endpoint is one
-   * the caller named, so the guard that exists for a peer-chosen URL would only refuse a localhost API.
-   */
+  /** Defaults to the base URL's own scheme and origin, with the private-range check off. */
   policy?: FetchPolicyInput;
 };
 
-/** What both aggregation modes answer, so a consumer can hold either — TRD §8.3's "without code change". */
+/** What both aggregation modes answer, so a consumer can hold either. */
 export interface AggregateReader {
   byHash(wasmHash: string): Promise<AggregatedWasmStatus>;
 }
@@ -80,10 +68,7 @@ export interface AggregateReader {
 export interface HostedQueryClient {
   /** The absolute base every read was built on, after resolution. */
   readonly baseUrl: string;
-  /**
-   * The list this deployment aggregates across, in the shape `newClient` takes — so the hosted list can seed
-   * a client-side client.
-   */
+  /** The list this deployment aggregates across, in the shape `newClient` takes. */
   verifiers(): Promise<PeerTrustedVerifiersList>;
   readonly registry: AggregateReader & {
     /** Every trusted verifier's answer for whatever Wasm a contract address currently holds. */
@@ -109,7 +94,6 @@ export function newHostedClient(options: HostedClientOptions): HostedQueryClient
   const guarded = createGuardedFetch(policy, impl);
 
   const urlFor = (path: string) => new URL(`${prefix}${QUERY_API_V1}${path}`, base).toString();
-  // Origin plus whatever path the base carried, which is not `base.origin` when the API sits behind a gateway.
   const resolvedBase = new URL(prefix === "" ? "/" : `${prefix}/`, base).toString().replace(/\/$/, "");
 
   const getJson = async (path: string): Promise<{ status: number; body: unknown }> => {
@@ -127,8 +111,7 @@ export function newHostedClient(options: HostedClientOptions): HostedQueryClient
     try {
       return { status: response.status, body: JSON.parse(text) as unknown };
     } catch {
-      // The success path needs this as much as the failure path does, and for a sharper reason: a console
-      // sharing the API's origin answers an unrouted path with 200 text/html, which is not a refusal.
+      // An origin-sharing console answers an unrouted path with 200 text/html, which is not a refusal.
       throw new QueryApiError({
         status: response.status,
         code: "invalid_response",
@@ -141,8 +124,6 @@ export function newHostedClient(options: HostedClientOptions): HostedQueryClient
 
   const aggregate = async (path: string): Promise<AggregatedWasmStatus> => {
     const { status, body } = await getJson(path);
-    // Validated as a peer's document, returned in the producer type: they differ only where a consumer has to
-    // tolerate more than we publish, and none of those differences is a field a reader dereferences blind.
     return parse(PeerAggregatedWasmStatus, body, status, urlFor(path)) as unknown as AggregatedWasmStatus;
   };
 
@@ -153,8 +134,7 @@ export function newHostedClient(options: HostedClientOptions): HostedQueryClient
       return parse(PeerTrustedVerifiersList, body, status, urlFor("/verifiers"));
     },
     registry: {
-      // Lower-cased and encoded: the route is case-insensitive about a hash, and a subject is not allowed to
-      // carry `../` out of the prefix it was joined onto.
+      // Encoded so a subject cannot carry `../` out of the prefix.
       byHash(wasmHash) {
         return aggregate(`/wasms/${encodeURIComponent(wasmHash.trim().toLowerCase())}`);
       },
@@ -167,15 +147,12 @@ export function newHostedClient(options: HostedClientOptions): HostedQueryClient
   };
 }
 
-/** Absolute as given; a relative base is the browser's own origin, and nothing else can resolve one. */
 function resolveBase(prefix: string, given: string): URL {
   try {
     return new URL(prefix);
   } catch {
-    // Falls through: `""` and `/gateway` both land here.
   }
-  // A bare host — `api.example.com` — parses as neither, and resolving it as a path would silently build
-  // a URL on the page's own origin.
+  // A bare host parses as neither, and resolving it as a path would silently target the page's own origin.
   if (prefix !== "" && !prefix.startsWith("/")) {
     throw new FetchPolicyError(
       `baseUrl ${JSON.stringify(given)} is neither an absolute URL nor a root-relative path; ` +
@@ -195,7 +172,6 @@ function resolveBase(prefix: string, given: string): URL {
 
 const decoder = new TextDecoder();
 
-/** Bounded before it is read: an error body is as unbounded as a success body. */
 async function bodyText(response: Response, maxResponseBytes: number): Promise<string> {
   try {
     return decoder.decode(await readBoundedBytes(response, maxResponseBytes));
@@ -212,8 +188,6 @@ function transportFailure(error: unknown): QueryApiFailure {
   if (error instanceof FetchPolicyError) {
     return { status: 0, code: "refused", message: error.message };
   }
-  // No status and no code of its own. Naming it keeps it distinguishable from a service that answered with a
-  // refusal, which is a different thing to tell a reader.
   return {
     status: 0,
     code: isTimeout(error) ? "timeout" : "unreachable",
@@ -225,7 +199,6 @@ function isTimeout(error: unknown): boolean {
   return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
 }
 
-/** The declared error envelope where there is one, a synthesised failure where there is not. */
 function declaredFailure(response: Response, text: string): QueryApiFailure {
   let body: { error?: unknown; message?: unknown } | undefined;
   try {
@@ -237,8 +210,7 @@ function declaredFailure(response: Response, text: string): QueryApiFailure {
   return {
     status: response.status,
     code: declared ?? `http_${response.status}`,
-    // `||`, not `??`: HTTP/2 carries no reason phrase, so `statusText` is "" in every deployed environment
-    // and a refusal would render as a blank line.
+    // `||`, not `??`: HTTP/2 carries no reason phrase, so `statusText` is "".
     message:
       (typeof body?.message === "string" ? body.message : "") ||
       response.statusText ||

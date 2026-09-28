@@ -2,6 +2,4 @@ packages:
   - "packages/*"
   - "services/*"
   - "clients/*"
-  # The black-box E2E suite (@scvs/e2e-tests). It is a workspace package so `turbo run test` enumerates it and
-  # its `test` task inherits the root task graph.
   - "test/integration"

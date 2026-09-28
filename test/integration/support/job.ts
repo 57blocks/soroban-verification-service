@@ -1,4 +1,3 @@
-/** Submitting, and waiting. */
 import { buildLogTokenFor } from "./build-log-token.js";
 import { deploymentParameters, env } from "./env.js";
 import { expectStatus, http, postJson, sleep, type HttpResult } from "./http.js";
@@ -13,7 +12,6 @@ import {
 
 export interface SubmissionOutcome {
   readonly response: HttpResult;
-  /** Present only on a 202. */
   readonly jobId?: string;
 }
 
@@ -34,7 +32,6 @@ export async function submit(body: SubmitBody): Promise<SubmissionOutcome> {
   return { response, jobId };
 }
 
-/** Submits and asserts the 202, for the many cases where a rejection is simply not the subject. */
 export async function submitAccepted(
   body: SubmitBody,
   options: { requireFreshTargetJob?: boolean } = {},
@@ -65,27 +62,16 @@ export async function readJob(jobId: string): Promise<JobStatusBody> {
 
 export interface TerminalJob {
   readonly body: JobStatusBody;
-  /** `queued` → terminal, in milliseconds. The DEDUP criterion's T1/T2. */
   readonly wallClockMs: number;
-  /** Every distinct status observed, in order — `E2E-SUB-14` compares this against the SSE stream. */
   readonly statusSequence: string[];
-  /** Every distinct `progress.step` observed, in order. */
   readonly progressSteps: string[];
 }
 
-/**
- * The one published status a job can leave again: the retry scan re-queues `build_timeout` and
- * `internal_error`, both publish as `build_failed`, and the body never says which reason it was.
- */
+/** The retry scan re-queues build_timeout and internal_error, and both publish as build_failed. */
 const REQUEUEABLE_STATUS = "build_failed";
 
-/** One `SCVS_JOB_RETRY_INTERVAL_MS` scan plus a margin, so a re-queue that is going to happen has happened. */
 export const RETRYABLE_SETTLE_MS = (deploymentParameters.jobRetryIntervalMs ?? 60_000) + 2_000;
 
-/**
- * Holds a `build_failed` for `settleMs` before returning it, so a retried job is read at its final answer.
- * `settleMs: 0` returns the first terminal state, for a case whose subject is that state.
- */
 export async function waitForTerminal(
   jobId: string,
   options: { timeoutMs?: number; startedAt?: number; settleMs?: number } = {}
@@ -97,8 +83,6 @@ export async function waitForTerminal(
   const statusSequence: string[] = [];
   const progressSteps: string[] = [];
   let last: JobStatusBody | undefined;
-  // When the status now being held was first seen. T1/T2 measure to that instant, not to `Date.now()`, so
-  // settling does not inflate the wall clock a caller reads.
   let heldSince = 0;
 
   while (Date.now() < deadline) {
@@ -121,8 +105,6 @@ export async function waitForTerminal(
     await sleep(env.pollIntervalMs);
   }
 
-  // A `build_failed` still inside its settle window when the job timeout expired did reach a terminal state.
-  // Reporting "never reached one" would be false.
   if (last && TERMINAL_JOB_STATUSES.includes(last.status)) {
     return { body: last, wallClockMs: heldSince - startedAt, statusSequence, progressSteps };
   }
@@ -130,8 +112,6 @@ export async function waitForTerminal(
   throw new Error(
     `Job ${jobId} never reached a terminal state within ${timeoutMs} ms. ` +
       `Statuses seen: ${statusSequence.join(" → ") || "(none)"}. ` +
-      // A job that timed out while composing looks identical to one stuck in `preparing` unless the progress
-      // line is printed too, and "which of those was it" is the first question asked.
       `Progress steps seen: ${progressSteps.join(" → ") || "(none)"}. ` +
       `Last body: ${JSON.stringify(last)}`
   );
@@ -146,15 +126,6 @@ export async function submitAndWait(
   return { ...terminal, jobId };
 }
 
-/**
- * `GET …/log` returns `text/plain`, and a JSON envelope on every other arm of BL-1's ladder: 401 with no
- * `X-Build-Log-Token`, 404 with a wrong one *and* when the job recorded no log — the two are deliberately
- * indistinguishable, so the route is not an oracle for which job ids exist — and 410 once the log expires.
- *
- * The token is attached from this run's own submissions. A job this run did not create has none, and the
- * resulting 401 is the correct answer rather than a harness defect: its log belongs to the submission that
- * created it.
- */
 export async function readJobLog(jobId: string): Promise<HttpResult> {
   const token = buildLogTokenFor(jobId);
   return http(jobLogUrl(jobId), {
@@ -162,13 +133,10 @@ export async function readJobLog(jobId: string): Promise<HttpResult> {
   });
 }
 
-/** Uploads raw archive bytes. */
 export async function uploadSource(
   bytes: Uint8Array,
   filename = "source.tar.gz"
 ): Promise<UploadSourceResponse> {
-  // The upload door decides archive format from magic bytes. Keep the conventional MIME type on the wire too,
-  // so ZIP E2E rows exercise the same browser request shape rather than a gzip-labelled ZIP.
   const contentType = filename.toLowerCase().endsWith(".zip") ? "application/zip" : "application/gzip";
   const result = await http(uploadSourceUrl(), {
     method: "POST",
@@ -179,30 +147,22 @@ export async function uploadSource(
   return result.json as UploadSourceResponse;
 }
 
-/**
- * `JobsRepository.requeueRetryableFailures` sets `progress_step = "queued"` together with this string, and
- * `progress` is a published field on `GET /v1/verifications/:job_id`.
- */
+/** Must match the detail JobsRepository.requeueRetryableFailures writes. */
 export const RULE_D_REQUEUE_DETAIL = "Retrying after a retryable failure.";
 
 export interface RequeueWatch {
-  /** The last body observed — where the job stood when the window closed. */
   readonly body: JobStatusBody;
   readonly statusSequence: string[];
   readonly progressSteps: string[];
   readonly progressDetails: string[];
-  /** Every distinct `updated_at` observed, in order. */
   readonly updatedAtSequence: string[];
-  /** Terminal → non-terminal transitions actually observed. */
   readonly requeues: number;
   readonly sawRequeueMarker: boolean;
   readonly endedTerminal: boolean;
   readonly watchedMs: number;
-  /** Human-readable, attached verbatim to an assertion message. */
   readonly explanation: string;
 }
 
-/** Keeps polling a job **past** its first terminal state. */
 export async function watchPastTerminal(
   jobId: string,
   options: { windowMs: number; stopOnFirstRequeue?: boolean }
@@ -232,7 +192,6 @@ export async function watchPastTerminal(
     if (detail && progressDetails[progressDetails.length - 1] !== detail) progressDetails.push(detail);
     if (detail === RULE_D_REQUEUE_DETAIL) sawRequeueMarker = true;
 
-    // A job that left a terminal status was re-queued by something.
     if (previousWasTerminal === true && !terminal) requeues += 1;
     previousWasTerminal = terminal;
 

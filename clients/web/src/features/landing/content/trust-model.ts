@@ -14,17 +14,9 @@ export type TrustSignal = {
   title: string;
   description: string;
   tag: string;
-  /**
-   * The card's hash comparison, drawn as the deployed digest over the rebuilt one. Illustrative digests, split
-   * into chunks so the eye can find the chunk that differs — which is what reading a real one is like.
-   */
   compare: { deployed: string[]; rebuilt: string[] };
 };
 
-/**
- * The second card named Stellar Expert. Nothing in `config/trusted-verifiers.*.json` lists them, so the example
- * attributed a verdict to a third party that is not a peer of this deployment.
- */
 export const trustSignals: TrustSignal[] = [
   {
     tone: "ok",

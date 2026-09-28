@@ -1,25 +1,19 @@
 import type { RebuildErrorCode } from "@scvs/core";
-// Which file is the rebuilt artifact.
 
 import { readdir, rm, stat } from "node:fs/promises";
 import { join, posix, resolve, sep } from "node:path";
 import type { CommandResult } from "@scvs/core/process";
 
-/** The build container's scratch mount: `target/`, `tmp/`, `cargo-home/`, `vendor/`. Compiler-visible paths — moving one is byte-affecting. */
+/** Compiler-visible path: changing it changes the built bytes. */
 export const CONTAINER_OUT_DIR = "/out";
 
-/** Where the build tool copies its artifacts (`--out-dir`), on a mount of its own. AR1's candidates are the `.wasm` files here. */
 export const CONTAINER_ARTIFACT_DIR = "/artifact";
 
-/** One `Wasm File:` / `Wasm Hash:` pair from the build tool's own build summary. */
 export type BuildArtifactReport = {
-  /** Path inside the build container, exactly as the tool printed it. */
   containerPath: string;
-  /** The tool's own hash of the bytes it produced, when it printed one. */
   sha256?: string;
 };
 
-/** Parse the artifact report `stellar contract build` prints for each contract it produced. */
 export function parseBuildArtifactReports(output: string): BuildArtifactReport[] {
   const reports: BuildArtifactReport[] = [];
   for (const rawLine of output.split(/\r?\n/)) {
@@ -41,12 +35,8 @@ export function parseBuildArtifactReports(output: string): BuildArtifactReport[]
   return reports;
 }
 
-/**
- * **AR1** — the candidate is the one artifact in the output mount, and the tool's own report must name it.
- * Uniqueness is used only to refuse: nothing is selected by inspecting the directory.
- */
+/** A report only confirms the sole artifact in the mount, never selects one: code run by the compile can print a report. */
 export function selectArtifactFromOutput(input: {
-  /** Absolute host paths, from `snapshotWasmPaths` over the artifact mount, taken after the build. */
   candidates: string[];
   reports: BuildArtifactReport[];
   artifactDir: string;
@@ -93,11 +83,9 @@ export function selectArtifactFromOutput(input: {
     }
     if (resolved.hostPath !== candidate) continue;
 
-    // A `Wasm Hash:` binds to the report above it, so the winning report is not always the one carrying it.
     const sha256 = report.sha256 ?? lastHashFor(input.reports.slice(0, index), candidate, input.artifactDir);
     if (!sha256) {
-      // Every oracle in `test/differential/oracles.ts` prints one, 25.1.0 through 27.1.0 — so an absent hash
-      // is not an old-CLI compatibility case, and relaxing this back to a skip would be a fail-open.
+      // A missing hash must refuse; treating it as a skip would fail open.
       return {
         ok: false,
         reason: "artifact_report_hash_missing",
@@ -117,7 +105,6 @@ export function selectArtifactFromOutput(input: {
   };
 }
 
-/** The last hash any of `earlier` stated for `candidate`, in print order. */
 function lastHashFor(
   earlier: BuildArtifactReport[],
   candidate: string,
@@ -132,7 +119,6 @@ function lastHashFor(
   return undefined;
 }
 
-/** Every `.wasm` under `root`, not following symlinks: **AR2**'s pre-build snapshot, and AR1's post-build candidate listing. */
 export async function snapshotWasmPaths(root: string): Promise<Set<string>> {
   const found = new Set<string>();
   await collectExistingWasm(root, found);
@@ -153,15 +139,13 @@ async function collectExistingWasm(dir: string, found: Set<string>): Promise<voi
       await collectExistingWasm(path, found);
       continue;
     }
-    // Symlinks are deliberately not followed — `isFile()` is false for one, so a link pointing at a `.wasm`
-    // outside the tree is not recorded.
+    // Symlinks are not followed: `isFile()` is false for one.
     if (entry.isFile() && entry.name.endsWith(".wasm")) {
       found.add(resolve(path));
     }
   }
 }
 
-/** Map a reported in-container path to its host path, requiring it to sit inside the dedicated output mount. */
 export function resolveReportedArtifact(
   containerPath: string,
   outDir: string,
@@ -179,6 +163,3 @@ export function resolveReportedArtifact(
   const relative = normalized.slice(CONTAINER_ARTIFACT_DIR.length + 1);
   return { ok: true, hostPath: join(outDir, ...relative.split("/")) };
 }
-
-// Everything that read the CLI's prose lived here — `extractVerifiedHash`, `parseVerifyArtifactReport`, the
-// kept-directory locators.

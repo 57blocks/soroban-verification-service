@@ -6,7 +6,6 @@ import type { LookupState } from "../types";
 
 export const isWasmHash = isHexSha256;
 
-/** Every trusted verifier's answer for one Wasm hash, as *this deployment* has it. */
 export const useHashLookup = (wasmHash: string | null): LookupState & { refresh: () => void } => {
   const trimmed = wasmHash?.trim().toLowerCase() ?? null;
   const valid = trimmed !== null && trimmed !== "" && isWasmHash(trimmed);
@@ -18,5 +17,4 @@ export const useHashLookup = (wasmHash: string | null): LookupState & { refresh:
   );
 };
 
-/** Shared with the contract route: these codes are the transport's, not one route's. */
 export const lookupFailureCopy = (failure: QueryApiFailure): string => transportFailureCopy(failure);

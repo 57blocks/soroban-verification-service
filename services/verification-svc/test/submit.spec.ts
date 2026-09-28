@@ -14,10 +14,7 @@ afterAll(async () => {
   await app?.close();
 });
 
-// Characterization tests pinning the error envelope every route answers in — the version field included, since
-// a consumer keys off it to know how to read the rest.
 describe("POST /api/verification/v1/verifications validation", () => {
-  // The row E2E-API-01 sends and this suite never did.
   it("rejects a body with no target at all", async () => {
     const res = await request(server).post("/api/verification/v1/verifications").send({});
     expect(res.status).toBe(400);
@@ -30,7 +27,6 @@ describe("POST /api/verification/v1/verifications validation", () => {
     });
   });
 
-  // The other half of the same hole: present, but nothing to descend into.
   it.each([
     ["a string", "testnet"],
     ["an array", []],

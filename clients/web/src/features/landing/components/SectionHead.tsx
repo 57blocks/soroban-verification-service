@@ -5,11 +5,9 @@ type SectionHeadProps = {
   label: string;
   title: ReactNode;
   description: ReactNode;
-  /** `dark` recolours the three lines for the near-black sections. */
   tone?: "light" | "dark";
 };
 
-/** The eyebrow + heading + blurb block that opens every landing section. */
 export const SectionHead = ({
   label,
   title,

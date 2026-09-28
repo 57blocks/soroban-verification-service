@@ -20,7 +20,6 @@ const bulkQueryDocs = [
   { name: "cursor", required: false, schema: { type: "string" }, description: "{timestamp}-{wasm_hash}" },
 ] as const;
 
-/** Reads `jobs.published_updated_at` directly via `JobsRepository`. */
 @Controller()
 export class OwnBulkLoadController {
   constructor(@Inject(JobsRepository) private readonly jobs: JobsRepository) {}
@@ -50,7 +49,6 @@ export class OwnBulkLoadController {
     };
   }
 
-  /** Same handler, same body; the headers are the only difference. */
   @Get("api/verification/v1/wasms.json")
   @SkipThrottle()
   @ApiOperation({ operationId: "ownBulkLoadJson", deprecated: true, description: DEPRECATED_JSON_ROUTE_DESCRIPTION })
@@ -70,7 +68,6 @@ export class OwnBulkLoadController {
   }
 }
 
-/** A malformed cursor, order or limit is a client error, never a silently substituted default. */
 function parseBulkQuery(orderParam?: string, limitParam?: string, cursorParam?: string) {
   const order = parseBulkOrder(orderParam);
   if (!order) throw new ApiError(400, { error: "invalid_order", message: "order must be 'asc' or 'desc'" });

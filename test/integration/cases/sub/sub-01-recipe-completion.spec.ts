@@ -1,4 +1,3 @@
-/** E2E-SUB-01 — cli_legacy_recipe_completion */
 import { caseBlock } from "../../support/gate.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
 import { env } from "../../support/env.js";
@@ -48,14 +47,10 @@ for (const row of NETWORKS) {
 
         const body = response.json;
 
-        // HA1 — a cli-legacy pair resolves to a *composed* environment.
         expect(body.build_environment?.kind).toBe("compose");
 
-        // It must not appear in `missing_fields`.
         expect(body.missing_fields ?? []).not.toContain("bldimg");
 
-        // HA2 — cli-legacy has no on-chain SEP-58 recipe, so preflight cannot claim completeness, and what it
-        // *does* ask for is the source.
         const missing: string[] = body.missing_fields ?? [];
         expect(missing.length).toBeGreaterThan(0);
         expect(missing).toEqual(expect.arrayContaining(["source_sha256"]));
@@ -65,20 +60,15 @@ for (const row of NETWORKS) {
       it(
         "accepts one fresh recipe, reaches verified, and appears on the public query surface",
         async () => {
-          // HA3 is asserted by construction: after preflight, the harness completes the recipe locally.
           const submitted = await submit(await submissionFor(row.fixtureId));
           expectStatus(submitted.response, 202);
           expect(submitted.jobId).toBeDefined();
           expect(submitted.response.json.status).toBe("queued");
 
-          // HA4 — submission is a write plus a return, never a build. Five seconds is generous; the point is
-          // that this response does not wait on the verification pipeline.
           expect(submitted.response.durationMs).toBeLessThan(5_000);
 
           const terminal = await waitForTerminal(submitted.jobId!);
 
-          // HA5. Note the vocabulary: the *job* surface says `verified`, and the published surface says
-          // `verified` too — the two only diverge on mismatch (see GAPS.JOB_STATUS_VOCABULARY).
           if (terminal.body.status !== "verified") {
             throw new Error(
               `Verification job ${submitted.jobId} did not reach verified. ` +
@@ -91,7 +81,6 @@ for (const row of NETWORKS) {
           const wasmHash = terminal.body.result?.wasm_hash ?? target.wasm_hash;
           expect(wasmHash).toBeDefined();
 
-          // HA6 — through the aggregate route, because that is the surface a consumer has.
           const identity = await ownVerifierIdentity();
           const queryUrl = aggregatedByHashUrl(wasmHash!);
           const deadline = Date.now() + 60_000;

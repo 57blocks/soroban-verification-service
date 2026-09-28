@@ -8,7 +8,6 @@ import {
 } from "../src/modules/source-resolution/fetch-source-bytes.util.js";
 import type { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/** Falls back to `.tar.gz`. */
 describe("deriveExtension", () => {
   it("treats .tar.gz as one unit, not the last .-segment", () => {
     expect(deriveExtension("myproject.tar.gz")).toBe(".tar.gz");
@@ -47,10 +46,6 @@ describe("deriveExtension", () => {
   });
 });
 
-/**
- * `sources/` is content-addressed and `E2E-SRC-06` asserts the invariant that binds it: hashing the published
- * bytes reproduces `artifact.source.source_sha256`.
- */
 const SUBMITTED_SHA = "a".repeat(64);
 const CANONICAL_SHA = "b".repeat(64);
 const CANONICAL_KEY = "staging/rebuild-1/verify/canonical-source";
@@ -64,7 +59,6 @@ const UPLOADED: SourceReference = {
   upload_id: "upload-1",
 };
 
-/** Only the two reads the publish path makes; everything else on the service is out of scope here. */
 function resolution(over: Partial<Record<"staging" | "upload", unknown>> = {}) {
   return {
     readStagingObjectBytes: async (key: string) =>
@@ -77,7 +71,6 @@ function resolution(over: Partial<Record<"staging" | "upload", unknown>> = {}) {
 
 describe("canonicalArchiveExtension", () => {
   it("names the archive by its FORMAT, not by what the submitter called the container", () => {
-    // The case this exists for: a `.tar.gz` that arrived inside `counter.zip`.
     expect(canonicalArchiveExtension("gzip")).toBe(".tar.gz");
     expect(canonicalArchiveExtension("zip")).toBe(".zip");
     expect(canonicalArchiveExtension("tar")).toBe(".tar");
@@ -98,18 +91,13 @@ describe("declareSourceFileName — the canonical archive names the published co
     });
 
     expect(name).toBe(`${CANONICAL_SHA}.tar.gz`);
-    // The invariant `sourceFileExtension`/`sourceSha256FromFileName` rest on, asserted rather than assumed: the
-    // name is self-describing, so every consumer reads one value and not two.
     expect(sourceSha256FromFileName(name)).toBe(CANONICAL_SHA);
   });
 
   it("is unchanged when the submitted archive IS the canonical archive", async () => {
-    // Every submission that exists today: nothing was peeled, so the name comes off the upload's own filename
-    // exactly as it did before this feature.
     expect(await declareSourceFileName(UPLOADED, resolution())).toBe(`${SUBMITTED_SHA}.tar.gz`);
   });
 
-  /** `deriveExtension` reads the LAST segment, so a `.tar.gz.zip` submission derives `.zip`. */
   it("does not let the container's extension name the archive inside it", async () => {
     expect(deriveExtension("counter.tar.gz.zip")).toBe(".zip");
 
@@ -134,7 +122,6 @@ describe("fetchSourceBytesForPublishing — which bytes land in sources/", () =>
   });
 
   it("returns nothing when the canonical object is gone, rather than falling back to the submitted bytes", async () => {
-    // Returning `undefined` leaves `sourcePublishPendingSince` set for the recovery scheduler instead.
     const fetched = await fetchSourceBytesForPublishing(UPLOADED, resolution({ staging: undefined }), {
       sha256: CANONICAL_SHA,
       key: "staging/rebuild-1/verify/absent",

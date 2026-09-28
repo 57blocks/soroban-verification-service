@@ -1,16 +1,5 @@
 name: Publish images
 
-# This repository's build artifacts, published where anyone can pull them.
-#
-# The split this file exists for: **building is public, deploying is not.** A container image is a
-# function of this source and nothing else, so it is built here, from a run anyone can read, and
-# addressed by digest. The deployment pipeline never builds — it is handed a digest and copies it
-# into the registry its runtime pulls from. That is what lets the deploy workflows be reusable
-# without ever checking this repository out, and it is why no AWS credential appears in this file.
-#
-# Immutable tags only. The moving pointer that decides what a service is *running* is a mutable alias
-# in the deployment registry, owned by Terraform (invariants.md rule 29); nothing here should be
-# mistaken for it.
 on:
   push:
     branches:
@@ -20,11 +9,10 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write # provenance attestation, not cloud access
+  id-token: write
   attestations: write
 
-# Never cancel a publish in flight: a half-pushed manifest is worse than a queued one, and a later
-# commit's images do not supersede an earlier commit's — both are addressed by their own digest.
+# Never cancel a publish in flight: a half-pushed manifest is worse than a queued one.
 concurrency:
   group: publish-images-${{ github.ref }}
   cancel-in-progress: false
@@ -40,8 +28,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The resident services' image. The only one that bakes the pinned `stellar` CLI, which
-          # verification-svc's preflight and orchestrator-svc's chain reader spawn.
           - component: service
             dockerfile: docker/service.Dockerfile
             platform: linux/arm64
@@ -52,9 +38,7 @@ jobs:
             platform: linux/arm64
             tag_suffix: ""
             needs_cli: "false"
-          # The builder ships as two single-architecture images rather than one manifest list: each
-          # Batch compute environment is single-architecture, and dispatch picks the queue that can
-          # run the submission's image.
+          # Two single-architecture images, never one manifest list: each Batch compute environment is single-architecture.
           - component: builder
             dockerfile: docker/builder.Dockerfile
             platform: linux/arm64
@@ -73,8 +57,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # No AWS here, so the S3 build cache is not reachable and not wanted: the script's primary
-      # source is the official release the pin names, digest-verified either way.
       - name: Fetch the pinned stellar CLI binary
         if: matrix.needs_cli == 'true'
         env:
@@ -96,10 +78,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The console's build stamp. A COMMIT date, not a build date: an image is a function of its source, so
-      # rebuilding a commit has to produce the same stamp. `.dockerignore` excludes `.git` from the build
-      # context, which is why it is read here and passed in. Skipped for every other component, whose
-      # Dockerfiles declare no such argument.
+      # A commit date, not a build date: rebuilding a commit must produce the same stamp.
       - name: Read the console's build stamp
         if: matrix.component == 'web'
         id: stamp
@@ -124,23 +103,12 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           push: true
-          # Empty for every component but web, whose step above is the only one that runs.
           build-args: ${{ steps.stamp.outputs.args }}
-          # Both default to true, which makes `outputs.digest` name an OCI index (image plus
-          # attestation manifests) rather than the image. The deployment side copies by digest and
-          # must get the image; provenance is attached below instead.
+          # Both default to true, which makes `outputs.digest` an OCI index rather than the image.
           provenance: false
           sbom: false
           tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/sv-${{ matrix.component }}:${{ github.sha }}${{ matrix.tag_suffix }}
 
-      # A service whose subject is reproducible builds should be able to answer "what produced this
-      # image" about its own artifacts.
-      #
-      # Gated on visibility rather than skipped or forced: persisting an attestation is one of the
-      # features this organization's plan allows only on a public repository — the same wall branch
-      # protection sits behind. Unconditional, every image publishes and then the run goes red on
-      # the last step; `continue-on-error` would hide a genuine signing failure after publication.
-      # This turns itself on at the flip and means something from that moment.
       - name: Attest build provenance
         if: github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

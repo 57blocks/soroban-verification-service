@@ -9,22 +9,14 @@ import { ImagePlatformService } from "./image-platform.service.js";
 import { MismatchDiagnosticsService } from "./mismatch-diagnostics.service.js";
 import { VerificationPipelineService } from "./verification-pipeline.service.js";
 
-/**
- * The build-dispatch half of orchestrator-svc's pipeline. Exports `VerificationPipelineService` (driven per
- * active job by `build-dispatch.scheduler.ts`) and `BatchDispatchService`.
- */
 @Module({
   imports: [PublishModule, BuildEnvironmentsModule, SourceResolutionModule],
   providers: [
     ChainReaderService,
-    // Not exported: it answers a question only the pipeline asks, about a rebuild only the pipeline keys.
     BuildEnvironmentIdentityService,
-    // Not exported: `BatchDispatchService` is its only consumer, and its per-process cache is only sound
-    // because there is exactly one instance of it.
+    // Not exported: its per-process cache is sound only with exactly one instance.
     ImagePlatformService,
     BatchDispatchService,
-    // Not exported: only `VerificationPipelineService` explains a mismatch, and it does so strictly after the
-    // verdict it cannot change.
     MismatchDiagnosticsService,
     VerificationPipelineService,
   ],

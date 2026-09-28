@@ -11,7 +11,6 @@ export class StatusLinkRecoveryScheduler implements OnModuleInit, OnModuleDestro
   private readonly logger = new ScvsLogger("status-link-recovery");
   private readonly metrics = new ScvsMetrics("status-link-recovery", { logger: this.logger });
   private readonly detached = new DetachedWork(this.logger);
-  // Same-process, in-flight guard as the sibling recovery schedulers'.
   private readonly retryingJobIds = new Set<string>();
 
   constructor(
@@ -39,19 +38,13 @@ export class StatusLinkRecoveryScheduler implements OnModuleInit, OnModuleDestro
   async recoverPendingStatusLinks(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingStatusLink();
-      // Same O4 discipline as the other backlog gauges: emitted on every tick, including the empty one, so
-      // silence never reads as zero.
       this.metrics.gauge("status_link_backlog", pending.length);
-      // The level alone cannot tell a queue that is moving from one job stuck since the day it published,
-      // and the query returns them oldest-first.
       const oldest = pending[0]?.statusLinkPendingSince;
       this.metrics.gauge(
         "status_link_oldest_pending_seconds",
         oldest ? Math.max(0, (Date.now() - Date.parse(oldest)) / 1000) : 0,
       );
 
-      // Held rows are excluded from `pending` by construction, so without this the one state that needs a
-      // human is the one nothing reports.
       const blocked = await this.jobs.countJobsBlockedStatusLink();
       for (const reason of ["invalid_document", "unrepresentable", "manual_hold"] as const) {
         this.metrics.gauge("status_link_blocked", blocked.find((row) => row.reason === reason)?.count ?? 0, {

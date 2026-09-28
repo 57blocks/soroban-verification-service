@@ -1,4 +1,3 @@
-/** The HTTP client every case uses. */
 import { createHash } from "node:crypto";
 
 import { captureBuildLogToken } from "./build-log-token.js";
@@ -12,7 +11,6 @@ export interface HttpResult {
   readonly bytes: Uint8Array;
   readonly durationMs: number;
   readonly url: string;
-  /** Parsed body when the response was JSON; `undefined` for `text/plain`, archives, or bad JSON. */
   readonly json?: any;
 }
 
@@ -21,7 +19,6 @@ export interface HttpOptions {
   readonly headers?: Record<string, string>;
   readonly body?: string | Uint8Array;
   readonly timeoutMs?: number;
-  /** Send no `Accept`/`Content-Type`. `E2E-QRY-11` needs a request carrying nothing at all. */
   readonly bare?: boolean;
 }
 
@@ -43,8 +40,7 @@ export async function http(url: string, options: HttpOptions = {}): Promise<Http
     const text = new TextDecoder().decode(buffer);
     const json = tryJson(text);
 
-    // Here and not in the submit helpers: the token is returned exactly once and cannot be re-issued, so the
-    // capture has to sit somewhere no call site can bypass. See `build-log-token.ts`.
+    // The token is returned only once; capture it here, where no call site can bypass it.
     if (response.status === 202) captureBuildLogToken(json);
 
     return {
@@ -75,9 +71,7 @@ export function sha256Hex(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** The error envelope, as the two services actually emit it. One shape on both (RC6). */
 export interface ErrorEnvelope {
-  /** `stellar-verification-error` and `1.0` — both required, both asserted below. */
   readonly schema?: string;
   readonly schema_version?: string;
   readonly error: string;
@@ -90,10 +84,6 @@ export interface ErrorEnvelope {
 export function expectErrorEnvelope(result: HttpResult): ErrorEnvelope {
   expect(result.status).toBeGreaterThanOrEqual(400);
   expect(result.json).toBeDefined();
-  // Asserted here rather than per case, because the failure this catches is a *route* that answers
-  // outside the envelope — a catch-all filter building its own body, which is what query-svc's did
-  // until 2026-09-03 while its OpenAPI declared both fields required. A negative case that reaches
-  // any 4xx/5xx on either service is an observation of that, whatever it was probing for.
   expect(result.json.schema).toBe("stellar-verification-error");
   expect(result.json.schema_version).toBe("1.0");
   expect(typeof result.json.error).toBe("string");
@@ -102,7 +92,6 @@ export function expectErrorEnvelope(result: HttpResult): ErrorEnvelope {
   return result.json as ErrorEnvelope;
 }
 
-/** Fails with the body attached — a bare "expected 200, got 400" costs a second run to diagnose. */
 export function expectStatus(result: HttpResult, ...allowed: number[]): void {
   if (allowed.includes(result.status)) return;
   throw new Error(

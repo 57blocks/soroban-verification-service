@@ -5,8 +5,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-// Four steps, each catching what the previous cannot: the bundle imports exactly its declared dependencies.
-
 const here = dirname(fileURLToPath(import.meta.url));
 const sdkRoot = resolve(here, "..");
 const bundlePath = join(sdkRoot, "dist/index.js");
@@ -14,10 +12,7 @@ const fixtureRoot = resolve(sdkRoot, "../../test/fixtures/verifiers");
 
 const WASM_HASH = "a".repeat(64);
 
-/**
- * Every bare specifier the bundle imports, in either form. Anchored, or a string literal containing the word
- * "import" matches.
- */
+/** Anchored, or a string literal containing "import" would match. */
 const BUNDLE_IMPORT =
   /(?:^|[\s;}])(?:import|export)\s[^;]*?from\s*["']([^"']+)["']|(?:^|[\s;}])import\s*["']([^"']+)["']/gm;
 
@@ -29,10 +24,7 @@ async function bundleImports(): Promise<string[]> {
   return [...new Set(specifiers)].sort();
 }
 
-/**
- * An equality assertion, not a denylist: a package the bundle inlines emits no import at all, so grepping for
- * `@nestjs/` would pass on a bundle carrying the whole of Nest.
- */
+/** Equality, not a denylist: an inlined package emits no import, so a grep would pass a bundle carrying all of Nest. */
 async function assertImportsMatchDependencies(): Promise<void> {
   const manifest = JSON.parse(await readFile(join(sdkRoot, "package.json"), "utf8")) as {
     dependencies?: Record<string, string>;
@@ -47,7 +39,6 @@ async function assertImportsMatchDependencies(): Promise<void> {
   );
 }
 
-/** `class-validator` reads a property's type from the metadata the compiler emits. */
 async function assertDecoratorMetadataSurvived(): Promise<void> {
   const source = await readFile(bundlePath, "utf8");
   assert.ok(
@@ -71,7 +62,6 @@ async function browserBundle(): Promise<string> {
   return outfile;
 }
 
-/** A `fetch` over the fixture tree; the bundle itself never touches the filesystem. */
 function fixtureFetch(): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
@@ -96,7 +86,6 @@ async function main(): Promise<void> {
       await readFile(join(fixtureRoot, "trusted-verifiers.local.json"), "utf8"),
     ) as Parameters<typeof sdk.newClient>[0]["tvl"];
 
-    // An absolute https base, so the default policy is the one being exercised.
     const client = sdk.newClient({
       tvl,
       baseUrl: "https://fixtures.example.com/",
@@ -112,7 +101,6 @@ async function main(): Promise<void> {
     );
     assert.equal(aggregate.agreement, "disputed");
 
-    // Validation must still reject: proof that bundling kept `reflect-metadata` and the metadata.
     assert.throws(() => sdk.newClient({ tvl: {} as never }), /schema|verifiers/i);
 
     console.log(

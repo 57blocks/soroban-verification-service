@@ -209,9 +209,6 @@ def run_flow(environment, target: dict, burst_number: int, request_number: int) 
             error = "terminal_not_matched"
         if error is None and result.get("wasm_hash") != target["wasm_hash"]:
             error = "job_wasm_hash_mismatch"
-        # Address ownership is asserted against the job status body, not the report: the published
-        # artifact dropped `target` (`storage-layout/src/shapes.ts` — a verdict attaches to
-        # a Wasm hash, not to a contract on a network).
         job_target = (terminal or {}).get("target") or {}
         if error is None and (
             job_target.get("network") != FIXTURE["network"]
@@ -225,8 +222,6 @@ def run_flow(environment, target: dict, burst_number: int, request_number: int) 
             artifact, error = request_json(environment, session, "GET", artifact_url, "GET report artifact", 200)
             if error is None and (artifact or {}).get("schema") != "stellar-verification-artifact-v1":
                 error = "report_schema_mismatch"
-            # Only what the artifact actually declares. `result.wasm_hash` is the sole place the
-            # verdict's Wasm hash lives now; the contract-level assertion moved above.
             report_result = (artifact or {}).get("result") or {}
             if error is None and (
                 report_result.get("matched") is not True

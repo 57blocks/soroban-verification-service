@@ -14,7 +14,6 @@ export type UploadRecord = {
   visibility: "public" | "private";
 };
 
-/** CRUD over the `uploads` table — pre-submission private-tarball staging, orthogonal to job state. */
 @Injectable()
 export class UploadsRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
@@ -56,10 +55,6 @@ export class UploadsRepository {
     return existing;
   }
 
-  /**
-   * Records the submitter's declared visibility once known (submit time, not upload time — the manifest that
-   * carries `is_public` arrives after the upload itself in the two-step flow).
-   */
   async setUploadVisibility(id: string, visibility: "public" | "private"): Promise<void> {
     await this.prisma.upload.update({ where: { id }, data: { visibility } });
   }

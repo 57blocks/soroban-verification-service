@@ -6,10 +6,6 @@ import {
   ValidatorConstraintInterface,
 } from "class-validator";
 
-/**
- * "Required when the predicate holds, and **absent** when it does not" — both halves in one decorator, because
- * the obvious encoding does not work.
- */
 @ValidatorConstraint({ name: "presentOnlyWhen", async: false })
 class PresentOnlyWhenConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {

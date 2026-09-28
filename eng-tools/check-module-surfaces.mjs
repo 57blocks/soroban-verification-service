@@ -11,14 +11,6 @@ if (!existsSync(modulesDir)) {
   process.exit(2);
 }
 
-/**
- * A module's directory is its own business. Another module reaches it through `index.js` and nothing else, so
- * a file inside can be renamed, split or moved without a search across the service.
- *
- * One exception, and it is Nest's rather than ours: a `*.module.ts` names the modules it imports, which is how
- * a Nest module declares its graph. Routing that through a barrel buys nothing and risks a circular module
- * reference at boot.
- */
 const CROSS_MODULE_IMPORT = /from\s+["']\.\.\/([a-z][a-z0-9-]*)\/([^"']+)["']/g;
 
 function sourceFiles(dir) {
@@ -53,7 +45,6 @@ for (const name of moduleNames) {
   }
 }
 
-// A module others import from must actually have the surface they are told to use.
 for (const target of [...surfaces].sort()) {
   const index = join(modulesDir, target, "index.ts");
   if (!existsSync(index) || !statSync(index).isFile()) {

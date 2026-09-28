@@ -1,11 +1,7 @@
 name: Rollback service image
 
-# The run title carries the environment being rolled back.
 run-name: Rollback service image → ${{ inputs.environment }}
 
-# It builds nothing and registers nothing.
-
-# Called by the operations repository, which owns the trigger.
 on:
   workflow_call:
     inputs:
@@ -42,8 +38,7 @@ permissions:
   id-token: write
   contents: read
 
-# No `concurrency:` here — see deploy.yml's note. The caller must give a rollback the SAME group as a
-# deploy of that environment: both end in `update-service`, and the loser would silently win.
+# No `concurrency:` (it would deadlock the caller); the caller must share its deploy group with rollbacks.
 
 env:
   AWS_REGION: ap-southeast-2
@@ -56,9 +51,6 @@ jobs:
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     steps:
-      # `commit_sha` arrives as a free-text dispatch input and ends up as a git ref, an ECR image tag and
-      # an argument inside steps that hold AWS credentials. The caller is expected to have resolved it,
-      # but a reusable workflow cannot assume its caller did anything.
       - name: Check the commit SHA is a commit SHA
         env:
           COMMIT_SHA: ${{ inputs.commit_sha }}
@@ -84,9 +76,7 @@ jobs:
           ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
 
-      # Pure git, no credentials, and placed before the first step that takes any: this environment may
-      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
-      # the ambient commit is the CALLER's, which is never on this repository's main.
+      # `--sha` is required: under workflow_call the ambient commit is the caller's.
       - name: Fetch main to prove the ref against
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
@@ -128,8 +118,7 @@ jobs:
         id: digest
         env:
           REPOSITORY: ${{ steps.descriptor.outputs.repository }}
-          # Through `env:`, never `${{ }}` inside the script — this step holds AWS credentials, and an
-          # expression is substituted into the shell's source text before the shell ever sees it.
+          # Through `env:`, never `${{ }}` in the script: an expression is substituted into the shell source.
           COMMIT_SHA: ${{ inputs.commit_sha }}
         run: |
           set -euo pipefail
@@ -142,10 +131,6 @@ jobs:
           fi
           echo "value=$DIGEST" >> "$GITHUB_OUTPUT"
 
-      # invariants.md rule 29: CI owns the task definition, and every revision it has ever registered pins an
-      # exact commit's digest. Rolling back means finding the ACTIVE revision that pins the target commit's
-      # digest and pointing the service at it directly — no alias involved, and none of the running definitions
-      # were ever expected to read one.
       - name: Find each service's task definition revision for ${{ inputs.commit_sha }}
         id: revisions
         env:
@@ -155,12 +140,7 @@ jobs:
           TARGET_ENV: ${{ inputs.environment }}
         run: |
           set -euo pipefail
-          # Every lookup must succeed before anything is written to $GITHUB_OUTPUT: writing a
-          # multi-line value opens a heredoc block in that file, and exiting mid-write (as the old
-          # version of this step did on a lookup failure) leaves it unterminated — GitHub Actions then
-          # fails the step with "Matching delimiter not found", masking the real error below. So the
-          # search and the write are two separate phases: nothing is written until every service has
-          # resolved.
+          # Write nothing to $GITHUB_OUTPUT until every lookup succeeds: an unterminated delimiter masks the real error.
           RESULTS=""
           for SERVICE in $SERVICES; do
             FAMILY_KEY=$(echo "$SERVICE" | tr '-' '_')
@@ -198,9 +178,6 @@ jobs:
             echo "ARNS"
           } >> "$GITHUB_OUTPUT"
 
-      # One call per service: TASK_DEFINITION_ARN in roll-service-to-alias.sh is single-service by
-      # construction (one revision ARN cannot serve several services), and each service here resolved to
-      # its own family's revision above.
       - name: Roll each service onto its resolved revision
         env:
           CLUSTER: ${{ steps.descriptor.outputs.cluster }}

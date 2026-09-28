@@ -1,4 +1,3 @@
-/** E2E-DEDUP-01 — identical input does not create a second build */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -25,8 +24,6 @@ caseBlock(
         const firstReport = await reportForJob(firstRun.body.result, firstRun.body.result?.wasm_hash);
         const first = await observeBuild(firstRun.jobId, firstRun, firstReport?.artifact);
 
-        // Byte-identical request. Not a copy of the object — the same object, so no field can drift between the
-        // two submissions and quietly change the idempotency key.
         const secondRun = await submitAndWait(body);
         const secondReport = await reportForJob(
           secondRun.body.result,
@@ -34,12 +31,10 @@ caseBlock(
         );
         const second = await observeBuild(secondRun.jobId, secondRun, secondReport?.artifact);
 
-        // A submitter always gets their own job to poll.
         expect(secondRun.jobId).not.toBe(firstRun.jobId);
 
         expectNoSecondBuild(evaluateNoSecondBuild(first, second));
 
-        // Diagnostic from the case file: same input, same answer.
         expect(secondRun.body.status).toBe(firstRun.body.status);
       },
       2 * env.jobTimeoutMs + 120_000

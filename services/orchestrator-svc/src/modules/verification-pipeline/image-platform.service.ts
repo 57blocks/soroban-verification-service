@@ -10,13 +10,7 @@ import {
   type ParsedImageReference,
 } from "./image-platform.util.js";
 
-/**
- * Establishes which architectures a digest-pinned build image publishes, by asking the registry it is addressed
- * against.
- */
-
 export type ImagePlatformResolution = {
-  /** Empty when the registry could not be read, or answered something we cannot route. */
   architectures: BuildArchitecture[];
   resolvedFrom: "index" | "manifest_config" | "unresolved";
 };
@@ -26,7 +20,6 @@ const UNRESOLVED: ImagePlatformResolution = Object.freeze({
   resolvedFrom: "unresolved",
 });
 
-/** Both index shapes and both single-manifest shapes, so one request covers every case. */
 const MANIFEST_ACCEPT = [
   "application/vnd.oci.image.index.v1+json",
   "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -36,10 +29,7 @@ const MANIFEST_ACCEPT = [
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
-/**
- * A digest is immutable, so a cached answer can never be stale — but a hostile stream of distinct references
- * must not grow this without bound.
- */
+// Digest answers never go stale; the bound caps growth from a stream of distinct references.
 const CACHE_LIMIT = 512;
 
 @Injectable()
@@ -53,8 +43,6 @@ export class ImagePlatformService {
 
     const parsed = parseDigestPinnedImage(imageReference);
     if (!parsed) {
-      // `policy.ts` rejects a non-digest-pinned image long before dispatch, so this is a reference shape we
-      // cannot address rather than an untrusted image reaching the sandbox.
       return this.remember(imageReference, UNRESOLVED, "reference is not a digest-pinned image");
     }
 
@@ -73,7 +61,6 @@ export class ImagePlatformService {
   private async probe(parsed: ParsedImageReference): Promise<ImagePlatformResolution> {
     const manifest = await this.getJson(parsed, `manifests/${parsed.digest}`, MANIFEST_ACCEPT);
 
-    // An index with one runnable platform is a normal shape, so "is an index" is not "is multi-arch".
     const fromIndex = architecturesFromManifestDocument(manifest);
     if (fromIndex.length > 0) {
       return { architectures: fromIndex, resolvedFrom: "index" };
@@ -87,7 +74,6 @@ export class ImagePlatformService {
     return arch ? { architectures: [arch], resolvedFrom: "manifest_config" } : UNRESOLVED;
   }
 
-  /** One `/v2/` GET, following the registry's Bearer challenge once when it answers 401. */
   private async getJson(
     parsed: ParsedImageReference,
     path: string,
@@ -127,7 +113,6 @@ export class ImagePlatformService {
 
     const tokenUrl = new URL(challenge.realm);
     if (challenge.service) tokenUrl.searchParams.set("service", challenge.service);
-    // The challenge's own scope when it gives one; otherwise the narrowest scope that can answer this question.
     tokenUrl.searchParams.set(
       "scope",
       challenge.scope || `repository:${parsed.repository}:pull`
@@ -153,7 +138,6 @@ export class ImagePlatformService {
     this.cache.set(imageReference, resolution);
 
     if (resolution.resolvedFrom === "unresolved") {
-      // Warn, not error: the dispatch continues on the default architecture.
       this.logger.warn("could not establish the build image's architecture", {
         image: imageReference,
         detail: unresolvedDetail ?? "registry answer carried no routable architecture",

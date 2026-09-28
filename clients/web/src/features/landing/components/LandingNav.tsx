@@ -4,7 +4,6 @@ import { heroCopy } from "../content";
 import { sectionLinks } from "../navigation";
 import { BrandLogo } from "./BrandLogo";
 
-/** Sticky and translucent — it sits over the hero's wash. */
 export const LandingNav = () => (
   <nav className="sticky top-0 z-50 border-b border-line bg-surface/[0.92] px-4 py-4 backdrop-blur-[10px] md:px-20">
     <div className="mx-auto flex max-w-shell flex-wrap items-center justify-between gap-4">

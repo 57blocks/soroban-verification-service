@@ -6,14 +6,6 @@ import { readLegacyCustody, readReport } from "./read.js";
 import { createResultStorage } from "./storage-backend.js";
 import { reportKey } from "./keys.js";
 
-// Plain-script test, following registry-status-test.ts's convention rather than Jest.
-
-/**
- * The exact shape every report published since the initial release has carried — no top-level
- * `image_trust_level`, `build_recipe` a loose object rather than a validated `PublishedBuildRecipe` — and the
- * one this test exists to keep readable: `image_trust_level`/`build_recipe`'s schema-enforced narrowing stayed
- * `@IsOptional()` specifically so a report like this still parses.
- */
 function preExistingShapedReport(overrides: { build_recipe?: unknown } = {}): Record<string, unknown> {
   return {
     schema: "stellar-verification-artifact-v1",

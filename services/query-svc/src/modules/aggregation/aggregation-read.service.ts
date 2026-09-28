@@ -14,10 +14,7 @@ import {
   type UnavailableVerifier,
 } from "@scvs/core";
 
-/**
- * Assembles an aggregate from what the sync retained. Never fetches: a bulk-load page must not be delayed by a
- * slow verifier (AB6), and the single-hash route answers from the same material so the two cannot disagree.
- */
+/** Never fetches: answers only from what the sync retained. */
 @Injectable()
 export class AggregationReadService {
   constructor(
@@ -56,15 +53,10 @@ export class AggregationReadService {
     const last = rows.at(-1);
     return {
       records,
-      // A short page is the end of the stream (BL4/AB3), and only then is the cursor null.
       cursor: rows.length === opts.limit && last ? `${new Date(last.aggregationUpdatedAt).getTime()}-${last.wasmHash}` : null,
     };
   }
 
-  /**
-   * The two reads every assembly shares: the whole TVL (to know who is enabled and what each member is
-   * *called*) and every verifier's sync state.
-   */
   private async assemblyContext(): Promise<AssemblyContext> {
     const [state, records] = await Promise.all([
       this.aggregation.listSyncState(),
@@ -72,8 +64,6 @@ export class AggregationReadService {
     ]);
     const active = records.filter((record) => record.status === "active");
     return {
-      // The fallback below is the honest one and the only one left: a member the seeded document named no
-      // `display_name` for reads back under its id.
       displayNames: new Map(
         records.map((record) => [record.verifierId, record.displayName ?? record.verifierId]),
       ),
@@ -83,14 +73,12 @@ export class AggregationReadService {
     };
   }
 
-  /** Verifiers whose absence from this hash's answer has to be named rather than left silent. */
   private unavailableFor(context: AssemblyContext): UnavailableVerifier[] {
     const unavailable: UnavailableVerifier[] = [];
     for (const entry of context.stateByVerifier.values()) {
       if (entry.lastError === undefined) continue;
       if (!context.knownVerifierIds.has(entry.verifierId)) continue;
       unavailable.push({
-        // AB6: the classification the sync recorded beside the message.
         url: context.resultRoots.get(entry.verifierId) ?? entry.verifierId,
         ...(context.displayNames.has(entry.verifierId)
           ? { name: context.displayNames.get(entry.verifierId)! }
@@ -104,19 +92,13 @@ export class AggregationReadService {
 }
 
 type AssemblyContext = {
-  /** Every TVL member's operator-facing name, keyed by id — active or not. */
   displayNames: Map<string, string>;
-  /** Result root per verifier id — the identity an `unavailable_verifiers` entry is named by. */
   resultRoots: Map<string, string>;
   knownVerifierIds: Set<string>;
   stateByVerifier: Map<string, VerifierSyncCursorRecord>;
 };
 
-/**
- * `context` rather than the one map this needs: `displayNames` and `resultRoots` are both `Map<string,
- * string>`, so a caller passing the wrong one type-checks and serves a display name in the field that
- * identifies a verifier.
- */
+/** Takes the whole context: `displayNames` and `resultRoots` share a type, so passing one map invites a mix-up. */
 function assemble(
   wasmHash: string,
   cached: readonly VerifierResultCacheRecord[],
@@ -132,13 +114,11 @@ function assemble(
   });
 }
 
-/** One retained entry, relayed. Every retained entry carries its retrieval time; a live one never does (AB5). */
 function toEntry(record: VerifierResultCacheRecord, resultRoot: string): AggregatedRegistryVerification {
   const recipe = (record.recipe ?? {}) as Record<string, unknown>;
   const verifier = (record.verifier as { url?: string; name?: string } | undefined) ?? { url: resultRoot };
   return {
     verifier: verifier.url !== undefined ? verifier : { ...verifier, url: resultRoot },
-    // CV10: a status we do not recognise is shown as `unverified`, not passed through.
     status: registryStatusOrUnverified(record.status),
     ...(record.recipeSource !== undefined ? { recipe_source: record.recipeSource } : {}),
     ...(record.imageTrustLevel !== undefined ? { image_trust_level: record.imageTrustLevel } : {}),
@@ -154,7 +134,6 @@ function toEntry(record: VerifierResultCacheRecord, resultRoot: string): Aggrega
   } as AggregatedRegistryVerification;
 }
 
-/** One of AB6's four, or `fetch_failed` for a row that predates the column or names something else. */
 function unavailableReason(stored: string | undefined): UnavailableVerifier["reason"] {
   const known: readonly UnavailableVerifier["reason"][] = ["fetch_failed", "invalid_response", "timeout", "refused"];
   return known.find((reason) => reason === stored) ?? "fetch_failed";

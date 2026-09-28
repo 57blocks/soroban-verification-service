@@ -42,9 +42,7 @@ function cli58PrivateUploadWasSelected(args) {
   );
 }
 
-// This decides whether F-UPG-V1/F-UPG-V2 are built, not just which tests run, so it must not turn on
-// `-t`: a Jest filter edited in the workflow would stop provisioning them, and the case would gate-skip
-// itself green. The spec holds one case, so naming it is the selection.
+// Select by spec path, never by `-t`: this also decides whether the upgrade fixtures get built.
 function upgradeLifecycleWasSelected(args) {
   const upgradeSpec = args.some((arg) => arg.includes("cases/upg/upg-normal-lifecycle.spec.ts"));
   if (!upgradeSpec) return false;
@@ -102,10 +100,6 @@ function run(command, args, env = process.env) {
   process.exit(result.status ?? 1);
 }
 
-/**
- * The job summary is rendered from Jest's own JSON report (`eng-tools/write-e2e-summary.mjs`), so ask for one
- * whenever a report directory is configured.
- */
 function withJsonReport(jestArgs) {
   const configured = process.env.SCVS_E2E_REPORT_DIR;
   if (!configured) return jestArgs;
@@ -115,7 +109,6 @@ function withJsonReport(jestArgs) {
   const reportDir = resolve(repoRoot, configured);
   mkdirSync(reportDir, { recursive: true });
   const label = (process.env.SCVS_E2E_REPORT_LABEL ?? "e2e").replace(/[^A-Za-z0-9._-]+/g, "-");
-  // One label can run more than once in a job (the auto suite and a targeted spec, say).
   let report = resolve(reportDir, `${label}-jest.json`);
   for (let index = 2; existsSync(report); index += 1) {
     report = resolve(reportDir, `${label}-${index}-jest.json`);

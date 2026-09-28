@@ -14,8 +14,6 @@ afterAll(async () => {
   await app?.close();
 });
 
-// Characterization tests pinning the error envelope every route answers in — the version field included, since
-// a consumer keys off it to know how to read the rest.
 describe("POST /api/verification/v1/preflight validation", () => {
   it("rejects a missing network", async () => {
     const res = await request(server).post("/api/verification/v1/preflight").send({ contract_id: "C123" });

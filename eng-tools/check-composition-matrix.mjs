@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-/**
- * Runs the composition gate across a **set** of recorded `(cliver, rsver)` pairs and reports what each one did,
- * rather than across the single pair it happened to default to.
- */
+/** Runs the composition gate across every recorded `(cliver, rsver)` pair and reports each outcome. */
 
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -32,8 +29,6 @@ function arg(name, fallback) {
 }
 
 async function main() {
-  // Before anything is spent. A bare cliver costs a full compose to discover and reports it as a toolchain
-  // disagreement — see `assertChainFormClivers`.
   assertChainFormClivers();
 
   const { CURRENT_COMPOSE_TEMPLATE_VERSION } = await import("../packages/core/dist/src/index.js");
@@ -59,7 +54,6 @@ async function main() {
   const probes = await probeRustTargets(rows, template);
   if (has("probe-only")) {
     printProbeLedger(probes);
-    // `missing-targets` does not fail the probe — it is a finding the matrix rows go on to confirm.
     const exitCode = probes.some((probe) => probe.outcome === "error" || probe.outcome === "unparseable")
       ? 1
       : 0;
@@ -82,7 +76,6 @@ async function main() {
     console.log(`  ${row.why}\n`);
 
     let result = await composeOne(row, templateVersion);
-    // One retry, and only for a failure positively identified as ours.
     if (result.outcome === "inconclusive") {
       console.log(`\n  ↻ ${row.id}: ${result.message ?? "infrastructure failure"} — retrying once\n`);
       result = await composeOne(row, templateVersion);
@@ -134,14 +127,8 @@ async function writeResult(outputPath, result) {
   console.log(`result_json      : ${absolutePath}`);
 }
 
-/**
- * One HTTP request per distinct `rsver`: does the toolchain Rust actually shipped for that version carry the
- * target every shipped template hardcodes?
- */
 async function probeRustTargets(rows, template) {
   const targets = template.rust?.targets ?? [];
-  // `--probe-corpus` widens this from "the rsvers this run composes" to "every stable rsver a live class-B
-  // contract recorded".
   const versions = [
     ...new Set([...rows.map((row) => row.rsver), ...(has("probe-corpus") ? CORPUS_STABLE_RSVERS : [])]),
   ].sort(compareRsver);
@@ -154,7 +141,6 @@ async function probeRustTargets(rows, template) {
 
   console.log(`\n— probing rustup channel manifests for ${targets.join(", ") || "(no targets)"} —`);
   for (const rsver of versions) {
-    // The resolver refuses these as `undated_nightly` before composition, which is the correct place for it.
     if (/nightly|beta/.test(rsver)) {
       record(rsver, "skipped", "no dated channel manifest for an undated marker");
       continue;
@@ -169,7 +155,6 @@ async function probeRustTargets(rows, template) {
         record(rsver, "error", `${url} → ${response.status}`);
       } else {
         const manifest = await response.text();
-        // A manifest that declares *no* `rust-std` target at all has not told us the target is absent.
         if (!manifest.includes("[pkg.rust-std.target.")) {
           record(rsver, "unparseable", "no `[pkg.rust-std.target.…]` section — the reader's assumption is stale");
         } else {
@@ -188,7 +173,6 @@ async function probeRustTargets(rows, template) {
   return probes;
 }
 
-/** `[pkg.rust-std.target.<triple>]` followed, within its own section, by `available = true`. */
 function declaresAvailableTarget(manifest, target) {
   const header = `[pkg.rust-std.target.${target}]`;
   const at = manifest.indexOf(header);
@@ -198,26 +182,19 @@ function declaresAvailableTarget(manifest, target) {
   return /available\s*=\s*true/.test(section);
 }
 
-/**
- * Whether a failure is **positively identifiable** as our infrastructure rather than a property of the pair —
- * in which case the row measured nothing and must not be reported as a result.
- */
 function isInfrastructureFailure(reason, message, output = "") {
   const text = String(message ?? "");
   if (reason === "component_unreachable") {
-    // "returned 504", "returned 502 for v25.1.0", "exceeded 300000ms" — but NOT "publishes no … asset", which
-    // is the permanent half sharing this reason.
+    // Transient only: "publishes no … asset" shares this reason and is permanent.
     return /returned \d{3}\b/.test(text) || /exceeded \d+ms/.test(text) || /downloaded as zero bytes/.test(text);
   }
   if (reason === "image_build_failed") {
-    // `buildComposedImage` throws with the fixed text "The composed environment did not build.".
     const haystack = `${text}\n${output}`;
     return /failed to build: EOF/.test(haystack) || /Cannot connect to the Docker daemon/.test(haystack);
   }
   return false;
 }
 
-/** Runs the real gate for one pair, echoing its output live and keeping a copy to classify. */
 async function composeOne(row, templateVersion) {
   const args = [
     GATE,
@@ -233,7 +210,6 @@ async function composeOne(row, templateVersion) {
   const { code, output } = await run(process.execPath, args);
   if (code === 0) return { ...row, outcome: "composed" };
 
-  // The gate's own failure line: `✗ Template v3 failed [unreleased_cli]: stellar-cli has no release …`.
   const marked = /✗ Template .* failed \[([a-z_]+)\]: ([^\n]*)/.exec(output);
   if (marked) {
     const [, reason, message] = marked;
@@ -275,7 +251,6 @@ function run(command, args) {
   });
 }
 
-/** Numeric, not lexicographic. */
 function compareRsver(a, b) {
   const parts = (v) => v.split("-")[0].split(".").map(Number);
   const [left, right] = [parts(a), parts(b)];
@@ -292,7 +267,6 @@ function printProbeLedger(probes) {
     console.log(`  ${probe.rsver.padEnd(16)} ${probe.outcome.padEnd(16)} ${probe.detail}`);
   }
 
-  // The boundary, not the list.
   const missing = probes.filter((probe) => probe.outcome === "missing-targets").map((p) => p.rsver);
   const present = probes.filter((probe) => probe.outcome === "has-targets").map((p) => p.rsver);
   if (missing.length > 0 && present.length > 0) {
@@ -312,7 +286,6 @@ function printProbeLedger(probes) {
   }
 }
 
-/** The run's actual product. */
 function printLedger(results) {
   console.log(`\n${"─".repeat(96)}\ncomposition matrix`);
   for (const result of results) {
@@ -322,7 +295,6 @@ function printLedger(results) {
     );
   }
 
-  // A dimension counts as exercised when some row carrying it reached a **decided** outcome.
   const inconclusive = results.filter((result) => result.outcome === "inconclusive");
   if (inconclusive.length > 0) {
     console.log(
@@ -340,8 +312,6 @@ function printLedger(results) {
     results.every((result) => !result.dimensions.includes(dimension) || !decided.has(result.outcome)),
   );
   if (unexercised.length > 0) {
-    // Not itself a failure — but a matrix silent on a dimension it claims to cover reads as coverage it does
-    // not have, which is the exact failure mode this whole exercise exists to correct.
     console.log(`\n  ⚠ no row reached a decided outcome for: ${unexercised.join(", ")}`);
   }
 }
@@ -350,10 +320,7 @@ function exitCodeFor(results) {
   const strict = has("strict");
   const failures = results.filter((result) => {
     if (result.outcome === "composed") return false;
-    // Not a failure of the pair — it is an absence of evidence, reported separately above.
     if (result.outcome === "inconclusive") return false;
-    // An unexplained failure fails the run whatever the row expected: the composer has no word for what
-    // happened, so nobody downstream could act on it either.
     if (result.outcome === "unnamed-failure" || result.outcome === "unnamed-reason") return true;
     return strict || result.expect === "composes";
   });
@@ -361,7 +328,6 @@ function exitCodeFor(results) {
   const unmeasured = results.filter((result) => result.outcome === "inconclusive");
   if (failures.length === 0) {
     if (unmeasured.length === results.length) {
-      // Every row was infrastructure.
       console.error(`\n✗ no row produced a result — all ${results.length} were infrastructure failures.`);
       return 1;
     }

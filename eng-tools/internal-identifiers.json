@@ -1,25 +1,8 @@
 {
   "$comment": [
-    "Rules and baseline for eng-tools/check-secrets.mjs: the identifiers no entropy scanner",
-    "recognises. gitleaks covers the credential classes and is configured in .gitleaks.toml.",
-    "",
-    "The rules below are armed with THIS deployment's values, because development happens in this",
-    "repository now and nothing upstream of it strips an identifier any more. A digest discloses",
-    "nothing; the domain is a company domain, not a secret, and it is the string that must never",
-    "appear. A fork should replace both with its own — or empty them, which disarms the rule.",
-    "",
-    "To arm a rule:",
-    "decided what its own deployment must not disclose. To arm a rule:",
-    "",
-    "  aws-account-id     add the SHA-256 of your account id to `digests` — never the id itself,",
-    "                     because this file is public",
-    "  internal-hostname  add `\"domain\": \"<your-domain>\"`; with none, the rule never fires. List",
-    "                     in `published` any exact host under it that IS published surface — ours",
-    "                     serves the schema `$id`s — or the rule reports what it exists to let through",
-    "",
-    "`pending` is a ratchet, not an allowlist: it records what the tree carried when the gate was",
-    "armed, the gate fails when a count grows or a file not named here acquires one, and",
-    "`pnpm run check:secrets -- --write-baseline` can only ever shrink it."
+    "Rules and baseline for check-secrets.mjs: identifiers no entropy scanner recognises.",
+    "aws-account-id: `digests` holds SHA-256 digests, never the id itself. internal-hostname: `domain` arms it;",
+    "`published` lists exact hosts under it that may appear. `pending` is a ratchet: `--write-baseline` only shrinks it."
   ],
   "rules": {
     "aws-account-id": {

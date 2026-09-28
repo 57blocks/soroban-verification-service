@@ -1,10 +1,5 @@
 import type { ComposerArtifact } from "@scvs/core";
 
-/**
- * The composer's only outbound channel for its result: a plain PUT to the presigned URL it was handed
- * (`ComposerJobParams.upload_url`, minted by `ComposerDispatchService`).
- */
-
 export type UploadResult =
   | { ok: true; status: number }
   | { ok: false; status?: number; detail: string };

@@ -10,11 +10,6 @@ import type {
 } from "@scvs/db";
 import type { AppConfigService } from "../src/config/configuration.js";
 
-/**
- * A `recipe.json` this orchestrator cannot use must become a terminal, visible failure in one tick — never an
- * exception.
- */
-
 const getObjectTextBounded = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const getObjectBytesBounded = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const putObjectText = jest.fn<(...args: unknown[]) => Promise<void>>();
@@ -28,8 +23,6 @@ jest.unstable_mockModule("@scvs/aws", () => ({
   describeJob: async () => undefined,
   presignPutUrl: async () => "https://example.invalid/put",
   submitJob: async () => "batch-job-1",
-  // Reached through `source-resolution`'s surface: this service now imports the module rather than one
-  // file inside it, so the stub covers what that module uses too.
   deleteObject: async () => undefined,
   getObjectBytes: async () => undefined,
   presignGetUrl: async () => "https://example.invalid/get",
@@ -116,7 +109,6 @@ describe("a newer orchestrator reads every older builder's artifact", () => {
 });
 
 describe("an artifact this orchestrator cannot use fails terminally, in one tick", () => {
-  /** The forward direction: a builder deployed ahead of this orchestrator. */
   it("records artifact_schema_unsupported for a higher contract MAJOR", async () => {
     const ahead = { ...JSON.parse(corpus("v1.0/success-version-alignment.json")), schema_version: "2.0" };
     getObjectTextBounded.mockResolvedValue({ text: JSON.stringify(ahead) });
@@ -128,7 +120,6 @@ describe("an artifact this orchestrator cannot use fails terminally, in one tick
     expect(outcome.errorCode).toBe("artifact_schema_unsupported");
     expect(recorded).toHaveLength(1);
     expect(recorded[0].errorCode).toBe("artifact_schema_unsupported");
-    // The reason has to be readable by whoever is paged, not just machine-matchable.
     expect(String((recorded[0].diagnostics as { stderr_excerpt?: string }).stderr_excerpt)).toContain(
       "Deploy this environment's orchestrator before its builder",
     );
@@ -158,10 +149,6 @@ describe("an artifact this orchestrator cannot use fails terminally, in one tick
     expect(outcome.errorCode).toBe("artifact_unreadable");
   });
 
-  /**
-   * The reconciler's rung 2. Returning `true` is what ends the loop: `false` would leave the rebuild `running`
-   * and the scan would ask again in 60 seconds, forever, which is the observed failure.
-   */
   it("lets the reconciler settle an unusable artifact instead of retrying it every minute", async () => {
     const ahead = { ...JSON.parse(corpus("v1.0/success-version-alignment.json")), schema_version: "3.0" };
     getObjectTextBounded.mockResolvedValue({ text: JSON.stringify(ahead) });

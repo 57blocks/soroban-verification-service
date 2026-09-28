@@ -22,23 +22,18 @@ import { UploadsRepository } from "./uploads.repo.js";
 import { UploadJobReferencesRepository } from "./upload-job-references.repo.js";
 
 export type DbModuleAsyncOptions = Pick<ModuleMetadata, "imports"> & {
-  /** Resolves the connection. */
   useFactory: (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matches Nest's own factory typing
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ) => DbConnectionInput | Promise<DbConnectionInput>;
-  /** Injection tokens for `useFactory`'s parameters, same contract as Nest's own async options. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- as above
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inject?: any[];
 };
 
 const REPOSITORIES = [
-  // Not a repository, but provided and exported on the same terms: it is the readiness probe's `SELECT 1`, and
-  // it keeps `$queryRaw` inside this package.
   DbHealthService,
   JobsRepository,
   RebuildsRepository,
-  // See environments.repo.ts's own header.
   EnvironmentsRepository,
   UploadsRepository,
   UploadJobReferencesRepository,
@@ -48,7 +43,6 @@ const REPOSITORIES = [
   ReportArchiveUploadsRepository,
 ];
 
-/** Owns the lifecycle of the Prisma client created by this module. */
 @Injectable()
 class PrismaClientLifecycle implements OnModuleDestroy {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
@@ -58,13 +52,9 @@ class PrismaClientLifecycle implements OnModuleDestroy {
   }
 }
 
-/** Provides the `PrismaClient` and every repository over it. */
 @Module({})
 export class DbModule {
   static forRootAsync(options: DbModuleAsyncOptions): DynamicModule {
-    // Resolved once; `DB_CONNECTION_STRING` and `DB_CONNECTION_INPUT` both derive from this rather than each
-    // re-invoking `options.useFactory`, which may not be idempotent (e.g. reads from a config service that's
-    // fine to call once).
     const connectionInputProvider: Provider = {
       provide: DB_CONNECTION_INPUT,
       useFactory: options.useFactory,
@@ -85,7 +75,6 @@ export class DbModule {
 
     return {
       module: DbModule,
-      // Global, like `ConfigModule.forRoot({ isGlobal: true })` next to it in every app.module.ts.
       global: true,
       imports: options.imports ?? [],
       providers: [

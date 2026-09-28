@@ -15,7 +15,6 @@ import { toTrustedVerifier } from "../../common/tvl.js";
 import { SoveClientFactory } from "../results/client-factory.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** Keeps the retained aggregation current. */
 @Injectable()
 export class AggregationSyncService {
   private readonly logger = new ScvsLogger("aggregation-sync");
@@ -29,20 +28,14 @@ export class AggregationSyncService {
     @Inject(SoveClientFactory) private readonly clients: SoveClientFactory,
   ) {}
 
-  /** False until every active verifier has been attempted once. */
   get hasCompletedFirstPass(): boolean {
     return this.firstPassComplete;
   }
 
-  /**
-   * Called from the serving entrypoint, not from a lifecycle hook: `generate-openapi.ts` initialises this same
-   * application with no database, so anything starting at `onApplicationBootstrap` would make document
-   * generation depend on Postgres.
-   */
+  /** Not from a lifecycle hook: generate-openapi.ts initialises this app with no database. */
   start(): void {
     const intervalMs = this.configService.get("aggregationSyncIntervalMs", { infer: true });
     if (intervalMs <= 0) {
-      // A deployment that syncs on a schedule of its own, or a test.
       this.logger.warn("aggregation sync disabled by configuration", { interval_ms: intervalMs });
       return;
     }
@@ -55,7 +48,6 @@ export class AggregationSyncService {
     if (this.timer) clearInterval(this.timer);
   }
 
-  /** One pass over every active verifier. Never throws: a pass that fails is retried next tick. */
   async syncAll(): Promise<void> {
     const records = await this.verifiers.listTrustedVerifiers({ activeOnly: true });
     const verifiers = records
@@ -63,8 +55,6 @@ export class AggregationSyncService {
         try {
           return [toTrustedVerifier(record)];
         } catch (error) {
-          // This loop must not let one bad row abort every other verifier's sync for the tick, so skip it and
-          // say why, loudly.
           this.logger.error("skipping malformed trusted_verifiers row", {
             verifier_id: record.verifierId,
             error: messageOf(error),
@@ -74,18 +64,12 @@ export class AggregationSyncService {
       })
       .filter((verifier) => verifier.status === "active");
 
-    // Every verifier's hash set comes from its own bulk-load stream (syncOne()/discover(), forward-only cursor)
-    // — see decisions/static-only-tvl-membership-is-foreclosed-again.md.
     for (const verifier of verifiers) {
       await this.syncOne(verifier);
     }
     this.firstPassComplete = true;
   }
 
-  /**
-   * One verifier, every known hash. Note what that means for a peer serving a document we cannot parse: the
-   * rows stay and go stale, and the verifier surfaces under `unavailable_verifiers`. Nothing is withdrawn.
-   */
   async syncOne(verifier: TrustedVerifier): Promise<void> {
     const client = await this.clients.forVerifier(verifier);
     const now = new Date().toISOString();
@@ -99,8 +83,6 @@ export class AggregationSyncService {
         const document = await client.registry.statusObject(verifier, wasmHash);
         const entry = ownEntryOf(document, verifier);
         if (entry === undefined) {
-          // The peer answered, and the answer holds no entry for this hash: a withdrawal, not a transport
-          // problem.
           await this.aggregation.withdrawVerifierEntry({ verifierId: verifier.id, wasmHash, now });
           continue;
         }
@@ -111,7 +93,6 @@ export class AggregationSyncService {
           entry: {
             status: entry.status,
             schemaVersion: document.schema_version,
-            // The peer's own identity block, kept verbatim beside the TVL's attribution (CV11).
             ...(entry.verifier !== undefined ? { verifier: entry.verifier } : {}),
             ...(peerString(fields, "recipe_source") !== undefined
               ? { recipeSource: peerString(fields, "recipe_source") }
@@ -123,9 +104,7 @@ export class AggregationSyncService {
             ...(fields.verified_source_code_uris !== undefined
               ? { verifiedSourceCodeUris: fields.verified_source_code_uris }
               : {}),
-            // Normalised, never relayed verbatim: `stellar-verification-aggregate` types a link as an
-            // object, and a peer on the draft shape sends bare strings. The reader tolerates both; this is
-            // the boundary where that tolerance has to end.
+            // Normalised: a draft-shape peer sends bare strings, and the aggregate types a link as an object.
             ...(entry.results_urls !== undefined
               ? { resultsUrls: entry.results_urls.map(toResultUrl) }
               : {}),
@@ -136,20 +115,16 @@ export class AggregationSyncService {
         });
       } catch (error) {
         if (isNotFound(error)) {
-          // Same as an empty document: the peer has nothing here, authoritatively.
           await this.aggregation.withdrawVerifierEntry({ verifierId: verifier.id, wasmHash, now });
           continue;
         }
-        // A malformed document is the peer's problem and is worth naming, but it is not a reason to stop
-        // reading the rest of their hashes.
         failure = messageOf(error);
         failureReason = classifyFailure(error);
         if (!(error instanceof RegistryDocumentError)) break; // unreachable: stop asking this tick
       }
     }
 
-    // The position only advances past a page read in full; a failure keeps the old one so the next tick retries
-    // the same page rather than stepping over records it never saw.
+    // Advance only past a page read in full; on failure keep the old cursor so the page is retried.
     await this.aggregation.setCursor(
       verifier.id,
       failure === undefined ? page.cursor : page.previousCursor,
@@ -160,7 +135,6 @@ export class AggregationSyncService {
     if (problem) this.logger.warn("verifier sync incomplete", { verifier_id: verifier.id, error: problem });
   }
 
-  /** One page of a peer's own bulk-load stream, resumed from where we left off. */
   private async discover(
     client: SoveClient,
     verifier: TrustedVerifier,
@@ -176,7 +150,6 @@ export class AggregationSyncService {
       const last = page.records.at(-1);
       return {
         hashes: page.records.map((record) => record.wasm_hash),
-        // A server-reported cursor always wins when present (BL4: it means more to read).
         ...(page.cursor !== null
           ? { cursor: page.cursor }
           : last !== undefined
@@ -185,14 +158,12 @@ export class AggregationSyncService {
         previousCursor,
       };
     } catch (error) {
-      // Classified here, not left to the caller's `fetch_failed` default: a discovery failure is the one that
-      // empties the page, so the per-hash loop never runs and never classifies anything.
       return { hashes: [], previousCursor, error: messageOf(error), errorReason: classifyFailure(error) };
     }
   }
 }
 
-/** What one tick of discovery produced. `cursor === undefined` means "nothing to record, keep what you had". */
+/** `cursor === undefined` means "nothing to record, keep what you had". */
 type DiscoveryPage = {
   hashes: string[];
   cursor?: string;
@@ -201,34 +172,20 @@ type DiscoveryPage = {
   errorReason?: UnavailableVerifier["reason"];
 };
 
-/** The fields that do not belong in `recipe` because the row already has a column for them. */
 const ENTRY_FIELDS_WITH_THEIR_OWN_COLUMN = [
   "verifier",
   "status",
   "results_urls",
   "processed_at",
-  // Ours records the *document* version this entry came from (CV11).
   "schema_version",
-  // `out_of_band` and the singular `verified_source_code_uri` left this list in the same change: they are
-  // fields we no longer emit, so they belong in `recipe`'s keep-everything-else bucket, which relays a peer
-  // still on the draft's shape unchanged (CV8) without a column that would only ever hold someone else's
-  // vocabulary.
   "recipe_source",
   "image_trust_level",
   "verified_source_code_uris",
-  // The bug this fixes: listing it as a field WE add meant `recipeOf` excluded it on the way IN, while nothing
-  // on the way OUT ever supplied it, so `verified_source_code_uri` was stripped from every peer document and
-  // never restored.
 ];
 
-/** Fields WE add on the way out. */
 const FIELDS_WE_ADD_WHEN_SERVING = ["retrieved_at"];
 
-/**
- * CV8 requires unknown fields to survive being *cached*, not only forwarded, and `/api/query/v1/*` serves what
- * this function stored: `AggregationReadService` never fetches, so whatever is dropped here is gone from the
- * served answer.
- */
+/** Unknown peer fields must survive here: the read side serves only what this stores. */
 function recipeOf(entry: Record<string, unknown>): Record<string, unknown> {
   const excluded = new Set([...ENTRY_FIELDS_WITH_THEIR_OWN_COLUMN, ...FIELDS_WE_ADD_WHEN_SERVING]);
   return Object.fromEntries(
@@ -236,7 +193,6 @@ function recipeOf(entry: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
-/** The entry belonging to the verifier whose root we just read. */
 function ownEntryOf(
   document: PeerRegistryStatusObject,
   verifier: TrustedVerifier,
@@ -252,21 +208,18 @@ function ownEntryOf(
 
 const trimSlash = (url: string): string => url.replace(/\/+$/, "");
 
-/** A string field we recognise, read off the untyped entry. */
 function peerString(entry: Record<string, unknown>, field: string): string | undefined {
   const value = entry[field];
   return typeof value === "string" ? value : undefined;
 }
 
-/** AB6's `reason`, as far as this side can tell them apart. */
 function classifyFailure(error: unknown): UnavailableVerifier["reason"] {
   if (error instanceof RegistryDocumentError) return "invalid_response";
   const message = messageOf(error).toLowerCase();
   if (message.includes("timeout") || message.includes("timed out") || message.includes("aborted")) {
     return "timeout";
   }
-  // The fetch policy refuses a destination before any request is made — a decision of ours, not a failure of
-  // theirs, and the one reason a consumer can act on by talking to us.
+  // Messages the fetch policy throws when it refuses a destination before any request.
   if (message.includes("is not allowed") || message.includes("blocked")) return "refused";
   return "fetch_failed";
 }

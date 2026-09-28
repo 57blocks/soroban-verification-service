@@ -7,13 +7,10 @@ import { readVerdict } from "../utils/preflight.util";
 
 const MISSING_API_URL_DETAIL = "VITE_VERIFY_API_URL is not configured for this build.";
 
-/** Runs `POST /api/verification/v1/preflight` and holds its answer for the submission that follows. */
 export const usePreflight = (form: { getValues: () => VerifyFormValues }) => {
   const [state, setState] = useState<PreflightState>({ phase: "idle" });
   const preflightMutation = usePreflightVerification();
 
-  // Stable identity: the console resets on every target edit, and an unstable callback there would make the
-  // effect re-run on each render and clear the answer the moment it arrived.
   const reset = useCallback(() => setState({ phase: "idle" }), []);
 
   const commit = (next: PreflightState): PreflightState => {
@@ -21,11 +18,7 @@ export const usePreflight = (form: { getValues: () => VerifyFormValues }) => {
     return next;
   };
 
-  /**
-   * Returns the resulting state as well as storing it: a caller that needs to act on the answer immediately
-   * (prefilling the evidence form) cannot read `state` in the same tick, because the `setState` has not been
-   * applied yet.
-   */
+  /** Also returns the state: a caller acting on it immediately cannot read `state` in the same tick. */
   const run = async (targetType: TargetType): Promise<PreflightState> => {
     if (!isApiBaseConfigured()) {
       return commit({ phase: "failed", error: MISSING_API_URL_DETAIL });
@@ -47,7 +40,6 @@ export const usePreflight = (form: { getValues: () => VerifyFormValues }) => {
       const verdict = readVerdict(res.data.build_environment);
       return commit({
         phase: "answered",
-        // An arm this build does not recognise blocks rather than passes.
         verdict: verdict ?? { gate: "blocked", label: "unrecognized" },
         response: res.data,
       });

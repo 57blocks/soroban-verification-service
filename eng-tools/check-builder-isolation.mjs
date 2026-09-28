@@ -11,26 +11,22 @@ if (!existsSync(srcDir)) {
   process.exit(2);
 }
 
-/** Every pattern here matches a **call shape**, not prose or a data literal. */
 const CAPABILITY_PATTERNS = [
   { re: /"docker"\s*,/, what: 'spawns `docker` (argv literal "docker")' },
   { re: /--docker-host/, what: "passes --docker-host, i.e. addresses a container runtime" },
-  // `(?<!function )` so a module *defining* `stellarCli()` is not reported as invoking it.
+  // `(?<!function )`: defining `stellarCli()` is not invoking it.
   {
     re: /(?<!function )\bstellarCli\s*\([^)]*\)/,
     what: "invokes the Stellar CLI, whose verify path starts a container",
   },
 ];
 
-/** Parsing or executing what the submitter supplied. */
 const ATTACKER_INPUT_PATTERNS = [
   { re: /"tar"\s*,/, what: 'spawns `tar` on submitted bytes (argv literal "tar")' },
   { re: /"git"\s*,/, what: 'spawns `git` on a submitted URL (argv literal "git")' },
   { re: /\bextractSourceArchive\b/, what: "extracts a submitted archive" },
   { re: /\bmaterializeSource\b/, what: "downloads/clones submitted source" },
 ];
-
-// ── walk the source tree ────────────────────────────────────────────────────────────────────────
 
 const files = [];
 (function walk(dir) {
@@ -41,10 +37,8 @@ const files = [];
   }
 })(srcDir);
 
-/** Relative imports only: a package import cannot carry either capability into this unit. */
 const importsOf = (file) => {
   const source = readFileSync(file, "utf8")
-    // Drop type-only import statements before looking for specifiers.
     .replace(/^\s*import\s+type\s+[\s\S]*?from\s+"[^"]+";?\s*$/gm, "");
   const specifiers = [...source.matchAll(/from\s+"(\.[^"]+)"/g)].map((m) => m[1]);
   return specifiers
@@ -55,7 +49,6 @@ const importsOf = (file) => {
     .filter(Boolean);
 };
 
-/** Comments are stripped before matching. */
 const withoutComments = (source) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
@@ -64,11 +57,8 @@ const hits = (file, patterns) => {
   return patterns.filter((p) => p.re.test(source)).map((p) => p.what);
 };
 
-/** An entrypoint is a file no other file in this unit imports. */
 const imported = new Set(files.flatMap(importsOf));
 const entrypoints = files.filter((f) => !imported.has(f));
-
-// ── per entrypoint, what can it reach? ──────────────────────────────────────────────────────────
 
 const findings = [];
 
@@ -108,8 +98,6 @@ for (const entry of entrypoints) {
     );
   }
 
-  // The same file doing both is worth calling out separately: it is the shape a reviewer is most likely to
-  // reintroduce by "just inlining" an extraction next to the command assembly.
   const bothInOneFile = [...new Set(capability.map((c) => c.rel))].filter((rel) =>
     attacker.some((a) => a.rel === rel),
   );
@@ -120,8 +108,6 @@ for (const entry of entrypoints) {
     );
   }
 }
-
-// ── report ──────────────────────────────────────────────────────────────────────────────────────
 
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
 for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);

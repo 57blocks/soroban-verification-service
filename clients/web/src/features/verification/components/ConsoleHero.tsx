@@ -11,10 +11,6 @@ const heroCopy: Record<VerifyMode, { title: string; line: string }> = {
   },
 };
 
-/**
- * The page header. Deliberately not a hero: this page is a tool, and the landing page is where the argument for
- * it is made — an eyebrow, one heading and one line, so the target form opens the first viewport.
- */
 export const ConsoleHero = ({ mode }: { mode: VerifyMode }) => {
   const { title, line } = heroCopy[mode];
 

@@ -7,10 +7,6 @@ export const resultHead: SectionCopy = {
     "Every verification publishes the same set of documents: the verdict, what produced it, and what it was produced from — each addressed by a hash, each attributed to the verifier that wrote it.",
 };
 
-/**
- * This section replaced a three-layer architecture diagram. The layers described how the service is deployed,
- * which is the operator's question; what a reader of a result needs is what the result contains.
- */
 export const resultCards: Capability[] = [
   {
     title: "A verdict, and what produced it",

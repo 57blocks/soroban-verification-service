@@ -1,8 +1,3 @@
-/**
- * The harness's own configuration: where the deployment under test is, and which classes of case this run is
- * allowed to execute.
- */
-
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -25,39 +20,24 @@ function trimTrailingSlash(url: string): string {
 }
 
 export interface E2eEnv {
-  /** Master gate. Nothing in this package runs without it — see the README's "Why a gate". */
   readonly enabled: boolean;
 
-  /** Identifies one harness invocation. Set it explicitly to reproduce a run. */
   readonly runId: string;
 
-  /** `verification-svc`'s public origin, e.g. `https://verify.example.io`. */
   readonly verifyUrl?: string;
-  /** `query-svc`'s public origin. */
   readonly queryUrl?: string;
-  /** The public Web console origin, which may share the API origin behind the ALB. */
   readonly webUrl?: string;
-  /**
-   * The **static** origin the published result tree is served from — what `SCVS_PUBLIC_RESULT_ROOT` is set to
-   * on the deployment.
-   */
   readonly resultRoot?: string;
 
   readonly network: "mainnet" | "testnet";
 
-  /** Performance cases consume shared build capacity and run only through the explicit perf path. */
   readonly allowPerf: boolean;
-  /** Selects routine automated cases, real-timeout cases, or both. */
   readonly autoScope: AutoScope;
-  /** `BROWSER` cases drive a public Web deployment with Playwright. */
   readonly allowBrowser: boolean;
   readonly strictTrd: boolean;
 
-  /** How long a submitted job may take to reach a terminal state before a case gives up. */
   readonly jobTimeoutMs: number;
-  /** Poll interval while waiting on a job. */
   readonly pollIntervalMs: number;
-  /** Per-request timeout for a single HTTP call. */
   readonly requestTimeoutMs: number;
 }
 
@@ -96,36 +76,25 @@ export const env: E2eEnv = Object.freeze({
   requestTimeoutMs,
 });
 
-/**
- * Which `config/deploy/<env>/` artefact describes the deployment under test — `dev`, `staging`, or unset for a
- * deployment this repository does not manage.
- */
 const deployEnv = str("SCVS_E2E_ENV");
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-/** `config/deploy/<env>/<service>.json`'s shape, as far as this file reads it. */
 interface DeclaredVariable {
   source?: string;
   value?: unknown;
   default?: unknown;
   note?: string;
-  /** `false` when `value` is a mirror of the authoritative store (SSM) rather than the truth. */
   value_is_authoritative?: boolean;
 }
 
 interface DeployArtifact {
   target_env?: string;
   environment?: Record<string, DeclaredVariable | undefined>;
-  /**
-   * A reader that only looks at `environment` finds nothing for `SCVS_STORAGE_BUCKET` and quietly concludes the
-   * artefact does not declare it.
-   */
   ssm_parameters?: { variables?: Record<string, DeclaredVariable | undefined> };
   secrets?: { variables?: Record<string, DeclaredVariable | undefined> };
 }
 
-/** A declared variable, wherever in the artefact it is declared. */
 function declaredVariable(
   artifact: DeployArtifact,
   name: string
@@ -137,7 +106,6 @@ function declaredVariable(
   );
 }
 
-/** The builder's deployment artefact, parsed once — or a hard failure. */
 function loadDeployArtifact(
   service = "builder"
 ): { path: string; artifact: DeployArtifact } | undefined {
@@ -176,7 +144,6 @@ function loadDeployArtifact(
 const deployArtifact = loadDeployArtifact("builder");
 const orchestratorDeployArtifact = loadDeployArtifact("orchestrator-svc");
 
-/** A positive literal effective value from a bound deployment descriptor. */
 function deployLiteralNumber(
   deploy: { path: string; artifact: DeployArtifact } | undefined,
   variable: string,
@@ -254,7 +221,6 @@ export const retryPolicyProvenance = Object.freeze({
   maxAttempts: retryParameters.maxAttempts.describe,
 });
 
-/** One `SCVS_MAX_SOURCE_ARCHIVE_*` bound, read from the bound artefact. */
 function builderArchiveBound(variable: string): { value?: number; blocked?: string } {
   if (!deployArtifact) return {};
 
@@ -283,7 +249,6 @@ function builderArchiveBound(variable: string): { value?: number; blocked?: stri
   return { value };
 }
 
-/** The three archive bounds, and where each came from. */
 const ARCHIVE_BOUND_ENV_NAMES = [
   "SCVS_E2E_LIMIT_TAR_ENTRIES",
   "SCVS_E2E_LIMIT_UNCOMPRESSED_BYTES",
@@ -346,7 +311,6 @@ const archiveBounds = Object.freeze({
   ),
 });
 
-/** Human-readable provenance for the three archive bounds. */
 export const archiveLimitProvenance: Readonly<Record<keyof typeof archiveBounds, string>> =
   Object.freeze({
     limitTarEntries: archiveBounds.limitTarEntries.describe,
@@ -354,10 +318,6 @@ export const archiveLimitProvenance: Readonly<Record<keyof typeof archiveBounds,
     limitArchiveBytes: archiveBounds.limitArchiveBytes.describe,
   });
 
-/**
- * A 📐-marked case must read its parameter from the deployment rather than invent one — so each is optional
- * here, and a case whose parameter is absent skips, naming it.
- */
 export const deploymentParameters = Object.freeze({
   limitTarEntries: archiveBounds.limitTarEntries.value,
   limitUncompressedBytes: archiveBounds.limitUncompressedBytes.value,

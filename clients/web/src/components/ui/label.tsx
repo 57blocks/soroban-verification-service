@@ -2,7 +2,6 @@ import { forwardRef } from "react";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { cn } from "@/lib/utils";
 
-/** The design's field label: 12px, bold, uppercase, ink. */
 export const Label = forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>

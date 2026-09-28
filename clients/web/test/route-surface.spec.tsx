@@ -13,13 +13,8 @@ import { landingRoutes } from "@/features/landing/routes";
 import { legalRoutes } from "@/features/legal/routes";
 import { verificationRoutes } from "@/features/verification/routes";
 
-/**
- * The set nginx is told to serve the entry document for. A route present in one and not the other is a page
- * that works locally and 404s in the deployed image, or the reverse — neither announces itself.
- */
 const declared = () => [...CONSOLE_ROUTE_PATHS].sort();
 
-/** Every path the built tree actually answers, `fullPath` being what the router resolves against. */
 const mounted = () =>
   Object.entries(router.routesById)
     .filter(([id]) => id !== rootRouteId)
@@ -33,15 +28,11 @@ describe("the console's route surface has one definition", () => {
     expect(mounted()).toEqual(declared());
   });
 
-  // The legal routes derive their paths from their content's slug rather than from ROUTE_PATHS, so this pair is
-  // the one the test above is load-bearing for.
   test("the legal documents' slugs are the paths that were declared", () => {
     const paths = legalRoutes.map((route) => route.fullPath).sort();
     expect(paths).toEqual(["/privacy", "/terms"]);
   });
 
-  // The landing page is the root route and the console is one segment in — not the other way round, and
-  // with no redirect standing between them.
   test("`/` is the landing page and `/verify` is the console", () => {
     expect(router.routesByPath["/"]).toBe(landingRoutes[0]);
     expect(router.routesByPath["/verify"]).toBe(verificationRoutes[0]);

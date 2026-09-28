@@ -1,6 +1,4 @@
 export * from "./connection.js";
-// Only `getDatabaseUrl`, not `export *`: `env.ts`'s `PostgresConnectionConfig` duplicates `connection.ts`'s
-// type of the same name.
 export { getDatabaseUrl } from "./env.js";
 export * from "./client.js";
 export * from "./db.module.js";

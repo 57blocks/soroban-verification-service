@@ -1,14 +1,5 @@
 #!/usr/bin/env node
-/**
- * Two scanners over the snapshot the public export will carry: a deny-list for the deployment
- * identifiers no entropy scanner knows to look for, and gitleaks for the credentials no deny-list can
- * anticipate. No AWS, no network beyond the image pull.
- *
- * Two modes, and the second is the one that matters. Over this repository it is a ratchet against
- * `internal-identifiers.json`'s baseline. Over an export product — `--root <dir> --zero-baseline`,
- * which is how `export:public-tree` calls it — no occurrence is authorised at all, because a gate
- * over the source is not a gate over the product.
- */
+/** A deny-list for deployment identifiers plus gitleaks, over the snapshot the public export carries. Needs Docker. */
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
@@ -32,12 +23,8 @@ const zeroBaseline = process.argv.includes("--zero-baseline") || Boolean(scanRoo
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const root = scanRoot ? scanRoot : repoRoot;
 
-/** Digest-pinned so a moved tag cannot change what the gate means. */
 const GITLEAKS = "ghcr.io/gitleaks/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854";
 
-// ── The publication snapshot ────────────────────────────────────────────────────────────────────
-// Over this repository: the tracked files `export/manifest.json` says ship. Over a product: whatever
-// is in it, because the manifest has already been applied.
 const BINARY = /\.(png|jpe?g|gif|svg|ico|woff2?|ttf|pdf|wasm|zip|tar|gz|xz|bin)$/i;
 const SKIP = new Set([".git", "node_modules", "dist", ".turbo"]);
 
@@ -54,9 +41,7 @@ function walk(dir) {
 
 const trackedFiles = () =>
   execFileSync("git", ["ls-files"], { cwd: repoRoot, encoding: "utf8" }).split("\n").filter(Boolean);
-// No manifest means no export to scope against, which is the exported copy's own situation: it runs
-// in a repository where everything already ships. The reader is imported dynamically for the same
-// reason — the export drops it, and a static import would crash this gate in the tree it protects.
+// Imported dynamically: the export drops `export-manifest.mjs`, and a static import would crash there.
 async function publicationScope() {
   if (scanRoot) return walk(root);
   const tracked = trackedFiles();
@@ -66,8 +51,6 @@ async function publicationScope() {
 }
 const inScope = (await publicationScope()).filter((f) => !BINARY.test(f));
 
-// ── 1. Internal identifiers ─────────────────────────────────────────────────────────────────────
-/** `{ "<path>": { "<rule>": <count> } }` — the same shape the baseline records. */
 const observed = {};
 for (const file of inScope) {
   let text;
@@ -80,8 +63,6 @@ for (const file of inScope) {
   if (Object.keys(counts).length > 0) observed[file] = counts;
 }
 
-// The ratchet: a path may hold no more than the baseline records, and a path the baseline does not
-// name may hold none at all. Draining the baseline is the scrub's job, not this gate's.
 const pending = zeroBaseline ? {} : rules.pending ?? {};
 for (const [file, counts] of Object.entries(observed)) {
   for (const [rule, count] of Object.entries(counts)) {
@@ -96,7 +77,6 @@ for (const [file, counts] of Object.entries(observed)) {
   }
 }
 
-// A baseline entry that no longer matches reality is stale: shrink it, so the ratchet keeps its grip.
 for (const [file, counts] of Object.entries(pending)) {
   for (const [rule, allowed] of Object.entries(counts)) {
     const count = observed[file]?.[rule] ?? 0;
@@ -120,9 +100,6 @@ notes.push(
       `the baseline, across ${Object.keys(pending).length} file(s)`,
 );
 
-// ── 2. gitleaks over the same snapshot ──────────────────────────────────────────────────────────
-// Materialised rather than scanned in place: `--no-git` over the working tree reads node_modules and
-// every gitignored build directory, which buries the signal under vendored noise.
 const hasDocker = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 if (!hasDocker) {
   const why = "gitleaks needs a Docker daemon and none answered";
@@ -155,7 +132,6 @@ if (!hasDocker) {
       findings.push(`gitleaks did not run: ${(run.stderr || run.error?.message || "").trim()}`);
     } else {
       const leaks = JSON.parse(readFileSync(report, "utf8") || "[]");
-      // The report names the snapshot's own copy; the author needs the repository path.
       for (const leak of leaks) {
         const file = leak.File.replace(/^\/?snapshot\//, "");
         findings.push(
@@ -170,12 +146,10 @@ if (!hasDocker) {
   }
 }
 
-// ── Report ──────────────────────────────────────────────────────────────────────────────────────
 for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);
 for (const n of notes) console.log(inGha ? `::notice::${n}` : `  ! ${n}`);
 
-// Shrink-only by construction, so the flag can record a completed scrub but never launder a new
-// occurrence into the baseline — the one thing a self-updating gate must not allow.
+// Shrink-only: the flag may lower the baseline, never raise it.
 if (process.argv.includes("--write-baseline")) {
   if (scanRoot) {
     console.error("--write-baseline writes this repository's baseline; it is meaningless over --root");

@@ -28,13 +28,8 @@ const Card = () => {
   );
 };
 
-/**
- * Mainnet was in the list, disabled, annotated "Soon" — while every route behind it already served both
- * networks.
- */
 describe("the network picker offers both networks", () => {
   test("mainnet is selectable, not a greyed placeholder", async () => {
-    // The card carries the submission-agreement links, so it needs a router above it.
     await renderInRouter(<Card />);
     await userEvent.click(screen.getByRole("combobox", { name: /network/i }));
 
@@ -48,7 +43,6 @@ describe("the network picker offers both networks", () => {
     expect(buildTarget({ ...defaultValues, network: "mainnet" }).network).toBe("mainnet");
   });
 
-  // The offer is new; the default is not.
   test("testnet is still what the form starts on", () => {
     expect(defaultValues.network).toBe("testnet");
   });

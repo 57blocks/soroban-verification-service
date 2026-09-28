@@ -1,4 +1,3 @@
-/** The DEDUP group's substitute criterion for "no second build". */
 import { sha256Hex } from "./http.js";
 import { readJobLog, RULE_D_REQUEUE_DETAIL } from "./job.js";
 import type { RequeueWatch, TerminalJob } from "./job.js";
@@ -8,7 +7,6 @@ export interface BuildObservation {
   readonly jobId: string;
   readonly terminal: TerminalJob;
   readonly artifact?: VerificationArtifact;
-  /** Whether `artifact` is this job's own publication. */
   readonly artifactIsOwn: boolean;
   readonly logSha256?: string;
   readonly logAvailable: boolean;
@@ -39,7 +37,6 @@ export interface NoSecondBuildVerdict {
     readonly sameRebuiltArtifact: boolean | undefined;
     readonly identicalLogs: boolean | undefined;
   };
-  /** Human-readable, and attached verbatim to the assertion message. */
   readonly explanation: string;
 }
 
@@ -90,7 +87,6 @@ export function expectNoSecondBuild(verdict: NoSecondBuildVerdict): void {
 }
 
 export function expectSecondBuildHappened(verdict: NoSecondBuildVerdict): void {
-  // Different source bytes can legitimately produce the same Wasm.
   if (
     verdict.conditions.fasterThanOneFifth === false ||
     verdict.conditions.sameRebuiltArtifact === false ||
@@ -101,10 +97,6 @@ export function expectSecondBuildHappened(verdict: NoSecondBuildVerdict): void {
   );
 }
 
-/**
- * Deliberately asymmetric in what counts as evidence, for the same reason `expectSecondBuildHappened` is: the
- * two directions are not observable with equal confidence.
- */
 export function expectRequeued(watch: RequeueWatch, label: string): void {
   if (watch.requeues > 0 || watch.sawRequeueMarker) return;
   throw new Error(

@@ -1,7 +1,6 @@
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
-/** Every input in the design is the same 44px white field: ink border on focus, plus the yellow focus ring. */
 export const Input = forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type = "text", ...props }, ref) => (
     <input

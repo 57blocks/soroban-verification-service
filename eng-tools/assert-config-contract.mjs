@@ -19,11 +19,9 @@ const { effective, services } = resolveManifest(manifest);
 const failures = [];
 const checked = { presence: 0, value: 0, digest: 0 };
 const unverifiable = [];
-/** required_when clauses this run could not decide — reported, never silently skipped. */
 const undecidable = [];
 let quietlyPresenceOnly = 0;
 
-/** Evaluates a manifest `required_when` clause against a service's own report. */
 function evaluateRequiredWhen(clause, report) {
   const match = /^\s*([A-Z0-9_]+)\s*(==|!=)\s*(.+?)\s*$/.exec(String(clause));
   if (!match) return undefined;
@@ -32,18 +30,13 @@ function evaluateRequiredWhen(clause, report) {
 
   const reported = report.variables?.[governing];
   if (reported === undefined) return undefined;
-  // `true` means "set, non-empty" with no value — cannot compare against a specific value.
+  // `true` means set with the value withheld; `false` means unset.
   if (reported === true) return undefined;
-  // `false` means unset. Comparable: unset is not equal to any concrete expected value.
   const actual = reported === false ? "" : String(reported);
 
   return op === "==" ? actual === expected : actual !== expected;
 }
 
-/**
- * Whether `entry` is required for this deployment, and why — folding `required`, `required_in` and
- * `required_when` into one answer so the presence gate below has a single thing to ask.
- */
 function requirement(entry, report) {
   if (entry.required === true || entry.required === "yes") {
     return { required: true, why: `required (fail: ${entry.fail})` };
@@ -73,7 +66,6 @@ function requirement(entry, report) {
   return { required: false };
 }
 
-/** service name -> report */
 const reports = new Map();
 for (const file of files) {
   let report;
@@ -94,8 +86,6 @@ for (const file of files) {
   reports.set(report.service, report);
 }
 
-// ── per-service: required variables are set, and recorded values match ───────────────────────────
-
 for (const [service, report] of reports) {
   const resolved = effective.get(service);
   if (!resolved) {
@@ -107,8 +97,6 @@ for (const [service, report] of reports) {
     const reported = report.variables?.[name];
 
     if (reported === undefined) {
-      // The report is generated from the same manifest, so a gap here means the deployed image predates a
-      // manifest change — worth failing on rather than skipping.
       failures.push(
         `${service}: ${name} is declared in the manifest but absent from the report — ` +
           `the running image is older than the contract`
@@ -116,7 +104,6 @@ for (const [service, report] of reports) {
       continue;
     }
 
-    // 1. Required means set. This is the whole point for the `fail: silent` class — and, since
     const { required, why: requiredWhy } = requirement({ ...entry, name }, report);
     if (required) {
       const isPresent = reported !== false;
@@ -135,7 +122,6 @@ for (const [service, report] of reports) {
 
     const expected = entry.envs?.[targetEnv];
 
-    // 2. A recorded expected value of `""` is asserted in the one direction that exists. `presence`
     if (expected === "") {
       if (reported === false) {
         checked.value += 1;
@@ -148,7 +134,6 @@ for (const [service, report] of reports) {
       continue;
     }
 
-    // 3. A recorded expected value must match the reported one. Only possible where the manifest
     if (
       observabilityOf(entry) === "value" &&
       expected !== undefined &&
@@ -163,7 +148,6 @@ for (const [service, report] of reports) {
         checked.value += 1;
       }
     } else if (required) {
-      // Presence-checked only, so say so — but name only the cases where that limitation is interesting.
       if (entry.fail === "silent") {
         unverifiable.push(
           `${service}.${name} — set, but its value is unverifiable here ` +
@@ -176,8 +160,6 @@ for (const [service, report] of reports) {
     }
   }
 }
-
-// ── cross-service: an identical-across group really is identical ─────────────────────────────────
 
 for (const [groupName, group] of Object.entries(manifest.groups ?? {})) {
   const match = /^identical-across\(([^)]*)\)$/.exec(group.invariant ?? "");
@@ -216,8 +198,6 @@ for (const [groupName, group] of Object.entries(manifest.groups ?? {})) {
   }
 }
 
-// ── report ──────────────────────────────────────────────────────────────────────────────────────
-
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
 for (const failure of failures) {
   console.log(inGha ? `::error::${failure}` : `  ✗ ${failure}`);
@@ -230,9 +210,6 @@ if (unverifiable.length) {
   );
   for (const item of unverifiable.sort()) console.log(`    · ${item}`);
 }
-// Printed, never swallowed: a `required_when` this run could not evaluate is a check that did NOT happen, and
-// the whole point of this file's header is that an assertion which silently skips part of its surface reads as
-// "all clear" when it is not.
 if (undecidable.length) {
   console.log(
     `\n${undecidable.length} conditional requirement(s) NOT evaluated — treat as unchecked, not as passing:`

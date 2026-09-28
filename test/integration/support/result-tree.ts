@@ -1,4 +1,3 @@
-/** Reading the published result tree from the static origin. */
 import { linkUrls, type RegistryResultUrl } from "./types.js";
 import { expectStatus, http, sha256Hex, type HttpResult } from "./http.js";
 import {
@@ -14,10 +13,7 @@ import type {
   VerifierPolicy,
 } from "./types.js";
 
-/**
- * `wasms/{hash}.json`. S3-backed static origins may spell a missing private bucket key as 403 instead of 404;
- * either means no readable status object.
- */
+/** S3 may answer a missing private key with 403 instead of 404; both mean absent. */
 export async function readStatusObject(
   wasmHash: string
 ): Promise<{ found: false; result: HttpResult } | { found: true; object: RegistryStatusObject; result: HttpResult }> {
@@ -37,7 +33,6 @@ export async function requireStatusObject(wasmHash: string): Promise<RegistrySta
   return read.object;
 }
 
-/** The report artifact, fetched by URL rather than by hash. */
 export async function readReportByUrl(
   url: string
 ): Promise<{ artifact: VerificationArtifact; bytes: Uint8Array; sha256: string; result: HttpResult }> {
@@ -67,7 +62,6 @@ export async function readVerifierManifest(): Promise<VerifierManifest> {
   return result.json as VerifierManifest;
 }
 
-/** Resolves the report for a finished job. */
 export async function reportForJob(
   jobResult: { artifact_url?: string } | undefined,
   wasmHash?: string
@@ -85,16 +79,11 @@ export async function reportForJob(
   return undefined;
 }
 
-/** This verifier as a published document identifies it: `url` is the result root, `name` is self-claimed. */
 export interface OwnVerifierIdentity {
   readonly url: string;
   readonly name?: string;
 }
 
-/**
- * `SCVS_E2E_VERIFIER_URL` short-circuits the manifest read: it exists for a deployment whose manifest
- * the runner cannot reach, and `readVerifierManifest` throws on anything but a `200`.
- */
 export async function ownVerifierIdentity(): Promise<OwnVerifierIdentity> {
   const url = process.env.SCVS_E2E_VERIFIER_URL;
   const name = process.env.SCVS_E2E_VERIFIER_NAME;
@@ -103,10 +92,6 @@ export async function ownVerifierIdentity(): Promise<OwnVerifierIdentity> {
   return { url: manifest.url, name: name ?? manifest.display_name };
 }
 
-/**
- * Comparable form of a result root: scheme and host lowercased, one trailing slash dropped, path case
- * preserved. Mirrors `normalizeVerifierUrl` in `packages/core` (dry-run findings §1.4).
- */
 export function normalizeResultRoot(url: string): string {
   try {
     const parsed = new URL(url);
@@ -122,10 +107,6 @@ type OwnEntryCandidate = {
   results_urls?: RegistryResultUrl[];
 };
 
-/**
- * Picks this verifier's own entry, by result root rather than by display name. Three rules
- * in order, mirroring `packages/storage-layout`'s `findOwnEntry`.
- */
 export function ownEntryOf<T extends OwnEntryCandidate>(
   entries: readonly T[],
   identity: OwnVerifierIdentity
@@ -137,7 +118,6 @@ export function ownEntryOf<T extends OwnEntryCandidate>(
   );
 }
 
-/** The same three rules as a predicate, for a case counting or filtering rather than picking one. */
 export function isOwnEntry(entry: OwnEntryCandidate, identity: OwnVerifierIdentity): boolean {
   return (
     declaresOurRoot(entry, identity) ||
@@ -146,33 +126,21 @@ export function isOwnEntry(entry: OwnEntryCandidate, identity: OwnVerifierIdenti
   );
 }
 
-/** 1. The identity itself, and the only rule that establishes ownership rather than confirming it. */
 function declaresOurRoot(entry: OwnEntryCandidate, identity: OwnVerifierIdentity): boolean {
   return entry.verifier?.url !== undefined && normalizeResultRoot(entry.verifier.url) === normalizeResultRoot(identity.url);
 }
 
-/**
- * 2. A document published before the cutover carries no `url` at all — the draft shape had no field
- *    for it. An entry whose links sit under our own root is ours whatever it calls itself, which is
- *    also why renaming the operator cannot orphan a published hash.
- */
 function linksUnderOurRoot(entry: OwnEntryCandidate, identity: OwnVerifierIdentity): boolean {
   if (entry.verifier?.url !== undefined) return false;
   const prefix = `${normalizeResultRoot(identity.url)}/`;
   return linkUrls(entry).some((url) => normalizeResultRoot(url).startsWith(prefix));
 }
 
-/**
- * 3. Last resort: a legacy entry that declares no identity *and* links nothing under our root — an
- *    `unverified` one has neither. `name` is self-claimed, so this can only ever confirm a guess,
- *    and it is skipped entirely when we hold no name: two `undefined`s are not a match.
- */
 function carriesOurLegacyName(entry: OwnEntryCandidate, identity: OwnVerifierIdentity): boolean {
   if (identity.name === undefined) return false;
   return entry.verifier?.url === undefined && entry.verifier?.name === identity.name;
 }
 
-/** Fails loudly when a hash already carries a `verified` entry from us. */
 export async function assertHashNotYetVerifiedByUs(
   wasmHash: string,
   caseId: string

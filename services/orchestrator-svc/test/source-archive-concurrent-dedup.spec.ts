@@ -21,11 +21,6 @@ import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.service.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/**
- * Sibling of `mainnet-source-archive.spec.ts` (eligibility/persistence) and `archive-and-recovery.spec.ts` (the
- * report path's own duplicate-content guard).
- */
-
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
 
 let jobs: JobsRepository;
@@ -45,14 +40,11 @@ beforeAll(async () => {
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4997/public";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
   process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
-  // This suite exercises MSA-1's archive-eligible path, which now defaults off (design.md §8, MSA-5).
   process.env.SCVS_SOURCE_ARCHIVE_ENABLED = "true";
 
   moduleRef = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
-      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
-      // needs the module that provides it.
       ScheduleModule.forRoot(),
       DbModule.forRootAsync({
         inject: [ConfigService],
@@ -72,7 +64,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    // Scheduled archives write to the rows cleanup deletes, so they finish first.
+    // Stop background archive work before deleting the rows it writes.
     if (arweaveArchive) await arweaveArchive.onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
@@ -114,7 +106,6 @@ function freshWasmHash(): string {
   return randomUUID().replace(/-/g, "").padEnd(64, "0");
 }
 
-/** Publishes a mainnet+public job whose source is already durable. */
 async function publishMainnetJob(opts: { sourceSha256: string; wasmHash: string }): Promise<JobRecord> {
   const sourceFileName = `${opts.sourceSha256}.tar.gz`;
   await stageDurableSource(sourceFileName);
@@ -175,7 +166,6 @@ describe("source-archive concurrent dedup", () => {
   it("two jobs sharing one source_sha256, published back to back, produce exactly one Irys upload", async () => {
     const sourceSha256 = createdRows.sourceArchiveUpload(randomUUID().replace(/-/g, "").padEnd(64, "0"));
 
-    // Only `kind: "source"` calls count.
     let sourceUploadCalls = 0;
     const internals = arweaveArchive as unknown as {
       uploadToIrys: (kind: string, input: unknown) => Promise<unknown>;
@@ -192,8 +182,6 @@ describe("source-archive concurrent dedup", () => {
         publishMainnetJob({ sourceSha256, wasmHash: freshWasmHash() }),
       ]);
 
-      // Whichever job lost the claim race records `archived: false` and leaves `sourceArchivePendingSince` set
-      // for `SourceArchiveRecoveryScheduler`'s own retry.
       const deadline = Date.now() + 4_000;
       while (!(await sourceArchiveSettled(jobA.jobId)) || !(await sourceArchiveSettled(jobB.jobId))) {
         if (Date.now() > deadline) throw new Error("timed out driving both jobs' source archive to settle");
@@ -218,11 +206,10 @@ describe("source-archive concurrent dedup", () => {
   it("a claim stale past the timeout is released and re-claimed inline, not left stranded", async () => {
     const sourceSha256 = createdRows.sourceArchiveUpload(randomUUID().replace(/-/g, "").padEnd(64, "0"));
 
-    // Simulates a claimant that crashed mid-upload: a "claimed" row with no process left to finish it.
     await sourceArchiveUploads.findOrCreate(sourceSha256);
     await prisma.sourceArchiveUpload.update({
       where: { sourceSha256 },
-      data: { updatedAt: new Date(Date.now() - 10 * 60_000) }, // 10 minutes ago, past the 5-minute default
+      data: { updatedAt: new Date(Date.now() - 10 * 60_000) }, // past the 5-minute stale-claim timeout
     });
 
     const job = await publishMainnetJob({ sourceSha256, wasmHash: freshWasmHash() });
@@ -290,14 +277,12 @@ describe("source-archive concurrent dedup", () => {
         return current !== undefined && current.sourceArchiveAttempts > 0;
       }, "the failed attempt to be recorded");
 
-      // Released, not stranded at "claimed": immediately queryable as gone, well under the 5-minute stale-claim
-      // timeout the OTHER recovery path relies on.
       const claim = await sourceArchiveUploads.getBySourceSha256(sourceSha256);
       expect(claim).toBeUndefined();
 
       const settled = await jobs.getJobById(job.jobId);
       expect(settled?.sourceArchivedTxId).toBeUndefined();
-      expect(settled?.sourceArchivePendingSince).toBeDefined(); // still owed — the existing retry path picks it up later
+      expect(settled?.sourceArchivePendingSince).toBeDefined();
     } finally {
       internals.uploadToIrys = realUpload;
     }

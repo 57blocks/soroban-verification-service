@@ -11,7 +11,5 @@ module.exports = {
   },
   testMatch: ["**/test/**/*.spec.ts"],
   setupFiles: ["<rootDir>/test/jest.setup.cjs"],
-  // Reports a database that was already dirty before the suites started, so a red suite can be told apart from
-  // a red database at a glance.
   globalSetup: "../../packages/db/testing/db-state-setup.cjs",
 };

@@ -13,10 +13,6 @@ import { landingRoutes } from "@/features/landing/routes";
 import { footerColumns, operatorPointer } from "@/features/landing/navigation";
 import { renderInRouter } from "./render-in-router";
 
-/**
- * Every rendered destination, not just the ones the content tables hold: the gate is that no *position*
- * offers the repository while it is private, and a new one added in JSX is caught here too.
- */
 const repoHrefs = (container: HTMLElement) =>
   [...container.querySelectorAll<HTMLAnchorElement>("a[href]")]
     .map((anchor) => anchor.getAttribute("href") ?? "")
@@ -47,10 +43,6 @@ describe("a private repository is not linked from anywhere", () => {
   });
 });
 
-/**
- * The links are withheld, not deleted. Flipping `sourceIsPublic` has to bring them back, so the tables that
- * hold them must keep holding them — and `landing-content.spec.ts` keeps checking each names a real path.
- */
 describe("withheld, not deleted", () => {
   test("the footer still declares the repository links it is not rendering", () => {
     const hrefs = footerColumns.flatMap((column) => column.items.map((item) => item.href));

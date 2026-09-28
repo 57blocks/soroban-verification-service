@@ -30,17 +30,11 @@ const ConsoleLoading = ({ mode }: { mode: VerifyMode }) => (
 );
 
 export type VerifyConsoleProps = {
-  /** `submit` starts a new verification; `job` opens an existing one. */
   mode?: VerifyMode;
   initialJobId?: string;
-  /** Set by `/verify?new=1` to clear a finished submission and start over. */
   forceNew?: boolean;
 };
 
-/**
- * The verify console. One react-hook-form instance spans the whole page: the target card and the evidence card
- * are two stages of the same submission, so they share it.
- */
 export const VerifyConsole = ({
   mode = "submit",
   initialJobId,
@@ -83,8 +77,6 @@ export const VerifyConsole = ({
       <div className="relative z-[1]">
         <SiteNav />
 
-        {/* Submission is driven by explicit buttons, not a native submit — the page holds two
-          stages of one request and each has its own handler. */}
         <form onSubmit={(event) => event.preventDefault()}>
           <div className="mx-auto max-w-console px-8 pb-16 pt-10">
             <ConsoleHero mode={mode} />
@@ -96,10 +88,6 @@ export const VerifyConsole = ({
               </>
             )}
 
-            {/* Only once there is a job to track. Before that the strip reported the first step of a form
-                the reader can already see, which is what put it between them and the field.
-                `allComplete` had one producer, `already_verified`, which submit could never send.
-                `verified` is the state that actually completes the flow. */}
             {submissionState !== "idle" && (
               <FlowProgress
                 currentStep={currentStep}
@@ -154,7 +142,6 @@ export const VerifyConsole = ({
                   />
                 )}
 
-                {/* Verdict, then how it was rebuilt, then what that produced. */}
                 <RebuildCard groups={provenanceGroups} />
 
                 {RESULT_STATES.includes(submissionState) && jobResult && (
@@ -187,10 +174,6 @@ export const VerifyConsole = ({
 
             {mode === "submit" && <RecentJobsCard jobs={recentJobs} />}
 
-            {/* New tab, not an in-place route change: this page's whole submission — the
-                preflight answer, the prefilled evidence, the archive hashed in this browser — is
-                component state, and a navigation away loses it. Same reason as
-                `SubmissionAgreement`. */}
             <SiteFooter legalLinksInNewTab />
           </div>
         </form>

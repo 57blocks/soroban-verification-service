@@ -11,7 +11,6 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit, OnModuleDes
   private readonly logger = new ScvsLogger("source-archive-recovery");
   private readonly metrics = new ScvsMetrics("source-archive-recovery", { logger: this.logger });
   private readonly detached = new DetachedWork(this.logger);
-  // Same-process, in-flight guard as `ArchiveRecoveryScheduler`'s `retryingJobIds`.
   private readonly retryingJobIds = new Set<string>();
 
   constructor(
@@ -46,12 +45,7 @@ export class SourceArchiveRecoveryScheduler implements OnModuleInit, OnModuleDes
   async recoverPendingSourceArchives(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingSourceArchive();
-      // Same O4 discipline as archive_backlog/source_publish_backlog: emitted on every tick, including the
-      // empty one.
       this.metrics.gauge("source_archive_backlog", pending.length);
-      // Mirrors the eligibility gate at schedule time (mainnet-source-archive design.md §8, MSA-5): when
-      // archiving is off, existing pending rows are left alone (no data loss) but never retried — retrying
-      // them would just repeat the arweave_disabled failure this flag exists to stop.
       if (!this.configService.get("arweave", { infer: true }).sourceArchiveEnabled) return;
       for (const job of pending) {
         if (this.retryingJobIds.has(job.jobId)) continue;

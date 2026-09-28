@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { materializeSource } from "../src/modules/builder/fetch-source.js";
 
-/** They asserted a checkout produced no `source_sha256`; a shape that is refused cannot emit one at all. */
 describe("materializeSource — refused source shapes", () => {
   it.each(["git", "hosted_tarball"] as const)(
     "refuses a %s source ref rather than acquiring it itself",
@@ -21,10 +20,6 @@ describe("materializeSource — refused source shapes", () => {
     },
   );
 
-  /**
-   * The one that would have been a live hole. `git clone` ran a subprocess on a submitter-supplied string with
-   * no scheme check, so a local path.
-   */
   it("refuses a git ref naming a readable local directory, which the old arm accepted", async () => {
     const repo = await gitFixture();
 
@@ -36,7 +31,6 @@ describe("materializeSource — refused source shapes", () => {
   });
 });
 
-/** The rule is that a source hash is something the verifier computed over bytes it holds. */
 describe("materializeSource — source_sha256 provenance", () => {
   it("publishes the hash it computed for an archive, and rejects a mismatch", async () => {
     const { path, sha256 } = await archiveFixture();
@@ -51,7 +45,6 @@ describe("materializeSource — source_sha256 provenance", () => {
     });
 
     expect(ok.ok).toBe(true);
-    // Lower-cased and computed, not the upper-cased string that was submitted.
     if (ok.ok) expect(ok.source.source_sha256).toBe(sha256);
 
     const mismatch = await materializeSource({

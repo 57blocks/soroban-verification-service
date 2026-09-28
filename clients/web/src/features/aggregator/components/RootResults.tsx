@@ -2,7 +2,6 @@ import type { RootResult } from "../hooks/use-root-lookups";
 import { LoadingRow } from "./Feedback";
 import { VerifierResult } from "./VerifierResult";
 
-/** What each additional root said, one block per root. */
 export const RootResults = ({ results }: { results: readonly RootResult[] }) => (
   <ul className="space-y-4 pl-0" data-testid="additional-root-results">
     {results.map((result) => (
@@ -32,9 +31,7 @@ export const RootResults = ({ results }: { results: readonly RootResult[] }) => 
               Published {result.document.updated_at} — this root&apos;s own clock.
             </p>
             <ul className="mt-3 space-y-3 pl-0">
-              {/* By URL, not position: this list's order is the root's to choose, and a PeerLink
-                  that the reader already confirmed must not be reused for a different destination.
-                  `verifier.name` is never a key — core forbids it. */}
+              {/* Keyed by URL, never by `verifier.name`: that is free text a peer writes about itself. */}
               {result.document.source_code_verifications.map((entry, index) => (
                 <VerifierResult key={entry.verifier.url ?? `#${index}`} entry={entry} />
               ))}

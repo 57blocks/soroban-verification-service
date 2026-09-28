@@ -4,7 +4,6 @@ import { FadeUp } from "@/components/ui/fade-up";
 import { audienceHead, visibleAudienceCards } from "../content";
 import { SectionHead } from "./SectionHead";
 
-/** Both arms of `AudienceAction` render the same underlined call to action. */
 const actionClass =
   "inline-flex items-center gap-1.5 border-b-2 border-yellow pb-0.5 text-[0.9rem] font-semibold transition-colors hover:border-ink";
 
@@ -20,8 +19,6 @@ export const AudienceSection = () => {
 
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
           {cards.map(({ label, title, description, sample, action }, index) => (
-            // FadeUp is the grid item, so it carries `h-full` — without that the card's background stops short
-            // of the tallest cell in the row.
             <FadeUp key={label} delay={index * 120} className="h-full">
               <div className="flex h-full flex-col rounded-xl border border-line bg-surface p-6 transition-all duration-150 hover:-translate-y-1 hover:shadow-lg md:p-7">
                 <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-yellow-deep">

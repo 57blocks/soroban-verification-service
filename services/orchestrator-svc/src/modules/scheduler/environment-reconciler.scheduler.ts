@@ -7,14 +7,9 @@ import { ComposerDispatchService } from "../build-environments/index.js";
 import { EnvironmentOutcomeService } from "../build-environments/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** Same sets as the rebuild reconciler — Batch's vocabulary, not ours. */
 const BATCH_NON_TERMINAL = new Set(["SUBMITTED", "PENDING", "RUNNABLE", "STARTING", "RUNNING"]);
 const BATCH_TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
 
-/**
- * Unwedges compositions stuck in `composing` — the `Environment` analogue of `RebuildReconcilerScheduler`,
- * necessary for a strictly worse version of the same reason.
- */
 @Injectable()
 export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("environment-reconciler");
@@ -46,7 +41,7 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
   }
 
   async reconcileStuckEnvironments(): Promise<void> {
-    // A scan that outruns its own interval would issue the same resets twice.
+    // An overrunning scan would issue the same resets twice.
     if (this.reconciling) return;
     this.reconciling = true;
     try {
@@ -59,7 +54,6 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
         await this.reconcileOne(environment, timeoutMs);
       }
     } catch (error) {
-      // One bad row must not stop the scan from running again next interval.
       this.logger.error("environment reconciliation scan failed", {
         error: error instanceof Error ? error : String(error),
       });
@@ -79,8 +73,6 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
     };
 
     if (!environment.batchJobId) {
-      // Claimed, but `markComposing` never recorded a Batch job id — so the submission almost certainly never
-      // landed.
       this.logger.warn(
         "composition was claimed but never recorded a Batch job; resetting it to pending",
         fields
@@ -89,13 +81,11 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
       return;
     }
 
-    // ── Rung 1: ask Batch ──────────────────────────────────────────────────────────────────────
     let batchState: { status: string; statusReason?: string } | undefined;
     let couldAskBatch = true;
     try {
       batchState = await this.composer.describeBatchJob(environment.batchJobId);
     } catch (error) {
-      // Degrade to rung 2 rather than abort — and remember we could not ask, which is what forfeits rung 3.
       couldAskBatch = false;
       this.logger.error("could not ask Batch about a silent composition; trying the receipt", {
         ...fields,
@@ -105,8 +95,6 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
     }
 
     if (batchState && BATCH_NON_TERMINAL.has(batchState.status)) {
-      // Alive. A composition legitimately takes tens of minutes (a rustup download plus a full `docker build`
-      // plus an ECR push), so this is the expected answer for a slow-but-healthy row.
       this.logger.log("composition is still running according to Batch; leaving it alone", {
         ...fields,
         batch_status: batchState.status,
@@ -123,9 +111,6 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
       return;
     }
 
-    // ── Rung 2: the receipt alone ──────────────────────────────────────────────────────────────
-    // Reached when Batch has forgotten the job (`undefined`), reported a status outside both sets, or could not
-    // be asked at all.
     if (await this.outcomes.tryRecordFromArtifact(environment)) {
       this.logger.warn("resolved a silent composition from its receipt alone", {
         ...fields,
@@ -134,9 +119,8 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
       return;
     }
 
-    // ── Rung 3: reset for a fresh composition ─────────────────────────────────────────────────
     if (!couldAskBatch) {
-      // "We could not ask" is not "Batch has no record". Leave it; the next interval may reach Batch.
+      // "Could not ask" is not "Batch has no record"; leave it for the next interval.
       this.logger.error(
         "composition is unresolvable this pass (Batch unreachable, no receipt); leaving it untouched",
         { ...fields, batch_job_id: environment.batchJobId }

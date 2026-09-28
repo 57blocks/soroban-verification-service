@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
-// One alternation for the two inline marks the content files use: `**bold**` and `[label](href)`.
+// Either inline mark: `**bold**` or `[label](href)`.
 const INLINE_MARK = /(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g;
 const BOLD = /^\*\*([^*]+)\*\*$/;
 const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
@@ -9,7 +9,6 @@ const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
 const linkClass =
   "text-ink underline decoration-yellow decoration-2 underline-offset-[3px] hover:decoration-ink";
 
-/** A same-origin path becomes a router link; anything else opens in a new tab. */
 const renderLink = (label: string, href: string, key: number): ReactNode =>
   href.startsWith("/") ? (
     <Link key={key} to={href} className={linkClass}>

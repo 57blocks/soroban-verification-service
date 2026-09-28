@@ -4,10 +4,6 @@ import { describe, expect, test, vi } from "vitest";
 import { SubmissionAgreement } from "@/features/verification/components/SubmissionAgreement";
 import { renderInRouter } from "./render-in-router";
 
-/**
- * The console's clickwrap (versioned-terms-and-assent design.md TA-1): an unchecked control, at the
- * submission and not at the preflight step, and an affirmative act distinct from pressing the button.
- */
 describe("the acceptance control", () => {
   test("is absent without `acceptance` — the preflight step keeps the notice it always had", async () => {
     await renderInRouter(<SubmissionAgreement />);
@@ -56,17 +52,11 @@ describe("the acceptance control", () => {
     const box = screen.getByTestId("accept-terms");
     expect(box).toBeDisabled();
     expect(screen.getByTestId("accept-terms-blocked").textContent).toMatch(/could not be loaded/);
-    // A submitter must never be able to accept a document that failed to load.
     await userEvent.click(box);
     expect(onAcceptedChange).not.toHaveBeenCalled();
   });
 });
 
-/**
- * Why a refused submission is legible. The old shape put the reason in a `title` on a disabled button —
- * a tooltip that needs a hovering mouse, which a touch screen does not have and a disabled element does not
- * reliably fire anyway.
- */
 describe("a refused submission", () => {
   test("states the reason on the page, as an alert", async () => {
     await renderInRouter(

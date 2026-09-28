@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-/** Moves only the run-scoped F-UPG fixture from v1 to v2. */
 export function upgradeFixtureToV2(): void {
   const result = spawnSync(
     "bash",

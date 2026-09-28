@@ -20,7 +20,6 @@ const expectedFailures = JSON.parse(
 const differentialEnabled = process.env.SCVS_DIFFERENTIAL === "1";
 const differentialTimeoutMs = 20 * 60_000;
 
-/** The one fixture the cross-toolchain legs re-run. */
 const CROSS_ORACLE_FIXTURE_ID = "cli-legacy-single-package-current";
 
 describe("differential fixture matrix", () => {
@@ -52,8 +51,6 @@ describe("differential fixture matrix", () => {
     const fixtureIds = new Set(FIXTURES.map((fixture) => fixture.id));
     const oracleIds = new Set(ORACLES.map((oracle) => oracle.id));
     for (const [id, failure] of Object.entries(expectedFailures)) {
-      // A cross-oracle leg is declared as `<fixtureId>@<oracleId>` — both halves have to name something real,
-      // or an entry can silently excuse a leg nobody runs.
       const [fixtureId, oracleId] = id.split("@");
       expect(fixtureIds.has(fixtureId!)).toBe(true);
       if (oracleId !== undefined) expect(oracleIds.has(oracleId)).toBe(true);
@@ -95,7 +92,6 @@ describe("differential fixture matrix", () => {
   });
 });
 
-/** The oracle table, checked as data — none of this needs Docker, so it runs on every change. */
 describe("differential oracles", () => {
   it("has stable unique oracle ids", () => {
     const ids = ORACLES.map((oracle) => oracle.id);
@@ -111,7 +107,6 @@ describe("differential oracles", () => {
   });
 
   it("★ pins every committed oracle image by digest, never by tag", () => {
-    // A tag-addressed oracle silently changes what the differential claim is about.
     for (const oracle of ORACLES.filter((candidate) => candidate.image)) {
       expect(oracle.image).toMatch(/@sha256:[0-9a-f]{64}$/);
     }
@@ -125,8 +120,7 @@ describe("differential oracles", () => {
   });
 
   it("★ refuses a supplied reference that is not digest-pinned instead of using it", () => {
-    // A plain spread would return that digest and the assertion below would pass without ever exercising the
-    // refusal it is named after.
+    // `image: undefined` matters: a plain spread keeps the digest and never exercises the refusal.
     const oracle: Oracle = {
       ...ORACLES[1]!,
       image: undefined,
@@ -144,14 +138,10 @@ describe("differential oracles", () => {
   });
 
   it("names a fixture the cross-toolchain legs can actually re-run", () => {
-    // Those legs are built at collection time from this id. A rename here without one there would otherwise
-    // turn into a confusing collection-time crash rather than a named failure.
     expect(FIXTURES.map((fixture) => fixture.id)).toContain(CROSS_ORACLE_FIXTURE_ID);
   });
 
   it("builds every committed fixture against the baseline oracle", () => {
-    // Keeps `fixtures.ts` and this table from parting company: if a fixture is ever pointed at a different
-    // image, that is a decision worth making explicitly rather than by editing one line.
     const baseline = resolveOracleImage(BASELINE_ORACLE);
     expect(baseline).toBeDefined();
     for (const fixture of FIXTURES) expect(fixture.image).toBe(baseline);
@@ -181,7 +171,6 @@ maybeDescribe("differential harness", () => {
   }, differentialTimeoutMs);
 });
 
-/** The same source, our builder against the official CLI, in a **different toolchain's** image. */
 maybeDescribe("differential harness — cross-toolchain", () => {
   for (const oracle of ORACLES.filter((candidate) => candidate.id !== BASELINE_ORACLE.id)) {
     const reason = missingOracleReason(oracle);

@@ -1,8 +1,3 @@
-# Applies to every image built with the repo root as context (docker/builder.Dockerfile,
-# docker/service.Dockerfile). Every Dockerfile here either doesn't need these paths at all, or
-# regenerates them fresh inside the container (`pnpm install`, `tsc`/`next build`) — carrying the
-# host's copies in only bloats the build-context upload and risks shadowing the container's own
-# linux/glibc-built native modules with host-platform ones at the exact same path.
 **/node_modules
 **/dist
 **/.next
@@ -12,11 +7,6 @@ infra/cdk/cdk.out
 infra/cdk/node_modules
 *.log
 
-# Never ship a host's environment into a build. `docker/web.Dockerfile` copies the whole workspace,
-# and `clients/web`'s Vite build now reads the root `.env` — so a developer's file would put its
-# `VITE_*` values into the bundle. `VITE_VERIFY_API_URL` is protected by the Dockerfile's own `ENV`
-# (process.env wins over a .env file in Vite), but `VITE_ENABLE_AGGREGATOR` has no such guard,
-# and that one is TRD §1.4's boundary. The secrets in the same file are reason enough on their own.
 .env
 .env.*
 !.env.example

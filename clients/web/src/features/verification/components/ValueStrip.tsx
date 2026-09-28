@@ -6,18 +6,11 @@ import { MonoLabel } from "./MonoLabel";
 type ValueStripProps = {
   label: ReactNode;
   value: ReactNode;
-  /** A second line under the strip: what the value was compared against, or why it is approximate. */
   detail?: ReactNode;
-  /** Comparison strips colour the value by verdict — and nothing else here does. */
   valueClassName?: string;
   className?: string;
 };
 
-/**
- * One label over one value, the value in the landing page's monospace strip. Every grid in the result — the
- * comparison, the build inputs, the timing — is made of these: the console holds real digests, paths and
- * durations, and the strip is the device this design uses to set a concrete value apart from the prose.
- */
 export const ValueStrip = ({
   label,
   value,

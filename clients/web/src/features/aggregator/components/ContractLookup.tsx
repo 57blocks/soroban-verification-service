@@ -8,7 +8,6 @@ import { LookupResult } from "./LookupResult";
 
 const NETWORKS: Network[] = ["mainnet", "testnet"];
 
-/** Look up whatever Wasm a contract address currently holds, across every trusted verifier. */
 export const ContractLookup = () => {
   const [network, setNetwork] = useState<Network>("testnet");
   const [input, setInput] = useState("");

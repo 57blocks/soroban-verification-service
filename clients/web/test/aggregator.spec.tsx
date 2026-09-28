@@ -18,7 +18,6 @@ const renderWithQuery = (ui: ReactElement) => {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 };
 
-/** query-svc's error body, as its LegacyHttpExceptionFilter actually serialises one. */
 const refusal = (status: number, error: string, message: string) =>
   new Response(JSON.stringify({ error, message, status_code: status }), {
     status,
@@ -34,7 +33,6 @@ const ENTRY = {
   processed_at: "2026-08-17T00:00:00.000Z",
 };
 
-/** An answer: query-svc retained at least one entry. `agreement` follows from that. */
 const aggregatedStatus = (over: Record<string, unknown> = {}) => ({
   schema_version: "1.0",
   wasm_hash: WASM_HASH,
@@ -45,7 +43,6 @@ const aggregatedStatus = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-/** No entries — what query-svc returns for a subject its sync has not reached. */
 const notRetained = (over: Record<string, unknown> = {}) =>
   aggregatedStatus({ source_code_verifications: [], agreement: "no_data", ...over });
 
@@ -124,8 +121,6 @@ describe("looking up one hash in this deployment's aggregate", () => {
     await waitFor(() => expect(calls).toHaveLength(2));
   });
 
-  // query-svc answers from what its sync retained, so an empty aggregate means "not reached yet", not "nobody
-  // has anything".
   test("an empty aggregate is reported as what this deployment holds, not as a verdict", async () => {
     stubFetch(() => ok(notRetained()));
 
@@ -155,8 +150,6 @@ describe("looking up one hash in this deployment's aggregate", () => {
     expect(screen.queryByTestId("hash-empty")).not.toBeInTheDocument();
   });
 
-  // The timestamp query-svc sends is `new Date()` at the moment it serves the answer — not a publication time
-  // and not an aggregation-change time.
   test("the assembled timestamp is not described as when the aggregate changed", async () => {
     stubFetch(() => ok(aggregatedStatus()));
 
@@ -167,7 +160,6 @@ describe("looking up one hash in this deployment's aggregate", () => {
     expect(results.textContent).toContain("assembled from the retained aggregate, not when it changed");
   });
 
-  // SDK6 and AB6 both exist so an unreachable verifier is never silently dropped.
   test("an unreachable verifier stays visible even when nothing has been retained", async () => {
     stubFetch(() =>
       ok(
@@ -190,8 +182,6 @@ describe("looking up one hash in this deployment's aggregate", () => {
   });
 });
 
-// The page reads through `soroban-verification-client`'s hosted mode, so the SDK's consumer rules are the page's rules — and a
-// publish that breaks one shows up here rather than in an integrator's bug report.
 describe("the aggregate is read through the SDK", () => {
   const lookUpHash = async () => {
     renderWithQuery(<HashLookup />);
@@ -218,8 +208,6 @@ describe("the aggregate is read through the SDK", () => {
   });
 });
 
-// query-svc and the console share one origin in every deployed environment, and nginx answers `try_files …
-// /index.html` with 200 text/html for any path the load balancer did not route here.
 describe("a 200 that is not JSON is named, not surfaced as a parse error", () => {
   test("an unrouted API path reports a query-API failure, not a SyntaxError", async () => {
     stubFetch(
@@ -237,8 +225,6 @@ describe("a 200 that is not JSON is named, not surfaced as a parse error", () =>
   });
 });
 
-// Each of these is a distinct fact. The one that must never read as "not verified" is the ledger being
-// unreachable — the address was never resolved, so nothing was asked about it at all.
 describe("the contract look-up keeps every refusal distinguishable", () => {
   const lookup = async (response: Response) => {
     stubFetch(() => response);
@@ -289,8 +275,6 @@ describe("the contract look-up keeps every refusal distinguishable", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  // `address_resolution_failed` is the refusal the copy explicitly invites a retry on, so the button has to
-  // actually re-ask.
   test("pressing Look up again on an unchanged address re-asks", async () => {
     const calls: string[] = [];
     vi.stubGlobal(
@@ -317,14 +301,12 @@ describe("the contract look-up keeps every refusal distinguishable", () => {
     expect(isContractId(` ${CONTRACT_ID.toLowerCase()} `)).toBe(true);
     expect(isContractId(`C${"A".repeat(54)}`)).toBe(false);
     expect(isContractId(`G${"A".repeat(55)}`)).toBe(false);
-    expect(isContractId(`C${"1".repeat(55)}`)).toBe(false); // 0/1/8/9 are not base32
+    expect(isContractId(`C${"1".repeat(55)}`)).toBe(false);
     expect(isContractId("")).toBe(false);
   });
 });
 
 describe("the trusted verifiers page treats peer fields as untrusted", () => {
-  // The real envelope, per packages/storage-layout's TrustedVerifiersList and what the live service returns —
-  // `schema`, not `schema_version`, and `updated_at` is required.
   const tvl = (over: Record<string, unknown> = {}) =>
     ok({
       schema: "stellar-trusted-verifiers-list-v1",
@@ -334,9 +316,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
           id: "peer-1",
           display_name: "Peer One",
           url: "https://peer.example/results/",
-          // OPTIONAL in the published schema (a peer may advertise no manifest), but present on everything
-          // the live service emits: the column is NOT NULL and `toTrustedVerifier` refuses a row without one.
-          // So this fixture is what our own /v1/verifiers answers, not the minimum a peer may serve.
           manifest_url: "https://peer.example/results/verifier-manifest.json",
           status: "active",
           ...over,
@@ -363,8 +342,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(list.querySelector("img")).toBeNull();
   });
 
-  // query-svc falls `display_name` back to the verifier id, because `trusted_verifiers` has no display_name
-  // column.
   test("the id is not repeated when it is all the display name is", async () => {
     stubFetch(() => tvl({ id: "peer-1", display_name: "peer-1" }));
 
@@ -374,8 +351,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(list.textContent?.match(/peer-1/g)).toHaveLength(1);
   });
 
-  // The published schema requires only `url` and `status`, so a conformant list may carry neither a label
-  // nor an id. The page reads the CONSUMER list, so this is a shape it can actually be handed.
   test("an entry with neither id nor display_name is named by its result root", async () => {
     stubFetch(() =>
       ok({
@@ -393,8 +368,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(list.textContent).not.toContain("undefined");
   });
 
-  // The duplicate-key regression: `id` was the React key, so two id-less entries shared `undefined` and
-  // reconciled as one row — the list silently lost a member.
   test("two entries with no id render as two rows", async () => {
     stubFetch(() =>
       ok({
@@ -414,8 +387,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(list.querySelectorAll("li")).toHaveLength(2);
   });
 
-  // `id` is implementation-local and promises nothing across entries; the result root is unique by
-  // definition, because the same root is the same verifier. Keying on `id` collapsed these two into one.
   test("two entries sharing a local id render as two rows", async () => {
     stubFetch(() =>
       ok({
@@ -447,7 +418,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(list.textContent).toContain("peer-1");
   });
 
-  // The page says that rather than "not enumerable", which would now be wrong.
   test("a peer with no bulk-load route says what it can and cannot contribute", async () => {
     stubFetch(() => tvl());
 
@@ -477,7 +447,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  // `disabled` is the status that changes what every other tab shows.
   test.each([
     ["active", "bg-success-fg"],
     ["paused", "bg-warning-fg"],
@@ -492,7 +461,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(list.querySelector(`.${tone}`)).not.toBeNull();
   });
 
-  // A body without `verifiers` is not an empty list — it is a response from something that is not this route.
   test("a 200 whose body has no verifiers is named, not rendered as empty", async () => {
     stubFetch(() => ok({ schema: "stellar-trusted-verifiers-list-v1", updated_at: "x" }));
 
@@ -504,8 +472,6 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
   });
 });
 
-// The additional-roots path is the one place the browser fetches a verifier, so its guards are the ones that
-// matter most.
 describe("asking an additional root directly", () => {
   const ROOT = { id: "https://peer.example/public", url: "https://peer.example/public" };
 
@@ -537,8 +503,6 @@ describe("asking an additional root directly", () => {
       ...over,
     });
 
-  // The page says "Nothing was queried" for a malformed hash. That has to be true of the roots too, and
-  // `wasms/${hash}.json` resolves as a relative URL, so `../` escapes the root.
   test.each(["not-a-hash", "a".repeat(63), "../../../etc/passwd"])(
     "%p is never sent to a root",
     async (bad) => {
@@ -554,8 +518,6 @@ describe("asking an additional root directly", () => {
     expect(calls).toEqual([`${ROOT.url}/wasms/${WASM_HASH}.json`]);
   });
 
-  // `aggregateWasmStatus` refuses this and the direct read must too: a root does not get to answer for a hash
-  // nobody asked about, and nothing on screen prints the document's own hash.
   test("a document about different bytes is refused, not rendered", async () => {
     const { result } = runHook(WASM_HASH, () => rootDocument({ wasm_hash: "b".repeat(64) }));
 

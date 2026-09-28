@@ -8,12 +8,10 @@ type JobTimingCardProps = {
   timing: JobTiming | null;
 };
 
-/** When this job started and how long it has taken. */
 export const JobTimingCard = ({ timing }: JobTimingCardProps) => {
   if (!timing) return null;
 
   const { startedMs, updatedMs, elapsedMs, isRunning, finishIsExact } = timing;
-  // A total that fell back to `updated_at` is an upper bound, not a measurement — see `useJobTiming`.
   const approximate = !isRunning && !finishIsExact && updatedMs !== undefined;
 
   return (

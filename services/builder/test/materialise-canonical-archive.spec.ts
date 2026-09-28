@@ -10,10 +10,6 @@ import { runCommand } from "@scvs/core/process";
 import { MaterialiseService } from "../src/modules/materialise/materialise.service.js";
 import { zipArchive } from "./malicious-corpus.js";
 
-/**
- * The materialiser end to end, through the real Nest wiring, for the one property the verify path depends on:
- * **which archive the CLI is handed.**
- */
 describe("MaterialiseService — the archive the verify path is handed", () => {
   const saved = { ...process.env };
 
@@ -68,21 +64,15 @@ describe("MaterialiseService — the archive the verify path is handed", () => {
     expect(handoff.ok).toBe(true);
     if (!handoff.ok) return;
 
-    // Compared as bytes rather than as a path, because a path that merely looks right is what this replaces.
     expect(handoff.source.canonical_path).toBeDefined();
     expect(await readFile(handoff.source.canonical_path!)).toEqual(innerBytes);
 
-    // And the name is one the CLI accepts, since it decides format from the extension.
     expect(handoff.source.canonical_path!.endsWith(".tar.gz")).toBe(true);
 
-    // `source_sha256` is still the hash of what was SUBMITTED — the zip.
     expect(handoff.source.source_sha256).toBe(outerSha);
 
-    // The build path still gets a tree, and it is the inner archive's tree with its wrapper stripped.
     expect((await readdir(handoff.source.workspace_path)).sort()).toEqual(["Cargo.toml", "src"]);
 
-    // The wire record. `canonical_sha256` is the INNER archive's hash — evidence only, and the value the
-    // trusted side will re-derive from the bytes rather than trust.
     expect(handoff.source.canonicalisation).toEqual({
       depth: 1,
       outer_format: "zip",
@@ -92,8 +82,6 @@ describe("MaterialiseService — the archive the verify path is handed", () => {
       uploaded: false,
     });
 
-    // Nothing of the peel survives: the canonical archive was adopted into the artifact root first, so leaving
-    // the staging behind would leave a second copy of the submitter's bytes in the handoff.
     const handoffEntries = await readdir(join(handoff.source.workspace_path, ".."));
     expect(handoffEntries.filter((entry) => entry.includes("-peel-"))).toEqual([]);
   });
@@ -111,16 +99,11 @@ describe("MaterialiseService — the archive the verify path is handed", () => {
 
     expect(handoff.ok).toBe(true);
     if (!handoff.ok) return;
-    // The submitted archive itself, not a copy of it: peeling wrote nothing and created no directory.
     expect(handoff.source.canonical_path).toBe(archivePath);
     expect(handoff.source.canonicalisation).toBeUndefined();
     expect(await readdir(handoff.source.workspace_path)).toEqual(["Cargo.toml"]);
   });
 
-  /**
-   * The submit gate cannot cover it — it compares a *declared* hash and passes when the chain lookup failed
-   * there — which is why the rule exists twice.
-   */
   it("★ refuses an archive the chain does not record, and does not rebuild one", async () => {
     const root = await mkdtemp(join(tmpdir(), "scvs-mat-refuse-"));
     await mkdir(join(root, "pkg"), { recursive: true });
@@ -136,8 +119,6 @@ describe("MaterialiseService — the archive the verify path is handed", () => {
     if (handoff.ok) throw new Error("unreachable");
     expect(handoff.reason).toBe("source_archive_not_chain_recorded");
     expect(handoff.status).toBe("source_hash_mismatch");
-    // Both hashes, for the same reason the submit gate carries both: the pair is what separates "I uploaded the
-    // wrong file" from "my tree is not the tree that was archived".
     expect(handoff.detail).toContain(chainSha256);
     expect(handoff.detail).toContain(sha256);
   });
@@ -150,8 +131,7 @@ describe("MaterialiseService — the archive the verify path is handed", () => {
     await runCommand(["tar", "-czf", archivePath, "-C", root, "pkg"], { mirrorOutput: false });
     const sha256 = createHash("sha256").update(await readFile(archivePath)).digest("hex");
 
-    // Lower-case, and not a choice: `MaterialiseJobParams.expected_source_sha256` is
-    // `@Matches(/^[0-9a-f]{64}$/)`, so an upper-case oracle never reaches the gate.
+    // Lower-case: `expected_source_sha256` must match /^[0-9a-f]{64}$/, so an upper-case oracle never reaches the gate.
     const handoff = await materialise(archivePath, sha256, sha256);
 
     expect(handoff.ok).toBe(true);
@@ -180,7 +160,6 @@ describe("MaterialiseService — the archive the verify path is handed", () => {
 
     expect(handoff.ok).toBe(true);
     if (!handoff.ok) return;
-    // A peel happened, so the record exists — and it must not claim an oracle nobody supplied.
     expect(handoff.source.canonicalisation?.reconstruction).toBe("no_oracle");
     expect(handoff.source.canonicalisation?.expected_source_sha256).toBeUndefined();
   });

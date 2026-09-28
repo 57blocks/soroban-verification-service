@@ -12,7 +12,6 @@ async function main(): Promise<void> {
 
   assert.equal(storage.crossProcessAtomicWrites, false);
 
-  // No client is injected below, so these run the path a service takes.
   const objectStorage = (config: Partial<Parameters<typeof createResultStorage>[0]>) =>
     createResultStorage({ kind: "s3", bucket: "b", publicRoot: "https://example.test", ...config } as never);
   assert.equal(objectStorage({}).crossProcessAtomicWrites, true);
@@ -28,33 +27,27 @@ async function main(): Promise<void> {
     "an injected client is opaque — its endpoint cannot be read back from here",
   );
 
-  // Absent object: no version to read, and only a create-if-absent write may land.
   assert.equal(await storage.readTextVersioned("wasms/a.json"), undefined);
   assert.equal(await storage.writeTextIfUnchanged("wasms/a.json", "first\n", JSON_TYPE, null), "written");
 
-  // Create-if-absent against something that now exists is a conflict, and writes nothing.
   assert.equal(await storage.writeTextIfUnchanged("wasms/a.json", "clobber\n", JSON_TYPE, null), "conflict");
   assert.equal(await readFile(join(root, "wasms/a.json"), "utf8"), "first\n");
 
-  // A version read back pins a successful replacement.
   const read = await storage.readTextVersioned("wasms/a.json");
   assert.ok(read);
   assert.equal(read.text, "first\n");
   assert.equal(await storage.writeTextIfUnchanged("wasms/a.json", "second\n", JSON_TYPE, read.version), "written");
 
-  // The now-stale version is refused, and the bytes on disk are untouched.
   assert.equal(await storage.writeTextIfUnchanged("wasms/a.json", "third\n", JSON_TYPE, read.version), "conflict");
   assert.equal(await readFile(join(root, "wasms/a.json"), "utf8"), "second\n");
 
-  // Unparseable bytes still carry a version, so a create-if-absent write cannot replace them.
   await storage.writeText("wasms/b.json", "{ not json", JSON_TYPE);
   const corrupt = await storage.readTextVersioned("wasms/b.json");
   assert.ok(corrupt, "a corrupt document must still report a version");
   assert.equal(await storage.writeTextIfUnchanged("wasms/b.json", "{}\n", JSON_TYPE, null), "conflict");
   assert.equal(await readFile(join(root, "wasms/b.json"), "utf8"), "{ not json");
 
-  // Launched concurrently rather than one after the other — sequential writes cannot reach the interleaving
-  // this is about.
+  // Must run concurrently: sequential writes never reach the interleaving.
   await storage.writeTextIfUnchanged("wasms/c.json", "base\n", JSON_TYPE, null);
   const pinned = await storage.readTextVersioned("wasms/c.json");
   assert.ok(pinned);
@@ -66,16 +59,13 @@ async function main(): Promise<void> {
   const landed = await readFile(join(root, "wasms/c.json"), "utf8");
   assert.ok(landed === "left\n" || landed === "right\n", "the winner's bytes, whole");
 
-  // Create-if-absent races the same way.
   const created = await Promise.all([
     storage.writeTextIfUnchanged("wasms/d.json", "first\n", JSON_TYPE, null),
     storage.writeTextIfUnchanged("wasms/d.json", "second\n", JSON_TYPE, null),
   ]);
   assert.deepEqual([...created].sort(), ["conflict", "written"], "exactly one creator may land");
 
-  // One root spelled two ways is one lock. The absolute spelling is realpath'd first because macOS reaches
-  // its temp dir through a symlink and `chdir` resolves what `resolve()` does not — without it this would
-  // exercise the symlink case the lock does NOT cover.
+  // Realpath'd first: macOS reaches its temp dir through a symlink, which the lock does not unify.
   {
     const previous = process.cwd();
     const realRoot = await realpath(root);

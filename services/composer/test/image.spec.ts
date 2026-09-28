@@ -9,8 +9,6 @@ import {
 } from "../src/modules/composer/image.js";
 import type { CommandResult } from "@scvs/core/process";
 
-/** The pure half of `image.ts`. */
-
 describe("reportsExpectedVersion", () => {
   it("accepts a version reported inside rustc's real output format", () => {
     expect(reportsExpectedVersion("rustc 1.95.0 (abcdef123 2026-01-01)", "1.95.0")).toBe(true);
@@ -25,22 +23,16 @@ describe("reportsExpectedVersion", () => {
   });
 
   it("rejects the version the pair did not ask for", () => {
-    // The PoC's actual finding: the official 26.0.0 image contains rust 1.94.1, while `stellar-cli-docker`'s
-    // own matrix declares 1.93.
     expect(reportsExpectedVersion("rustc 1.94.1 (abcdef123 2026-01-01)", "1.93.0")).toBe(false);
   });
 
   it("★ rejects a version the expected one is merely a prefix of", () => {
-    // The false-accept the old `includes()` rule had. `1.95` is not `1.95.0`, and treating it as such would let
-    // the smoke test pass on an image built with a different toolchain than the pair recorded.
     expect(reportsExpectedVersion("rustc 1.95.0 (abcdef 2026-01-01)", "1.95")).toBe(false);
     expect(reportsExpectedVersion("rustc 1.9", "1.9")).toBe(true);
     expect(reportsExpectedVersion("rustc 1.90.0", "1.9")).toBe(false);
   });
 
   it("★ rejects a prerelease as a match for the release it is a candidate for", () => {
-    // `26.0.0-rc.1` is not `26.0.0`. Semver's own separators (`-`, `+`) are excluded on the right for exactly
-    // this case.
     expect(reportsExpectedVersion("stellar 26.0.0-rc.1", "26.0.0")).toBe(false);
     expect(reportsExpectedVersion("stellar 26.0.0+build.7", "26.0.0")).toBe(false);
   });
@@ -51,14 +43,10 @@ describe("reportsExpectedVersion", () => {
   });
 
   it("keeps looking after a bounded-on-one-side-only occurrence", () => {
-    // The scan must not stop at the first textual hit: here the first `1.95.0` is part of `21.95.0` and the
-    // real one comes later.
     expect(reportsExpectedVersion("build 21.95.0 rustc 1.95.0", "1.95.0")).toBe(true);
   });
 
   it("rejects an empty expected version rather than matching everything", () => {
-    // `"".includes` semantics would make this vacuously true, which would silently disable the smoke test for a
-    // pair whose version field was somehow blank.
     expect(reportsExpectedVersion("rustc 1.95.0", "")).toBe(false);
   });
 
@@ -75,7 +63,6 @@ describe("registryRegion", () => {
   });
 
   it("refuses a repository URI that was passed where a registry host belongs", () => {
-    // The configured value is `<registry>/<repository>`; `pushComposedImage` splits it before calling this.
     expect(() =>
       registryRegion("123456789012.dkr.ecr.eu-west-1.amazonaws.com/scvs-composed-environments"),
     ).toThrow(ImageError);
@@ -87,8 +74,6 @@ describe("registryRegion", () => {
   });
 
   it("reports ecr_auth_failed with the offending registry in context", () => {
-    // The reason code travels to the receipt and becomes `Environment.errorCode`, so it has to be the
-    // machine-readable one rather than a bare message.
     try {
       registryRegion("not-a-registry");
       throw new Error("expected a throw");
@@ -101,7 +86,6 @@ describe("registryRegion", () => {
 });
 
 describe("reportsExpectedRev", () => {
-  // The rev half of a recorded `cliver`.
   const REV = "5a7c5fe76530bf4248477ac812fc757146b98cc4";
 
   it("finds the commit in the CLI's own version output", () => {
@@ -110,8 +94,6 @@ describe("reportsExpectedRev", () => {
   });
 
   it("refuses a rev that is only a prefix of the reported one", () => {
-    // A truncated commit hash that happens to prefix the real one would otherwise accept a different build as
-    // the recorded one.
     expect(reportsExpectedRev(`stellar 27.0.0 (${REV})`, REV.slice(0, 12))).toBe(false);
   });
 
@@ -161,7 +143,6 @@ describe("reportedVersion", () => {
   });
 
   it("probes the binary via --entrypoint, not as a command the image's entrypoint would swallow", async () => {
-    // Template v3 declares `ENTRYPOINT ["stellar"]` to mirror the official image.
     const calls: string[][] = [];
     const runner = async (command: string[]): Promise<CommandResult> => {
       calls.push(command);
@@ -176,18 +157,15 @@ describe("reportedVersion", () => {
     );
 
     const argv = calls[0]!;
-    // The binary is the entrypoint; only its arguments follow the image reference.
     expect(argv).toContain("--entrypoint");
     expect(argv[argv.indexOf("--entrypoint") + 1]).toBe("rustc");
     const imageIndex = argv.findIndex((token) => token.startsWith("scvs-composed:"));
     expect(argv.slice(imageIndex + 1)).toEqual(["--version"]);
-    // And the probe must not be reachable as `<entrypoint> rustc …`.
     expect(argv.slice(imageIndex + 1)).not.toContain("rustc");
   });
 });
 
 describe("isImmutableTagConflict", () => {
-  // The recovery path this gates adopts an image already in ECR as this environment's own.
   const push = (stderr: string): { stdout: string; stderr: string } => ({ stdout: "", stderr });
 
   it("recognises what ECR actually says when the tag is taken on an immutable repository", () => {
@@ -217,17 +195,11 @@ describe("isImmutableTagConflict", () => {
   });
 
   it("★ needs both markers, not either one", () => {
-    // "already exists" alone is ordinary layer-push chatter; "immutable" alone can come from an unrelated
-    // message about repository settings.
     expect(isImmutableTagConflict(push("layer already exists"))).toBe(false);
     expect(isImmutableTagConflict(push("repository is immutable"))).toBe(false);
   });
 });
 
-/**
- * The architecture is recorded on the `Environment` row so dispatch can pick a Batch queue whose hosts can
- * actually run the image, *without* probing our private ECR.
- */
 describe("parseInspectedImage", () => {
   const DIGEST = `sha256:${"a".repeat(64)}`;
   const REPO = "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/scvs-composed-environments";
@@ -245,8 +217,6 @@ describe("parseInspectedImage", () => {
   });
 
   it("★ records no architecture for one we have no queue for, and still yields the digest", () => {
-    // `uname -m`'s spellings land here too, which is why the format asks Docker for the image config's own
-    // value rather than the host's.
     for (const reported of ["riscv64", "aarch64", "x86_64", "", "   "]) {
       const parsed = parseInspectedImage(`${REPO}@${DIGEST}\t${reported}`);
       expect(parsed.architecture).toBeUndefined();
@@ -255,7 +225,6 @@ describe("parseInspectedImage", () => {
   });
 
   it("records no architecture when the field is missing entirely", () => {
-    // An older daemon, or a format string that lost its second field: the digest still has to work.
     const parsed = parseInspectedImage(`${REPO}@${DIGEST}`);
     expect(parsed).toEqual({ repoDigest: `${REPO}@${DIGEST}`, digest: DIGEST });
   });
@@ -267,7 +236,6 @@ describe("parseInspectedImage", () => {
   });
 
   it("does not mistake a digest for an architecture when the tab is absent", () => {
-    // Splitting on whitespace instead of the tab would put `arm64` in the digest field or vice versa.
     expect(parseInspectedImage(`${REPO}@${DIGEST} arm64`).digest).toBeUndefined();
   });
 });

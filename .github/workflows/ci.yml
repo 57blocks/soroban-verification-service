@@ -1,6 +1,5 @@
 name: CI
 
-# Triggers deliberately do NOT include `push: feat/*`.
 on:
   pull_request:
   push:
@@ -10,11 +9,6 @@ on:
 permissions:
   contents: read
 
-# Supersede an in-flight run when new commits land on the same PR/branch — the older run's result is about code
-# nobody will merge.
-#
-# Keyed on the pull request number, not `head_ref`: two forks can both offer a branch called `main` or
-# `patch-1`, and keying on the branch name would let either one cancel the other's run.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -23,8 +17,6 @@ jobs:
   lint-typecheck-test:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # packages/db's build (`prisma generate && tsc`) reads these at prisma.config.ts's top level to assemble
-    # DATABASE_URL (see packages/db/src/env.ts).
     services:
       postgres:
         image: postgres:16
@@ -46,14 +38,10 @@ jobs:
       POSTGRES_USER: scvs
       POSTGRES_PASSWORD: scvs_local_dev
     steps:
-      # Full history: `check:workflow-pins` reads the commits the workflows pin themselves to, and a shallow
-      # clone holds none of them. Every other gate here reads `git ls-files` only.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      # No `version:` — pnpm/action-setup reads the root package.json `packageManager` field, which is also the
-      # field Turborepo requires to resolve the workspace.
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -64,87 +52,54 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Runs before Build deliberately: it needs neither a compiled workspace nor a database, and the failure it
-      # reports ("a variable exists in one of the three places and not the others") is cheaper to read on its
-      # own than buried after a 10-minute build.
       - name: Check environment variable contract
         run: pnpm run check:env
 
-      # Nothing here may name one deployment's data: the shape lives here, the values do not.
       - name: Check no deployment's data is named
         run: pnpm run check:deployment-data
 
-      # Duplicate keys and broken run blocks in a workflow file.
       - name: Check workflow files
         run: pnpm run check:workflows
 
-      # A caller pins the workflow it names, not what that workflow reaches: `uses:` cannot be an expression,
-      # so every reference back to this repository resolves again when the job starts.
       - name: Check the pipeline is pinned below the caller's pin
         run: pnpm run check:workflow-pins
 
-      # The other half of the same trust boundary: the pin says WHICH pipeline runs, this says a job may not
-      # take AWS credentials before proving the ref it is running is on main.
       - name: Check every credentialed job proves its ref first
         run: pnpm run check:credentialed-jobs
 
-      # Early, and before the build: a leaked credential is worth reporting in one minute rather than
-      # eleven. Needs the Docker daemon the Postgres service above already requires.
       - name: Check the publication snapshot for secrets and deployment identifiers
         run: pnpm run check:secrets
 
-      # Static source read only, no build and no database, so it runs alongside the checks above rather than
-      # after Build.
       - name: Check test suites clean up the rows they create
         run: pnpm run check:test-row-cleanup
 
-      # Walks the builder's module graph: no entrypoint may reach both container-execution capability and
-      # attacker-controlled input.
       - name: Check the builder's capability split
         run: pnpm run check:builder-isolation
 
-      # A module left out of both the barrel and the exports map still compiles and passes every test; nobody
-      # learns it is unreachable until a consumer imports it. This is the check that makes that visible.
       - name: Check every core module is reachable
         run: pnpm run check:core-exports
 
-      # A module's directory is its own business: another module reaches it through index.ts and nothing else,
-      # so a file inside can be renamed or split without a search across the service.
       - name: Check the orchestrator's module surfaces
         run: pnpm run check:module-surfaces
 
-      # A server that binds a port without setting its deadlines takes Node's, whose keep-alive is shorter than
-      # the balancer's idle timeout. That call sits past `listen()`, where no test runs.
       - name: Check the HTTP server timeouts are applied
         run: pnpm run check:http-timeouts
 
-      # The compose-built fixtures' `(cliver, rsver)` pairs are written down in three places that cannot
-      # see each other.
       - name: Check the fixture pair tables agree
         run: pnpm run check:fixture-tables
 
-      # The command surface's own contract: every tool indexed, every `check:` run by some workflow, and no
-      # `check:` reaching AWS.
       - name: Check the tool index
         run: pnpm run check:tool-index
 
-      # Static source read only, no build and no database: doc byte budgets, relative link validity,
-      # spec-to-test bindings, and docs/invariants.md's code-location references.
       - name: Check documentation contracts
         run: pnpm run check:docs
 
-      # Never a gate: an advisory appears when a researcher publishes, not when an author pushes. The tool
-      # exits 0 by contract and writes its table to the run summary.
       - name: Report dependency advisories
         run: pnpm run report:advisories
 
-      # Real nginx over a synthetic document root: what the deployed origin answers at a console route, a
-      # real file, and a path nothing routes. The runner has a Docker daemon for the Postgres service above.
       - name: Check what an unrouted path at the host root answers
         run: pnpm run check:host-routing
 
-      # Turborepo's local cache. Restoring it lets the later steps replay `build` instead of recompiling, so
-      # typecheck/lint/test only pay for their own work.
       - name: Restore Turborepo cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -157,33 +112,21 @@ jobs:
       - name: Build (topological)
         run: pnpm run build
 
-      # `clients/sdk` is the first package to define a real `typecheck` script, and it needs one: its build is
-      # `tsup` (which type-checks only what it bundles) and its tests live outside `src/`, so `tsc --noEmit`
-      # over both is the only thing covering them.
       - name: Typecheck
         run: pnpm run typecheck
 
       - name: Lint
         run: pnpm run lint
 
-      # The SDK is the one package meant to be consumed outside this workspace, so its packaging is part of the
-      # gate rather than a release-time discovery: publint + are-the-types-wrong run over a real `pnpm pack`,
-      # which is what catches a dist that resolves in-workspace and breaks for a consumer.
       - name: Check SDK packaging
         run: pnpm --filter soroban-verification-client run check:packaging
 
-      # Both documents' component schemas are derived from the DTOs' validation metadata, and
-      # `applyDerivedSchemas` throws on a dangling $ref or a property no validator typed.
       - name: Generate OpenAPI
         run: pnpm run generate:openapi
 
-      # This also proves every committed migration still applies cleanly to an empty database, in order.
       - name: Migrate database
         run: pnpm run db:migrate
 
-      # Catches the failure mode where `schema.prisma` was edited but no migration was generated for it: the
-      # app's types compile and the suites pass against a schema the migrations never produce, and the mismatch
-      # only surfaces at deploy time.
       - name: Check schema/migration drift
         working-directory: packages/db
         run: |
@@ -202,15 +145,11 @@ jobs:
           fi
           exit "$status"
 
-      # `bsdtar` is what `services/builder`'s extractor reads zip source archives with, and the builder suite
-      # exercises that path against real zips.
       - name: Install bsdtar (zip source archives)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libarchive-tools
           bsdtar --version
 
-      # The root script passes `--continue`, so every package's suite runs even after one fails and a red run
-      # shows every failure rather than only the first.
       - name: Test
         run: pnpm run test

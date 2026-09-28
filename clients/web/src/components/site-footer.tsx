@@ -2,14 +2,9 @@ import { companyUrl } from "@/config/site";
 import { LegalLinks } from "./legal-links";
 
 type SiteFooterProps = {
-  /**
-   * Open the legal documents in a new tab. Set by the verify console, whose in-progress submission is component
-   * state and does not survive a navigation away — see `LegalLinks`.
-   */
   legalLinksInNewTab?: boolean;
 };
 
-/** The one-line credit that closes the console and legal pages, with the legal links beside it. */
 export const SiteFooter = ({ legalLinksInNewTab = false }: SiteFooterProps = {}) => (
   <footer className="mx-auto mt-14 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[0.85rem] text-ink-mute">
     <span className="inline-flex items-center gap-2">

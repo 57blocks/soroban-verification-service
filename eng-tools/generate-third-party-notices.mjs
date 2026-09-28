@@ -1,13 +1,5 @@
 #!/usr/bin/env node
-/**
- * Writes `THIRD-PARTY-NOTICES` from the production dependency graph.
- *
- * Apache-2.0 §4(d) asks a redistributor to propagate the NOTICE of the Apache-2.0 works it carries,
- * and our own `NOTICE` has no third-party section. Generated rather than written, because a
- * hand-maintained list of 500 packages is a list that is wrong by the next `pnpm update`.
- *
- * Reads `pnpm licenses list --prod`; no network beyond what pnpm already resolved, no AWS.
- */
+/** Writes `THIRD-PARTY-NOTICES` from `pnpm licenses list --prod`; refuses a copyleft licence. No AWS. */
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,8 +16,6 @@ const byLicence = JSON.parse(
   }),
 );
 
-// A licence that obliges the distributor of a binary to offer source is a licence this project cannot
-// carry without a decision. Nothing in the graph has one today, and this is what keeps that true.
 const COPYLEFT = /\b(GPL|AGPL|LGPL|MPL|EPL|CDDL|OSL|EUPL|SSPL)\b/i;
 const copyleft = Object.keys(byLicence).filter((l) => COPYLEFT.test(l));
 if (copyleft.length > 0) {

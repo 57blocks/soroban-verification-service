@@ -12,9 +12,6 @@ import {
   type PeerTrustedVerifiersList,
 } from "../src/index.js";
 
-// The fixtures under test/fixtures/registry are the draft's own worked examples, copied verbatim, so "we read
-// what the draft publishes" is checkable rather than asserted.
-
 const here = dirname(fileURLToPath(import.meta.url));
 const registryFixtures = resolve(here, "../../../test/fixtures/registry");
 
@@ -25,17 +22,10 @@ async function fixture(name: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(join(registryFixtures, name), "utf8")) as Record<string, unknown>;
 }
 
-/** The draft example every other test here builds on. */
 const READABLE_DRAFT = "200-out-of-band.json";
 
-/** The one example whose `results_urls` are bare strings — the draft's own link shape. */
 const BARE_STRING_LINKS = "200-verified.json";
 
-/**
- * Every worked example in the draft parses, bare-string links included; if one fails, our shape has drifted
- * from the draft. A consumer normalises a link with `toResultUrl` rather than being handed a document that
- * refused to read over one field's shape.
- */
 async function draftExamplesParse(): Promise<void> {
   const files = (await readdir(registryFixtures)).filter((name) => name.endsWith(".json"));
   assert.ok(files.length >= 5, `expected the draft's examples, found ${files.length}`);
@@ -53,33 +43,27 @@ async function draftExamplesParse(): Promise<void> {
   assert.ok(links.some((link) => typeof link === "string"), `${BARE_STRING_LINKS} lost its bare-string links`);
 }
 
-/** Unknown fields tolerated by default; the base projection on request. */
 async function validationModes(): Promise<void> {
   const extended = {
     ...(await fixture(READABLE_DRAFT)),
-    x_extensions: ["some-peer.extension/1.0"], // a peer's declaration: tolerated, never emitted
-    source_sha256: "a".repeat(64), // a field the 1.0 schema has no room for
+    x_extensions: ["some-peer.extension/1.0"],
+    source_sha256: "a".repeat(64),
   };
 
-  // Both tolerated: a real document carrying extensions must still be readable.
   const relaxed = validateStatusObject(extended, "extended");
   assert.equal(relaxed.wasm_hash, HASH);
 
-  // Projects first, so a closed-schema consumer gets a document that passes rather than an error.
   const strict = validateStatusObject(extended, "extended", "strict-base");
   assert.equal(strict.wasm_hash, HASH);
   assert.equal((strict as unknown as Record<string, unknown>).x_extensions, undefined);
   assert.equal((strict as unknown as Record<string, unknown>).source_sha256, undefined);
-  // ...and projecting must not have mutated the caller's object.
   assert.deepEqual(extended.x_extensions, ["some-peer.extension/1.0"]);
 
   const newStatus = { ...(await fixture(READABLE_DRAFT)) };
-  (newStatus.source_code_verifications as Record<string, unknown>[])[0].status = "mismatch"; // ours, not the draft's
+  (newStatus.source_code_verifications as Record<string, unknown>[])[0].status = "mismatch";
   assert.equal(displayStatusOf(validateStatusObject(newStatus, "new-status").source_code_verifications[0]), "unverified");
   assert.equal(displayStatusOf(validateStatusObject(newStatus, "new-status", "strict-base").source_code_verifications[0]), "unverified");
 
-  // Wrong in the base shape still fails in both modes: the relaxation is about unknown fields and enum values,
-  // never about structure.
   const badShape = { ...(await fixture(READABLE_DRAFT)) };
   (badShape.source_code_verifications as Record<string, unknown>[])[0].verifier = "not an object";
   assert.throws(() => validateStatusObject(badShape, "bad-shape"), RegistryDocumentError);
@@ -89,7 +73,6 @@ async function validationModes(): Promise<void> {
   assert.throws(() => validateStatusObject([], "array"), RegistryDocumentError);
 }
 
-/** An unrecognised `status` displays as `unverified`; an aggregate still carries what was said. */
 function unknownStatusCoercion(): void {
   assert.equal(displayStatusOf({ status: "verified" } as RegistryVerification), "verified");
   assert.equal(displayStatusOf({ status: "mismatched" } as RegistryVerification), "mismatched");
@@ -99,19 +82,13 @@ function unknownStatusCoercion(): void {
   );
 }
 
-/** The key is `wasms/<hash>.json`, lowercase, with no `network` anywhere. */
 function keyConvention(): void {
   assert.equal(statusObjectUrl(`${ORIGIN}/`, HASH), `${ORIGIN}/wasms/${HASH}.json`);
-  // A hash arrives uppercase from plenty of tools; the layout is lowercase hex.
   assert.equal(statusObjectUrl(ORIGIN, HASH.toUpperCase()), `${ORIGIN}/wasms/${HASH}.json`);
 
-  // A missing trailing slash must not escape to the parent: plain resolution would read another verifier's
-  // root, or the origin's own.
   assert.equal(statusObjectUrl(`${ORIGIN}/verifier-a`, HASH), `${ORIGIN}/verifier-a/wasms/${HASH}.json`);
   assert.equal(statusObjectUrl(`${ORIGIN}/verifier-a/`, HASH), `${ORIGIN}/verifier-a/wasms/${HASH}.json`);
 
-  // Query and fragment are dropped, not slash-appended: appending left the path behind and resolved to the
-  // origin root — the same escape this normalization prevents.
   assert.equal(statusObjectUrl(`${ORIGIN}/verifier-a?a=1`, HASH), `${ORIGIN}/verifier-a/wasms/${HASH}.json`);
   assert.equal(statusObjectUrl(`${ORIGIN}/verifier-a#frag`, HASH), `${ORIGIN}/verifier-a/wasms/${HASH}.json`);
 
@@ -135,10 +112,6 @@ function tvl(...verifiers: Verifier[]): PeerTrustedVerifiersList {
   };
 }
 
-/**
- * `bulk_load_url` is whatever the TVL entry says — the SDK fetches it and never builds the path — so a repath
- * can never fail these tests.
- */
 function verifier(id: string, host: string, status = "active"): Verifier {
   return {
     id,
@@ -150,7 +123,6 @@ function verifier(id: string, host: string, status = "active"): Verifier {
   };
 }
 
-/** One verifier per outcome. The rule being tested is that nothing is dropped and nothing throws. */
 async function aggregationDegradesHonestly(): Promise<void> {
   const good = await fixture(READABLE_DRAFT);
   const list = tvl(
@@ -159,7 +131,6 @@ async function aggregationDegradesHonestly(): Promise<void> {
     verifier("garbage", "garbage.test"),
     verifier("unreachable", "unreachable.test"),
     verifier("paused-by-operator", "paused.test", "paused"),
-    // Its url is a private-range literal, so the policy refuses it before any request.
     {
       id: "off-policy",
       display_name: "off-policy display",
@@ -189,16 +160,12 @@ async function aggregationDegradesHonestly(): Promise<void> {
 
   assert.equal(aggregate.schema_version, "1.0");
   assert.equal(aggregate.wasm_hash, HASH);
-  // Nothing we emit declares x_extensions: the draft's closed schema rejects the declaration exactly as it
-  // rejects the declared field.
   assert.equal("x_extensions" in aggregate, false);
   assert.equal(typeof aggregate.updated_at, "string");
 
-  // The one verifier with a document contributes its entry, verbatim.
   assert.equal(aggregate.source_code_verifications.length, 1);
   assert.equal(aggregate.source_code_verifications[0].status, "verified");
 
-  // 404 is absence, not unavailability: no entry AND no unavailable row.
   const unavailableRoots = aggregate.unavailable_verifiers.map((entry) => entry.url).sort();
   assert.deepEqual(
     unavailableRoots,
@@ -207,25 +174,20 @@ async function aggregationDegradesHonestly(): Promise<void> {
   const reasons = new Map(aggregate.unavailable_verifiers.map((entry) => [entry.url, entry.reason]));
   assert.equal(reasons.get("https://garbage.test/"), "invalid_response");
   assert.equal(reasons.get("https://unreachable.test/"), "fetch_failed");
-  // A policy refusal is never reported as a timeout: no request was made, so latency would be a fabrication and
-  // `refused` is the only reason that tells an operator what actually happened.
   assert.equal(reasons.get("https://10.1.2.3/"), "refused");
   for (const entry of aggregate.unavailable_verifiers) {
     assert.ok((entry.error ?? "").length > 0, `${entry.url} carries no reason`);
   }
 
-  // A verifier the operator paused is neither queried nor reported as a failure.
   assert.equal(requested.some((url) => url.includes("paused.test")), false);
   assert.equal(unavailableRoots.includes("https://paused.test/"), false);
 
-  // CI4: only the static per-hash key was read — no manifest, no index, no hosted API.
   assert.deepEqual(
     [...new Set(requested.map((url) => new URL(url).pathname))],
     [`/wasms/${HASH}.json`],
   );
 }
 
-/** `unavailable_verifiers` is always present, and an empty aggregate is a legitimate answer. */
 async function alwaysPresentAndEmptyIsValid(): Promise<void> {
   const client = newClient({
     tvl: tvl(verifier("absent", "absent.test")),
@@ -236,7 +198,6 @@ async function alwaysPresentAndEmptyIsValid(): Promise<void> {
   assert.deepEqual(aggregate.source_code_verifications, []);
 }
 
-/** A peer answering for a different hash is refused, not merged. */
 async function targetMismatchIsRefused(): Promise<void> {
   const other = { ...(await fixture(READABLE_DRAFT)), wasm_hash: "b".repeat(64) };
   const client = newClient({
@@ -249,7 +210,6 @@ async function targetMismatchIsRefused(): Promise<void> {
   assert.match(aggregate.unavailable_verifiers[0]?.error ?? "", /does not match/i);
 }
 
-/** CV8: an unknown field on a peer's entry survives into the aggregate rather than being stripped. */
 async function unknownFieldsSurvive(): Promise<void> {
   const document = await fixture(READABLE_DRAFT);
   (document.source_code_verifications as Record<string, unknown>[])[0].some_future_field = "kept";
@@ -264,13 +224,11 @@ async function unknownFieldsSurvive(): Promise<void> {
   );
 }
 
-/** SO7: a peer that adopts a higher MINOR stays readable. */
 async function higherMinorIsReadable(): Promise<void> {
   const document: Record<string, unknown> = {
     ...(await fixture(READABLE_DRAFT)),
     schema_version: "1.1",
   };
-  // A MINOR is additive, so a real 1.1 document carries fields 1.0 has no room for.
   (document.source_code_verifications as Record<string, unknown>[])[0].source_sha256 = "d".repeat(64);
 
   const client = newClient({
@@ -286,25 +244,18 @@ async function higherMinorIsReadable(): Promise<void> {
     (aggregate.source_code_verifications[0] as unknown as Record<string, unknown>).source_sha256,
     "d".repeat(64),
   );
-  // Our own aggregate still declares what WE conform to. A peer's MINOR is not contagious.
   assert.equal(aggregate.schema_version, "1.0");
 
-  // The direct read is the same shape, and it reports the peer's version rather than assuming ours.
   const single = await client.registry.statusObject(
     { ...verifier("modern", "modern.test") } as never,
     HASH,
   );
   assert.equal(single.schema_version, "1.1");
 
-  // Both validation modes: projecting to the base shape must not re-impose the producer's exactness.
   assert.equal(validateStatusObject(document, "peer-1.1").schema_version, "1.1");
   assert.equal(validateStatusObject(document, "peer-1.1", "strict-base").schema_version, "1.1");
 }
 
-/**
- * The other half of "branch on MAJOR". A 2.x document may have redefined a field we read, so accepting it would
- * let us restate a claim the peer never made — `invalid_response` is honest.
- */
 async function unknownMajorIsRefused(): Promise<void> {
   const document = { ...(await fixture(READABLE_DRAFT)), schema_version: "2.0" };
   const client = newClient({
@@ -318,7 +269,6 @@ async function unknownMajorIsRefused(): Promise<void> {
   assert.match(aggregate.unavailable_verifiers[0]?.error ?? "", /schema_version/);
 }
 
-/** One aggregation, in the Registry's vocabulary; artifact verification is the other surface. */
 async function clientSurface(): Promise<void> {
   const client = newClient({ tvl: tvl(verifier("a", "a.test")) });
   assert.equal(typeof client.registry.byHash, "function");

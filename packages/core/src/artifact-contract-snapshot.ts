@@ -1,15 +1,10 @@
 import { getMetadataStorage, validateSync } from "class-validator";
-// Nested shapes resolve only with this: `@ValidateNested` records that a property is a class, and
-// class-transformer's `@Type(() => X)` is the only place X is written down.
-// @ts-expect-error -- untyped entry point
+// class-transformer's `@Type(() => X)` metadata is the only record of a nested property's class.
+// @ts-expect-error
 import { defaultMetadataStorage } from "class-transformer/cjs/storage.js";
 import { BUILD_ARTIFACT_SCHEMA_VERSION } from "./artifact-contract.js";
 import { BuildArtifact } from "./batch.js";
 
-/**
- * A machine-readable description of the `recipe.json` wire contract — every class it reaches, every property
- * each declares, and whether validation rejects a document that omits it.
- */
 export type ArtifactContractSnapshot = {
   schema_version: string;
   shapes: Record<string, ArtifactContractShape>;
@@ -21,10 +16,6 @@ export type ArtifactContractShape = {
 
 type Constructor = new () => object;
 
-/**
- * Derives the snapshot from the DTOs as they are now. Pure read of the decorator metadata plus one
- * `validateSync` of an empty instance per class — no fixture, no I/O.
- */
 export function deriveArtifactContractSnapshot(): ArtifactContractSnapshot {
   const storage = getMetadataStorage();
   const shapes: Record<string, ArtifactContractShape> = {};
@@ -59,7 +50,6 @@ export function deriveArtifactContractSnapshot(): ArtifactContractSnapshot {
   return { schema_version: BUILD_ARTIFACT_SCHEMA_VERSION, shapes: sortKeys(shapes) };
 }
 
-/** Fails rather than describing a nested property as a scalar. */
 function nestedClassOf(cls: Constructor, property: string): Constructor {
   const entry = (
     defaultMetadataStorage as {

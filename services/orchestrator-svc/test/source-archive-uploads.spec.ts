@@ -7,10 +7,6 @@ import {
 } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 
-/**
- * `findOrCreate` (packages/db/src/source-archive-uploads.repo.ts) is the concurrency-safety mechanism itself,
- * so.
- */
 let clientA: PrismaClient;
 let clientB: PrismaClient;
 let repoA: SourceArchiveUploadsRepository;

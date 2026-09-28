@@ -1,10 +1,6 @@
 #!/usr/bin/env tsx
-/**
- * Seeds the `trusted_verifiers` table from a `stellar-trusted-verifiers-list-v1` document via
- * `@scvs/db-query`'s `upsertTrustedVerifier`.
- */
-// Loads the workspace root .env: this script runs from the repository root via `pnpm run db:seed-tvl`, so it
-// never picked up a `.env` and failed on a missing POSTGRES_DB regardless of configuration.
+/** Seeds the `trusted_verifiers` table from a `stellar-trusted-verifiers-list-v1` document. */
+// Loads the workspace root .env, which a run from the repository root would otherwise miss.
 import "@scvs/config/load-env";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -38,24 +34,15 @@ type TrustedVerifiersListDocument = {
   updated_at?: string;
 };
 
-/** Both spellings are accepted. */
 const ACCEPTED_SCHEMAS = [TRUSTED_VERIFIERS_LIST_SCHEMA, TRUSTED_VERIFIERS_LIST_SCHEMA_LEGACY];
 const DEFAULT_SOURCE = "config/trusted-verifiers.local.json";
 
-// A TVL entry's URLs become query-svc's outbound fetch origins (`originsFromVerifiers`) the moment this
-// script seeds them — same standard `SCVS_TRUSTED_VERIFIERS_SOURCE` above already holds itself to, applied
-// to what the source actually contains instead of just where it came from. Private-range/localhost hosts are
-// allowed only for the built-in `DEFAULT_SOURCE` fixture, never for anything `SCVS_TRUSTED_VERIFIERS_SOURCE`
-// names explicitly: a *file path* is not a trust signal on its own — a real deployment's own configuration is
-// free to point this variable at a checked-in file too, and that file seeds a real, network-reachable
-// environment. Only the fixture this script falls back to when nothing was configured at all is actually
-// local-developer-only.
+// Private-range/localhost entry URLs are allowed only for the built-in `DEFAULT_SOURCE` fixture.
 const ENTRY_URL_POLICY = normalizePolicy({ allowedSchemes: ["https:"] });
 const ENTRY_URL_POLICY_LOCAL = normalizePolicy({ allowedSchemes: ["https:", "http:"], blockPrivateRanges: false });
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Returns the document text, a label for it, and whether it's the built-in local-dev fixture. */
 async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixture: boolean }> {
   const configured = process.env.SCVS_TRUSTED_VERIFIERS_SOURCE?.trim();
   const source = configured || DEFAULT_SOURCE;
@@ -70,10 +57,6 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
           `that decision on the network. Use a local path for development.`,
       );
     }
-    // An https: source is fetched over the network, so — unlike a file path, which is already
-    // reviewable repository content — nothing here proves the response is what was intended.
-    // SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 pins the exact content expected, the same way this
-    // repository pins a GitHub Actions `uses:` to a commit SHA rather than trusting a mutable ref.
     const expectedDigest = process.env.SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256?.trim();
     if (!expectedDigest) {
       throw new Error(
@@ -83,10 +66,6 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
           `content and this script would seed it without detecting anything wrong.`,
       );
     }
-    // Caught here, before any network request, so a malformed pin (a typo, a base64 digest pasted
-    // where hex was expected, wrong length) is reported as its own distinct, diagnosable problem —
-    // not as a confusing "expected <garbage>, got <realhex>" digest mismatch further down, which
-    // would leave an operator unsure whether the PIN or the CONTENT is what's actually wrong.
     if (!/^[0-9a-f]{64}$/i.test(expectedDigest)) {
       throw new Error(
         `SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 is not a valid sha256 hex digest (expected 64 hex ` +
@@ -102,8 +81,7 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
         `Could not fetch trusted verifiers list from ${url}: HTTP ${response.status} ${response.statusText}`,
       );
     }
-    // Hashed over the exact bytes on the wire, before any text decoding — a pin must cover what was
-    // actually transmitted, not a re-encoded or re-parsed form of it.
+    // Hash the exact bytes on the wire, before any text decoding.
     const bytes = await response.arrayBuffer();
     const actualDigest = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
     if (actualDigest.toLowerCase() !== expectedDigest.toLowerCase()) {
@@ -118,9 +96,7 @@ async function loadSource(): Promise<{ label: string; raw: string; isDefaultFixt
     return { label: url.toString(), raw: new TextDecoder().decode(bytes), isDefaultFixture };
   }
 
-  // Relative to the repository root rather than `process.cwd()`: this runs both from a workspace checkout
-  // (`pnpm run db:seed-tvl`, cwd = root) and from `/app` inside the service image, and a cwd-relative path
-  // silently resolves differently between the two.
+  // Relative to the repository root, not cwd: this also runs from `/app` in the service image.
   const path = isAbsolute(source) ? source : resolve(repoRoot, source);
   const raw = await readFile(path, "utf8").catch((error: Error) => {
     throw new Error(`Could not read trusted verifiers config at ${path}: ${error.message}`);
@@ -154,7 +130,6 @@ async function main(): Promise<void> {
           `there is no supported static-only member): ${JSON.stringify(verifier)}`,
       );
     }
-    // Checked here rather than left to the column, which is a plain String and would take it.
     if (
       verifier.status !== undefined &&
       !trustedVerifierStatuses.includes(verifier.status as (typeof trustedVerifierStatuses)[number])
@@ -169,7 +144,7 @@ async function main(): Promise<void> {
       ["manifest_url", verifier.manifest_url],
       ["bulk_load_url", verifier.bulk_load_url],
     ] as const) {
-      if (value === undefined) continue; // only `url` is actually optional — the check above already guarantees the other two
+      if (value === undefined) continue;
       try {
         checkUrl(entryUrlPolicy, value);
       } catch (error) {
@@ -181,17 +156,13 @@ async function main(): Promise<void> {
     }
   }
 
-  // `@scvs/db-query` hands its repositories out through NestJS DI now; this script has no container, so it
-  // builds the same class over its own client.
   const verifiersRepository = new TrustedVerifiersRepository(
     createPrismaClient(readDbEnv()),
   );
 
   for (const verifier of doc.verifiers) {
     const manifestUrl = verifier.manifest_url;
-    // Through `resultRootOf`, so a `-v1` document's `cdn_root` is read rather than silently missed: deriving
-    // the root from `manifest_url` instead would seed a peer's *manifest* directory as its result root, and
-    // every status read under it would 404.
+    // Through `resultRootOf`: deriving the root from `manifest_url` would seed the manifest directory.
     const resultsRoot = resultRootOf(verifier);
     if (resultsRoot === undefined) {
       throw new Error(`verifier ${verifier.id}: no result root (neither "url" nor "cdn_root")`);

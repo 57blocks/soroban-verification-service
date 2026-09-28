@@ -20,8 +20,6 @@ import { errorBody } from "@scvs/http";
 
 @Injectable()
 export class UploadsService {
-  // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
-  // metadata Nest's DI would otherwise infer this parameter's type from).
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(UploadsRepository) private readonly uploads: UploadsRepository,
@@ -35,8 +33,7 @@ export class UploadsService {
       };
     }
 
-    // From the bytes, never from `x-filename`: reading a format off a submitter-controlled name is the trap
-    // this service sits downstream of (builder/archive-format.ts).
+    // From the bytes, never from the submitter-controlled `x-filename`.
     const format = uploadArchiveFormat(body);
     if (!format) {
       return {
@@ -53,8 +50,6 @@ export class UploadsService {
     const uploadId = uuidv4();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const sourceSha256 = createHash("sha256").update(body).digest("hex");
-    // Both derived from the sniffed format, not from the header: a zip stored as `application/gzip` under a
-    // `.tar.gz` name is a lie the whole downstream chain would then read a format off.
     const filename =
       sanitizeFilename(filenameHeader) || `${sourceSha256}${UPLOAD_ARCHIVE_DEFAULT_SUFFIX[format]}`;
     const stagingKey = stagingUploadKey(uploadId, filename);

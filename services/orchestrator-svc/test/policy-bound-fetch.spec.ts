@@ -11,11 +11,6 @@ import {
   type HopResponse,
 } from "@scvs/core/policy-bound-fetch";
 
-/**
- * ── What each half of this file is for ───────────────────────────────────────────────────────────── The
- * control has two parts that fail in different ways, so they are tested at different seams:.
- */
-
 const POLICY = normalizePolicy({
   allowedSchemes: ["https:"],
   blockPrivateRanges: true,
@@ -23,12 +18,10 @@ const POLICY = normalizePolicy({
   timeoutMs: 5_000,
 });
 
-/** A body-less hop. `on` is unused for redirects — the loop destroys them without reading. */
 function redirectTo(location: string | undefined, status = 302): HopResponse {
   return { statusCode: status, headers: location ? { location } : {}, destroy: () => undefined };
 }
 
-/** A terminal hop carrying `body`, emitting it the way `IncomingMessage` would. */
 function bodyOf(body: string, status = 200): HopResponse {
   const handlers = new Map<string, ((chunk?: unknown) => void)[]>();
   const response = {
@@ -51,7 +44,6 @@ function bodyOf(body: string, status = 200): HopResponse {
   return response as unknown as HopResponse;
 }
 
-/** Records every URL the loop actually requested, in order, and replies from a scripted list. */
 function recordingRequester(hops: HopResponse[]) {
   const requested: string[] = [];
   const requestImpl = async (url: URL): Promise<HopResponse> => {
@@ -77,14 +69,11 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
       }),
     ).rejects.toBeInstanceOf(FetchPolicyError);
 
-    // The assertion that actually proves the control: the metadata endpoint was never connected to.
     expect(requested).toEqual(["https://source.example.com/archive.tar.gz"]);
     expect(requested.join(" ")).not.toContain("169.254.169.254");
   });
 
   it("refuses an RFC1918 literal before opening any connection at all", async () => {
-    // Refused by `checkUrl` on the way in, so the requester is never reached — `requested` being empty is the
-    // whole point.
     const { requested, requestImpl } = recordingRequester([bodyOf("never reached")]);
 
     for (const url of [
@@ -103,8 +92,6 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
   });
 
   it("re-validates every hop, not only the last one", async () => {
-    // `clients/sdk`'s `createGuardedFetch` checks `response.url` — all a browser can see — so a chain that dips
-    // through a blocked host and comes back out looks clean to it.
     const { requested, requestImpl } = recordingRequester([
       redirectTo("https://169.254.169.254/latest/meta-data/"),
       bodyOf("would have looked like a clean public final hop"),
@@ -121,7 +108,6 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
   });
 
   it("follows a legitimate public redirect and returns the body", async () => {
-    // Measured in the decision file; asserted here.
     const { requested, requestImpl } = recordingRequester([
       redirectTo("https://codeload.github.com/o/r/tar.gz/refs/tags/v1"),
       bodyOf("archive-bytes"),
@@ -141,8 +127,6 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
   });
 
   it("resolves a relative Location against the current hop", async () => {
-    // A relative `Location` is legal and common. Resolving it wrongly would either refuse a valid redirect or —
-    // worse — build a URL that skips the policy check because it failed to parse.
     const { requested, requestImpl } = recordingRequester([redirectTo("/elsewhere.tar.gz"), bodyOf("ok")]);
 
     await fetchThroughDestinationPolicy("https://source.example.com/deep/a.tar.gz", {
@@ -166,7 +150,6 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
         requestImpl,
       }),
     ).rejects.toBeInstanceOf(FetchPolicyError);
-    // maxRedirects: 3 → the original plus three followed hops, then refusal.
     expect(requested).toHaveLength(4);
   });
 
@@ -182,8 +165,6 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
   });
 
   it("reports a non-2xx as a peer that did not deliver, never as a refusal", async () => {
-    // A 404 arriving as `FetchPolicyError` made a submitter's typo indistinguishable from a probe of our
-    // internal network, in the API, the console and `failure_reason_total`.
     const { requestImpl } = recordingRequester([bodyOf("not found", 404)]);
 
     const error = await fetchThroughDestinationPolicy("https://source.example.com/a.tar.gz", {
@@ -241,7 +222,6 @@ describe("pinningLookup — the DNS-rebinding answer", () => {
     return (_hostname, _options, callback) => callback(null, addresses);
   };
 
-  /** `lookup`'s callback is Node-shaped, so the assertions read it rather than a promise. */
   function invoke(lookup: ReturnType<typeof pinningLookup>, options: Record<string, unknown> = {}) {
     return new Promise<{ error: Error | null; args: unknown[] }>((resolve) => {
       (lookup as unknown as (h: string, o: unknown, cb: (...a: unknown[]) => void) => void)(
@@ -253,8 +233,6 @@ describe("pinningLookup — the DNS-rebinding answer", () => {
   }
 
   it("refuses when ANY resolved address is in a blocked range, not just when all of them are", async () => {
-    // A hostile resolver returning one public and one private address must not get a connection attempt on the
-    // strength of which one the socket happens to try first.
     const lookup = pinningLookup(
       POLICY,
       resolverReturning([
@@ -279,7 +257,6 @@ describe("pinningLookup — the DNS-rebinding answer", () => {
   });
 
   it("hands back exactly the addresses it validated — the pin", async () => {
-    // The rebinding window exists when a check resolves one address and the connection resolves another.
     const addresses = [
       { address: "93.184.216.34", family: 4 },
       { address: "93.184.216.35", family: 4 },
@@ -310,8 +287,6 @@ describe("pinningLookup — the DNS-rebinding answer", () => {
   });
 
   it("reports a name that resolves to nothing as not delivered, rather than as a refusal", async () => {
-    // Pinned against the case below: both are "this name has no address", and they reached the caller as
-    // different classes, so one became `source_uri_refused` and the other did not.
     const { error } = await invoke(pinningLookup(POLICY, resolverReturning([])));
     expect(error).toBeInstanceOf(UpstreamNotDeliveredError);
     expect(error).not.toBeInstanceOf(FetchPolicyError);

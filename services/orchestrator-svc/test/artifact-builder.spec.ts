@@ -4,10 +4,6 @@ import type { JobRecord } from "@scvs/db";
 import { assembleArtifact, observeSep55Marker, recipeSourceFor, toBldopt } from "../src/modules/publish/artifact-builder.util.js";
 import { PublishService } from "../src/modules/publish/publish.service.js";
 
-/**
- * The cheapest entry that can legally CARRY a `bldopt`. It has to bear a verdict: SO3 closes an `unverified`
- * entry to exactly {verifier, status}, so the four verdict-conditional fields come along with it.
- */
 const bldoptCarrier = (bldopt: string[]): Record<string, unknown> => ({
   verifier: { url: "https://v.example/" },
   status: "verified",
@@ -72,7 +68,6 @@ const job: JobRecord = {
 
 const CHAIN_IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
 
-/** Before, it was the hash of the bytes the submitter handed us. */
 describe("source.source_sha256 is the archive this verification was produced from", () => {
   const CANONICAL_SHA = "7".repeat(64);
 
@@ -89,13 +84,10 @@ describe("source.source_sha256 is the archive this verification was produced fro
 
     expect(artifact.source.source_sha256).toBe(CANONICAL_SHA);
     expect(artifact.source.source_sha256).not.toBe(job.sourceRef.source_sha256);
-    // The pair moves together or the content-addressing breaks.
     expect(artifact.source.source_file_name).toBe(`${CANONICAL_SHA}.tar.gz`);
   });
 
   it("falls back to the submitted hash when nothing was peeled or rebuilt", () => {
-    // Every submission that exists today. Absence of the argument means "they are the same archive", never "we
-    // do not know" — which is why this stays the submitted, already-cross-checked value.
     const artifact = assembleArtifact(
       job,
       { id: "dev-verifier", displayName: "Dev verifier", policyId: "default" },
@@ -109,12 +101,6 @@ describe("source.source_sha256 is the archive this verification was produced fro
   });
 });
 
-/**
- * Its report published `source_sha256: 0f8d9f81…` for a contract recording `3ee9dbfe…` and said nothing about
- * the difference, so the document read as internally consistent while failing this feature's own assertion:
- * whenever the deployed Wasm records a `source_sha256`, either the published value equals it or the verifier
- * does not claim it does.
- */
 describe("source.chain_source_sha256", () => {
   const CHAIN_SHA = "3".repeat(64);
 
@@ -134,7 +120,6 @@ describe("source.chain_source_sha256", () => {
     const artifact = artifactWith(CHAIN_SHA);
 
     expect(artifact.source.chain_source_sha256).toBe(CHAIN_SHA);
-    // The pair that was unreadable before: what we built from, and what the chain names.
     expect(artifact.source.source_sha256).not.toBe(CHAIN_SHA);
   });
 
@@ -143,8 +128,6 @@ describe("source.chain_source_sha256", () => {
   });
 
   it("★ carries ACN-9's reason and ACN-7's sentence onto the published document", () => {
-    // `parseDto` validates and whitelists the artifact, so a field `verdict.util.ts` sets can still be stripped
-    // here — this is the round trip that proves both reach the file a submitter reads.
     const artifact = assembleArtifact(
       {
         ...job,
@@ -169,7 +152,6 @@ describe("source.chain_source_sha256", () => {
       outcome: "hash_mismatch",
       detail: "…a missing `.gitignore`.",
     });
-    // The three fields that were contradictory on their own, now readable together.
     expect(artifact.provenance.recipe_source).toBe("on_chain_metadata");
     expect(artifact.result.verification_path).toBe("retroactive_manual");
     expect(artifact.source.chain_source_sha256).toBe(CHAIN_SHA);
@@ -246,17 +228,13 @@ describe("published build-environment evidence", () => {
       "on_chain_recipe_in_trusted_image",
     );
 
-    // `parseDto` runs the assembled artifact through `plainToInstance`, which gives every `@IsOptional()` field
-    // on `SandboxDiagnostics` an own key with value `undefined` regardless of what the input carried.
     expect(artifact.result.sandbox_diagnostics?.command).toBeUndefined();
     expect(artifact.result.sandbox_diagnostics?.command_summary).toBeUndefined();
-    // Every other field survives — this is an omission, not a wholesale strip.
     expect(artifact.result.sandbox_diagnostics).toMatchObject({
       runner: "stellar_contract_verify",
       build_image: expect.any(String),
     });
 
-    // The wire-format check that actually matters: neither field's *bytes* reach the artifact.
     expect(JSON.stringify(artifact)).not.toContain("X-Amz-Signature");
     expect(JSON.stringify(artifact)).not.toContain("--source-uri");
     expect(JSON.stringify(artifact)).not.toContain("--wasm-hash");
@@ -443,8 +421,6 @@ describe("recipeSourceFor", () => {
 });
 
 describe("toBldopt (SO5)", () => {
-  // The one shape RegistryVerification.bldopt actually requires: pass each normalised entry through the real
-  // validator, not just this file's own expectations of what "correct" looks like.
   const validates = (bldopt: string[]): void => {
     expect(() => parseDto(RegistryVerification, bldoptCarrier(bldopt))).not.toThrow();
   };
@@ -506,8 +482,6 @@ describe("toBldopt (SO5)", () => {
 });
 
 describe("observeSep55Marker (RA5)", () => {
-  // The prefix is the discriminator against legacy SEP-58 v0.4.0 vocabulary — an unprefixed source_repo, or one
-  // that merely contains "github:" without being prefixed by it, must read false.
   const cases: Array<[string, unknown, boolean]> = [
     [
       "github: prefix -> true",
@@ -539,8 +513,6 @@ describe("observeSep55Marker (RA5)", () => {
       false,
     ],
     [
-      // source_repo is not deduplicated by planMetadataReplay (unlike bldimg/source_uri/ source_sha256), so a
-      // section can legally carry more than one entry.
       "a non-matching source_repo entry before a github:-prefixed one -> true",
       {
         metadata_replay: [
@@ -572,8 +544,6 @@ describe("observeSep55Marker (RA5)", () => {
     );
 
     expect(artifact.trust.sep55_attestation_present).toBe(true);
-    // Guards against a leak through build_recipe.build_options, the one field on `PublishedBuildRecipe` still a
-    // loose passthrough bag.
     expect(JSON.stringify(artifact)).not.toContain("source_code_verifications");
   });
 
@@ -626,7 +596,6 @@ describe("internal env values in published bldopt", () => {
     const result = toBldopt({ bldopt: ["--locked", "--env=SCVS_E2E_RECIPE_SCOPE=caller-value"] });
 
     expect(result).toEqual(["--locked", "--env=SCVS_E2E_RECIPE_SCOPE=<redacted>"]);
-    // The scrub must not break RegistryVerification.bldopt's own shape check.
     expect(() => parseDto(RegistryVerification, bldoptCarrier(result!))).not.toThrow();
   });
 

@@ -1,4 +1,3 @@
-/** E2E-UPG-01 — a normal contract upgrade verifies both versions at one address. */
 import { env } from "../../support/env.js";
 import { fixture, missingFixture, submissionFor } from "../../support/fixtures.js";
 import { caseBlock } from "../../support/gate.js";
@@ -93,9 +92,6 @@ caseBlock(
         const newStatus = await requireStatusObject(newHash);
         expect(ownEntryOf(oldStatus.source_code_verifications, identity)?.status).toBe("verified");
         expect(ownEntryOf(newStatus.source_code_verifications, identity)?.status).toBe("verified");
-        // A `results_urls` entry is `{type, url, sha256}` (AU1), so the pointer has to
-        // be read out of each link. Comparing the array itself to a URL string was not merely wrong
-        // here — the negative half passed vacuously, because no object can ever equal a URL.
         const oldEntryLinks = linkUrls(ownEntryOf(oldStatus.source_code_verifications, identity) ?? {});
         expect(oldEntryLinks).toContain(v1Run.body.result!.artifact_url!);
         expect(oldEntryLinks).not.toContain(v2Run.body.result!.artifact_url!);

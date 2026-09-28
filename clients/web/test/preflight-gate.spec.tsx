@@ -8,15 +8,12 @@ const getLegalDocumentsMock = vi.fn(() => Promise.resolve(legalBundleFixture()))
 const preflightVerification = vi.fn();
 const submitVerification = vi.fn();
 
-// The gate has to be observable as "no request was made", so the generated client's two mutation hooks are
-// replaced with ones that record calls.
 vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: () => getLegalDocumentsMock(),
   usePreflightVerification: () => ({ mutateAsync: preflightVerification }),
   useSubmitVerification: () => ({ mutateAsync: submitVerification }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
   AXIOS_INSTANCE: { defaults: {} },
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
 }));
@@ -98,8 +95,6 @@ describe("the preflight gate (UI1)", () => {
     expect(submitVerification).not.toHaveBeenCalled();
   });
 
-  // The gate must hold even when the caller ignores it — this is the case a `disabled` attribute does not
-  // cover.
   test("calling stage two directly on a blocked verdict still issues no request", async () => {
     preflightVerification.mockResolvedValue(
       preflightBody({ kind: "unsupported", reason: "unreleased_cli" }),
@@ -147,16 +142,12 @@ describe("the preflight gate (UI1)", () => {
     });
 
     expect(submitVerification).toHaveBeenCalledTimes(1);
-    // The version this browser was shown, taken from the fetched bundle rather than from any input
-    // (versioned-terms-and-assent design.md TA-2).
     expect(submitVerification.mock.calls[0][0].data).toMatchObject({
       accepted_terms_version: legalBundleFixture().data.version,
     });
   });
 
   test("an unaccepted agreement issues no request, whatever the operator's effective date", async () => {
-    // The fixture's `effective_date` is null — the regime in which the server does not compel an accepted
-    // version. The console compels the act regardless: a control that can be ignored is not a gate.
     preflightVerification.mockResolvedValue(
       preflightBody({ kind: "compose", intent: {}, trustLevel: "upstream_pinned" }),
     );
@@ -171,10 +162,8 @@ describe("the preflight gate (UI1)", () => {
     });
 
     expect(submitVerification).not.toHaveBeenCalled();
-    // On the page, not only in a toast.
     expect(result.current.terms.error).toMatch(/Terms of Service/);
 
-    // And the act clears it and lets the same submission through.
     act(() => {
       result.current.terms.onAcceptedChange(true);
     });
@@ -188,7 +177,6 @@ describe("the preflight gate (UI1)", () => {
   });
 
   test("refuses to submit at all when the operator's bundle could not be loaded", async () => {
-    // Nothing to accept means nothing to bind, so the console must not call the endpoint (TA-6).
     vi.mocked(getLegalDocumentsMock).mockRejectedValueOnce(new Error("no bundle"));
     preflightVerification.mockResolvedValue(
       preflightBody({ kind: "compose", intent: {}, trustLevel: "upstream_pinned" }),
@@ -203,8 +191,6 @@ describe("the preflight gate (UI1)", () => {
       await result.current.submitCompletedManifest();
     });
 
-    // The control itself is unusable, not merely unchecked: a submitter must never accept text that did not
-    // load.
     expect(result.current.terms.disabledReason).toMatch(/could not be loaded/);
     expect(submitVerification).not.toHaveBeenCalled();
   });

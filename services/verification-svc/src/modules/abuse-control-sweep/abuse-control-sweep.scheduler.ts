@@ -5,13 +5,11 @@ import { DetachedWork, ScvsLogger, startInterval } from "@scvs/core";
 import { AbuseControlRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** Keeps `abuse_control` inside its retention window (retention-and-pseudonymisation design.md RP-2). */
 @Injectable()
 export class AbuseControlSweepScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("abuse-control-sweep");
   private readonly detached = new DetachedWork(this.logger);
 
-  // Explicit `@Inject()` — see preflight.controller.ts's comment.
   constructor(
     @Inject(AbuseControlRepository) private readonly abuseControl: AbuseControlRepository,
     @Inject(ConfigService) private readonly configService: AppConfigService,
@@ -38,7 +36,6 @@ export class AbuseControlSweepScheduler implements OnModuleInit, OnModuleDestroy
       const removed = await this.abuseControl.pruneCountersBefore(new Date(Date.now() - retentionMs));
       if (removed > 0) this.logger.log("pruned expired abuse counters", { removed, retention_ms: retentionMs });
     } catch (error) {
-      // A silent failure here is a retention breach that nothing else reports, so it is an error record.
       this.logger.error("abuse counter sweep failed", {
         error: error instanceof Error ? error : String(error),
       });

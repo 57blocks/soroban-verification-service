@@ -1,9 +1,3 @@
-/**
- * What is left here after the operator's legal text moved out of this bundle: the page's own chrome about
- * draft state. Every operator-specific value — names, the two documents, their effective date and history
- * URL — now arrives from `GET /api/verification/v1/legal`.
- */
-
 export const draftBannerCopy = {
   title: "Draft — not yet in effect",
   body:

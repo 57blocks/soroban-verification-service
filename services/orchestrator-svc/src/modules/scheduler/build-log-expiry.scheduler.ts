@@ -6,12 +6,6 @@ import { DetachedWork, ScvsLogger, ScvsMetrics, startInterval } from "@scvs/core
 import { JobsRepository } from "@scvs/db";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/**
- * Removes raw build logs past their retention period (build-log-access design.md BL-2).
- *
- * It is not what makes an expired log unreadable — `JobsService.getBuildLog` already answers `410` from the
- * row, so a sweep that is late or wedged cannot extend the promise. This is what removes the bytes.
- */
 @Injectable()
 export class BuildLogExpiryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("build-log-expiry");
@@ -40,8 +34,6 @@ export class BuildLogExpiryScheduler implements OnModuleInit, OnModuleDestroy {
 
   async sweep(now = Date.now()): Promise<number> {
     try {
-      // Object keys, not job ids: one rebuild's log serves every job attached to it, and `listExpiredBuildLogs`
-      // returns a key only when the LAST of those jobs has expired and none is held (ADR-008).
       const keys = await this.jobs.listExpiredBuildLogs(
         new Date(now),
         this.configService.get("buildLogSweepBatchSize", { infer: true }),
@@ -55,9 +47,7 @@ export class BuildLogExpiryScheduler implements OnModuleInit, OnModuleDestroy {
       for (const objectKey of keys) {
         try {
           await deleteObject(s3, staging.bucket, objectKey);
-          // Only after the bytes are gone: clearing first would leave an object nothing points at, which is
-          // the state the job-retention sweep (retention-and-pseudonymisation RP-3) prevents for the
-          // same reason.
+          // Only after the delete: clearing the key first would leave an object nothing points at.
           await this.jobs.clearBuildLogKey(objectKey);
           deleted += 1;
         } catch (error) {
@@ -70,7 +60,6 @@ export class BuildLogExpiryScheduler implements OnModuleInit, OnModuleDestroy {
       if (deleted > 0) this.logger.log("expired build logs deleted", { deleted });
       return deleted;
     } catch (error) {
-      // A silent failure here is a retention breach nothing else reports.
       this.logger.error("build log expiry sweep failed", {
         error: error instanceof Error ? error : String(error),
       });

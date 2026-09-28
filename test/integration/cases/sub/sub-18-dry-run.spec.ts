@@ -1,4 +1,3 @@
-/** E2E-SUB-18 -- a dry run produces evidence for its submitter, not a published result. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -20,12 +19,10 @@ caseBlock(
     it(
       "keeps the dry-run result private while allowing the identical recipe to publish later",
       async () => {
-        // `submissionFor` adds one test-scoped inert bldopt. Both calls occur in this one Jest test, so they
-        // share a rebuild identity while remaining distinct from other runs and cases.
+        // Both calls must stay in this one Jest test to share its test-scoped recipe.
         const body = await submissionFor("F-LEG-1");
         const dryRun = await submitAndWait({ ...body, dry_run: true });
 
-        // The public status projects internal `evaluated` to the successful verdict.
         expect(dryRun.body.status).toBe("verified");
         expect(dryRun.body.result?.matched).toBe(true);
         expect(dryRun.body.result?.rebuilt_wasm_hash).toBe(dryRun.body.result?.wasm_hash);
@@ -44,7 +41,6 @@ caseBlock(
           /\.wasm\b/i,
         ]);
 
-        // An `evaluated` result is not adoptable.
         const published = await submitAndWait(body);
         expect(published.body.status).toBe("verified");
         expect(published.body.result?.matched).toBe(true);

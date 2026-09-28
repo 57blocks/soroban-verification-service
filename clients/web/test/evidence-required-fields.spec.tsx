@@ -16,14 +16,11 @@ import type {
 const preflightVerification = vi.fn();
 const submitVerification = vi.fn();
 
-// Same shape as `preflight-gate.spec.tsx`: the point is observable as "no request was made", and asserting on a
-// disabled button would pass against a console that submits anyway.
 vi.mock("@scvs/verify-api-client", async () => ({
   getLegalDocuments: () => Promise.resolve(legalBundleFixture()),
   usePreflightVerification: () => ({ mutateAsync: preflightVerification }),
   useSubmitVerification: () => ({ mutateAsync: submitVerification }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
   AXIOS_INSTANCE: { defaults: {} },
@@ -59,10 +56,7 @@ const readyPreflight = {
   },
 };
 
-/**
- * `form.formState` is a Proxy that only tracks the slices something *rendered* has read, and this harness
- * renders the hook alone.
- */
+/** `formState` is a Proxy tracking only slices a render has read, and this harness renders the hook alone. */
 const fieldError = (
   form: { getFieldState: (name: never) => { error?: { message?: string } } },
   name: "source_sha256" | "source_uri",
@@ -73,7 +67,6 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 
-/** A console with preflight already cleared, so stage two is the only gate left. */
 const openStageTwo = async () => {
   preflightVerification.mockResolvedValue(readyPreflight);
   const { result } = renderHook(() => useVerificationConsole({ mode: "submit" }), { wrapper });
@@ -93,7 +86,6 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-/** The refusal came back as a 400 from the API for a fact the field already knew. */
 describe("stage two validates the required evidence before it submits", () => {
   test("an empty source URI on the public-URI path issues no request", async () => {
     const result = await openStageTwo();
@@ -141,7 +133,6 @@ describe("stage two validates the required evidence before it submits", () => {
     );
   });
 
-  /** The picker is not a react-hook-form field, so `form.trigger` cannot see it. */
   test("both halves of 'required' are reported from a single press", async () => {
     const result = await openStageTwo();
 
@@ -153,7 +144,6 @@ describe("stage two validates the required evidence before it submits", () => {
     });
 
     expect(submitVerification).not.toHaveBeenCalled();
-    // The field error and the picker's refusal, both from the same press.
     expect(fieldError(result.current.form, "source_sha256")).toBeTruthy();
     expect(result.current.sourceArchive.error).toMatch(/Select the exact source archive/);
   });
@@ -178,7 +168,6 @@ describe("stage two validates the required evidence before it submits", () => {
   });
 });
 
-/** Narrowing the console's copy of `SOURCE_URI_PATTERN` to `https://` would refuse input the API accepts. */
 describe("the source-URI rule accepts what the submit boundary accepts", () => {
   test.each([
     "https://example.com/source.tar.gz",
@@ -189,8 +178,6 @@ describe("the source-URI rule accepts what the submit boundary accepts", () => {
     expect(sourceUriRefusal(uri)).toBeNull();
   });
 
-  // A trailing space is *not* in this list on purpose: `buildInlineManifest` submits the trimmed value, so
-  // judging the untrimmed one would refuse input the API would have accepted.
   test.each(["", "   ", "example.com/source.tar.gz", "9lives:x", "://nowhere"])(
     "%j is refused",
     (uri) => {
@@ -231,11 +218,6 @@ describe("the refusal is rendered beside the control that caused it", () => {
   });
 });
 
-/**
- * The submit boundary's `HEX_64_RE` is case-insensitive and the publish boundary's `SEP58_HEX_SHA256` is not,
- * and nothing server-side normalises the manifest's `source_sha256` (unlike the wasm hash, which carries
- * `@LowercaseHex`).
- */
 describe("the submitted source_sha256 is lowercase", () => {
   test("an uppercase paste is normalised on the way out", () => {
     const manifest = buildInlineManifest(

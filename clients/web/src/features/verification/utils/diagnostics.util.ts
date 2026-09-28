@@ -16,7 +16,6 @@ export const getSandboxDiagnostics = (result?: Record<string, unknown>) =>
 export const getWasmCompare = (diagnostics?: Record<string, unknown>) =>
   objectValue(diagnostics?.wasm_compare);
 
-/** Reads a diagnostics field the builder writes as a plain string, or "" when absent. */
 export const diagnosticsText = (
   diagnostics: Record<string, unknown> | undefined,
   key: string,
@@ -47,7 +46,6 @@ const commonPreview = (diff?: Record<string, unknown>) => {
   );
 };
 
-/** Deployed-vs-rebuilt Wasm differences, reduced to one "Same/Different" line per dimension. */
 export const wasmCompareSummaryEntries = (
   compare?: Record<string, unknown>,
 ) => {

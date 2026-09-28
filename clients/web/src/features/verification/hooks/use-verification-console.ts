@@ -46,10 +46,6 @@ type UseVerificationConsoleOptions = {
   forceNew?: boolean;
 };
 
-/**
- * Owns the submission state machine: submit a target, handle the `incomplete` round trip, follow the live job
- * stream, and record the result in this browser's recent-jobs list.
- */
 export const useVerificationConsole = ({
   mode,
   initialJobId,
@@ -64,8 +60,6 @@ export const useVerificationConsole = ({
   const lastNotifiedRef = useRef<string | null>(null);
 
   const [targetType, setTargetType] = useState<TargetType>("contract_id");
-  // One state, discriminated by which producer wrote it — see `ConsoleState` in ../types for why three
-  // producers cannot share one flat object.
   const [consoleState, setConsoleState] = useState<ConsoleState>({ phase: "idle" });
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [rejectedOptions, setRejectedOptions] = useState<RejectedBuildOption[]>([]);
@@ -73,8 +67,6 @@ export const useVerificationConsole = ({
 
   const recentJobs = useRecentJobs();
   const preflight = usePreflight(form);
-  // Read fresh each render, so an archive picked after a re-run of preflight is judged against that run's
-  // answer and never a previous contract's.
   const chainSourceField =
     preflight.state.phase === "answered"
       ? preflight.state.response.available_fields?.source_sha256
@@ -84,12 +76,9 @@ export const useVerificationConsole = ({
   const sourceArchive = useSourceArchive(form, chainSourceSha256);
   const submitMutation = useSubmitVerification();
 
-  // `useWatch` rather than `form.watch()`: it returns a value instead of a function, which keeps this hook
-  // memoizable.
   const watched = useWatch({ control: form.control });
   const values: VerifyFormValues = { ...defaultValues, ...watched };
 
-  // The banner's fields, and the display status the copy table is keyed on.
   const banner = bannerView(consoleState);
   const submissionState = consoleStateToSubmissionState(consoleState);
 
@@ -97,10 +86,7 @@ export const useVerificationConsole = ({
     jobId: string,
     status: RecentJob["status"],
     nextResponse?: Partial<JobResponse>,
-    /**
-     * The job settled on this event. Only `onTerminal` passes it, and only the verifier's own `updated_at` is
-     * stored — never this tab's clock, which is why it is not `|| now` like the field below.
-     */
+    /** Only the verifier's own `updated_at` is stored as `finished_at`, never this tab's clock. */
     options: { settled?: boolean } = {},
   ) => {
     const now = new Date().toISOString();
@@ -109,10 +95,7 @@ export const useVerificationConsole = ({
       status,
       target: nextResponse?.target || banner.target,
       detail: nextResponse?.detail || banner.detail,
-      // Prefer the API-provided created_at (job submission time) when present; `rememberJob` preserves an
-      // existing entry's own value over this one anyway.
       created_at: nextResponse?.created_at || now,
-      // The verifier's own `updated_at` where the event carried one, and only otherwise this tab's clock.
       updated_at: nextResponse?.updated_at || now,
       ...(options.settled && nextResponse?.updated_at
         ? { finished_at: nextResponse.updated_at }
@@ -135,8 +118,7 @@ export const useVerificationConsole = ({
         ...data,
         detail,
       });
-      // Merging into the previous value is why a naive union over the old flat object could not work: the
-      // stream sends partial updates.
+      // The stream sends partial updates, so progress merges into the previous response.
       setConsoleState((prev) => ({
         phase: "job",
         state: "queued",
@@ -160,7 +142,6 @@ export const useVerificationConsole = ({
       }));
       rememberCurrentJob(activeJobId, terminal, data, { settled: true });
 
-      // Guard against a duplicate delivery re-notifying for a state already announced.
       const notifyKey = `${activeJobId}:${terminal}`;
       if (lastNotifiedRef.current !== notifyKey) {
         lastNotifiedRef.current = notifyKey;
@@ -177,7 +158,6 @@ export const useVerificationConsole = ({
     },
   });
 
-  /** Opens an existing job; the stream above fills in the real state. */
   const restoreJob = (jobId: string) => {
     if (!isApiBaseConfigured()) {
       setConsoleState({
@@ -187,14 +167,12 @@ export const useVerificationConsole = ({
       return;
     }
 
-    // `submitting` until the stream's first event, which is what puts `ConsoleLoading` on screen.
     setConsoleState({ phase: "submitting" });
     setActiveJobId(jobId);
   };
 
   useEffect(() => {
     if (forceNew) {
-      // This is "adjusting state when a prop changes".
       restoredJobRef.current = null;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setConsoleState({ phase: "idle" });
@@ -210,7 +188,6 @@ export const useVerificationConsole = ({
     restoreJob(jobId);
   }, [forceNew, initialJobId, mode]);
 
-  /** Copies whatever the verifier already resolved into the evidence form. */
   const prefillEvidenceFields = (fields?: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(evidencePrefill(fields))) {
       form.setValue(key as keyof VerifyFormValues, value as string);
@@ -228,7 +205,6 @@ export const useVerificationConsole = ({
       return;
     }
 
-    // Same rule for the terms, and for the same reason: a rule that lives only on the input is not a rule.
     if (terms.gate.blockedReason !== undefined) {
       terms.refuse();
       toast.error(terms.gate.blockedReason);
@@ -241,7 +217,6 @@ export const useVerificationConsole = ({
     try {
       const target = buildTarget(values);
 
-      // Upload the source archive first in upload-archive mode, so the manifest carries upload_id.
       let uploadedSource: SourceUploadResponse | undefined;
       if (includeManifest && sourceArchive.mode === "upload_archive") {
         uploadedSource = await sourceArchive.upload(values.source_sha256);
@@ -254,12 +229,10 @@ export const useVerificationConsole = ({
         data: {
           target,
           manifest,
-          // The version this browser was shown, never anything the user typed. Omitted while no bundle
-          // loaded, which the terms gate has already refused above.
+          // Only the version this browser was shown, never anything the user typed.
           ...(terms.gate.version ? { accepted_terms_version: terms.gate.version } : {}),
         } as unknown as SubmitRequestDto,
       });
-      // No cast and no `normalizeStatus`.
       const data = res.data;
       setConsoleState({ phase: "accepted", response: data });
 
@@ -270,8 +243,7 @@ export const useVerificationConsole = ({
       }
 
       toast.success("Verification job queued");
-      // Before anything can navigate away: this response is the ONLY time the token is emitted, and losing it
-      // means losing the raw build log for good (build-log-access design.md BL-1).
+      // Before anything can navigate away: this response is the only time the token is emitted.
       rememberBuildLogToken(data.job_id, data.build_log_token);
       rememberCurrentJob(data.job_id, "queued", { target: data.target });
       navigate({
@@ -281,14 +253,12 @@ export const useVerificationConsole = ({
       });
       setActiveJobId(data.job_id);
     } catch (error) {
-      // A refused submission lands here rather than above — see `submitRejection`.
       const failure = submitRejection(error);
       failWith(failure);
       toast.error(failure.detail);
     }
   };
 
-  /** Stage one: ask preflight whether this contract can be verified at all, and stop here if it cannot. */
   const submitTarget = async () => {
     const field = targetType === "contract_id" ? "contractId" : "wasmHash";
     const valid = await form.trigger(field);
@@ -309,14 +279,12 @@ export const useVerificationConsole = ({
       return;
     }
 
-    // Everything the chain already stated, so the submitter supplies only what is genuinely missing.
     prefillEvidenceFields({
       ...(next.response.available_fields ?? {}),
       ...(next.response.suggested_manifest ?? {}),
     });
   };
 
-  /** The prefilled recipe belongs to the answer above, so it is cleared with it and never merged across targets. */
   const clearEvidence = useCallback(() => {
     for (const field of evidenceFields) {
       form.setValue(field, defaultValues[field]);
@@ -324,18 +292,13 @@ export const useVerificationConsole = ({
     }
   }, [form]);
 
-  // Preflight's answer is about the target it was asked about. Editing the target invalidates it, and a stale
-  // "ready" would gate a submission of a contract nobody checked.
+  // Editing the target invalidates preflight and its evidence; a stale "ready" must not gate a submission.
   const resetPreflight = preflight.reset;
   const resetSourceArchive = sourceArchive.reset;
   useEffect(() => {
     resetPreflight();
-    // Everything below is evidence about the target being left. A field the next target's chain does not state
-    // would otherwise stay on screen — and be submitted — as the previous contract's.
     clearEvidence();
     resetSourceArchive();
-    // Same "adjusting state when an input changes" as the `forceNew` effect above: the list describes a
-    // `bldopt` the line before this one just cleared.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRejectedOptions([]);
   }, [
@@ -345,16 +308,13 @@ export const useVerificationConsole = ({
     values.contractId,
     values.wasmHash,
     values.network,
-    // Switching the picker is a change of target too, and left the previous one's evidence on screen.
     values.targetType,
   ]);
 
-  /** Stage two: the evidence the verifier asked for. */
   const submitCompletedManifest = async () => {
     const refusals: { field?: "source_sha256" | "source_uri"; message: string }[] = [];
 
-    // First, so an unchecked box is what the toast says even when fields are missing too: it is the refusal
-    // a submitter is least likely to have noticed, having read the sentence as a notice rather than a control.
+    // First, so the toast names the terms refusal even when fields are missing too.
     if (terms.gate.blockedReason !== undefined) {
       terms.refuse();
       refusals.push({ message: terms.gate.blockedReason });
@@ -367,7 +327,6 @@ export const useVerificationConsole = ({
       const uriRefusal = sourceUriRefusal(values.source_uri);
       if (uriRefusal) refusals.push({ field: "source_uri", message: uriRefusal });
     } else {
-      // Sets the picker's own inline refusal as a side effect — it has no form field to carry one.
       const archiveRefusal = sourceArchive.requireArchive();
       if (archiveRefusal) refusals.push({ message: archiveRefusal });
     }
@@ -380,18 +339,13 @@ export const useVerificationConsole = ({
       return;
     }
 
-    // Refusing here rather than letting the 400 come back is what keeps the endpoint out of a call whose answer
-    // is already known.
     const sourceRefusal = chainSourceRefusal(chainSourceSha256, values.source_sha256);
     if (sourceRefusal) {
-      // The server's own refusal sets the banner as well as the toast, so this one does too — otherwise
-      // skipping the round trip would quietly cost the submitter the more durable half of the message.
       failWith({ code: sourceArchiveNotChainRecorded, detail: sourceRefusal });
       toast.error(sourceRefusal, { duration: 30_000 });
       return;
     }
 
-    // UI1a: reject client-side what the verifier would reject, and label it `policy_rejected`.
     const options = validateBuildOptions(values.bldopt);
     setRejectedOptions(options.ok ? [] : options.rejected);
     if (!options.ok) {
@@ -423,8 +377,6 @@ export const useVerificationConsole = ({
 
   const resultView = useJobResultView({ consoleState, submissionState, currentJobId, recentJobs });
 
-  // The `incomplete` arm is the only submit response carrying either, and only on the race path where the chain
-  // changed between preflight and submit.
   const incomplete =
     consoleState.phase === "accepted" && consoleState.response.status === "incomplete"
       ? consoleState.response
@@ -436,15 +388,11 @@ export const useVerificationConsole = ({
     recentJobs,
 
     submissionState,
-    /** Everything the banner renders, already resolved — components do not read raw response fields. */
     banner,
-    /** The result area: `jobTiming`, `buildLog`, `buildLogToken`, `jobResult`, `publishedArtifact`, `provenanceGroups`. */
     ...resultView,
     isSubmitting: submissionState === "submitting",
-    /** A submission has settled — render the result area. */
     hasResult: isTerminal,
     showSubmitForm: mode === "submit" || submissionState === "incomplete",
-    // Evidence is offered once preflight has cleared the contract.
     showEvidenceForm:
       submissionState === "incomplete" ||
       (preflight.state.phase === "answered" &&
@@ -462,12 +410,9 @@ export const useVerificationConsole = ({
     submitTarget,
 
     preflight: preflight.state,
-    /** Stage two is offered only once preflight said this contract can be verified. */
     isPreflightReady:
       preflight.state.phase === "answered" && preflight.state.verdict.gate === "ready",
 
-    // Preflight is the source once it has answered; a submit `incomplete` still supplies it on the race path,
-    // which is why the submit response is read first when one exists.
     availableFields:
       incomplete?.available_fields ||
       incomplete?.prefill ||

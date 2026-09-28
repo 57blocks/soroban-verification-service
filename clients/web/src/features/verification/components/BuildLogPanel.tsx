@@ -14,18 +14,12 @@ import { MonoLabel } from "./MonoLabel";
 
 type BuildLogPanelProps = {
   state: BuildLogState;
-  /**
-   * This browser's token for this job, when it holds one. Shown so the submitter can move it to another
-   * device or send it to a colleague deliberately — the Service cannot re-issue it, and a token nobody can
-   * see is a token nobody can use twice (build-log-access design.md §4).
-   */
   token?: string;
 };
 
 const logTextClass =
   "m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[0.8rem] leading-relaxed text-ink-value";
 
-/** One folded run of bookkeeping, expanding in place to the exact lines it stands for. */
 const FoldedRun = ({ label, text, lineCount }: { label: string; text: string; lineCount: number }) => {
   const [open, setOpen] = useState(false);
 
@@ -65,8 +59,7 @@ const LogBody = ({ segments }: { segments: LogSegment[] }) => (
           lineCount={segment.lineCount}
         />
       ) : (
-        // `<pre>{text}</pre>` — the log is the sandbox's output, which is the untrusted side of the trust
-        // boundary.
+        // Untrusted sandbox output: render as text only.
         <pre key={`text-${index}`} className={logTextClass}>
           {segment.text}
         </pre>
@@ -75,10 +68,6 @@ const LogBody = ({ segments }: { segments: LogSegment[] }) => (
   </div>
 );
 
-/**
- * The full redacted build output for a terminal job (UI2), and — just as importantly — what to say when there
- * is none.
- */
 export const BuildLogPanel = ({ state, token }: BuildLogPanelProps) => {
   const [open, setOpen] = useState(false);
   if (state.phase === "idle") return null;
@@ -132,11 +121,6 @@ export const BuildLogPanel = ({ state, token }: BuildLogPanelProps) => {
   );
 };
 
-/**
- * Shown only where the log itself is shown, and only to a browser that already holds the token — it
- * reveals nothing a reader of this page could not already do, and is the sole way to carry the token
- * anywhere else.
- */
 const LogToken = ({ token }: { token: string }) => (
   <div className="mt-4">
     <CopyableField label="Build-log token (keep it: this Service cannot re-issue it)" value={token} />
@@ -171,8 +155,6 @@ const renderBody = (state: BuildLogState, segments: LogSegment[]) => {
     case "unavailable":
       return <Unavailable body={state.body} />;
 
-    // The shared-link case, and the designed one: the raw log answers to a token the submitter received,
-    // not to the job id in this URL (build-log-access design.md BL-1, §4).
     case "needs-token":
       return (
         <p className="m-0 text-[0.9rem] text-ink-body">

@@ -1,4 +1,3 @@
-/** E2E-SUB-13 — `bldopt` round-trips exactly, and is never silently dropped */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { expectPerTrd } from "../../support/conformance.js";
@@ -17,8 +16,6 @@ caseBlock(
     unless: () => missingFixture("F-LEG-1"),
   },
   () => {
-    // The case's own value. Quotes inside a value are where naive shell assembly splits an entry into three and
-    // the build fails for a reason that has nothing to do with the source.
     const ENTRY = "--env=B='this is very nice'";
 
     it(
@@ -28,12 +25,8 @@ caseBlock(
         const body = await submissionFor("F-LEG-1", { bldopt: [...baseBldopt, ENTRY] });
         const run = await submitAndWait(body);
 
-        // HA1 — accepted, not treated as malformed. Anything in the four failure states would mean the entry
-        // was rejected or broke the build.
         expect(["verified", "mismatch"]).toContain(run.body.status);
 
-        // HA2 — byte-for-byte. `toBe` on the string, not a normalised comparison: normalisation is precisely
-        // what must not have happened.
         const report = await reportForJob(run.body.result, run.body.result?.wasm_hash);
         expect(report).toBeDefined();
 
@@ -43,7 +36,6 @@ caseBlock(
         expect(recipe?.build_options?.bldopt).toBeDefined();
         expect(recipe!.build_options!.bldopt).toContain(ENTRY);
 
-        // HA3 — the build did not fail from split quoting.
         expect(run.body.result?.reason).not.toBe("build_failed");
       },
       env.jobTimeoutMs + 60_000
@@ -68,17 +60,13 @@ caseBlock(
         })
       );
 
-      // HA2 is the one that matters: the option must never be dropped.
       expect(outcome.response.status).toBeGreaterThanOrEqual(400);
       expect(outcome.jobId).toBeUndefined();
 
       const envelope = expectErrorEnvelope(outcome.response);
 
-      // The message names the exact edit — `--manifest-path=contracts/contract-b/Cargo.toml` — so the submitter
-      // is not left to infer the rule from a restatement of it.
       expect(envelope.detail ?? envelope.message).toMatch(/--manifest-path=/);
 
-      // HA1 offers two acceptable answers, `policy_rejected` or normalisation.
       expectPerTrd("BLDOPT_NON_EQUALS_ERROR", "E2E-SUB-13/non_equals_form", () => {
         expect(envelope.error).toBe("policy_rejected");
       });
@@ -87,9 +75,6 @@ caseBlock(
     it(
       "builds the named package when the same option is written in `=` form",
       async () => {
-        // The positive control, and E2E-SEC-05/manifest_path_normalized's assertion: with the correctly-spelled
-        // option the workspace's non-default package is what gets built, which shows up as a verdict against
-        // contract-b's deployed hash.
         const run = await submitAndWait(await submissionFor("F-MULTIPKG"));
         expect(run.body.status).toBe("verified");
 

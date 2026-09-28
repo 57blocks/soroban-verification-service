@@ -235,7 +235,7 @@ class VerificationFlowUser(HttpUser):
                 error = self.validate_terminal(terminal)
             if error is None:
                 error = self.validate_report(terminal["result"]["artifact_url"])
-        except Exception as exception:  # Records failures without reducing the configured user count.
+        except Exception as exception:
             error = f"unexpected_{type(exception).__name__}"
 
         transaction_exception = None if error is None else RuntimeError(error)
@@ -283,9 +283,6 @@ class VerificationFlowUser(HttpUser):
             return "terminal_not_verified"
         if result.get("wasm_hash") != self.target["wasm_hash"]:
             return "job_wasm_hash_mismatch"
-        # Address ownership is asserted here, not on the report: the published artifact dropped
-        # `target` (`storage-layout/src/shapes.ts` — a verdict attaches to a Wasm hash, not
-        # to a contract on a network), while the job status body still carries it.
         job_target = terminal.get("target") or {}
         if (
             job_target.get("network") != FIXTURE["network"]
@@ -307,8 +304,6 @@ class VerificationFlowUser(HttpUser):
                 raise RuntimeError("report_missing_artifact")
             if artifact.get("schema") != "stellar-verification-artifact-v1":
                 raise RuntimeError("report_schema_mismatch")
-            # Only what the artifact actually declares. `result.wasm_hash` is the sole place the
-            # verdict's Wasm hash lives now; the contract-level assertion moved to validate_terminal.
             result = artifact.get("result") or {}
             if (
                 result.get("matched") is not True

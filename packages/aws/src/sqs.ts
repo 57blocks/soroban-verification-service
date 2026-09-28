@@ -21,10 +21,6 @@ export type ReceiveMessagesOptions = {
   abortSignal?: AbortSignal;
 };
 
-/**
- * Thin wrapper over SQS `ReceiveMessage`, defaulting to a 20s long poll (SQS's own max) so a consumer loop
- * isn't hammering the API every tick.
- */
 export async function receiveMessages(
   client: SQSClient,
   queueUrl: string,
@@ -50,7 +46,6 @@ export async function receiveMessages(
     }));
 }
 
-/** Deletes a message after it has been successfully processed, so it isn't redelivered. */
 export async function deleteMessage(client: SQSClient, queueUrl: string, receiptHandle: string): Promise<void> {
   await client.send(new DeleteMessageCommand({ QueueUrl: queueUrl, ReceiptHandle: receiptHandle }));
 }

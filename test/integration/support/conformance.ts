@@ -1,4 +1,3 @@
-/** Read `setup/global-teardown.cjs` first for why this exists at all. */
 import { appendFileSync } from "node:fs";
 
 import { env } from "./env.js";
@@ -6,13 +5,10 @@ import { env } from "./env.js";
 export interface Gap {
   readonly id: string;
   readonly required: string;
-  /** What the deployment does instead, and where that is already written down. */
   readonly observed: string;
-  /** The document that records it, so a reader can check whether it has since been closed. */
   readonly recordedIn: string;
 }
 
-/** Every entry below was found by reading the implementation against the case files. */
 export const GAPS = {
   ERROR_ENVELOPE_SCHEMA_VERSION: {
     id: "RC2/RC6-schema_version",
@@ -32,13 +28,6 @@ export const GAPS = {
     recordedIn: "the verdict vocabulary the status object publishes (SO1)",
   },
 
-  // ── Removed 2026-08-20: `ROUTE_SOURCE`, `VERIFIED_SOURCE_CODE_URI`, `STATUS_OBJECT_SOURCE_FIELDS` ──
-  // These three recorded that `GET /v1/source/{source_sha256}`, `verified_source_code_uri`, and the SEP-58
-  // v0.5.0 pair `source_sha256`/`source_uri` are unimplemented.
-
-  // ── Retired 2026-08-20: `MALICIOUS_ARCHIVE_REASON` (`SEC-03-reason`) ──────────────────────────────
-  // So `E2E-SEC-03` now asserts the wire status `source_unavailable` outright.
-
   SYNC_REJECTION_HAS_NO_LOG: {
     id: "GAP-4-no-job-no-log",
     required:
@@ -57,7 +46,6 @@ export const GAPS = {
     recordedIn: "a specification gap in deduplication: nothing defines this, and the suite pins current behaviour",
   },
 
-  /** `services/verification-svc/src/modules/preflight/manifest.ts` — `firstBldoptShapeViolation`. */
   BLDOPT_NON_EQUALS_ERROR: {
     id: "SUB-13-bldopt-error-code",
     required:
@@ -68,7 +56,6 @@ export const GAPS = {
       "services/verification-svc/src/modules/preflight/manifest.ts — `firstBldoptShapeViolation` doc comment (2026-08-13)",
   },
 
-  /** `E2E-PUB-07/log_pointer`. */
   REPORT_LOG_POINTER: {
     id: "PUB-07-build_log_url",
     required: "`E2E-PUB-07/log_pointer`: `diagnostics.build_log_url` exists in the report and resolves.",
@@ -81,10 +68,6 @@ export const GAPS = {
 
 export type GapKey = keyof typeof GAPS;
 
-/**
- * Default mode records the divergence and continues, so the rest of the case still runs and the run still ends
- * green when nothing *unknown* broke.
- */
 export function expectPerTrd(gapKey: GapKey, caseId: string, assertion: () => void): void {
   try {
     assertion();

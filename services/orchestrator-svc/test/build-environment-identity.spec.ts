@@ -11,11 +11,6 @@ import type { BuildEnvironmentResolver } from "../src/modules/build-environments
 import type { WasmMetadata } from "../src/modules/verification-pipeline/chain-reader.service.js";
 import { ConfigurationError } from "../src/config/configuration-error.js";
 
-/**
- * The distinction this file exists for: "still composing" and "failed, here is why" used to be the same
- * `undefined` return inside the pipeline service, reachable only through a job row and Postgres.
- */
-
 const PAIR = { cliver: "23.1.0", rsver: "1.90.0" };
 const INTENT: ComposeIntent = { pair: PAIR, template_version: "v1" };
 const RECIPE_SHA = "a".repeat(64);
@@ -158,8 +153,6 @@ describe("BuildEnvironmentIdentityService.resolve", () => {
     expect(outcome).toEqual({ kind: "resolved", identity: RECIPE_SHA });
   });
 
-  // `isPermanentCompositionFailure` is what separates these two, and only the FailureReason it picks decides
-  // whether `requeueRetryableFailures` will ever look at the job again.
   it("calls a permanent composition failure policy_rejected", async () => {
     const { identity } = service({
       materialization: { kind: "failed", environmentId: "env-1", errorCode: "component_checksum_mismatch" },

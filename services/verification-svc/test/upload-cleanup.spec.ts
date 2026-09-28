@@ -4,17 +4,13 @@ import { createPrismaClient, JobsRepository, UploadJobReferencesRepository, Uplo
 import { CreatedRows } from "@scvs/db/testing";
 import { UploadCleanupService } from "../src/common/upload-cleanup.js";
 
-/**
- * `hasOutstandingObligation` recognizes TWO ways a job can still owe a publish, both exercised here: **still in
- * flight** (non-terminal, public).
- */
 const prisma = createPrismaClient(readDbEnv());
 const jobs = new JobsRepository(prisma);
 const uploads = new UploadsRepository(prisma);
 const uploadJobReferences = new UploadJobReferencesRepository(prisma);
 const createdRows = new CreatedRows();
 
-const CEILING_MS = 4 * 60 * 60 * 1000; // matches the production default, kept explicit here
+const CEILING_MS = 4 * 60 * 60 * 1000;
 function configService(ceilingMs = CEILING_MS) {
   return { get: () => ceilingMs } as unknown as ConstructorParameters<typeof UploadCleanupService>[2];
 }
@@ -35,7 +31,6 @@ afterAll(async () => {
   }
 });
 
-/** Mirrors uploads.service.ts's receive(), minus the S3 PUT — same helper submit-upload-check.spec.ts uses. */
 async function seedUpload(expiresInMs = -1000): Promise<string> {
   const uploadId = randomUUID();
   const sourceSha256 = createHash("sha256").update(randomBytes(64)).digest("hex");
@@ -54,7 +49,6 @@ function contractId(): string {
   return `C${randomBytes(20).toString("hex").toUpperCase()}`;
 }
 
-/** Creates a job whose sourceRef references `uploadId`, and records the Decision 3 reference. */
 async function seedJob(uploadId: string, visibility: "public" | "private"): Promise<string> {
   const sourceSha256 = createHash("sha256").update(randomBytes(64)).digest("hex");
   const jobId = createdRows.job(randomUUID());
@@ -81,15 +75,10 @@ async function seedJob(uploadId: string, visibility: "public" | "private"): Prom
   return jobId;
 }
 
-/** Advances a seeded job straight to `evaluated` (dry-run terminal, no publish ever attempted). */
 async function markEvaluated(jobId: string): Promise<void> {
   await jobs.advanceJob(jobId, "queued", "evaluated", { verdict: "verified" });
 }
 
-/**
- * Advances a seeded job to `published` with a failed publish attempt recorded — the "terminal, but still owed a
- * retry" branch.
- */
 async function markPublishedWithPendingSource(jobId: string): Promise<void> {
   await jobs.advanceJob(jobId, "queued", "published", {
     verdict: "verified",
@@ -98,10 +87,6 @@ async function markPublishedWithPendingSource(jobId: string): Promise<void> {
   await jobs.recordSourcePublishOutcome(jobId, { published: false });
 }
 
-/**
- * Backdates a job's `created_at` — the age-ceiling test needs a job older than the ceiling, which `createJob`
- * (stamping `now()`) cannot produce directly.
- */
 async function backdateJobCreatedAt(jobId: string, ageMs: number): Promise<void> {
   await prisma.$executeRawUnsafe(
     `UPDATE jobs SET created_at = now() - ($1 || ' milliseconds')::interval WHERE id = $2::uuid`,
@@ -113,10 +98,9 @@ async function backdateJobCreatedAt(jobId: string, ageMs: number): Promise<void>
 describe("UploadCleanupService sweep exemption (Decision 1)", () => {
   it("keeps an expired upload whose public job is still in flight (queued, never yet attempted a publish)", async () => {
     const uploadId = await seedUpload();
-    await seedJob(uploadId, "public"); // stays queued — the "still in flight" branch
+    await seedJob(uploadId, "public");
     const service = new UploadCleanupService(uploads, uploadJobReferences, configService());
 
-    // Not asserting on the returned count — see the comment on the next case for why.
     await service.cleanupExpiredUploads();
 
     expect(await uploads.getUpload(uploadId)).toBeDefined();
@@ -125,7 +109,7 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
   it("keeps an expired upload whose public job is terminal but its own publish attempt failed", async () => {
     const uploadId = await seedUpload();
     const jobId = await seedJob(uploadId, "public");
-    await markPublishedWithPendingSource(jobId); // the "terminal, still owed a retry" branch
+    await markPublishedWithPendingSource(jobId);
     const service = new UploadCleanupService(uploads, uploadJobReferences, configService());
 
     await service.cleanupExpiredUploads();
@@ -136,11 +120,9 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
   it("deletes an expired upload whose referencing job is private and done for", async () => {
     const uploadId = await seedUpload();
     const jobId = await seedJob(uploadId, "private");
-    // The paired case below pins that.
     await jobs.advanceJob(jobId, "queued", "failed", { failureReason: "policy_rejected" });
     const service = new UploadCleanupService(uploads, uploadJobReferences, configService());
 
-    // What this case owns is whether ITS OWN seeded upload survives.
     await service.cleanupExpiredUploads();
 
     expect(await uploads.getUpload(uploadId)).toBeUndefined();
@@ -154,8 +136,6 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
 
     await service.cleanupExpiredUploads();
 
-    // The sweep's backstop role inverted for this window: the bytes the retry will re-resolve outrank the
-    // expiry, until the budget is spent or the eligibility window lapses.
     expect(await uploads.getUpload(uploadId)).toBeDefined();
   });
 
@@ -172,8 +152,6 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
   });
 
   it("deletes an expired upload whose public job never attempted its own publish and reached a terminal status without one (evaluated/dry-run)", async () => {
-    // The bug this case guards against: a naive "visibility===public && !sourceFileName" check would treat this
-    // job as still owed forever, since a dry run never sets sourceFileName.
     const uploadId = await seedUpload();
     const jobId = await seedJob(uploadId, "public");
     await markEvaluated(jobId);
@@ -186,8 +164,8 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
 
   it("deletes an expired upload whose public job is still in flight but past the age ceiling", async () => {
     const uploadId = await seedUpload();
-    const jobId = await seedJob(uploadId, "public"); // still queued
-    await backdateJobCreatedAt(jobId, CEILING_MS + 60_000); // just past the ceiling
+    const jobId = await seedJob(uploadId, "public");
+    await backdateJobCreatedAt(jobId, CEILING_MS + 60_000);
     const service = new UploadCleanupService(uploads, uploadJobReferences, configService());
 
     await service.cleanupExpiredUploads();
@@ -217,9 +195,9 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
   });
 
   it("never deletes an upload that has not expired yet, regardless of job state", async () => {
-    const uploadId = await seedUpload(30 * 60 * 1000); // 30 minutes in the future
+    const uploadId = await seedUpload(30 * 60 * 1000);
     const jobId = await seedJob(uploadId, "private");
-    await jobs.advanceJob(jobId, "queued", "failed", { failureReason: "internal_error" }); // even a case that would otherwise delete immediately
+    await jobs.advanceJob(jobId, "queued", "failed", { failureReason: "internal_error" });
     const service = new UploadCleanupService(uploads, uploadJobReferences, configService());
 
     await service.cleanupExpiredUploads();
@@ -232,7 +210,7 @@ describe("UploadCleanupService sweep exemption (Decision 1)", () => {
     const jobFinished = await seedJob(uploadId, "public");
     await jobs.advanceJob(jobFinished, "queued", "published", { verdict: "verified" });
     await jobs.recordSourcePublishOutcome(jobFinished, { published: true, sourceFileName: `${uploadId}.tar.gz` });
-    await seedJob(uploadId, "public"); // still queued — still owed
+    await seedJob(uploadId, "public");
     const service = new UploadCleanupService(uploads, uploadJobReferences, configService());
 
     await service.cleanupExpiredUploads();

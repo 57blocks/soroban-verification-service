@@ -1,6 +1,5 @@
 import type { SubmissionState } from "../types";
 
-/** States that carry a published verification result to render. */
 export const RESULT_STATES: SubmissionState[] = [
   "verified",
   "mismatch",
@@ -10,7 +9,6 @@ export const RESULT_STATES: SubmissionState[] = [
   "not_attempted",
 ];
 
-/** Index into `flowSteps` that the submission has reached. `3` is past the last step. */
 export const flowStepIndex = (state: SubmissionState) => {
   switch (state) {
     case "submitting":

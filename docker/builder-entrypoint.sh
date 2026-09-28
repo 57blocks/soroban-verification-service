@@ -1,6 +1,4 @@
 #!/bin/sh
-# Starts as root (needed to inspect/chgrp the mounted docker.sock and to run gosu), then execs the real Node
-# entrypoint as UID/GID 1000 (node:24-slim's built-in `node` user) before doing anything else.
 set -e
 
 DOCKER_SOCK="/var/run/docker.sock"

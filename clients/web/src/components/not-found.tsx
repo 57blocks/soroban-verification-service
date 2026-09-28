@@ -4,10 +4,6 @@ import { PillIcon } from "@/components/ui/pill-icon";
 import { SiteFooter } from "./site-footer";
 import { SiteNav } from "./site-nav";
 
-/**
- * What an unrouted path renders, whether it arrived by client-side navigation or as a fresh document — the
- * origin serves this page with a 404 status rather than the shell with a 200.
- */
 export const NotFoundPage = () => (
   <main className="min-h-screen bg-surface font-sans leading-normal text-ink antialiased">
     <SiteNav />

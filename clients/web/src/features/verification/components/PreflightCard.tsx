@@ -8,7 +8,6 @@ type PreflightCardProps = {
   state: PreflightState;
 };
 
-/** Preflight's per-contract answer, shown before a submission exists. */
 export const PreflightCard = ({ state }: PreflightCardProps) => {
   if (state.phase === "idle") return null;
 
@@ -29,8 +28,6 @@ export const PreflightCard = ({ state }: PreflightCardProps) => {
         tone="warning"
         title="Could not check this contract"
         description={state.error}
-        // Deliberately not the same wording as a negative answer: nothing was learned about the contract here,
-        // and a retry may well succeed.
         note="This is a problem reaching the verifier, not a verdict about your contract."
       />
     );
@@ -60,8 +57,6 @@ export const PreflightCard = ({ state }: PreflightCardProps) => {
       tone="danger"
       title={copy.title}
       description={copy.description}
-      // The label is shown verbatim. `unsupported` and `policy_rejected` mean different things to an author and
-      // must stay distinguishable in what they can quote back to us.
       note={verdict.label === "unrecognized" ? undefined : `Reported as ${verdict.label}`}
       detail={verdict.gate === "blocked" && verdict.label === "policy_rejected" ? verdict.detail : undefined}
     />

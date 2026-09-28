@@ -9,15 +9,9 @@ import { dockerFinalSandboxOptions, dockerResourceLimits } from "../src/modules/
 import { prefetchCargoDependencies } from "../src/modules/builder/sandbox-runtime.js";
 import type { RunCliInput } from "../src/modules/builder/run-cli.types.js";
 
-/**
- * Two jobs both just return a verdict, and a violation is invisible to a black-box caller unless it produces a
- * symptom.
- */
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src", "modules", "builder");
 
-/** Mount targets a shared cargo/rustup cache could use. A fresh sandbox must mount none of them. */
 const SHARED_CACHE_TARGETS = [
   "/root/.cargo",
   "/usr/local/cargo",
@@ -28,7 +22,6 @@ const SHARED_CACHE_TARGETS = [
   "~/.rustup",
 ];
 
-/** The container-side paths a conformant build is allowed to mount, and nothing else. */
 const ALLOWED_MOUNT_TARGETS = ["/source:ro", "/vendor", "/vendor:ro", "/out"];
 
 function mountValues(command: string[]): string[] {
@@ -55,18 +48,15 @@ describe("TB4 — the acquisition container shares nothing with any other job", 
     const { command, sourceRoot, vendorDir, outDir } = await runPrefetch();
     const mounts = mountValues(command);
 
-    // The closed set.
     expect(mounts).toEqual([
       `${sourceRoot}:/source:ro`,
       `${vendorDir}:/vendor`,
       `${outDir}:/out`,
     ]);
 
-    // No docker `--mount`/`--volume` form sneaked a second mount past the `-v` scan.
     expect(command.some((arg) => arg === "--mount" || arg === "--volume")).toBe(false);
 
     for (const value of mounts) {
-      // A named volume's source is not an absolute path; a bind mount's is.
       expect(value.split(":")[0].startsWith("/")).toBe(true);
     }
 
@@ -78,7 +68,6 @@ describe("TB4 — the acquisition container shares nothing with any other job", 
   it("keeps CARGO_HOME per-job, container-relative — not a shared host registry", async () => {
     const { command } = await runPrefetch();
 
-    // `CARGO_HOME=/out/cargo-home` lives under the per-job output mount.
     expect(command).toContain("CARGO_HOME=/out/cargo-home");
     expect(command.some((arg) => arg.startsWith("CARGO_HOME=") && arg.includes("/root"))).toBe(false);
   });
@@ -92,15 +81,12 @@ describe("TB4 — the materialiser/runner handoff is namespaced per job", () => 
     expect(a).not.toBe(b);
     expect(a).toContain("job-a");
     expect(b).toContain("job-b");
-    // A path without the job id would be a shared location; the id must be a real path component.
     expect(a).toContain(join("scvs-handoff", "job-a"));
   });
 });
 
 describe("TB4 — the build stage's per-job directories are derived from a fresh temp dir", () => {
   it("creates the output directory per job, and derives vendor/cargo-home from it", () => {
-    // `runManualRebuild` assembles the build command inline, so its mounts are not reachable through a pure
-    // helper the way the prefetch stage's are.
     const runCli = readFileSync(join(SRC, "run-cli.ts"), "utf8");
     expect(runCli).toContain('mkdtemp(join(tmpdir(), "scvs-build-"))');
     expect(runCli).toContain('join(outDir, "vendor")');
@@ -108,7 +94,6 @@ describe("TB4 — the build stage's per-job directories are derived from a fresh
   });
 
   it("names no shared cache mount in either docker command assembly", () => {
-    // Negative guard over both files that build `docker run` argv.
     const runCli = readFileSync(join(SRC, "run-cli.ts"), "utf8");
     const runtime = readFileSync(join(SRC, "sandbox-runtime.ts"), "utf8");
 
@@ -150,8 +135,7 @@ async function runPrefetch(): Promise<{
       workspace_path: sourceRoot,
       local_path: sourceRoot,
     },
-    // A timeout short enough that the `docker run` this issues cannot succeed or hang the suite: the assertion
-    // is on the command that was assembled, which is returned either way.
+    // 1 ms: the docker run cannot succeed or hang the suite, and the assembled command is returned either way.
     config: { dependencyPrefetchTimeoutMs: 1, dockerCheckTimeoutMs: 1 },
   } as unknown as RunCliInput;
 

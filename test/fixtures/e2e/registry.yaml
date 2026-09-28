@@ -290,18 +290,6 @@ contracts:
         diverging between toolchains — but the two guards are not interchangeable and this one is the
         weaker.
 
-  # ── Not purpose-built, and cannot be ────────────────────────────────────────────────────────────
-  # Every other cli-legacy entry here is a contract we built. This one is a contract somebody else
-  # deployed, because the property it needs is one no image we can assemble produces: an `rsver` whose
-  # toolchain lacks `wasm32v1-none`, which is exactly why the verifier must refuse it. `stellar contract
-  # build` chooses that target itself (measured on the corpus's oldest CLI, 23.2.0), so a toolchain
-  # without it cannot complete the build the CLI requests.
-  #
-  # ★ It is nonetheless reachable, where F-PUBTEST is not, and the difference is worth stating because
-  # it looks like the same wall. F-PUBTEST is blocked on *rebuild evidence*. This fixture's expected
-  # verdict is a refusal reached before any source is fetched, compiled or compared, and nothing is
-  # published — so rebuild evidence is not merely expensive here, it is not part of the claim. Two
-  # properties, both readable straight off the chain, are the whole requirement.
   existing_testnet_refusable_cliver:
     fixture_roles: [F-FLOOR-REFUSE]
     network: testnet
@@ -377,7 +365,6 @@ contracts:
     class: cli-legacy
     cliver: 25.1.0#a048a57a75762458b487052e0021ea704a926bee
     rsver: 1.95.0
-    # No --locked: 25.1.0's `contract build` does not offer it (measured 2026-08-19).
     bldopt: [--manifest-path=contracts/verified-demo/Cargo.toml, --package=verified-demo, --optimize]
     source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
     status: ready
@@ -435,8 +422,6 @@ contracts:
     class: cli-legacy
     cliver: 23.3.0#08473ac20016c369067ce0dbca91d9595e72d6d4
     rsver: 1.91.1
-    # No --locked (nothing before 25.2.0 has it). --optimize and --package are measured present on
-    # 23.3.0: the build probe accepted them and the build succeeded, 2026-08-19.
     bldopt: [--manifest-path=contracts/verified-demo/Cargo.toml, --package=verified-demo, --optimize]
     source_sha256: ecf4bc7db300358330af9bc1a272267f1c870a849b68db0f768bcea4b6078533
     status: ready
@@ -701,21 +686,6 @@ required_contracts:
     status: candidate
     candidates: [existing_mainnet_reflector_pulse_v6_0_1, existing_testnet_cli_legacy_27_1_94_1]
     need: reproducible verifier-composed image and digest for at least one candidate
-    # ★ 2026-08-20 — `E2E-SUB-02/compose_cache_hit` no longer waits on this entry, and the reason is
-    # worth writing down so nobody unblocks F-LEG-2 expecting to close a case that is already closed.
-    #
-    # The cache-hit claim is that ONE environment row serves TWO DIFFERENT CONTRACTS — `environments`
-    # is keyed `(cliver, rsver, template_version)` UNIQUE, so a cache keyed on the target would pass
-    # any single-contract version of the case. A lone third-party contract can only be submitted
-    # twice, which is the shape `compose_unofficial_pair` already has. Two ready fixtures already sit
-    # on one pair (27.0.0#5a7c5fe7… / 1.96.0), so the case uses those:
-    #   purpose_testnet_f_leg_1   CBKT6EZF…  34fc22d0  canonical archive        rssdkver 25.3.1
-    #   purpose_testnet_f_multipkg CAXZUPMT… 8bce8d0c  multi-package contract-b rssdkver 23.5.3
-    #
-    # What F-LEG-2 is still for, and it is not a smaller thing: a contract THIS PROJECT DID NOT BUILD,
-    # whose composed environment reproduces bytes somebody else deployed. Every compose fixture here is
-    # built by our composer and verified by our composer; F-LEG-2 is the only planned entry that would
-    # break that circle for a pair no official image serves.
     not_blocking: E2E-SUB-02/compose_cache_hit — implemented 2026-08-20 on F-LEG-1 + F-MULTIPKG
     still_blocking: E2E-PUB-15's queued row, and the cross-environment claim described above
   F-COMPOSE-ONLY:
@@ -829,8 +799,6 @@ required_contracts:
     source_record: private-canary
     canary: SCVS-PRIVATE-CANARY-20260803
     target: purpose_testnet_f_leg_1
-    # The build-failed variant is this fixture with a different archive rather than a separate
-    # fixture: same target, same recipe. The variable is the archive, not the chain.
     build_failed_variant:
       status: ready
       source_record: build-failed
@@ -857,9 +825,6 @@ required_contracts:
     target: purpose_testnet_f_leg_1
   F-ADV-TAR:
     status: ready
-    # ★ candidate -> ready, 2026-08-20. The two outstanding records were waiting on a fixture
-    # *generator* and a limit *source*, and both now exist. No on-chain contract is or ever was
-    # needed: the submission borrows F-LEG-1's target and the archives are the variable.
     target: purpose_testnet_f_leg_1
     generated_by: test/integration/support/archives.ts
     generated_at: test time, in code, never checked in as binaries

@@ -1,10 +1,7 @@
 name: DB migrate
 
-# The run title carries the environment whose database this run touches — the Actions list would otherwise read
-# "DB migrate" for every run, including the ones that wrote to staging.
 run-name: DB migrate → ${{ inputs.environment }}
 
-# Called by the operations repository, and by deploy.yml with the image it just built.
 on:
   workflow_call:
     inputs:
@@ -75,32 +72,23 @@ on:
         required: false
 
 permissions:
-  id-token: write # OIDC -> AWS role assumption
+  id-token: write
   contents: read
 
 env:
   AWS_REGION: ap-southeast-2
-  # Everything else is read from /scvs/<env>/ci/descriptor by the preflight handshake below (T4/T5): the ECS
-  # cluster, the service ECR repository, the migrate family prefix, the account id.
 
 jobs:
-  # Everything downstream is gated on this.
   preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: ${{ inputs.environment }}
     env:
-      # Plain variable, no secret-based fallback: jobs that reference an `environment` do not
-      # receive repository-level secrets (GitHub resolves them to empty here), so the old
-      # `secrets.AWS_ACCOUNT_ID` ternary was dead code masked by this variable. vars.DEPLOY_ROLE_ARN
-      # is the contract and is set in both environments (2026-08-22).
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
     outputs:
       ready: ${{ steps.check.outputs.ready }}
       descriptor: ${{ steps.check.outputs.descriptor }}
     steps:
-      # The handshake runs a script from the repository, so this job needs the tree even though it makes no
-      # other use of it.
       - name: Mint a read token for the application repository
         id: source_token
         uses: 57blocks/soroban-verification-service/.github/actions/source-token@491a985c0002a083c7f85091c8fbd39e5ffc4fe6
@@ -116,9 +104,7 @@ jobs:
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
 
-      # Pure git, no credentials, and placed before the first step that takes any: this environment may
-      # only run a commit a release could be cut from. `--sha` is not optional — under `workflow_call`
-      # the ambient commit is the CALLER's, which is never on this repository's main.
+      # `--sha` is required: under workflow_call the ambient commit is the caller's.
       - name: Fetch main to prove the ref against
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
@@ -144,9 +130,7 @@ jobs:
           case "$code" in
             0)
               echo "ready=true" >> "$GITHUB_OUTPUT"
-              # account_id stripped for the same reason as deploy.yml's preflight: its value is the
-              # AWS_ACCOUNT_ID secret, and a job output containing a registered secret's value is skipped by
-              # GitHub, emptying this output for the migrate job.
+              # GitHub drops a job output containing a secret's value, and account_id is one.
               echo "descriptor=$(jq -c 'del(.account_id)' <<<"$DESC")" >> "$GITHUB_OUTPUT"
               ;;
             3)
@@ -160,7 +144,7 @@ jobs:
               } >> "$GITHUB_STEP_SUMMARY"
               ;;
             *)
-              # 4 = AccessDenied, 5 = schema mismatch — hard failures; the script named the reason.
+              # 4 = AccessDenied, 5 = schema mismatch; the script has named the reason.
               exit 1
               ;;
           esac
@@ -172,17 +156,10 @@ jobs:
     timeout-minutes: 30
     environment: ${{ inputs.environment }}
     env:
-      # Same rule as preflight's: no secret-based fallback in an environment-scoped job.
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
       CLUSTER_NAME: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
       SERVICE_ECR_REPOSITORY: ${{ fromJSON(needs.preflight.outputs.descriptor).ecr.service }}
       CONTAINER_NAME: ${{ inputs.target }}
-      # Environment- AND target-prefixed for the same reason the four service families are
-      # (aws-deployment.md §5.6) — plus the addition made when one environment started running two
-      # independent migration histories, since a shared family name would let them interleave. The
-      # prefix is Terraform-owned and arrives via the descriptor; the target list stays here because
-      # the valid set is `inputs.target` in this file, and copying it into Terraform is the coupling
-      # that had already gone stale twice (once on the prefix, once on the suffix).
       MIGRATE_FAMILY: ${{ fromJSON(needs.preflight.outputs.descriptor).db_migrate_family_prefix }}${{ inputs.target }}
     steps:
       - name: Configure AWS credentials (OIDC)
@@ -191,26 +168,13 @@ jobs:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Resolved once and reused by every step below that needs it, so the register call and the log
-      # lookup can never end up describing different revisions.
-      #
-      # The cluster is passed as a FULL ARN, not the bare descriptor name: `--cluster` accepts
-      # either, but the CI role's `ecs:RunTask` grant is conditioned on `ecs:cluster` matching this
-      # cluster's ARN, and passing the name left that condition unreliable — the request was denied
-      # with "no identity-based policy allows ecs:RunTask" even though the statement was present.
-      # The ARN is built here rather than read from the descriptor so the descriptor stays
-      # region-free (T4: AWS_REGION remains a workflow literal).
+      # --cluster must be the full ARN: the CI role's ecs:RunTask grant is conditioned on ecs:cluster.
       - name: Resolve the running task definition
         run: |
           set -euo pipefail
-          # The account id comes from the OIDC identity itself, not from a secret: repository-level secrets do
-          # not reach jobs that reference an environment, and the descriptor job output deliberately no longer
-          # carries account_id (its value matches the secret GitHub would strip). get-caller-identity is the
-          # same source Terraform's descriptor uses.
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region "$AWS_REGION")
           ECS_CLUSTER="arn:aws:ecs:${AWS_REGION}:${ACCOUNT_ID}:cluster/${CLUSTER_NAME}"
           echo "ECS_CLUSTER=$ECS_CLUSTER" >> "$GITHUB_ENV"
-          # The image-resolution step below composes the ECR registry from the same value.
           echo "ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
           TD=$(aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
@@ -225,9 +189,6 @@ jobs:
           echo "TASK_DEFINITION=$TD" >> "$GITHUB_ENV"
           echo "Borrowing: $TD"
 
-      # Carries this environment's Trusted Verifiers List, which is the caller's and not in the image.
-      # `continue-on-error` so the seed step below diagnoses an absent artifact — it can name both
-      # remedies — rather than download-artifact's bare "not found". Still fatal.
       - name: Take this deployment's contracts
         if: inputs.action == 'deploy' && inputs.target == 'query-svc'
         continue-on-error: true
@@ -245,18 +206,11 @@ jobs:
         run: |
           REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           if [ -n "$CALLED_REPO" ] && [ -n "$CALLED_DIGEST" ]; then
-            # workflow_call: deploy.yml passes the repository and digest it just pushed, so the migrations that
-            # run are exactly the ones in the release being deployed.
             IMAGE="${REGISTRY}/${CALLED_REPO}@${CALLED_DIGEST}"
           else
             TAG="${MANUAL_TAG:-}"
             if [ -z "$TAG" ]; then
-              # Newest image in the repository, resolved by push time — a manual run should not have to know a
-              # commit SHA to apply already-released migrations.
-              #
-              # Sorted here rather than in `--query`: the CLI paginates at 100 images and applies a query to
-              # each page, so `--output text` returns one answer PER PAGE. A repository that has crossed 100
-              # then yields a two-line value, which breaks $GITHUB_OUTPUT rather than picking the wrong image.
+              # Sorted in jq, not --query: the CLI applies --query per 100-image page.
               TAG=$(aws ecr describe-images --repository-name "$SERVICE_ECR_REPOSITORY" \
                 --region "$AWS_REGION" --output json \
                 | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty')
@@ -280,32 +234,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          # `migrate deploy` applies committed migrations and is the only mutating command used here.
           case "$ACTION" in
             deploy) PRISMA_CMD="prisma migrate deploy" ;;
             status) PRISMA_CMD="prisma migrate status" ;;
             *) echo "::error::unsupported action '$ACTION'"; exit 1 ;;
           esac
 
-          # Which package's schema/migration history this run applies — the other half of "which database",
-          # alongside CONTAINER_NAME (which task definition, hence which secrets/network, is borrowed).
           case "$TARGET" in
             verification-svc) MIGRATE_PACKAGE="packages/db" ;;
             query-svc) MIGRATE_PACKAGE="packages/db-query" ;;
             *) echo "::error::unsupported target '$TARGET'"; exit 1 ;;
           esac
 
+          # Prisma is invoked directly: pnpm is not on PATH in the runtime image.
           COMMAND="cd /app/$MIGRATE_PACKAGE && ./node_modules/.bin/$PRISMA_CMD"
 
-          # The list a deployment trusts is the caller's, and arrives in the `deploy-contracts` artifact.
-          # No source is a hard failure, never a fall-through: `config/trusted-verifiers.local.json`
-          # ships in the image and exists, so an unset variable seeds localhost URLs and exits 0.
-          # `tsx` (not `node`) because scripts/ is TypeScript that is never compiled into dist/.
+          # Never fall through: the image's trusted-verifiers.local.json would seed localhost URLs and exit 0.
           if [ "$ACTION" = "deploy" ] && [ "$TARGET" = "query-svc" ]; then
             TVL_DOC="/tmp/deploy-contracts/${ENVIRONMENT}/trusted-verifiers.json"
 
-            # The other accepted shape: a deployment that hosts its list sets the variable to an
-            # `https:` URL on the definition this run borrows, `db-migrate` having none of its own.
             DECLARED=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
               --region "$AWS_REGION" --output json \
               | jq -r '[.taskDefinition.containerDefinitions[]
@@ -316,13 +263,12 @@ jobs:
               echo "::error::two Trusted Verifiers Lists are on offer for $ENVIRONMENT — a document in the deploy-contracts artifact AND SCVS_TRUSTED_VERIFIERS_SOURCE on $TASK_DEFINITION. Which verifiers this deployment trusts is not something to resolve by precedence. Remove one."
               exit 1
             elif [ -f "$TVL_DOC" ]; then
-              # Here, not in the task: past this point a bad document fails after the DDL is applied.
+              # Validate here: inside the task a bad document fails after the DDL is applied.
               if ! jq -e 'type == "object" and (.verifiers | type) == "array" and (.verifiers | length) > 0' "$TVL_DOC" >/dev/null; then
                 echo "::error::$TVL_DOC is not a trusted verifiers list document with a non-empty \`verifiers\` array. An empty list seeds an empty table, and the symptom surfaces later as GET /verifiers returning []."
                 exit 1
               fi
-              # `run-task` gives no volume to mount, so the overrides are the only channel. Base64 of
-              # the exact bytes, never re-serialised: the seed reads what was reviewed.
+              # Overrides are run-task's only channel; pass the exact bytes, never re-serialised.
               TVL_B64=$(base64 < "$TVL_DOC" | tr -d '\n')
               COMMAND="$COMMAND && echo '--- MIGRATE_OK: DDL applied, seeding TVL ---'"
               COMMAND="$COMMAND && printf %s '$TVL_B64' | base64 -d > /tmp/trusted-verifiers.json"
@@ -340,9 +286,6 @@ jobs:
             fi
           fi
 
-          # Invokes the Prisma binary directly rather than through `pnpm exec`: docker/ service.Dockerfile's
-          # runtime stage never runs `corepack enable`, so `pnpm` is not on PATH there (only the build stage
-          # enables it).
           REGISTER_ARNS=$(aws ecs register-task-definition \
             --region "$AWS_REGION" \
             --cli-input-json "$( \
@@ -354,27 +297,19 @@ jobs:
             )" \
             --query 'taskDefinition.taskDefinitionArn' --output text)
 
-          # point run-task at the root sibling family; the same container name is preserved
           MIGRATE_TD="$REGISTER_ARNS"
 
-          # Only the command is overridden. Every variable the task reads comes from the task definition,
-          # which is where this environment's configuration put it.
           OVERRIDES=$(jq -nc \
             --arg name "$CONTAINER_NAME" \
             --arg cmd "$COMMAND" \
             '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd]}]}')
 
-          # ECS caps `--overrides` at 8192 bytes and the planted TVL rides inside it. Checked here so
-          # outgrowing the channel names its own fix, not a run-task `ClientException`.
           OVERRIDES_BYTES=$(printf %s "$OVERRIDES" | wc -c | tr -d ' ')
           if [ "$OVERRIDES_BYTES" -gt 8192 ]; then
             echo "::error::the run-task overrides are ${OVERRIDES_BYTES} bytes and ECS caps them at 8192. The Trusted Verifiers List document planted into the command is what grew. Host the list and declare it as an https: URL with SCVS_TRUSTED_VERIFIERS_SOURCE_SHA256 instead."
             exit 1
           fi
 
-          # The service's own `awsvpcConfiguration` is by definition the network that reaches this environment's
-          # RDS instance, so this is both correct per environment and self-healing when Terraform moves a
-          # subnet.
           NETWORK=$(aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
             --services "$CONTAINER_NAME" \
@@ -417,8 +352,6 @@ jobs:
           echo "exit_code=$EXIT_CODE stopped_reason=$REASON"
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-      # The task's own output is the useful artifact — "migrations applied" vs "already up to date" vs a
-      # specific SQL error — and it only exists in CloudWatch.
       - name: Print migration task logs
         if: always() && steps.run.outputs.task != ''
         env:
@@ -438,11 +371,7 @@ jobs:
             exit 0
           fi
           STREAM="${PREFIX}/${CONTAINER_NAME}/${TASK_ARN##*/}"
-          # `set -o pipefail` (above) makes this assignment's exit status reflect `aws logs
-          # get-log-events`, not `tee` — without it, a CloudWatch fetch failure (propagation
-          # delay right after tasks-stopped, a throttled/transient AWS API error, a wrong stream
-          # name) would leave migration.log empty but still "successfully" written, and the next
-          # step's marker-based diagnosis would misreport a log-fetch failure as "DDL failed".
+          # pipefail makes this test aws's exit status, not tee's.
           if ! aws logs get-log-events --log-group-name "$GROUP" --log-stream-name "$STREAM" \
             --region "$AWS_REGION" --limit 200 --query 'events[].message' --output text \
             | tee migration.log; then
@@ -450,8 +379,7 @@ jobs:
             echo "LOG_FETCH_FAILED" > migration.log
           fi
           {
-            # The backslashes before every backtick are load-bearing: this is a DOUBLE-quoted shell string, so
-            # an unescaped pair runs what it wraps.
+            # Escape every backtick: this is a double-quoted string.
             echo "### \`${TARGET}\` — \`prisma migrate ${ACTION}\`${SEED_SUFFIX} output"
             echo '```'
             cat migration.log
@@ -462,18 +390,10 @@ jobs:
         if: always() && steps.run.outputs.exit_code != '0'
         run: |
           EXIT_CODE="${{ steps.run.outputs.exit_code }}"
-          # migration.log only exists if the "Print migration task logs" step ran and the task
-          # actually launched (steps.run.outputs.task != ''). If run-task itself was never
-          # accepted (e.g. no subnets, ECS rejected it), that earlier step already reported the
-          # real error and this file was never written — fall back to the generic message.
           if [ ! -f migration.log ]; then
             echo "::error::migration task exited ${EXIT_CODE} — see the logs above"
             exit 1
           fi
-          # The previous step writes this exact sentinel when it could not fetch CloudWatch logs
-          # at all (see its own ::warning::) — in that case an empty/absent log is not evidence
-          # the DDL failed, only that we can't see what happened. Report that honestly instead of
-          # confidently blaming DDL.
           if grep -q 'LOG_FETCH_FAILED' migration.log; then
             echo "::error::migration task exited ${EXIT_CODE}, but its CloudWatch logs could not be fetched — cannot determine whether DDL or the TVL seed failed. Check the task directly: aws ecs describe-tasks --cluster <cluster> --tasks <task arn>, and retry fetching its logs once CloudWatch has caught up."
             exit 1

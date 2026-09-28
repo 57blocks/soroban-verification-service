@@ -1,7 +1,6 @@
 import { flattenValidationErrors, safeParseDto } from "./validate.js";
 import type { ClassConstructor, ValidationError } from "./validate.js";
 
-/** Thrown when a service's environment fails validation — always at startup, never mid-request. */
 export class EnvValidationError extends Error {
   constructor(
     message: string,
@@ -12,10 +11,6 @@ export class EnvValidationError extends Error {
   }
 }
 
-/**
- * This factory is a pure class-validator utility; the shared env *DTOs*, which do encode those variable names,
- * stay in `@scvs/config`.
- */
 export function createEnvValidator<T extends object>(
   dto: ClassConstructor<T>,
   serviceName: string,

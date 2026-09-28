@@ -1,6 +1,5 @@
 import type { SectionCopy } from "./types";
 
-/** The heading said "Four stages. Under 15 minutes. */
 export const pipelineHead: SectionCopy = {
   label: "How it works",
   title: "Four stages, one pipeline.",
@@ -12,7 +11,6 @@ export type PipelineStage = {
   num: string;
   title: string;
   description: string;
-  /** The illustrative monospace strip along the card's bottom. */
   sample: string;
 };
 
@@ -32,7 +30,6 @@ export const pipelineStages: PipelineStage[] = [
     sample: "CDLZ…K5WQ ← archive sha256 91f3…c0d4",
   },
   {
-    // Was "Sandboxed Stellar CLI inside a digest-pinned trusted image".
     num: "03",
     title: "Rebuild",
     description:
@@ -48,11 +45,6 @@ export const pipelineStages: PipelineStage[] = [
   },
 ];
 
-/**
- * The hero diagram's labels. Every value is illustrative — nothing here is fetched — but each names something
- * the service really does: a source archive pinned by its hash, a sandbox with no network and no credentials,
- * a hash comparison performed outside that sandbox, and an attributed published result.
- */
 export const pipelineSample = {
   sourceLabel: "source",
   source: "acme/token @ 91f3c0d",
@@ -63,7 +55,6 @@ export const pipelineSample = {
   contract: "contract CDLZ…K5WQ",
   deployed: "deployed.wasm — bytes as deployed",
   deployedHash: "sha256 a91c…d8a3",
-  // `verified` is the status the service actually publishes (docs/glossary.md), not a synonym.
   verdict: "verified",
   verdictNote: "compared outside the sandbox",
   published: "published · attributed",

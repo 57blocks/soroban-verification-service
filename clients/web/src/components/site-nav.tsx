@@ -1,10 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { githubRepoUrl, sourceIsPublic } from "@/config/site";
 
-/**
- * The compact nav shared by every page that is not the landing page: the wordmark home, and — once the source
- * is public — the round GitHub link on the right.
- */
 export const SiteNav = () => (
   <nav className="sticky top-0 z-50 border-b border-line bg-surface/[0.92] backdrop-blur-[10px]">
     <div className="mx-auto flex max-w-shell items-center justify-between gap-6 px-8 py-[18px]">

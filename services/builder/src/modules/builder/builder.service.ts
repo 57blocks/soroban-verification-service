@@ -40,18 +40,11 @@ const EXIT_CODES: Record<Classification, number> = {
 export type BuilderRunResult = {
   classification: Classification;
   exitCode: number;
-  /** The single structured JSON line entrypoint.ts writes to stdout as its last line. */
   line: Record<string, unknown>;
 };
 
-/**
- * It receives an already-materialised, already-extracted source tree through the handoff document
- * `MaterialiseService` wrote in its own socket-less container, and does nothing but assemble and run container
- * commands.
- */
 @Injectable()
 export class BuilderService {
-  // Explicit `@Inject()` — see build-dispatch.scheduler.ts's comment.
   private readonly logger = new ScvsLogger("builder", { sink: stderrOnlySink });
 
   constructor(
@@ -76,8 +69,6 @@ export class BuilderService {
       );
     }
 
-    // O2: `job_id` is this run's correlation identifier, and it needs no plumbing — it arrives on
-    // `BatchJobParams` and the trusted side reads it back off `recipe.json`.
     return runWithLogContext({ job_id: job.job_id, mode: job.mode }, () =>
       this.runForJob(job)
     );
@@ -91,20 +82,14 @@ export class BuilderService {
     try {
       handoff = await readHandoff(path);
     } catch (error) {
-      // Not a source problem: the materialiser container did not run, or ran somewhere this container cannot
-      // see.
       const detail =
         `No readable source handoff at ${path}: ${describeError(error)}. The materialiser container ` +
         `must run first and share a host-mounted path with this one — see handoff.ts.`;
-      // The params are parsed and `job.upload_url` is in hand, so the artifact can still go out — unlike the
-      // `run()`-level fatal for unparseable params, which has no URL and is the honest exception.
       await this.uploadLogOnlyArtifact(job, detail);
       return this.emitFatal(job.job_id, job.mode, detail);
     }
 
     if (!handoff.ok) {
-      // The materialiser reported an unfetchable source and exited 0 on purpose, so that this runs and the
-      // trusted side gets the precise reason rather than a synthesised `no_artifact`.
       return this.finish(job, {
         outcome: "cli_failure",
         runner: "docker_build_image_rebuild",
@@ -130,7 +115,6 @@ export class BuilderService {
     return this.finish(job, result);
   }
 
-  /** Must match the materialiser's, and must be a real path on the host — see handoff.ts. */
   private handoffRoot(): string {
     return this.configService.get("handoffRoot", { infer: true }) || tmpdir();
   }
@@ -153,8 +137,7 @@ export class BuilderService {
     job: BatchJobParams,
     result: RunCliResult
   ): Promise<BuilderRunResult> {
-    // Ordering matters for the same reason: dying between the two uploads leaves no `recipe.json`, and a
-    // missing `recipe.json` is already treated as a failed attempt.
+    // Wasm first: dying between the two uploads must leave no `recipe.json`, which already reads as a failed attempt.
     const uploadedWasm = await this.uploadRebuiltBytes(job, result);
     if (uploadedWasm.ok === false) {
       return this.emitFatal(
@@ -201,7 +184,6 @@ export class BuilderService {
     });
   }
 
-  /** Sends the rebuilt Wasm to its own presigned target, when this attempt produced one. */
   private async uploadRebuiltBytes(
     job: BatchJobParams,
     result: RunCliResult
@@ -229,16 +211,11 @@ export class BuilderService {
 
     this.logger.log("rebuilt Wasm uploaded for trusted-side hashing", {
       size_bytes: bytes.byteLength,
-      // The sandbox's own hash, for comparison against the one the orchestrator is about to compute.
       self_hashed_sha256: result.rebuilt_wasm_hash,
     });
     return { ok: true, uploaded: true };
   }
 
-  /**
-   * Uploads a `recipe.json` whose only payload is the build log, for a terminal path that produced no
-   * `RunCliResult` to build a real artifact from.
-   */
   private async uploadLogOnlyArtifact(job: BatchJobParams, detail: string): Promise<void> {
     try {
       const artifact = buildRecipeArtifact(buildRecipeFromJob(job), {
@@ -272,8 +249,7 @@ export class BuilderService {
     classification: Classification,
     extra: Record<string, unknown>
   ): BuilderRunResult {
-    // The one terminal record. `extra` is deliberately NOT spread into it: it is a `Record<string, unknown>`
-    // assembled from job params and diagnostics, exactly the shape the kernel refuses to accept as fields.
+    // Never spread `extra` into this record: it is an untyped bag of job params and diagnostics.
     this.logger.log("rebuild finished", {
       classification,
       process_exit_code: EXIT_CODES[classification],
@@ -298,7 +274,6 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** The two tests covering this asserted the wrong meaning, which is why nothing caught it. */
 export function buildRecipeFromJob(
   job: Pick<BatchJobParams, "image_digest" | "build_args" | "build_options" | "metadata_replay">,
 ): BuildRecipe {

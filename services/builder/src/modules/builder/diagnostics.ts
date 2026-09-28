@@ -1,5 +1,3 @@
-// Diagnostics and failure-result builders.
-
 import type { RebuildErrorCode, SandboxDiagnostics } from "@scvs/core";
 import type { CommandResult } from "@scvs/core/process";
 import { excerpt, redactCommand, redactLocalPath, redactSecrets, redactUnknown, summarizeGenericCommand } from "./redact.js";
@@ -18,8 +16,7 @@ export function cliFailure(
     runner,
     exit_code,
     reason,
-    // Redacted here rather than at each call site: this bag is untyped and reaches the published artifact as
-    // `failure_context`, so it is the one publishing path a field's type cannot cover.
+    // Redacted here: this untyped bag is published as `failure_context`.
     diagnostics: {
       reason,
       ...(redactUnknown(diagnostics) as Record<string, unknown>),
@@ -123,8 +120,6 @@ export function dockerPrefetchPolicyDiagnostics(input: {
     dependency_prefetch: "cargo_vendor",
     dependency_prefetch_policy: "allowlist",
     dependency_prefetch_allowed_hosts: input.policy.allowed_hosts,
-    // Both carry a URL read out of an untrusted Cargo file, so both go through redaction — userinfo and
-    // query strings in such a URL are exactly what it is for.
     dependency_prefetch_blocked_url: redactSecrets(input.policy.blocked_url),
     stderr_excerpt: excerpt(input.policy.detail),
     reference_alignment: referenceAlignment(),
@@ -153,7 +148,6 @@ export function dockerBuildDiagnostics(input: {
   extractionNormalisation?: string;
   replayedBldopts: string[];
   unparsableBldopts: string[];
-  /** Set only when the CLI positively named an argument it rejected — see `rejectedBuildArgument`. */
   rejectedBuildArgument?: { flag: string; origin: "recorded_bldopt" | "verifier_added" };
   metadataReplay?: string[];
 }): SandboxDiagnostics {
@@ -175,8 +169,6 @@ export function dockerBuildDiagnostics(input: {
     ...(input.extractionNormalisation ? { extraction_normalisation: input.extractionNormalisation } : {}),
     ...(input.replayedBldopts.length ? { replayed_bldopts: input.replayedBldopts } : {}),
     ...(input.unparsableBldopts.length ? { unparsable_bldopts: input.unparsableBldopts } : {}),
-    // Absent on every failure this could not positively identify, which is most of them — the caller stays on
-    // the generic `rebuild_command_failed` path there rather than guessing.
     ...(input.rejectedBuildArgument
       ? {
           rejected_build_option: input.rejectedBuildArgument.flag,

@@ -18,10 +18,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-/**
- * Separate from `test` on purpose: `test` does not await, so an async case there would report `ok` before it
- * ran and turn a failure into an unhandled rejection.
- */
+/** `test` does not await; async cases must use this. */
 async function testAsync(name: string, fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
@@ -34,7 +31,6 @@ async function testAsync(name: string, fn: () => Promise<void>): Promise<void> {
 
 const clock = () => "2026-08-05T00:00:00.000Z";
 
-/** Captures what a logger would have written, so a test can assert the exact record. */
 function capture(): { lines: Array<{ level: LogLevel; line: string }>; sink: (level: LogLevel, line: string) => void } {
   const lines: Array<{ level: LogLevel; line: string }> = [];
   return { lines, sink: (level, line) => lines.push({ level, line }) };
@@ -77,8 +73,6 @@ test("O2: `job_id` is inherited from the ambient scope, not passed by the call s
   const logger = new ScvsLogger("verification-pipeline", { clock, sink });
 
   runWithLogContext({ job_id: "job-1" }, () => {
-    // Deliberately three frames deep and with no `job_id` argument — this is the property that lets `job_id`
-    // leave message text without every function signature growing.
     const inner = () => logger.log("dispatched to Batch");
     const middle = () => inner();
     middle();
@@ -93,8 +87,6 @@ test("O2: nested scopes merge, innermost wins, and the scope does not leak out",
 
   runWithLogContext({ request_id: "req-1" }, () => {
     runWithLogContext({ job_id: "job-1" }, () => {
-      // The one record that carries both ids — what makes an accepted job traceable back to the HTTP request
-      // that created it, with no `request_id` column anywhere.
       logger.log("job accepted");
     });
     logger.log("responding 202");
@@ -122,8 +114,6 @@ await testAsync("O2: an async scope survives an await", async () => {
 
 test("S18: a non-primitive field is dropped loudly, never spread into the record", () => {
   const { lines, sink } = capture();
-  // The failure this prevents: `{ ...jobParams }` or `{ params }` reaching a record and carrying a presigned
-  // `upload_url` with it.
   new ScvsLogger("batch-dispatch", { clock, sink }).log("submitting", {
     params: { upload_url: "https://s3.example/presigned?X-Amz-Signature=secret" } as never,
     job_id: "job-1",
@@ -167,7 +157,6 @@ test("a caller cannot forge a reserved key", () => {
 test("an extra positional param from Nest's own logging is dropped, not forwarded", () => {
   const { lines, sink } = capture();
   const logger = new ScvsLogger("bootstrap", { clock, sink });
-  // How Nest calls a LoggerService internally: (message, stack, context).
   (logger as { error(message: unknown, ...rest: unknown[]): void }).error(
     "Nest application failed",
     "Error: boom\n    at /app/services/query-svc/dist/main.js:12:9",
@@ -230,7 +219,6 @@ test("stderrOnlySink keeps every level off stdout, for a unit whose stdout is a 
     for (const undo of restore) undo();
   }
 
-  // The builder's stdout carries `scvs-builder-entrypoint-result-v1` and nothing else.
   assert.deepEqual(
     written.map((entry) => entry.stream),
     ["stderr", "stderr"],

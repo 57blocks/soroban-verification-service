@@ -26,10 +26,8 @@ import type { SubmitRequestDto } from "./submit.dto.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { errorBody } from "@scvs/http";
 
-/** A job this submission created, and the one-time secret that reads its raw build log. */
 type CreatedJob = { jobId: string; buildLogToken: string };
 
-/** The accepted arm of `LegalService.checkAcceptance` — absent fields mean nothing was accepted (TA-7). */
 type AcceptedTerms = { version?: string; contentSha256?: string };
 
 export type ApiResponse = { statusCode: number; body: unknown };
@@ -52,8 +50,6 @@ const SEP58_FIELD_HINTS: Record<
   },
 };
 
-/** One short, greppable identity for a target in log lines — `testnet:CABC...` / `testnet:9f3a...`. */
-/** The target as log *fields* rather than an interpolated `network:id` label. */
 function targetFields(target: VerificationTarget): LogFields {
   return {
     network: target.network,
@@ -62,18 +58,14 @@ function targetFields(target: VerificationTarget): LogFields {
   };
 }
 
-/** The submitter's declared source visibility. */
 function declaredVisibility(manifest: SubmittedSourceManifest): "public" | "private" {
   return (manifest.is_public ?? false) ? "public" : "private";
 }
 
-/** Ported from the pre-Nest `routes/verifications.ts`'s `submitRouter` handler. */
 @Injectable()
 export class SubmitService {
   private readonly logger = new ScvsLogger("submit");
 
-  // Explicit `@Inject()` — see preflight.controller.ts's comment (tsx/esbuild doesn't emit the decorator
-  // metadata Nest's DI would otherwise infer this parameter's type from).
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(JobsRepository) private readonly jobs: JobsRepository,
@@ -86,8 +78,7 @@ export class SubmitService {
     const target = body.target as VerificationTarget;
     const manifest = body.manifest;
 
-    // First, before the chain read: a submission that forms no agreement should cost nothing, and this route
-    // creates a job on some paths without a second call (TRD §8.1, design.md TA-2).
+    // Before the chain read: a submission that forms no agreement must cost nothing.
     const acceptance = this.legal.checkAcceptance(body.accepted_terms_version);
     if (!acceptance.accepted) {
       this.logger.warn("submission rejected on terms acceptance", {
@@ -106,13 +97,8 @@ export class SubmitService {
       dry_run: body.dry_run ?? false,
     });
 
-    // Honoured now, not refused. `orchestrator-svc`'s comparison step terminates a dry run at `evaluated` and
-    // writes nothing to the result root.
     const dryRun = body.dry_run ?? false;
 
-    // Answering it correctly would mean re-fetching the deployed hash here to confirm the cached verdict still
-    // applies, which costs exactly what letting the job run costs (one chain fetch), except the job also
-    // produces a *fresh* verdict and needs no rebuild.
     if (!manifest) {
       const preflight = await runPreflight(target, this.chainReaderConfig());
       if (!preflight.ok) {
@@ -179,20 +165,12 @@ export class SubmitService {
           return {
             statusCode: 202,
             body: {
-              // Emitting `building`/`comparing` here put a value in the response that the OpenAPI document says
-              // cannot occur, so the generated client's type was a lie and the console's exhaustive branching
-              // fell through every arm: no navigation, no message, and the evidence form unmounted back to the
-              // target form mid-flow.
               status: "queued",
               job_id: activeJob.jobId,
-              // The caller's own target, never the matched job's: `getActiveJobForTarget` matches on
-              // contract_id OR wasm_hash, so the row it finds can legitimately name a *different* contract that
-              // shares this Wasm.
+              // The caller's own target: the matched row may name a different contract that shares this Wasm.
               target,
               available_fields: preflight.available_fields,
-              // No `build_log_token`: this job is someone else's, and its token was returned to whoever
-              // created it. Minting a second one for the same job would hand this caller access to a log they
-              // did not produce, which is the model this ticket replaced.
+              // No `build_log_token`: this job's token went to whoever created it.
               message:
                 "A verification job for this target is already queued or running. Its build log belongs to the submission that created it.",
             },
@@ -303,13 +281,9 @@ export class SubmitService {
       return {
         statusCode: 202,
         body: {
-          // The documented submission status, not the job's internal one — see the identical note on the
-          // inferred-manifest path above.
           status: "queued",
           job_id: activeJob.jobId,
-          // The caller's own target — see the identical note on the inferred-manifest path above.
           target,
-          // No `build_log_token` — see the identical note on the inferred-manifest path above.
           message:
             "A verification job for this target is already queued or running. Its build log belongs to the submission that created it.",
         },
@@ -328,17 +302,11 @@ export class SubmitService {
     });
   }
 
-  /**
-   * The one place a created job becomes HTTP, shared by both submit paths (inferred manifest and submitted
-   * manifest).
-   */
   private respondToCreated(
     created: CreatedJob,
     target: VerificationTarget,
     options: { queuedMessage: string; extra?: Record<string, unknown> }
   ): ApiResponse {
-    // This is the one record carrying BOTH the `request_id` the middleware opened the scope with and the
-    // `job_id` just created. The token is deliberately NOT among its fields, and must never become one.
     this.logger.log("job accepted", { ...targetFields(target), job_id: created.jobId });
     return {
       statusCode: 202,
@@ -347,23 +315,18 @@ export class SubmitService {
         job_id: created.jobId,
         target,
         ...(options.extra ?? {}),
-        // The only time this value is ever emitted. There is no route that re-issues it: one authorised by the
-        // job id would put the model back where it started (design.md §6 item 3).
+        // The only time this token is ever emitted; no route re-issues it.
         build_log_token: created.buildLogToken,
         message: options.queuedMessage,
       },
     };
   }
 
-  /** Creates the job. */
-  /** Also rejects an `upload_id` with no live row. */
-  /** `compareSourceAgainstChain` holds the comparison; this only reads the chain. */
   private async checkSourceAgainstChain(
     target: VerificationTarget,
     submittedSha256: string,
   ): Promise<ManifestValidation | { ok: true }> {
-    // A chain read that *throws* is the same case as one that returns `ok: false`, and the same case as a
-    // contract that records nothing: no oracle, so no refusal.
+    // A throwing chain read is the same as a contract that records nothing: no oracle, so no refusal.
     const lookup = await getWasmMetadata(target, this.chainReaderConfig()).catch(() => undefined);
     const chainSourceSha256 = lookup?.ok ? lookup.metadata.sep58.source_sha256 : undefined;
     return compareSourceAgainstChain(chainSourceSha256, submittedSha256);
@@ -427,8 +390,6 @@ export class SubmitService {
     }
 
     const jobId = randomUUID();
-    // Minted here and returned exactly once, in this submission's 202. Only its digest is stored, and nothing
-    // downstream can recover it (build-log-access design.md BL-1).
     const buildLogToken = mintBuildLogToken();
     await this.jobs.createJob({
       jobId,
@@ -442,15 +403,11 @@ export class SubmitService {
       },
       manifest,
       dryRun,
-      // The service's own hash, never anything the request carried: a caller cannot assert which words it
-      // was shown (design.md TA-3).
+      // The service's own hash, never anything the request carried.
       ...(acceptance.version && acceptance.contentSha256
         ? { acceptedTermsVersion: acceptance.version, acceptedTermsSha256: acceptance.contentSha256 }
         : {}),
     });
-    // That orphan is strictly worse than the risk this was written to avoid: at worst, a missed write here
-    // costs this one job its sweep-exemption protection for up to `stagingSweepJobAgeCeilingMs` (still bounded,
-    // same as every other residual gap in this feature).
     if (manifest.upload_id) {
       try {
         await this.uploadJobReferences.recordReference(manifest.upload_id, jobId);
@@ -465,10 +422,6 @@ export class SubmitService {
     return { jobId, buildLogToken };
   }
 
-  /**
-   * The whole of "you already asked for this" — every way an in-flight job has to match this submission before
-   * it may be handed back in place of a new one, plus how far back one still counts.
-   */
   private dedupQuestion(
     dryRun: boolean,
     manifest: SubmittedSourceManifest
@@ -481,7 +434,6 @@ export class SubmitService {
     const staleMs = this.configService.get("activeJobDedupStaleMs", {
       infer: true,
     });
-    // "You already asked for this" is only true when the earlier submission asked for the same thing:
     return {
       updatedSince: new Date(Date.now() - staleMs),
       dryRun,

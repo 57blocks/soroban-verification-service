@@ -6,11 +6,7 @@ import {
   ValidatorConstraintInterface,
 } from "class-validator";
 
-/**
- * "When the predicate holds, the object carries exactly these keys" — a conditional `additionalProperties:
- * false`, which no per-property decorator can express. Put it on a property that is always present: a custom
- * validator on an array-typed one derives `$ref: Array` in `@scvs/openapi` and fails the soundness check.
- */
+/** Put it on an always-present, non-array property: a custom validator on an array derives `$ref: Array`. */
 @ValidatorConstraint({ name: "closedTo", async: false })
 class ClosedToConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments): boolean {

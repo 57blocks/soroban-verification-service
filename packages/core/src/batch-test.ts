@@ -1,4 +1,4 @@
-// Required before any decorated class is evaluated — see `composer-test.ts`'s own note.
+// Must load before any decorated class is evaluated.
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { validateSync } from "class-validator";
@@ -59,7 +59,6 @@ test("BatchJobParams.image_digest validates the real composed-environment shape 
 });
 
 test("BatchJobParams.image_digest rejects a bare digest — this field is a full reference, not just a hash", () => {
-  // A bare digest here would be a value `docker run` cannot use.
   assert.notEqual(validateSync(params(DIGEST)).length, 0);
 });
 
@@ -72,14 +71,10 @@ test("BatchJobParams.image_digest rejects a garbled value", () => {
 });
 
 test("BatchJobParams.image_digest rejects a loopback registry host, even though RegistryVerification.bldimg allows it", () => {
-  // This field decides what the sandbox executes and is never submitter-facing or published, unlike `bldimg` —
-  // admitting `localhost` would be an unforced widening.
   assert.notEqual(validateSync(params(`localhost/myimage@${DIGEST}`)).length, 0);
 });
 
 test("BatchJobParams.image_digest accepts localhost:<port> — the port's colon alone satisfies the host-segment rule", () => {
-  // Not a special case for localhost: any host segment containing `.` or `:` matches, and a port number
-  // supplies the colon.
   assert.deepEqual(validateSync(params(`localhost:5000/myimage@${DIGEST}`)), []);
 });
 

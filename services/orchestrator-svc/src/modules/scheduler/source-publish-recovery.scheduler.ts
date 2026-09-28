@@ -11,7 +11,6 @@ export class SourcePublishRecoveryScheduler implements OnModuleInit, OnModuleDes
   private readonly logger = new ScvsLogger("source-publish-recovery");
   private readonly metrics = new ScvsMetrics("source-publish-recovery", { logger: this.logger });
   private readonly detached = new DetachedWork(this.logger);
-  // Same-process, in-flight guard as `ArchiveRecoveryScheduler`'s `retryingJobIds`.
   private readonly retryingJobIds = new Set<string>();
 
   constructor(
@@ -36,10 +35,6 @@ export class SourcePublishRecoveryScheduler implements OnModuleInit, OnModuleDes
     await this.detached.drain();
   }
 
-  /**
-   * The 24-hour give-up bound lives in `listJobsPendingSourcePublish`'s own query (it excludes rows older than
-   * that from what it returns), not here.
-   */
   async recoverPendingSourcePublishes(): Promise<void> {
     try {
       const pending = await this.jobs.listJobsPendingSourcePublish(

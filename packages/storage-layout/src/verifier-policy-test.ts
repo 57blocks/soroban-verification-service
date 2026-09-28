@@ -9,9 +9,6 @@ import { SOURCE_MODES, VerifierPolicy } from "./shapes.js";
 import { verifierPolicyKey } from "./keys.js";
 import { createResultStorage } from "./storage-backend.js";
 
-// Plain-script test, following registry-status-test.ts's convention — packages/* has no Jest config anywhere in
-// this repo.
-
 const PARAMS = {
   policyId: "test-policy-v1",
   acceptedTrustLevels: ["sdf_trusted"],
@@ -29,13 +26,9 @@ async function main(): Promise<void> {
   const returned = await writeVerifierPolicy(storage, PARAMS);
   const written = JSON.parse(await readFile(join(root, verifierPolicyKey()), "utf8")) as VerifierPolicy;
 
-  // What this verifier serves, and only that. `submit.service.ts`'s `createJob` constructs exactly two
-  // source-ref shapes, so these are the two modes the door can produce.
   assert.deepEqual(written.source_modes, ["private_uploaded_tarball", "source_uri"]);
   assert.deepEqual(returned.source_modes, written.source_modes);
 
-  // The half that was wrong for longer, and the more embarrassing one to publish: offering a route the door
-  // refuses invites a submitter to build against it.
   for (const refused of ["public_repo", "hosted_tarball"]) {
     assert.ok(!written.source_modes.includes(refused), `policy.json must not offer ${refused}`);
   }
@@ -45,7 +38,6 @@ async function main(): Promise<void> {
     assert.ok(SOURCE_MODES.includes(served), `${served} is emitted but not in the wire vocabulary`);
   }
 
-  // A peer verifying from a public git repository is entitled to say so.
   const peer = { ...written, source_modes: ["public_repo", "hosted_tarball"] };
   parseDto(VerifierPolicy, peer);
 

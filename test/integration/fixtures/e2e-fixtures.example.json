@@ -1,13 +1,7 @@
 {
   "$comment": [
-    "Copy this template to an environment-specific inventory such as e2e-fixtures.staging.json,",
-    "fill it from a real deployment, and point SCVS_E2E_FIXTURES at that file. Every entry corresponds",
-    "to an F-* row in docs/qa/e2e-test-plan.md \u00a73. Anything left out makes the cases that need it skip,",
-    "naming the fixture ID \u2014 nothing here is guessed or defaulted.",
-    "",
-    "test/fixtures/e2e/ already owns the scripts that produce these: build-purpose-contracts.sh,",
-    "deploy-testnet.sh, generate-fixtures.sh, and registry.yaml records which are currently `ready`.",
-    "This file is the bridge between that registry and the suite."
+    "Copy to an environment-specific inventory (e.g. e2e-fixtures.staging.json), fill it from a real deployment,",
+    "and point SCVS_E2E_FIXTURES at it. A missing entry makes the cases that need it skip."
   ],
   "contracts": {
     "F-MAINNET-READ-ONLY": {
@@ -219,7 +213,7 @@
     "tag_only": "docker.io/stellar/stellar-cli:25.2.0"
   },
   "mirrored_source": {
-    "$comment": "Same bytes, two locations \u2014 E2E-DEDUP-02/same_bytes_different_url.",
+    "$comment": "Same bytes, two locations.",
     "url_a": "https://example.invalid/a/source.tar.gz",
     "url_b": "https://example.invalid/b/source.tar.gz",
     "sha256": "<64 hex>"

@@ -5,10 +5,8 @@ type PeerLinkProps = {
   label: string;
 };
 
-/** Every part of this is about one fact: **the destination is peer-controlled**. */
 export const PeerLink = ({ url, label }: PeerLinkProps) => {
   const [confirmed, setConfirmed] = useState(false);
-  // Confirmation is about *this* destination.
   const [confirmedFor, setConfirmedFor] = useState(url);
   if (confirmedFor !== url) {
     setConfirmedFor(url);
@@ -55,7 +53,6 @@ export const PeerLink = ({ url, label }: PeerLinkProps) => {
   );
 };
 
-/** `null` for anything that is not an absolute http(s) URL. */
 const safeDestination = (url: string): URL | null => {
   try {
     const parsed = new URL(url);

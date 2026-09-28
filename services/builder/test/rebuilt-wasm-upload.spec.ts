@@ -8,11 +8,6 @@ import configuration from "../src/config/configuration.js";
 import { HANDOFF_SCHEMA, handoffPath, writeHandoff } from "../src/modules/builder/handoff.js";
 import { uploadRebuiltWasm } from "../src/modules/builder/upload.js";
 
-/**
- * What is asserted here is what is reachable without a Docker socket or a `stellar` binary: the upload
- * primitive's wire shape, and the runner's behaviour on the one path that reaches `finish` with no artifact.
- */
-
 const PUT_URL = "https://example.invalid/staging/rebuild-1/build/rebuilt.wasm?X-Amz-Signature=sig";
 
 type Recorded = { url: string; method?: string; contentType?: string; body?: unknown };
@@ -39,8 +34,6 @@ describe("uploadRebuiltWasm", () => {
       expect(result).toEqual({ ok: true, status: 200 });
       expect(stub.calls).toHaveLength(1);
       expect(stub.calls[0]).toMatchObject({ url: PUT_URL, method: "PUT", contentType: "application/wasm" });
-      // The bytes themselves, not a JSON envelope: the trusted side hashes what arrives here and compares that
-      // hash to the deployed Wasm's, so any re-encoding would break every verdict.
       expect(stub.calls[0].body).toBe(bytes);
     } finally {
       stub.restore();
@@ -103,8 +96,6 @@ describe("BuilderService, an attempt that produced no artifact", () => {
       const result = await moduleRef.get(BuilderService).run();
 
       expect(result.classification).toBe("cli_failure");
-      // Exactly one PUT, and not to the artifact target: there were no bytes, so attempting the upload would
-      // either 403 or store an empty object the trusted side would then hash.
       expect(stub.calls).toHaveLength(1);
       expect(stub.calls[0].url).not.toBe(PUT_URL);
 

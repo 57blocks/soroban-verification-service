@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** Prints the last run's drift ledger without re-running anything. */
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

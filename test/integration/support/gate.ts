@@ -1,16 +1,11 @@
-/** Skips, with a reason. */
 import { env, type ExecutionMode } from "./env.js";
 
 export interface CaseRequirements {
-  /** `E2E-SUB-05/tag_only`. */
   readonly id: string;
-  /** One line, from the case's own title. */
   readonly title: string;
   readonly mode: ExecutionMode;
-  /** Environment variables whose absence makes the case unrunnable. */
   readonly needs?: readonly (string | undefined)[];
   readonly prerequisites?: readonly string[];
-  /** A precondition the harness can only evaluate at module load, e.g. a fixture being registered. */
   readonly unless?: () => string | undefined;
 }
 
@@ -39,7 +34,6 @@ function missingReason(requirements: CaseRequirements): string | undefined {
   return requirements.unless?.();
 }
 
-/** Declares a case. */
 export function caseBlock(requirements: CaseRequirements, body: () => void): void {
   const reason = missingReason(requirements);
   const label = `${requirements.id} — ${requirements.title} [${requirements.mode}]`;
@@ -51,7 +45,6 @@ export function caseBlock(requirements: CaseRequirements, body: () => void): voi
   describe(label, body);
 }
 
-/** For a single row inside a table-driven case whose own precondition is missing. */
 export function rowTest(
   name: string,
   reason: string | undefined,

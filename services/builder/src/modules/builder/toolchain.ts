@@ -1,5 +1,4 @@
 import type { RebuildErrorCode } from "@scvs/core";
-// Toolchain pinning and the vendored-offline cargo config.
 
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -8,16 +7,8 @@ import type { CommandResult } from "@scvs/core/process";
 import { dependencyPrefetchTimeoutMs } from "./run-cli.config.js";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
 
-/**
- * Cargo config files a project can ship, in cargo's own precedence order (`config.toml` wins when both are
- * present).
- */
 export const SOURCE_CARGO_CONFIG_FILES = [join(".cargo", "config.toml"), join(".cargo", "config")];
 
-/**
- * Write the vendored-sources + offline redirect to `$CARGO_HOME/config.toml` and return the in-container path
- * (for diagnostics).
- */
 export async function writeVendorCargoConfig(cargoHomeDir: string, vendorDir: string): Promise<string> {
   await mkdir(cargoHomeDir, { recursive: true });
   await writeFile(
@@ -38,23 +29,19 @@ export async function writeVendorCargoConfig(cargoHomeDir: string, vendorDir: st
   return "/out/cargo-home/config.toml";
 }
 
-/** Whether the submitted source defines its own `[source.*]` cargo configuration. */
 export async function detectSourceCargoSourceOverride(sourceRoot: string): Promise<string | undefined> {
   for (const relativePath of SOURCE_CARGO_CONFIG_FILES) {
     const text = await readFile(join(sourceRoot, relativePath), "utf8").catch(() => undefined);
     if (text === undefined) continue;
     if (/^[^\S\n]*\[source\b/m.test(text)) return relativePath;
-    // A bare `replace-with` outside a `[source.*]` header is not valid cargo config, but a dotted-key form
-    // (`source.crates-io.replace-with = …`) is, and would have the same effect.
+    // Also the dotted-key form (`source.crates-io.replace-with = …`), which has the same effect.
     if (/^[^\S\n]*source\s*\.[^\n=]*replace-with\s*=/m.test(text)) return relativePath;
   }
   return undefined;
 }
 
-/** Toolchain files rustup honours, in the order it looks for them. */
 export const RUST_TOOLCHAIN_FILES = ["rust-toolchain.toml", "rust-toolchain"];
 
-/** Whether the submitted source pins its own Rust toolchain. */
 export async function detectRustToolchainFile(sourceRoot: string): Promise<string | undefined> {
   for (const name of RUST_TOOLCHAIN_FILES) {
     const info = await stat(join(sourceRoot, name)).catch(() => undefined);
@@ -63,10 +50,6 @@ export async function detectRustToolchainFile(sourceRoot: string): Promise<strin
   return undefined;
 }
 
-/**
- * Probe the digest-pinned image for the toolchain rustup would use by default, so the rebuild can pin it via
- * `RUSTUP_TOOLCHAIN`.
- */
 export async function probeActiveToolchain(
   image: string,
   config?: RunCliRuntimeConfig,
@@ -84,7 +67,6 @@ export type TrustedToolchain =
   | { ok: true; toolchain?: string; probe: CommandResult; sourceToolchainFile?: string }
   | { ok: false; reason: RebuildErrorCode; detail: string; probe: CommandResult; sourceToolchainFile?: string };
 
-/** Today that is the digest-pinned image's own active toolchain, probed. */
 export async function resolveTrustedToolchain(
   image: string,
   sourceRoot: string,
@@ -125,15 +107,9 @@ export async function resolveTrustedToolchain(
     };
   }
 
-  // The image reports no active toolchain and the source names none, so there is no rustup for anything to
-  // hijack.
   return { ok: true, probe: probe.result, ...withFile };
 }
 
-/**
- * Whether the probe ran to completion and established that the image has no usable rustup, as opposed to
- * failing for a reason that leaves the question open.
- */
 function imageHasNoRustup(result: CommandResult): boolean {
   if (result.timed_out || result.exit_code === null) return false;
   if (result.exit_code === 127) return true;

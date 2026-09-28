@@ -3,10 +3,6 @@ import type { SourceReference } from "@scvs/core";
 import { FetchPolicyError, UpstreamNotDeliveredError } from "@scvs/core/fetch-policy";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/**
- * What the transport does under this policy — redirect re-validation, the resolved-address pin, the body cap —
- * is `policy-bound-fetch.spec.ts`'s subject and is not retested here.
- */
 const STAGING = { bucket: "sv-test-scratch", region: "ap-southeast-2" };
 const REBUILD = "rb-0001";
 
@@ -113,10 +109,6 @@ describe("resolveSourceRefForDispatch — destinations refused before any reques
   });
 });
 
-/**
- * The other half of the same seam: `source_uri_refused` is what sends an operator to the egress policy, so only
- * a destination we would not go to may raise it.
- */
 describe("resolveSourceRefForDispatch — a destination we admitted that delivered nothing", () => {
   it.each([
     ["a non-2xx from a reachable host", "Status 404 from https://raw.githubusercontent.com"],
@@ -156,7 +148,6 @@ describe("resolveSourceRefForDispatch — what the builder is handed", () => {
     expect(svc.fetched).toEqual(["https://example.com/source.tar.gz"]);
     expect(svc.staged).toEqual([{ key: `staging/${REBUILD}/build/fetched-source`, bytes: BODY.byteLength }]);
     if (result.ok) {
-      // The submitter's host is gone from what crosses the boundary.
       expect(result.sourceRef.source_uri).toContain(`${STAGING.bucket}.s3.amazonaws.com`);
       expect(result.sourceRef.source_uri).not.toContain("example.com/source.tar.gz");
     }
@@ -186,7 +177,6 @@ describe("resolveSourceRefForDispatch — what the builder is handed", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("source_hash_mismatch");
-    // The point of catching it here rather than in the sandbox: no Batch job is spent on it.
     expect(svc.staged).toEqual([]);
   });
 

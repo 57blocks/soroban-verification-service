@@ -91,7 +91,6 @@ export SCVS_E2E_RUN_ID="$scope"
 export SCVS_E2E=1
 export SCVS_E2E_NETWORK=testnet
 
-# The consistency checker validates all base-inventory source archives, not only F-58-PRIV.
 SCVS_E2E_FIXTURES="test/integration/fixtures/e2e-fixtures.dev.json" \
   bash "$repo_root/test/fixtures/e2e/prepare-ci-sources.sh"
 bash "$repo_root/test/fixtures/e2e/build-purpose-contracts.sh"

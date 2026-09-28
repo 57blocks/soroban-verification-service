@@ -6,9 +6,6 @@ import { PeerLink } from "@/features/aggregator/components/PeerLink";
 import { VerifierResult } from "@/features/aggregator/components/VerifierResult";
 import { isWasmHash } from "@/features/aggregator/hooks/use-hash-lookup";
 
-// Built as a plain object and cast, rather than through the class: these are fixtures standing in for a
-// *peer's* document, and the point of the assertions below is what happens when one carries something the shape
-// does not promise.
 const entry = (over: Record<string, unknown> = {}): AggregatedRegistryVerification =>
   ({
     verifier: { name: "Peer Verifier", url: "https://peer.example/about" },
@@ -26,7 +23,6 @@ describe("peer content is untrusted (S24)", () => {
     expect(card.querySelector("img")).toBeNull();
   });
 
-  // A peer's `logo_url` would be a fetch this page makes on the peer's instruction.
   test("no image is ever loaded from a peer origin", () => {
     render(
       <VerifierResult

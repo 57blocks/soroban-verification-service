@@ -7,20 +7,15 @@ import {
 import { PRISMA_CLIENT } from "./db.tokens.js";
 import type { PrismaClient } from "./client.js";
 
-/** CRUD over the `upload_job_references` table — one row per (upload, job) pair. */
 @Injectable()
 export class UploadJobReferencesRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
 
-  /**
-   * Let a failure here propagate and fail the submission rather than silently accepting a request the sweep
-   * can't protect.
-   */
+  /** Must throw on failure: an unrecorded reference is an upload the sweep cannot protect. */
   async recordReference(uploadId: string, jobId: string): Promise<void> {
     await this.prisma.uploadJobReference.create({ data: { uploadId, jobId } });
   }
 
-  /** The job ids currently claiming this upload. */
   async findJobIdsForUpload(uploadId: string): Promise<string[]> {
     const rows = await this.prisma.uploadJobReference.findMany({
       where: { uploadId },
@@ -29,7 +24,6 @@ export class UploadJobReferencesRepository {
     return rows.map((row) => row.jobId);
   }
 
-  /** True when at least one job referencing this upload still owes it something. */
   async hasOutstandingObligation(
     uploadId: string,
     ceilingMs: number,

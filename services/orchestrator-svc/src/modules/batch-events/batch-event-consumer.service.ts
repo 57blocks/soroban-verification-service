@@ -10,10 +10,6 @@ import { ScvsLogger } from "@scvs/core";
 import { BatchEventHandlerService } from "./batch-event-handler.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/**
- * Consumes the `JobStateChangeQueue` — one AWS Batch "Job State Change" event per message, already filtered to
- * terminal states (SUCCEEDED/FAILED).
- */
 @Injectable()
 export class BatchEventConsumerService
   implements OnModuleInit, OnModuleDestroy
@@ -23,8 +19,7 @@ export class BatchEventConsumerService
   private loopPromise: Promise<void> | null = null;
   private readonly abortController = new AbortController();
 
-  // Explicit `@Inject()` — see build-dispatch.scheduler.ts's comment (tsx/esbuild doesn't emit the decorator
-  // metadata Nest's DI would otherwise infer this parameter's type from).
+  // Explicit @Inject(): tsx/esbuild emits no decorator metadata for Nest to infer parameter types from.
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(BatchEventHandlerService)
@@ -70,13 +65,12 @@ export class BatchEventConsumerService
               JSON.parse(message.body)
             );
 
-            // The message body is the Batch event, and that event carries `detail.container.environment` —
-            // where `SCVS_JOB_PARAMS_JSON`, and therefore the job's presigned S3 PUT URL, lives.
+            // Never log the body: the Batch event it carries holds a presigned S3 PUT URL.
             this.logger.log("processed a Batch job-state-change message", {
               receipt_handle_prefix: message.receiptHandle.slice(0, 16),
             });
           } catch (error) {
-            // Left on the queue deliberately: SQS redelivers it after the visibility timeout.
+            // Not deleted: SQS redelivers it after the visibility timeout.
             this.logger.error("failed to process a Batch job-state-change message", {
               error: error instanceof Error ? error : String(error),
             });
@@ -85,7 +79,6 @@ export class BatchEventConsumerService
           await deleteMessage(sqs, queueUrl, message.receiptHandle);
         }
       } catch (error) {
-        // Expected on shutdown: abort() rejects the in-flight receiveMessages() call.
         if (!this.stopped) {
           this.logger.error("Batch job-state-change queue poll failed", {
             error: error instanceof Error ? error : String(error),

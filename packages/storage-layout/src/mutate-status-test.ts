@@ -25,17 +25,12 @@ function baseParams(overrides: Partial<BuildWasmStatusParams> = {}): BuildWasmSt
   };
 }
 
-/**
- * An in-memory `ResultStorage` whose conditional write can be made to lose, which the filesystem backend
- * cannot: its own per-path lock serialises same-process writers, so nothing there ever reaches the re-read.
- * `onConflict` stands in for the other replica, mutating the store while this caller is losing to it.
- */
+/** In-memory storage whose conditional write can be made to lose; the filesystem backend's lock never lets it. */
 class RacingStorage implements ResultStorage {
   readonly kind = "filesystem" as const;
   readonly publicRoot = OURS.url;
   readonly crossProcessAtomicWrites = true;
   readonly objects = new Map<string, { text: string; version: number }>();
-  /** Conditional writes still to be refused, newest attempt first. */
   conflictsLeft = 0;
   onConflict: (() => void) | undefined;
   attempts = 0;
@@ -85,19 +80,17 @@ class RacingStorage implements ResultStorage {
   }
 }
 
-/** Appends a source URI straight into the stored bytes — the competing writer, not going through the helper. */
 function otherWriterAppends(storage: RacingStorage, url: string): void {
   const held = storage.objects.get(KEY);
   if (!held) throw new Error("competing writer found no document");
   const document = JSON.parse(held.text);
   const entry = document.source_code_verifications[0];
   const present: { url: string }[] = entry.verified_source_code_uris ?? [];
-  if (present.some((uri) => uri.url === url)) return; // idempotent, like the writer it stands in for
+  if (present.some((uri) => uri.url === url)) return;
   entry.verified_source_code_uris = [...present, { location: "verifier_self_storage", url }];
   storage.objects.set(KEY, { text: `${JSON.stringify(document, null, 2)}\n`, version: held.version + 1 });
 }
 
-/** Flips our stored entry to `verified` — the other replica winning the race rule 20 is about. */
 function otherWriterVerifies(storage: RacingStorage): void {
   const held = storage.objects.get(KEY)!;
   const document = JSON.parse(held.text);
@@ -118,12 +111,6 @@ function seed(params: BuildWasmStatusParams = baseParams()): RacingStorage {
   return storage;
 }
 
-/**
- * A document in the shape this verifier published before the SEP one: `results_urls` is a list of bare URI
- * strings and the entry's verifier carries a name and no `url`. Written straight into the store, because
- * `buildWasmStatus` cannot emit it — which is exactly why no fixture here had this shape, and why refusing
- * it on read went unnoticed until a hash from that era was re-verified.
- */
 function seedLegacyDocument(): RacingStorage {
   const storage = new RacingStorage();
   const document = {
@@ -151,10 +138,6 @@ async function main(): Promise<void> {
   const archiveUrl = "https://gateway.irys.xyz/tx-1";
   const competingUrl = `${OURS.url}/sources/${"b".repeat(64)}.tar.gz`;
 
-  // The regression: a stored document from before the SEP shape must still be amendable. Refusing its bare
-  // `results_urls` strings made the whole document unreadable, so `mutateWasmStatus` answered
-  // `invalid-document` — which it never overwrites — and every re-verification of such a hash exhausted its
-  // retries and abandoned. Measured on dev: 45 of 135 stored documents.
   {
     const storage = seedLegacyDocument();
 
@@ -166,8 +149,6 @@ async function main(): Promise<void> {
 
     assert.equal(result, "written", "a pre-SEP document is amendable, not `invalid-document`");
 
-    // And the rewrite is in the SEP shape: the upgrade is what the strings buy their way into, so nothing
-    // downstream ever sees the legacy form again.
     const final = JSON.parse(storage.objects.get(KEY)!.text);
     assert.equal(final.schema, "stellar-verification-status");
     for (const entry of final.source_code_verifications) {
@@ -178,7 +159,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // A lost swap re-reads and re-runs the mutation against what the winner left, so both updates survive.
   {
     const storage = seed();
     storage.conflictsLeft = 1;
@@ -218,7 +198,6 @@ async function main(): Promise<void> {
     );
   }
 
-  // The real writer, same race: a refusal must not be reported as a settled outcome.
   {
     const storage = seed();
     storage.conflictsLeft = 2;
@@ -235,7 +214,6 @@ async function main(): Promise<void> {
     assert.equal(final.source_code_verifications[0].verified_source_code_uris.length, 1);
   }
 
-  // Losing every attempt is `conflict` — still owed, never mistaken for "nothing to do".
   {
     const storage = seed();
     storage.conflictsLeft = Number.MAX_SAFE_INTEGER;
@@ -251,10 +229,6 @@ async function main(): Promise<void> {
     assert.equal(storage.objects.get(KEY)!.text, before, "nothing was written");
   }
 
-  // Rule 20 under the race it exists for. A mismatched publish loses the swap to a replica that installed a
-  // `verified` entry; the retry re-decides against those bytes and declines. Deciding this before the swap —
-  // which is what publish.service.ts used to do — reads a snapshot that the winner has already invalidated,
-  // and the mismatched lands on top of the verified.
   {
     const mismatched = baseParams({ verdict: "mismatched", rebuiltHash: "1".repeat(64) });
     const storage = seed(mismatched);

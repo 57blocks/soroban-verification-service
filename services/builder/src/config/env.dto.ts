@@ -1,6 +1,5 @@
 import { IsIn, IsNumberString, IsOptional, IsString } from "class-validator";
 
-/** The sandbox's environment contract, validated once at boot by `ConfigModule.forRoot({ validate })`. */
 export class BuilderEnvDto {
   @IsOptional()
   @IsIn(["production", "development", "test"], {
@@ -11,18 +10,14 @@ export class BuilderEnvDto {
   @IsOptional() @IsString()
   SCVS_JOB_PARAMS_JSON?: string;
 
-  // Optional and transitional — see configuration.ts's note beside it.
   @IsOptional() @IsString()
   SCVS_JOB_PARAMS_URL?: string;
 
   @IsOptional() @IsString()
   SCVS_ARTIFACT_DIR?: string;
 
-  // Optional because a single-container local run falls back to the OS temp dir.
   @IsOptional() @IsString()
   SCVS_HANDOFF_ROOT?: string;
-
-  // `STELLAR_DATA_HOME` and `XDG_DATA_HOME` were declared here for the Stellar CLI subprocess.
 
   @IsOptional() @IsNumberString({}, { message: "SCVS_SOURCE_FETCH_TIMEOUT_MS must be a number" })
   SCVS_SOURCE_FETCH_TIMEOUT_MS?: string;

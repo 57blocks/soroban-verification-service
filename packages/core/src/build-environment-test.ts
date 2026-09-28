@@ -1,4 +1,4 @@
-// Load before anything decorated is evaluated.
+// Must load before any decorated class is evaluated.
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { validateSync } from "class-validator";
@@ -59,8 +59,6 @@ test("Recipe hash changes when any pinned field changes", () => {
 });
 
 test("OfficialComponent: runtime_library is an accepted kind, and an invented kind still is not", () => {
-  // The negative half is the point of the test: the union is a published wire contract, and a typo'd kind must
-  // fail validation rather than reach a recipe.
   const good = Object.assign(new OfficialComponent(), {
     kind: "runtime_library",
     source: "https://snapshot.debian.org/archive/debian/20230924T084440Z/pool/main/d/dbus/libdbus.deb",
@@ -77,7 +75,6 @@ test("OfficialComponent: runtime_library is an accepted kind, and an invented ki
 });
 
 test("Recipe hash sorts a second component of the same kind by source, not by insertion order", () => {
-  // `kind` alone stopped being a total order when `runtime_library` arrived.
   const libA = {
     kind: "runtime_library" as const,
     source: "https://a.example/a.deb",
@@ -98,7 +95,6 @@ test("Recipe hash sorts a second component of the same kind by source, not by in
 });
 
 test("Recipe hash of an existing three-component recipe is unchanged by the source tie-break", () => {
-  // The tie-break must not have moved any already-published identity.
   assert.equal(
     composedEnvironmentRecipeHash(recipe()),
     "3758a19a2cd70a433ffe1f564e94c6b76f38f354ec4c11eaa27edae7c0461f61",
@@ -106,8 +102,6 @@ test("Recipe hash of an existing three-component recipe is unchanged by the sour
 });
 
 test("Recipe hash does not collide across a field-boundary shift (length-prefixing check)", () => {
-  // Guards against a naive concatenation scheme where e.g. a longer `template_version` and a shorter `cliver`
-  // could produce the same byte string as the reverse split.
   const a = recipe({ template_version: "ab", pair: { cliver: "c", rsver: "1.95.0" } });
   const b = recipe({ template_version: "a", pair: { cliver: "bc", rsver: "1.95.0" } });
   assert.notEqual(composedEnvironmentRecipeHash(a), composedEnvironmentRecipeHash(b));
@@ -148,23 +142,20 @@ test("ComposeIntent: validates with a pair and a template_version, nothing else 
 test("ComposeIntent: rejects a missing template_version rather than defaulting one silently", () => {
   const intent = new ComposeIntent();
   intent.pair = toolchainPair("25.1.0", "1.95.0");
-  // @ts-expect-error -- exercising the missing-field case on purpose
+  // @ts-expect-error
   intent.template_version = undefined;
   assert.notEqual(validateSync(intent).length, 0);
 });
 
 test("ComposeIntent: rejects an absent pair, which @ValidateNested alone would let through", () => {
-  // See `ComposeIntent.pair`'s comment.
   const intent = new ComposeIntent();
   intent.template_version = "v1";
-  // @ts-expect-error -- exercising the missing-field case on purpose
+  // @ts-expect-error
   intent.pair = undefined;
   assert.notEqual(validateSync(intent).length, 0);
 });
 
 test("BuildEnvironmentResolution: the compose case carries an intent, never a populated recipe", () => {
-  // If a future edit widens `compose` back to carrying a full `ComposedEnvironmentRecipe`, this assignment
-  // stops compiling.
   const resolution: BuildEnvironmentResolution = {
     kind: "compose",
     intent: { pair: { cliver: "25.1.0", rsver: "1.95.0" }, template_version: "v1" },

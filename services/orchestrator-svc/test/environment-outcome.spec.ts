@@ -8,14 +8,11 @@ import {
 } from "@scvs/core";
 import type { AppConfigService } from "../src/config/configuration.js";
 
-/** The trusted side's verification of an untrusted-by-construction receipt. */
-
 const getObjectText = jest.fn<(...args: unknown[]) => Promise<string | undefined>>();
 
 jest.unstable_mockModule("@scvs/aws", () => ({
   createS3Client: () => ({}),
   getObjectText,
-  // `composer-dispatch.service.js` is imported transitively for `composerArtifactKey`.
   createBatchClient: () => ({}),
   describeJob: async () => undefined,
   presignPutUrl: async () => "https://example.invalid/put",
@@ -42,7 +39,6 @@ const RECIPE: ComposedEnvironmentRecipe = {
   ],
 } as ComposedEnvironmentRecipe;
 
-/** The receipt's own hash has to be the real one, or every case would fail for the same wrong reason. */
 const RECIPE_SHA = composedEnvironmentRecipeHash(RECIPE);
 
 function environment(overrides: Partial<EnvironmentRecord> = {}): EnvironmentRecord {
@@ -73,11 +69,6 @@ function successReceipt(overrides: Partial<ComposerArtifact> = {}): Record<strin
 }
 
 class FakeEnvironments {
-  /**
-   * `recipePresent` rather than the recipe itself: the assertion that matters is that all three identities
-   * travelled together (`markReady` requires them), and inlining a whole recipe into every expectation would
-   * bury that in noise.
-   */
   ready: Array<{
     id: string;
     recipeSha256: string;
@@ -114,7 +105,6 @@ function serviceFor(environments: FakeEnvironments) {
   );
 }
 
-/** Every case drives the service through the Batch-terminal entry point unless it says otherwise. */
 async function record(
   receipt: Record<string, unknown> | undefined,
   row: EnvironmentRecord = environment(),
@@ -145,7 +135,6 @@ describe("EnvironmentOutcomeService", () => {
         id: "env-1",
         recipeSha256: RECIPE_SHA,
         imageDigest: IMAGE_DIGEST,
-        // All three together, never a partial write — `markReady`'s own precondition.
         recipePersisted: true,
         arch: undefined,
       },
@@ -154,7 +143,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("synthesises a failure when the composer finished but uploaded no receipt", async () => {
-    // The container died before its upload step, or ran out of disk mid-`docker build`.
     const { environments, outcome } = await record(undefined);
 
     expect(outcome).toEqual({
@@ -193,7 +181,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("refuses a receipt written for a different environment", async () => {
-    // A receipt for another environment at this environment's key.
     const { outcome } = await record(successReceipt({ environment_id: "env-other" }));
     expect(outcome).toEqual({
       status: "failed",
@@ -202,8 +189,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("refuses a success receipt missing any one of the three identities", async () => {
-    // They are not independently optional: `markReady` requires all three, and a row with a recipe hash but no
-    // pull coordinate is not a coherent `ready` state.
     for (const missing of ["recipe_sha256", "image_digest", "recipe"] as const) {
       const receipt = successReceipt();
       delete receipt[missing];
@@ -214,8 +199,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("refuses a receipt whose recipe describes a different pair than was requested", async () => {
-    // Dispatching a rebuild against it would publish a result claiming a toolchain that did not produce the
-    // bytes.
     const otherPair = { ...RECIPE, pair: { cliver: "26.0.0", rsver: "1.94.1" } };
     const { outcome } = await record(
       successReceipt({
@@ -238,7 +221,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("refuses a recipe_sha256 that does not hash from the recipe beside it", async () => {
-    // The composer already computed this hash and is trusted to.
     const { environments, outcome } = await record(
       successReceipt({ recipe_sha256: "f".repeat(64) }),
     );
@@ -260,8 +242,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("accepts a success receipt with no smoke test at all, rather than inventing a verdict", async () => {
-    // Absence is not disagreement. The composer's own refusal-to-push is the enforcement point; this service
-    // only rejects a smoke test that is present *and* says the pair did not match.
     const receipt = successReceipt();
     delete receipt.smoke_test;
     const { outcome } = await record(receipt);
@@ -273,7 +253,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("tryRecordFromArtifact reports false on a missing receipt instead of recording a failure", async () => {
-    // With no Batch terminal state either, "no receipt" is not evidence the composition failed.
     getObjectText.mockResolvedValue(undefined);
     const environments = new FakeEnvironments();
 
@@ -303,8 +282,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 
   it("rejects a receipt whose schema string is not the one this service understands", async () => {
-    // Validation is `parseDto`'s, not this service's — asserted here because the failure mode of a
-    // silently-accepted future schema is a half-understood receipt recorded as `ready`.
     getObjectText.mockResolvedValue(
       JSON.stringify(successReceipt({ schema: "scvs-composer-artifact-v2" as never })),
     );
@@ -317,10 +294,6 @@ describe("EnvironmentOutcomeService", () => {
   });
 });
 
-/**
- * The composer built the image on its own host, so it is the one component that knows what architecture it
- * declares.
- */
 describe("EnvironmentOutcomeService — the architecture the composer reported", () => {
   it("records it on the row", async () => {
     const { environments, outcome } = await record(successReceipt({ image_architecture: "arm64" }));
@@ -332,7 +305,6 @@ describe("EnvironmentOutcomeService — the architecture the composer reported",
   });
 
   it("records amd64 as readily as arm64", async () => {
-    // The default is arm64, so an amd64-only test is the one that would catch a hardcoded value.
     const { environments } = await record(successReceipt({ image_architecture: "amd64" }));
 
     expect(environments.ready[0]!.arch).toBe("amd64");
@@ -347,7 +319,6 @@ describe("EnvironmentOutcomeService — the architecture the composer reported",
   });
 
   it("★ drops an architecture we have no queue for, and still marks the row ready", async () => {
-    // `parseDto` throws out of `readArtifact`, so a receipt naming `riscv64` never became a `ready` row at all.
     const { environments, outcome } = await record(
       successReceipt({ image_architecture: "riscv64" }),
     );
@@ -358,8 +329,6 @@ describe("EnvironmentOutcomeService — the architecture the composer reported",
   });
 
   it("drops a `uname -m` spelling rather than trusting it", async () => {
-    // `aarch64` is the same machine as `arm64` but not the token a queue is keyed on, and guessing the mapping
-    // here would be a second place that decides what an architecture is.
     const { environments } = await record(successReceipt({ image_architecture: "aarch64" }));
 
     expect(environments.ready[0]!.arch).toBeUndefined();

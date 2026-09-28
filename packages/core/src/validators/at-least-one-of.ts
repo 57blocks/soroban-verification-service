@@ -6,10 +6,6 @@ import {
   ValidatorConstraintInterface,
 } from "class-validator";
 
-/**
- * Class-level replacement for the two `.superRefine()` calls the old Zod DTOs used ("need at least one of
- * contract_id/wasm_hash").
- */
 @ValidatorConstraint({ name: "atLeastOneOf", async: false })
 class AtLeastOneOfConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments): boolean {

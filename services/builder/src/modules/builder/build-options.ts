@@ -1,9 +1,6 @@
-// `bldopt`/`bldarg` parsing and replay, and manifest-path resolution.
-
 import { isAbsolute, join } from "node:path";
 import { splitShellWords, unescapeShellWord } from "@scvs/core";
 
-/** Absent (or empty) `bldarg` defaults to `contract build`, per spec. */
 export function shellSplit(value: string): string[] {
   const split = splitShellWords(value);
   return split.ok ? split.words : [];
@@ -13,20 +10,13 @@ export function leadingBuildArgs(bldarg: string[] | undefined): string[] {
   return bldarg?.length ? bldarg : ["contract", "build"];
 }
 
-/**
- * Options the rebuild command issues explicitly on its own (see `buildCommand` in `runManualRebuild`), so
- * replaying them from `bldopt` as well would duplicate or contradict them.
- */
 export const BLDOPT_VALUE_FLAGS_HANDLED_ELSEWHERE = new Set(["--manifest-path", "--package", "-p", "--env", "--out-dir"]);
 
 export const BLDOPT_INLINE_VALUE_FLAGS_HANDLED_ELSEWHERE = new Set(["--manifest-path", "--package", "-p", "--env", "--out-dir"]);
 
 export type ReplayedBuildOptions = {
-  /** Tokens appended to the rebuild's `contract build` invocation, in recorded order. */
   forwarded: string[];
-  /** Recorded tokens re-issued from typed fields or docker env rather than forwarded. */
   reissued: string[];
-  /** Entries whose shell encoding could not be parsed. */
   unparsable: { entry: string; reason: string }[];
 };
 
@@ -69,7 +59,6 @@ export function replayableBuildOptions(options: string[] | undefined): ReplayedB
   return { forwarded, reissued, unparsable };
 }
 
-/** Flags whose *value* is a separate token and which the rebuild re-issues itself — both tokens are skipped. */
 export function optionConsumesValue(token: string): boolean {
   return BLDOPT_VALUE_FLAGS_HANDLED_ELSEWHERE.has(token);
 }
@@ -97,7 +86,6 @@ export function withDefaultBuildEnv(
   options: {
     cargoHome?: string;
     cargoNetOffline?: boolean;
-    /** Probed from the build image. */
     rustupToolchain?: string;
   } = {},
 ): string[] {

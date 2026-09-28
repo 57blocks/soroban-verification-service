@@ -48,7 +48,6 @@ async function submit(body: object): Promise<request.Response> {
 }
 
 describe("dry_run", () => {
-  // It was refused with `501 dry_run_not_supported` until `dedup-and-lifecycle` shipped `evaluated`.
   it("honours a dry run: accepts it, and persists dry_run true", async () => {
     const body = submission(true);
     const res = await submit(body);
@@ -59,13 +58,11 @@ describe("dry_run", () => {
 
     const job = await jobsRepository.getJobById(res.body.job_id);
     expect(job?.dryRun).toBe(true);
-    // Scoped to this submission's own contract id rather than a table count: the suites share one Postgres, so
-    // a sibling creating a row between two counts would fail this for the wrong reason.
+    // Scoped to this submission's contract id, not a table count: the suites share one Postgres.
     expect(await prisma.job.count({ where: { contractId: body.target.contract_id } })).toBe(1);
   });
 
   it("no longer answers 501 for it", async () => {
-    // The refusal was a placeholder for a missing consuming half, not a policy.
     const res = await submit(submission(true));
     expect(res.status).not.toBe(501);
   });
@@ -88,10 +85,7 @@ describe("dry_run", () => {
   });
 
   it("never answers a real submission with a dry run's job, or the reverse", async () => {
-    // Handing a real submission the dry run's job reports `verified` for something that was never published and
-    // that no scan will ever publish — `evaluated` is terminal.
     const contract = `C${randomBytes(20).toString("hex").toUpperCase()}`;
-    // Holding it fixed leaves `dry_run` as the only difference, which is what the assertions below are about.
     const fixture = submission();
     const sameTarget = () => ({
       ...fixture,
@@ -106,7 +100,6 @@ describe("dry_run", () => {
     expect(real.body.job_id).not.toBe(dry.body.job_id);
     expect((await jobsRepository.getJobById(real.body.job_id))?.dryRun).toBe(false);
 
-    // And a second dry run for the same target IS deduplicated onto the first, as before.
     const dryAgain = await submit({ ...sameTarget(), dry_run: true });
     expect(dryAgain.body.job_id).toBe(dry.body.job_id);
   });

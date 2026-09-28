@@ -4,22 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCommand } from "@scvs/core/process";
 
-/** **T5's adversarial corpus** — one archive per attack, each with the reason code the extractor owes it. */
 export type MaliciousArchive = {
-  /** Stable id, used as the test name and as the thing a failure report names. */
   id: string;
-  /** What the archive is trying to do, in the attacker's terms. */
   attack: string;
-  /** The reason code the extractor must answer with. */
   reason: string;
-  /** Builds the archive under `root`, returning its path. */
   build: (root: string) => Promise<string>;
 };
 
-/** A tar member, as raw ustar bytes. `type` is the ustar typeflag. */
 type Member = { name: string; body?: string; type?: string; link?: string; mode?: number };
 
-/** Writes a ustar archive containing exactly `members`. */
 export function ustarArchive(members: Member[]): Buffer {
   const blocks: Buffer[] = [];
   for (const member of members) {
@@ -34,7 +27,7 @@ export function ustarArchive(members: Member[]): Buffer {
     octal(member.mode ?? 0o644, 100, 8);
     octal(0, 108, 8);
     octal(0, 116, 8);
-    // A link entry carries no payload; its target lives in the linkname field.
+    // Link entries (typeflag "1"/"2") carry no payload; the target is in the linkname field.
     octal(member.type === "1" || member.type === "2" ? 0 : body.length, 124, 12);
     octal(0, 136, 12);
     write("        ", 148, 8); // checksum placeholder: spaces, per the format
@@ -67,13 +60,8 @@ const raw = (name: string, members: Member[]) => async (root: string) => {
   return archive;
 };
 
-/** A zip member. `link` makes it a symlink whose target is the body; otherwise it is a regular file. */
 export type ZipMember = { name: string; body?: string; link?: string; mode?: number };
 
-/**
- * Writes a deflate zip containing exactly `members` — the zip half of `ustarArchive`, and hand-rolled for the
- * same reason.
- */
 export function zipArchive(members: ZipMember[]): Buffer {
   const locals: Buffer[] = [];
   const central: Buffer[] = [];
@@ -119,8 +107,7 @@ export function zipArchive(members: ZipMember[]): Buffer {
     entry.writeUInt16LE(0, 32); // comment
     entry.writeUInt16LE(0, 34); // disk number start
     entry.writeUInt16LE(0, 36); // internal attributes
-    // `* 0x10000`, not `<< 16`: S_IFLNK|0777 shifted left 16 overflows a signed 32-bit int and writeUInt32LE
-    // would throw on the negative result.
+    // `* 0x10000`, not `<< 16`: the shift overflows a signed 32-bit int and writeUInt32LE throws on the result.
     entry.writeUInt32LE((mode * 0x10000) >>> 0, 38);
     entry.writeUInt32LE(offset, 42);
     central.push(entry, name);
@@ -142,7 +129,6 @@ export function zipArchive(members: ZipMember[]): Buffer {
   return Buffer.concat([...locals, directory, end]);
 }
 
-/** CRC-32, written out rather than taken from `node:zlib`'s `crc32`, which only exists from Node 20.15. */
 const CRC_TABLE = (() => {
   const table = new Int32Array(256);
   for (let index = 0; index < 256; index += 1) {
@@ -167,7 +153,6 @@ const zip = (name: string, members: ZipMember[]) => async (root: string) => {
   return archive;
 };
 
-/** Builds a real archive with the local `tar`, for attacks the create path can express. */
 async function tarOf(root: string, entry: string, name = "source.tar"): Promise<string> {
   const archive = join(root, name);
   const result = await runCommand(["tar", "-cf", archive, "-C", root, entry], { mirrorOutput: false });
@@ -247,7 +232,6 @@ export const MALICIOUS_ARCHIVES: readonly MaliciousArchive[] = [
     attack:
       "A character-device member. Not a traversal, but not source either — extracting device nodes " +
       "from submitted input is a capability the sandbox has no reason to exercise.",
-    // `firstUnsafeVerboseEntry` is a **whitelist**.
     reason: "source_archive_unsafe_link",
     build: raw("device.tar", [
       { name: "pkg/Cargo.toml", body: '[package]\nname = "pkg"\n' },
@@ -275,13 +259,10 @@ export const MALICIOUS_ARCHIVES: readonly MaliciousArchive[] = [
     build: async (root: string) => {
       const source = join(root, "pkg");
       await mkdir(source, { recursive: true });
-      // Highly compressible, so the archive stays small while the declared expansion is large.
       await writeFile(join(source, "big.bin"), "0".repeat(4 * 1024 * 1024));
       return tarOf(root, "pkg", "size-bomb.tar");
     },
   },
-  // ── zip ────────────────────────────────────────────────────────────────────────────────────────
-  // Every attack above, re-expressed in the second container format the extractor now reads.
   {
     id: "zip-traversal-parent",
     attack: "A zip member named `pkg/../../escape.txt`, to write outside the extraction root.",
@@ -346,7 +327,6 @@ export const MALICIOUS_ARCHIVES: readonly MaliciousArchive[] = [
   },
 ];
 
-/** A scratch directory per fixture, so one case cannot see another's leftovers. */
 export async function scratch(prefix: string): Promise<string> {
   return mkdtemp(join(tmpdir(), `scvs-${prefix}-`));
 }

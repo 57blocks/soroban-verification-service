@@ -17,21 +17,14 @@ import { OrchestratorSvcEnvDto } from "./config/env.dto.js";
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-      // Without this, ConfigModule reads only `<cwd>/.env` — the reason the same POSTGRES_* block had to exist
-      // in every service directory.
       envFilePath: envFilePaths(),
-      // Runs BEFORE the `load` factory below, so a malformed variable is reported ahead of any single-variable
-      // throw inside configuration.ts.
       validate: createEnvValidator(OrchestratorSvcEnvDto, "orchestrator-svc"),
     }),
-    // Provides the PrismaClient + every repository.
     DbModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) =>
         configService.get("postgres", { infer: true }),
     }),
-    // Global, so the health controller and the dispatch scheduler share one DrainState — the probe must report
-    // the same drain the scheduler is honouring.
     DrainModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) =>

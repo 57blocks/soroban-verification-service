@@ -9,7 +9,6 @@ import {
   type RebuildErrorCodeClass,
 } from "./rebuild-error-code.js";
 
-// `--update` writes the snapshot instead of asserting it.
 const update = process.argv.includes("--update");
 const SNAPSHOT = new URL("../contract/rebuild-error-codes.json", import.meta.url).pathname;
 
@@ -36,9 +35,6 @@ if (update) {
   console.log(`wrote ${SNAPSHOT}`);
 }
 
-// ── The guarantee: neither end of the Batch seam can change this vocabulary invisibly ──────────────
-// The sandbox writes these codes into `BuildArtifact.reason`; `rebuildFailureReason` reads the class and
-// decides retryability. A code added, renamed or reclassified shows up here as a reviewable diff.
 test("the vocabulary and its classes match the frozen snapshot", () => {
   const frozen = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as Snapshot;
   const current = derive();
@@ -70,8 +66,6 @@ test("every code carries a known class, and the table is the only vocabulary", (
   assert.equal(new Set(rebuildErrorCodes).size, rebuildErrorCodes.length, "no duplicate codes");
 });
 
-// An older sandbox, or a `docker_error` passed through in the code's place, is not a parse failure: the
-// caller falls back rather than throwing, and `rebuildFailureReason` still has a rung for it.
 test("an unknown code classifies as undefined rather than throwing", () => {
   assert.equal(classifyRebuildErrorCode("a_code_no_build_of_this_knows"), undefined);
   assert.equal(classifyRebuildErrorCode(undefined), undefined);

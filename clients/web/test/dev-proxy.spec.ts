@@ -8,7 +8,6 @@ import {
 
 const TARGET = "https://dev.sv.example.com";
 
-/** The configuration that works: a bare origin, both API bases empty. */
 const valid = {
   VITE_DEV_API_PROXY: TARGET,
   VITE_VERIFY_API_URL: "",
@@ -31,18 +30,14 @@ describe("the dev proxy is off unless asked for", () => {
 
     const config = devProxyServerConfig(resolveDevProxy(valid));
     expect(config?.["/api"]).toMatchObject({ target: TARGET, changeOrigin: true, secure: true });
-    // The job page follows SSE through this, so the upgrade has to be proxied too.
     expect(config?.["/api"].ws).toBe(true);
   });
 
-  // Both services are routed by path on one origin in a deployed environment, so one rule serves
-  // `/api/verification/v1/...` and `/api/query/v1/...` alike.
   test("one rule covers both APIs", () => {
     expect(Object.keys(devProxyServerConfig(resolveDevProxy(valid)) ?? {})).toEqual(["/api"]);
   });
 });
 
-/** Failing at start-up, with the fix in the message, is the whole point. */
 describe("a proxy that cannot work refuses to start", () => {
   test("a target with a path, which would double the /api prefix", () => {
     expect(() =>
@@ -71,10 +66,6 @@ describe("a proxy that cannot work refuses to start", () => {
     ).toThrow(/must be http or https/);
   });
 
-  /**
-   * Unset and empty are different states for this variable: the console reports an absent base as "built
-   * unconfigured" and calls nothing, which reads as the proxy being broken.
-   */
   test("an unset verify base, which makes the console report itself unconfigured", () => {
     const withoutBase: Record<string, string | undefined> = { ...valid };
     delete withoutBase.VITE_VERIFY_API_URL;
@@ -114,7 +105,6 @@ describe("a proxy that cannot work refuses to start", () => {
   });
 });
 
-/** It looks exactly like the configuration, and its first symptom is the console reporting itself unconfigured. */
 describe("env files in the package directory are called out", () => {
   const PKG = "/repo/clients/web/";
   const ENV_DIR = "/repo/";
@@ -139,8 +129,6 @@ describe("env files in the package directory are called out", () => {
     expect(ignoredEnvFileWarning(PKG, ENV_DIR, () => false)).toBeUndefined();
   });
 
-  // Defensive: if envDir is ever pointed back at this package, these files are read and the warning would be
-  // actively wrong.
   test("silent when envDir is the package directory itself", () => {
     expect(ignoredEnvFileWarning(PKG, PKG, () => true)).toBeUndefined();
     expect(ignoredEnvFileWarning("/repo/clients/web", PKG, () => true)).toBeUndefined();

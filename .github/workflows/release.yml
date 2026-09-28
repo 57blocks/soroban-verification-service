@@ -1,10 +1,3 @@
-# Publishes both services' OpenAPI specifications as release assets, and `soroban-verification-client`
-# to the public npm registry. What each ref releases, and why the channel is a hard gate rather than
-# a convention: invariants.md rule 30.
-#
-# This workflow needs no cloud credential. It keeps its own triggers for that reason, while the
-# deployment workflows beside it are reusable and triggered from elsewhere.
-
 name: release
 
 run-name: >-
@@ -16,9 +9,9 @@ run-name: >-
 on:
   push:
     branches:
-      - main # the dev channel: a merge that touches the SDK publishes a prerelease and proves it installs
+      - main
     tags:
-      - "v*" # the staging and stable channels, told apart by the tag's own semver
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -41,15 +34,13 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # creating a release and uploading its assets
-  id-token: write # npm trusted publishing, and the provenance it stamps
+  contents: write
+  id-token: write
 
 env:
   AWS_REGION: ap-southeast-2
 
 jobs:
-  # Its own job so the decision is visible in the Actions list before anything is built, and so a ref that
-  # releases nothing costs one checkout rather than a full build.
   channel:
     name: Resolve the release channel
     runs-on: ubuntu-latest
@@ -60,24 +51,15 @@ jobs:
       dist_tag: ${{ steps.resolve.outputs.dist_tag }}
       publish_sdk: ${{ steps.resolve.outputs.publish_sdk }}
       publish_assets: ${{ steps.resolve.outputs.publish_assets }}
-      # The commit everything downstream builds, stamps and tags — the checked-out one unless a dispatch named
-      # another.
       commit: ${{ steps.resolve.outputs.sha }}
     steps:
-      # Full history and tags: the rule reads the highest stable tag to derive a dev version, and proves a
-      # release tag is an ancestor of main.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      # A tag push checks out the tag, and `main` is not necessarily a remote-tracking ref afterwards. Without
-      # this the ancestor check cannot run, and it reports that rather than passing.
       - name: Fetch main to prove the tag against
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
-      # A merge that changes nothing the tarball is built from publishes nothing, so `dev` does not gain a
-      # version per merge regardless of content. `event.before` is the push's own starting point, which is
-      # what makes a push carrying several commits read correctly; a dispatched run skips the gate.
       - name: Resolve the channel, the version and the dist-tag
         id: resolve
         env:
@@ -96,12 +78,8 @@ jobs:
       CHANNEL: ${{ needs.channel.outputs.channel }}
       SDK_VERSION: ${{ needs.channel.outputs.version }}
       DIST_TAG: ${{ needs.channel.outputs.dist_tag }}
-      # Every reader below uses this rather than GITHUB_SHA: a dispatch may release a commit that is not the
-      # one this workflow was started from, and the stamp, the tag and the provenance check must agree on which.
+      # Use this, not GITHUB_SHA: a dispatch may release a commit other than the one it started from.
       SDK_COMMIT: ${{ needs.channel.outputs.commit }}
-      # npm stamps provenance on a trusted publish, and provenance is verifiable only against a source
-      # anyone can read. So the registry half of a release waits for the flip; everything that proves the
-      # tarball is sound still runs on every merge.
       PUBLISH_SDK: ${{ needs.channel.outputs.publish_sdk == 'true' && github.event.repository.visibility == 'public' }}
 
     steps:
@@ -119,13 +97,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # After the install, before the build: every reader downstream — the tarball, the packaging gate, the
-      # publish, the registry gate — must see one number, and no lockfile entry pins it (`workspace:*`).
+      # After the install, before the build: every downstream reader must see the stamped version.
       - name: Stamp the resolved version into the SDK manifest
         if: env.PUBLISH_SDK == 'true'
         run: node eng-tools/stamp-sdk-version.mjs
 
-      # packages/db's build reads these at prisma.config.ts's top level, so the build cannot start without them.
       - name: Build (topological)
         run: pnpm run build
         env:
@@ -135,13 +111,9 @@ jobs:
           POSTGRES_USER: scvs
           POSTGRES_PASSWORD: placeholder
 
-      # The SDK's own suite includes the browser-bundle check, which bundles the published output for
-      # --platform=browser and executes it.
       - name: Test the SDK
         run: pnpm --filter soroban-verification-client run test
 
-      # publint + are-the-types-wrong + a real `pnpm pack` installed outside the workspace, whose declarations
-      # are typechecked as a consumer sees them. This is the last reader before a version becomes immutable.
       - name: Check SDK packaging
         run: pnpm --filter soroban-verification-client run check:packaging
 
@@ -150,8 +122,6 @@ jobs:
         run: |
           echo "::notice::soroban-verification-client@${SDK_VERSION} was built and checked but not published: this repository is still private, and a trusted publish stamps provenance that only a readable source can back. Publishing starts at the flip."
 
-      # Skipped on the dev channel only: ci.yml already generates both specs on every push to main, and a
-      # prerelease has no GitHub release to carry them.
       - name: Generate the OpenAPI specifications
         if: needs.channel.outputs.channel != 'dev'
         run: pnpm run generate:openapi
@@ -162,8 +132,6 @@ jobs:
           mkdir -p release-artifacts
           cp services/verification-svc/openapi.json release-artifacts/verification-svc.openapi.json
           cp services/query-svc/openapi.json release-artifacts/query-svc.openapi.json
-          # Fail loudly rather than uploading an empty file: a spec is generated by booting the real Nest app,
-          # so an empty one means the boot produced nothing and the asset would be a lie.
           for spec in release-artifacts/*.json; do
             test -s "$spec" || { echo "::error::$spec is empty"; exit 1; }
             node -e "JSON.parse(require('node:fs').readFileSync('$spec','utf8'))" \
@@ -179,11 +147,7 @@ jobs:
           path: release-artifacts/*.json
           if-no-files-found: error
 
-      # `gh release upload` requires a release to already exist, and **pushing a tag does not create one** — so
-      # uploading alone would fail on the only trigger that is supposed to publish. A dispatched run has no
-      # tag at all, so gh creates both (the tag at the running commit, the release) in one call. A non-stable
-      # channel's release is marked a prerelease, which is the channel made visible to a human reading the
-      # releases page.
+      # `gh release upload` needs an existing release, and pushing a tag does not create one.
       - name: Attach the specifications to the release
         if: needs.channel.outputs.publish_assets == 'true'
         env:
@@ -193,23 +157,13 @@ jobs:
           TAG="v${SDK_VERSION}"
           FLAGS=()
           if [ "${CHANNEL}" != "stable" ]; then FLAGS+=(--prerelease); fi
-          # A tag-triggered run has its tag already; a dispatched one does not, and gh must create it — at the
-          # commit being released, which is not necessarily the one the dispatch ran from.
           if [ "${GITHUB_REF_TYPE}" = "branch" ]; then FLAGS+=(--target "${SDK_COMMIT}"); fi
           if ! gh release view "${TAG}" >/dev/null 2>&1; then
             gh release create "${TAG}" --title "${TAG}" --generate-notes "${FLAGS[@]}"
           fi
           gh release upload "${TAG}" release-artifacts/*.json --clobber
 
-      # ── soroban-verification-client -> the public npm registry ──────────────────────────────────
-      # Last in the job on purpose: a published version is the only step here that cannot be undone
-      # or re-run, so everything that can still fail runs before it.
-      #
-      # No token and no cloud role. npm's trusted publishing takes the workflow's OIDC identity, so
-      # the credential is the run itself and there is nothing to leak or rotate. It also stamps
-      # provenance, which for a project whose subject is reproducible builds is the point rather
-      # than a bonus. Configured once on the registry side, against this repository and this
-      # workflow; until that exists, the publish step fails and says so.
+      # Publishing stays last: a published version cannot be undone, so everything that can fail runs first.
       - name: Use an npm that can publish with OIDC
         if: env.PUBLISH_SDK == 'true'
         run: |
@@ -230,9 +184,6 @@ jobs:
 
           published() { npm view "soroban-verification-client@${SDK_VERSION}" version >/dev/null 2>&1; }
 
-          # A published version is immutable, so "already there" is only safe when it is the SAME
-          # source. Re-running a release that got as far as publishing must not fail the run, and
-          # must not silently accept a version built from something else.
           if published; then
             FROM=$(npm view "soroban-verification-client@${SDK_VERSION}" scvs.gitSha 2>/dev/null || true)
             if [ "${FROM}" = "${SDK_COMMIT}" ]; then
@@ -245,8 +196,7 @@ jobs:
             npm publish --dry-run --tag "${DIST_TAG}"
             npm publish --tag "${DIST_TAG}" --provenance
 
-            # An exit code is not evidence that anything was published: `pnpm publish` exits 0 on a
-            # package it skipped, and a misdirected registry succeeds against that one.
+            # `pnpm publish` can exit 0 without publishing, so read the version back.
             if ! published; then
               echo "::error::npm publish reported success but soroban-verification-client@${SDK_VERSION} is not on the registry"
               exit 1
@@ -254,15 +204,10 @@ jobs:
             echo "::notice::published soroban-verification-client@${SDK_VERSION} under dist-tag \`${DIST_TAG}\`"
           fi
 
-      # `--tag` is the only thing separating a dev build from what `npm install soroban-verification-client` resolves, and an
-      # exit code is not evidence it landed. Read back with a throwaway cache and a bounded retry:
-      # `npm publish --dry-run` leaves the PRE-publish packument in npm's cache, which made a single
-      # immediate read a flaky gate — it passed on one run and reported an empty dist-tag on the next.
       - name: Verify the channel landed on its dist-tag
         if: env.PUBLISH_SDK == 'true'
         run: node eng-tools/check-published-dist-tags.mjs
 
-      # A registry read proves a version **exists**; only an installing consumer proves it is usable.
       - name: Verify the published SDK installs and runs
         if: env.PUBLISH_SDK == 'true'
         env:

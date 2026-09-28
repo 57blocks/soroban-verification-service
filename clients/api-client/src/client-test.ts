@@ -4,14 +4,6 @@ import { AXIOS_INSTANCE } from "./http.js";
 import { getBuildLog, getGetBuildLogQueryKey, uploadSource } from "./generated/verify-api.js";
 import { jobEventsPath } from "./routes.js";
 
-/**
- * Exercised through axios's own adapter seam: the real generated functions, the mutator, header merging and
- * `baseURL` all run, and only the transport is replaced — no network, and nothing mocked above it.
- *
- * The build-log cases pin a configuration decision, not orval: with `headers: true` off, `getBuildLog` has no
- * way to send its required token, and the console's only symptom is a 401. That is how it went unnoticed.
- */
-
 let captured: InternalAxiosRequestConfig | undefined;
 AXIOS_INSTANCE.defaults.adapter = async (config) => {
   captured = config;
@@ -39,7 +31,6 @@ await test("the generated getBuildLog sends the token the route requires", async
   assert.equal(header(captured, "x-build-log-token"), "token-a");
 });
 
-// The environment-agnostic contract: the caller owns the token; the client never reads storage for it.
 await test("the token sent is the one passed, per call", async () => {
   await getBuildLog(JOB, { "x-build-log-token": "token-a" });
   assert.equal(header(captured, "x-build-log-token"), "token-a");
@@ -53,7 +44,6 @@ await test("it honours the base URL the app configured, rather than choosing one
   assert.equal(captured?.baseURL, "https://dev.sv.example");
 });
 
-// The console reads `.data`; a mock returning the bare body would agree with a caller that forgot to.
 await test("it resolves to the axios response, whose data is the log text", async () => {
   const response = await getBuildLog(JOB, { "x-build-log-token": "t" });
   assert.equal(response.status, 200);
@@ -65,7 +55,6 @@ await test("the uploaded file's name fills X-Filename when the caller passes non
   assert.equal(header(captured, "X-Filename"), "source.tar.gz");
 });
 
-// Only possible since `headers: true`: a caller can now pass the header itself, in the spec's lowercase.
 await test("a filename the caller passes is kept, and not doubled by the mutator", async () => {
   await uploadSource(new File(["x"], "from-the-file.tar.gz"), { "x-filename": "chosen.tar.gz" });
   assert.equal(header(captured, "x-filename"), "chosen.tar.gz");
@@ -73,7 +62,6 @@ await test("a filename the caller passes is kept, and not doubled by the mutator
   assert.equal(names.length, 1);
 });
 
-// SSE is not in the document, so this route has no generated counterpart; it is pinned to its sibling.
 await test("the event stream lives beside the log, under the same job", () => {
   assert.equal(jobEventsPath(JOB), `/api/verification/v1/verifications/${JOB}/events`);
   assert.equal(jobEventsPath(JOB).replace(/\/events$/, "/log"), getGetBuildLogQueryKey(JOB)[0]);

@@ -1,6 +1,3 @@
-// The landing page's copy, one module per section. A section owns its `SectionHead` text and its items
-// together, so changing what a section claims is a change to exactly one file.
-
 export type { Capability, ContentLink, SampleSpan, SectionCopy } from "./types";
 
 export {

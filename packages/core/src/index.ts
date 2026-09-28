@@ -1,6 +1,3 @@
-// A missing line is invisible to this package's own `tsc`, which is why `pnpm run check:core-exports`
-// fails on a module reachable from nowhere. Node-only modules belong here: only Node consumers import the
-// barrel, and the SDK imports subpaths, walked by clients/sdk/test/browser-graph-test.ts.
 export * from "./enums.js";
 export * from "./target.js";
 export * from "./source.js";

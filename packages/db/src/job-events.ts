@@ -6,10 +6,7 @@ const CHANNEL = "scvs_job_updates";
 
 export type JobUpdateListener = (jobId: string) => void;
 
-/**
- * True Postgres LISTEN/NOTIFY push, not a poll: `JobsRepository.updateJob` issues
- * `pg_notify('scvs_job_updates', jobId)` after every write.
- */
+/** LISTEN side of the `pg_notify` that `JobsRepository` issues after every write. */
 @Injectable()
 export class JobEventsService implements OnModuleDestroy {
   private listenClient: PgClient | undefined;
@@ -20,10 +17,7 @@ export class JobEventsService implements OnModuleDestroy {
     @Inject(DB_CONNECTION_STRING) private readonly connectionString: string,
   ) {}
 
-  /**
-   * Subscribes to job-update notifications. Returns an unsubscribe function — callers (e.g. one per open SSE
-   * connection) MUST call it when done to avoid leaking listeners for closed streams.
-   */
+  /** Callers must call the returned unsubscribe when done, or the listener leaks. */
   async subscribeToJobUpdates(listener: JobUpdateListener): Promise<() => void> {
     await this.ensureListening();
     this.listeners.add(listener);
@@ -32,7 +26,6 @@ export class JobEventsService implements OnModuleDestroy {
     };
   }
 
-  /** Closes the dedicated LISTEN connection when the app shuts down. */
   async onModuleDestroy(): Promise<void> {
     this.listeners.clear();
     const client = this.listenClient;
@@ -65,8 +58,6 @@ export class JobEventsService implements OnModuleDestroy {
         }
       });
 
-      // The dedicated LISTEN connection dying silently would leave every open SSE stream stuck with no further
-      // updates until its own safety-net poll catches up.
       client.on("error", (error) => {
         console.error(
           "[db] job-events LISTEN connection error, will reconnect on next subscribe",

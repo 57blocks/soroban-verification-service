@@ -17,8 +17,6 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-/** The two primitives behind build-log-access design.md BL-1 and BL-4. */
-
 const ESC = "\u001b";
 
 test("a minted token is 256 bits of base64url, and never repeats", () => {
@@ -36,7 +34,6 @@ test("the stored value is a digest, and the token is not derivable from it", () 
 
   assert.match(stored, /^[0-9a-f]{64}$/);
   assert.ok(!stored.includes(token));
-  // The digest is what the row holds; nothing about it is the token.
   assert.notEqual(stored, token);
 });
 
@@ -46,13 +43,11 @@ test("the right token matches and every wrong one does not", () => {
 
   assert.equal(buildLogTokenMatches(token, stored), true);
   assert.equal(buildLogTokenMatches(mintBuildLogToken(), stored), false);
-  // A job that never minted one cannot be unlocked by anything, including the empty string.
   assert.equal(buildLogTokenMatches(token, undefined), false);
   assert.equal(buildLogTokenMatches("", undefined), false);
 });
 
 test("a stored value that is not a digest matches nothing, rather than throwing", () => {
-  // timingSafeEqual throws on a length mismatch, which would turn a corrupt row into a 500.
   for (const corrupt of ["", "not-hex", "ab", "f".repeat(63), "f".repeat(65)]) {
     assert.equal(buildLogTokenMatches(mintBuildLogToken(), corrupt), false);
   }
@@ -64,7 +59,6 @@ test("a token of the wrong shape is rejected before it is hashed", () => {
   }
 });
 
-/** BL-4 — the log is attacker-controlled content, and this is the hostile payload the AC asks for. */
 test("terminal control sequences are stripped from captured output", () => {
   const hostile: [string, string, string][] = [
     ["OSC 8 hyperlink", `${ESC}]8;;https://evil.test${ESC}\\click${ESC}]8;;${ESC}\\`, "click"],

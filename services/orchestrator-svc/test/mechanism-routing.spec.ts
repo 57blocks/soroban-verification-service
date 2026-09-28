@@ -1,16 +1,9 @@
 import { selectBuildMechanism } from "../src/modules/verification-pipeline/mechanism-routing.util.js";
 
-/**
- * The paragraph this replaces explained why the CLI path had to be bounded: it was the relaxed one (no
- * `--network none`, no capability drops, no resource limits) and it silently discarded the recipe, reading
- * `bldopt`/`bldarg` from the deployed contract instead.
- */
-
 const TRUSTED_IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
 const UNTRUSTED_IMAGE = `ghcr.io/someone/their-builder@sha256:${"b".repeat(64)}`;
 const COMPOSED_IDENTITY = `sha256:${"c".repeat(64)}`;
 
-/** The qualifying case, which every other case below is a single deviation from. */
 const eligible = {
   chainRecipe: {
     bldimg: TRUSTED_IMAGE,
@@ -30,7 +23,6 @@ describe("selectBuildMechanism", () => {
   });
 
   it("routes a contract that records no image to the sandbox", () => {
-    // cli-legacy, or no build metadata at all.
     expect(
       selectBuildMechanism({
         ...eligible,
@@ -51,8 +43,6 @@ describe("selectBuildMechanism", () => {
   });
 
   it("routes a composed environment to the sandbox even when the chain named a trusted image", () => {
-    // The composed image is ours, not the one the contract recorded — the CLI would be verifying against
-    // something the chain never named.
     expect(
       selectBuildMechanism({ ...eligible, environmentIdentity: COMPOSED_IDENTITY }),
     ).toEqual({ mode: "build", reason: "environment_is_composed" });
@@ -100,7 +90,6 @@ describe("selectBuildMechanism", () => {
   });
 
   it("treats an absent list and an empty one as the same recipe", () => {
-    // One is how the chain omits a key, the other how the orchestrator stores it.
     expect(
       selectBuildMechanism({
         chainRecipe: { bldimg: TRUSTED_IMAGE },
@@ -110,7 +99,6 @@ describe("selectBuildMechanism", () => {
     ).toEqual({ mode: "build", reason: "on_chain_recipe_in_trusted_image" });
   });
 
-  /** The property, rather than more examples. */
   it("★ maps every input to the sandbox, and names each deviation distinctly", () => {
     const cases = [
       [{ chainRecipe: { ...eligible.chainRecipe, bldimg: undefined } }, "no_chain_recorded_image"],
@@ -125,7 +113,6 @@ describe("selectBuildMechanism", () => {
   });
 });
 
-/** It required `buildMode: "verify"`, and `selectBuildMechanism` above is now total on `"build"`. */
 describe("PA1 routes every input to the sandbox (the retirement's precondition)", () => {
   const CHAIN_IMAGE = `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`;
 
@@ -156,7 +143,6 @@ describe("PA1 routes every input to the sandbox (the retirement's precondition)"
   });
 
   it("★ still distinguishes why, because `reason` outlives the routing decision as recipe_source", () => {
-    // The branches survive for this and only this — five inputs, one mode, five reasons.
     const reasons = new Set(
       [
         { chainRecipe: {}, environmentIdentity: `sha256:${"d".repeat(64)}` },

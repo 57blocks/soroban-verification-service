@@ -10,7 +10,6 @@ import { BuilderEnvDto } from "./config/env.dto.js";
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-      // Validation still applies to whatever the Batch job definition injected.
       validate: createEnvValidator(BuilderEnvDto, "builder"),
     }),
     BuilderModule,

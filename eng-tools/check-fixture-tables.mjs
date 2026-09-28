@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-/**
- * The compose-built fixtures' `(cliver, rsver)` pairs are written down in three places, edited independently,
- * none able to see the others.
- */
+/** Static: the compose-built fixtures' `(cliver, rsver)` pairs agree across the build script, deploy script and registry. */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -13,7 +10,6 @@ const REGISTRY = "test/fixtures/e2e/registry.yaml";
 
 const read = (path) => readFileSync(join(ROOT, path), "utf8");
 
-/** `compose_targets=( "ID|cliver|rsver|out.wasm" … )` — parsed from the array literal, comments skipped. */
 function buildTargets() {
   const text = read(BUILD_SCRIPT);
   const open = text.indexOf("compose_targets=(");
@@ -38,7 +34,6 @@ function buildTargets() {
   return rows;
 }
 
-/** The `compose-only` deploy list's `"ID|out.wasm"` rows. */
 function deployTargets() {
   const text = read(DEPLOY_SCRIPT);
   const at = text.indexOf('if [[ "$deploy_set" == "compose-only" ]]');
@@ -52,7 +47,6 @@ function deployTargets() {
   return rows;
 }
 
-/** Every `contracts:` entry's `fixture_roles`, `cliver` and `rsver`. */
 function registryContracts() {
   const lines = read(REGISTRY).split("\n");
   const start = lines.findIndex((line) => line === "contracts:");
@@ -61,7 +55,7 @@ function registryContracts() {
   const entries = new Map();
   let current;
   for (const line of lines.slice(start + 1)) {
-    if (/^[a-z_]+:/.test(line)) break; // next top-level key
+    if (/^[a-z_]+:/.test(line)) break;
     const key = /^ {2}([a-z0-9_]+):\s*$/.exec(line);
     if (key) {
       current = { name: key[1], roles: [], cliver: undefined, rsver: undefined, bldopt: undefined };
@@ -75,7 +69,6 @@ function registryContracts() {
     if (cliver) current.cliver = cliver[1];
     const rsver = /^ {4}rsver:\s*(.+?)\s*$/.exec(line);
     if (rsver) current.rsver = rsver[1];
-    // Flow style only, matching `purpose_testnet_f_multipkg`'s existing form.
     const bldopt = /^ {4}bldopt:\s*\[(.*)\]\s*$/.exec(line);
     if (bldopt) current.bldopt = bldopt[1].split(",").map((o) => o.trim()).filter(Boolean);
   }
@@ -89,7 +82,6 @@ const registry = registryContracts();
 
 console.log(`compose targets in ${BUILD_SCRIPT}: ${build.length}`);
 
-// 1. build ↔ deploy: same ids, same output filenames, same order-independent set.
 for (const row of build) {
   const match = deploy.find((d) => d.id === row.id);
   if (!match) {
@@ -106,7 +98,6 @@ for (const row of deploy) {
   }
 }
 
-// 2. build ↔ registry: every target has a reviewed entry recording the same pair.
 for (const row of build) {
   const entry = [...registry.values()].find((c) => c.roles.includes(row.id));
   if (!entry) {
@@ -120,7 +111,6 @@ for (const row of build) {
     problems.push(`${row.id}: ${BUILD_SCRIPT} builds rsver ${row.rsver}, ${REGISTRY} (${entry.name}) records ${entry.rsver}`);
   }
 
-  // The build options are a property of the *cliver* — `--locked` exists in 25.2.0 and not in 25.1.0.
   if (!entry.bldopt) {
     problems.push(
       `${row.id}: ${REGISTRY} (${entry.name}) records no flow-style \`bldopt: [...]\` — the build options ` +
@@ -134,7 +124,6 @@ for (const row of build) {
   }
 }
 
-// 3. Output filenames must be distinct, or one target overwrites another's Wasm and the duplicate-hash
 const outputs = new Map();
 for (const row of build) {
   const clash = outputs.get(row.output);

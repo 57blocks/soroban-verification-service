@@ -7,14 +7,6 @@ import {
 } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 
-/**
- * BL-2's sharing rule, against the real database: one rebuild's log serves every job attached to it
- * (ADR-008), so the object may only be swept when the LAST of those jobs has expired and none is held.
- *
- * `BuildLogExpiryScheduler` itself is not called here — it deletes table-wide and would take a sibling
- * suite's objects with it, which is what `job-retention.spec.ts` learned the hard way. Its own logic is in
- * `build-log-expiry-scheduler.spec.ts`, over a stub.
- */
 let client: PrismaClient;
 let jobs: JobsRepository;
 const createdRows = new CreatedRows();
@@ -22,7 +14,6 @@ const createdRows = new CreatedRows();
 const PAST = new Date(Date.now() - 60_000);
 const FUTURE = new Date(Date.now() + 60_000);
 
-/** Unique per run, so `listExpiredBuildLogs`'s table-wide read can never see a sibling suite's key. */
 const uniqueKey = () => `build-logs/${randomUUID()}/build.log`;
 
 beforeAll(() => {
@@ -75,7 +66,6 @@ async function jobWithLog(opts: {
   return jobId;
 }
 
-/** Only ever this file's own keys — the repository method reads the whole table. */
 const ours = (keys: string[], mine: string[]) => keys.filter((key) => mine.includes(key));
 
 describe("listExpiredBuildLogs", () => {
@@ -92,7 +82,6 @@ describe("listExpiredBuildLogs", () => {
   it("★ keeps a shared object while ANY job attached to it is still unexpired", async () => {
     const key = uniqueKey();
     await jobWithLog({ key, expiresAt: PAST });
-    // A second job on the same rebuild, submitted later, whose own week has not run out.
     await jobWithLog({ key, expiresAt: FUTURE });
 
     const selected = await jobs.listExpiredBuildLogs(new Date(), 500);
@@ -111,7 +100,6 @@ describe("listExpiredBuildLogs", () => {
   });
 
   it("leaves a job with no recorded expiry alone — the 30-day job-retention sweep owns those", async () => {
-    // Every row written before this migration: a log key, and no expiry to read a bound from.
     const key = uniqueKey();
     await jobWithLog({ key, expiresAt: null });
 

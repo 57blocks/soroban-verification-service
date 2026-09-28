@@ -6,8 +6,6 @@ import {
   TaskPropertiesTooLargeError,
 } from "../src/modules/verification-pipeline/taskproperties-size.util.js";
 
-/** The merge itself, independent of any realistic document. */
-
 const registered: RegisteredTaskProperties = {
   revision: 1,
   taskProperties: [
@@ -38,8 +36,6 @@ const registered: RegisteredTaskProperties = {
 
 describe("measureMergedTaskProperties", () => {
   it("replaces same-name static environment entries with the override's, rather than appending", () => {
-    // Same-length values, so the difference isolates the merge rule: overriding an existing name DISPLACES the
-    // static entry, while a fresh name adds alongside it.
     const displacing = measureMergedTaskProperties(
       [{ name: "runner", environment: [{ name: "XDG_DATA_HOME", value: "xxxxxxxxxxxx" }] }],
       registered,

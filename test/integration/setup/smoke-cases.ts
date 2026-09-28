@@ -1,9 +1,7 @@
 export interface JestSmokeCase {
   readonly id: string;
   readonly file: string;
-  /** This case's fixed provisioner owns a run-scoped fixture and invokes Jest itself. */
   readonly provisioned?: boolean;
-  /** Fixture that makes a provisioned case runnable without invoking its local provisioner. */
   readonly fixtureId?: string;
 }
 
@@ -12,7 +10,6 @@ export interface BrowserSmokeCase {
   readonly file: string;
 }
 
-/** The canonical E2E case IDs that constitute the public-system smoke suite. */
 export const smokeJestCases: readonly JestSmokeCase[] = [
   { id: "E2E-VERIFY-HEALTH", file: "cases/verify/verify-health.spec.ts" },
   { id: "E2E-SUB-01/testnet", file: "cases/sub/sub-01-recipe-completion.spec.ts" },

@@ -1,10 +1,6 @@
 import { SoveClientFactory } from "../src/modules/results/client-factory.service.js";
 import type { TrustedVerifier } from "soroban-verification-client";
 
-// SoveClientFactory constructed directly, not through the DI container — same approach as
-// address-resolver.spec.ts, since the one behavior under test (which transport `allowInsecureResultRoots`
-// selects) does not need a running app.
-
 const VERIFIER: TrustedVerifier = {
   id: "local-verifier",
   display_name: "Local",
@@ -35,9 +31,6 @@ describe("SoveClientFactory — allowInsecureResultRoots and the pinned transpor
       undefined as never,
       unreachableFetchFactory,
     );
-    // Constructing the client is enough to prove it: createPinnedFetch (unreachableFetchFactory's real-world
-    // counterpart) throws at construction time when handed a policy admitting http:, so a client this call
-    // returns without throwing proves the relaxed policy went to a different transport.
     await expect(factory.forVerifier(VERIFIER)).resolves.toBeDefined();
   });
 

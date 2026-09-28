@@ -7,13 +7,6 @@ type SegmentedChoiceProps<T extends string> = {
   className?: string;
 };
 
-/**
- * The two-up control the design uses for "Lookup by": a 44px inset track the same height as the select and
- * input beside it, the active half raised out of it on white.
- *
- * The active half was filled with the accent, which made a *selection* the loudest mark on the page while the
- * accent is reserved for a verdict. Nothing here is a verdict, so nothing here is accented.
- */
 export const SegmentedChoice = <T extends string>({
   selected,
   options,

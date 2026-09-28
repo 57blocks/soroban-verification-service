@@ -8,27 +8,21 @@ import type { Response } from "express";
 import { healthPayload } from "./health.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-// Never throttled: the container HEALTHCHECK and the ALB target group are the heaviest callers of these
-// routes, and a probe refused with 429 is a probe that failed — the quota would take the task out of
-// service for being healthy enough to be polled.
 @SkipThrottle()
 @Controller("health")
 export class HealthController {
-  // Explicit `@Inject()` — tsx/esbuild does not emit the decorator metadata Nest would otherwise infer
-  // these parameter types from.
+  // Explicit `@Inject()`: tsx/esbuild emits no decorator metadata.
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
     @Inject(DrainState) private readonly drain: DrainState,
     @Inject(DbHealthService) private readonly dbHealth: DbHealthService,
   ) {}
 
-  /** Unchanged: the container `HEALTHCHECK`, the ALB target group, and an existing spec read this. */
   @Get()
   getHealth(): { status: string; version: string } {
     return healthPayload("0.1.0");
   }
 
-  /** Liveness: the process is up. Checks no dependencies — see verification-svc's controller for why. */
   @Get("live")
   @ApiOperation({ summary: "Liveness — the process is up. Checks no dependencies, by design." })
   @ApiOkResponse({ description: "alive" })
@@ -36,11 +30,6 @@ export class HealthController {
     return { status: "alive" };
   }
 
-  /**
-   * Every route but this tree reads Postgres, so answering 200 with the database gone keeps a useless instance
-   * in the target group. The probe's bound must stay below the balancer's health-check timeout, or the
-   * balancer gives up before the answer arrives.
-   */
   @Get("ready")
   @ApiOperation({ summary: "Readiness — false while draining, or while Postgres is unreachable." })
   @ApiOkResponse({ description: "ready to serve reads" })

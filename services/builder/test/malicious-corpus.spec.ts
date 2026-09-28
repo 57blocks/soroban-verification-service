@@ -5,7 +5,6 @@ import {
 } from "../src/modules/builder/archive-extraction.js";
 import { MALICIOUS_ARCHIVES, scratch } from "./malicious-corpus.js";
 
-/** **T5 — the adversarial corpus, driven as a corpus.** */
 const limits = { ...DEFAULT_ARCHIVE_LIMITS, maxEntries: 8, maxUncompressedBytes: 1024 * 1024 };
 
 describe("T5 — every adversarial archive fails closed, with its documented reason", () => {
@@ -18,19 +17,15 @@ describe("T5 — every adversarial archive fails closed, with its documented rea
 
       const result = await extractSourceArchive({ archivePath: archive, destRoot: dest, limits });
 
-      // Refused — and refused for the stated reason.
       expect({ id: entry.id, ok: result.ok }).toEqual({ id: entry.id, ok: false });
       if (result.ok) return;
       expect({ id: entry.id, reason: result.reason }).toEqual({ id: entry.id, reason: entry.reason });
 
-      // `ok: false` with a half-extracted tree would mean the escaping member may already have been written —
-      // the assertion above would pass and the control would be gone.
       expect(await readdir(dest)).toEqual([]);
     },
   );
 
   it("covers every attack family the README reserved this corpus for", () => {
-    // The README named path traversal, symlink escape and expansion bombs.
     const reasons = new Set(MALICIOUS_ARCHIVES.map((entry) => entry.reason));
 
     expect(reasons).toContain("source_archive_unsafe_path");
@@ -59,7 +54,6 @@ describe("T5 — every adversarial archive fails closed, with its documented rea
 
 describe("T5 — the corpus is not vacuously red", () => {
   it("★ admits a conformant zip through the same call", async () => {
-    // The zip half of the both-ways discipline below.
     const root = await scratch("corpus-zip-src");
     const dest = await scratch("corpus-zip-dest");
     const { writeFile } = await import("node:fs/promises");
@@ -82,8 +76,6 @@ describe("T5 — the corpus is not vacuously red", () => {
   });
 
   it("★ admits a conformant archive through the same call", async () => {
-    // Without this, every assertion above would pass on an extractor that refused everything — the corpus would
-    // be measuring nothing.
     const root = await scratch("corpus-ok-src");
     const dest = await scratch("corpus-ok-dest");
     const { mkdir, writeFile } = await import("node:fs/promises");

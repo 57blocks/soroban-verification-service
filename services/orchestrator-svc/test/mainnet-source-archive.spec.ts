@@ -16,8 +16,6 @@ import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.se
 import { SourceArchiveRecoveryScheduler } from "../src/modules/scheduler/source-archive-recovery.scheduler.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/** Source-side sibling of `archive-and-recovery.spec.ts`. */
-
 const WASM_HASH = "8".repeat(64);
 const REBUILT_HASH = WASM_HASH;
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
@@ -37,14 +35,11 @@ beforeAll(async () => {
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4996/public";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
   process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
-  // This suite exercises MSA-1's archive-eligible path, which now defaults off (design.md §8, MSA-5).
   process.env.SCVS_SOURCE_ARCHIVE_ENABLED = "true";
 
   moduleRef = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
-      // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
-      // needs the module that provides it.
       ScheduleModule.forRoot(),
       DbModule.forRootAsync({
         inject: [ConfigService],
@@ -62,7 +57,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    // Scheduled archives write to the rows cleanup deletes, so they finish first.
+    // Stop background archive work before deleting the rows it writes.
     if (moduleRef) await moduleRef.get(ArweaveArchiveService).onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
@@ -70,7 +65,6 @@ afterAll(async () => {
   }
 });
 
-/** Polls until `condition` holds. */
 async function waitUntil(condition: () => Promise<boolean>, what: string): Promise<void> {
   const deadline = Date.now() + 4_000;
   for (;;) {
@@ -93,20 +87,10 @@ function resultStorage() {
   });
 }
 
-/**
- * Writes `sources/{sha}{ext}` directly, bypassing the real staged-upload fetch — the fixture only needs the
- * bytes to exist at the key `attemptSourcePublish` would have written them to.
- */
 async function stageDurableSource(sourceFileName: string): Promise<void> {
   await resultStorage().writeBytes(sourceKeyFromFileName(sourceFileName), new TextEncoder().encode("fixture bytes"), "application/octet-stream");
 }
 
-/**
- * Stubs the private `attemptSourcePublish` to report success without a real S3/network fetch — the source is
- * already staged via `stageDurableSource`, so "durable" is simply true. Defaults to the suite-wide `publish`;
- * pass a differently-configured instance (e.g. one built with `SCVS_SOURCE_ARCHIVE_ENABLED` unset) to stub that
- * one instead.
- */
 function stubSourceAlreadyDurable(targetPublish: PublishService = publish): () => void {
   const internals = targetPublish as unknown as {
     attemptSourcePublish: (...args: never[]) => Promise<boolean>;
@@ -118,16 +102,11 @@ function stubSourceAlreadyDurable(targetPublish: PublishService = publish): () =
   };
 }
 
-/**
- * A fresh, per-test content-address so no test's durable `sources/` write is visible to another test's own
- * first (meant-to-fail) `attemptSourcePublish` call.
- */
 function freshSource(): { sourceSha256: string; sourceFileName: string; uploadId: string } {
   const sourceSha256 = randomUUID().replace(/-/g, "").padEnd(64, "0");
   return { sourceSha256, sourceFileName: `${sourceSha256}.tar.gz`, uploadId: randomUUID() };
 }
 
-/** Defaults to the suite-wide `jobs`/`rebuilds`; pass a differently-configured pair to use those instead. */
 async function createJob(
   opts: {
     network: "mainnet" | "testnet";
@@ -190,11 +169,6 @@ async function createJob(
   return (await targetJobs.getJobById(job.jobId))!;
 }
 
-/**
- * `retryPendingSourcePublish`'s own precondition (its doc comment): `job.result.artifact_url` is only ever set
- * by a REAL `writePublication` run. Defaults to the suite-wide `jobs`/`publish`; pass a differently-configured
- * trio to exercise a job created against another module (e.g. `SCVS_SOURCE_ARCHIVE_ENABLED` unset).
- */
 async function createPublishedJobPendingSourceArchive(
   opts: {
     network: "mainnet" | "testnet";
@@ -212,7 +186,7 @@ async function createPublishedJobPendingSourceArchive(
   expect(publishedJob.status).toBe("published");
   expect(publishedJob.result?.artifact_url).toBeDefined();
   if (opts.visibility !== "private") {
-    expect(publishedJob.sourcePublishPendingSince).toBeDefined(); // the source fetch above failed for real
+    expect(publishedJob.sourcePublishPendingSince).toBeDefined();
   }
   return publishedJob;
 }
@@ -260,8 +234,6 @@ describe("PublishService.retryPendingSourcePublish — mainnet archive eligibili
 
     const afterRetry = await jobs.getJobById(job.jobId);
     expect(afterRetry?.sourceFileName).toBe(sourceFileName);
-    // Set by the SAME recordSourcePublishOutcome call that cleared sourcePublishPendingSince — confirms the
-    // eligibility check that ran before that call actually reached it.
     expect(afterRetry?.sourceArchivePendingSince).toBeDefined();
 
     await waitUntil(() => sourceArchiveSettled(job.jobId), "the mainnet source archive to settle");
@@ -273,7 +245,6 @@ describe("PublishService.retryPendingSourcePublish — mainnet archive eligibili
     expect(uris.some((uri) => uri.location === "arweave" && uri.url.startsWith("https://gateway.irys.xyz/"))).toBe(
       true,
     );
-    // No per-entry sha256 on the Arweave copy: the entry's own source_sha256 already anchors it.
     expect(status?.source_code_verifications[0]?.source_sha256).toBe(sourceSha256);
   });
 
@@ -330,8 +301,6 @@ describe("PublishService.retryPendingSourcePublish — mainnet archive eligibili
       unstub();
     }
 
-    // With one atomic call, a failure here leaves the row exactly as the first publish attempt left it —
-    // nothing lost, nothing half-written.
     const reloaded = await jobs.getJobById(job.jobId);
     expect(reloaded?.sourcePublishPendingSince).toBeDefined();
     expect(reloaded?.sourceFileName).toBeUndefined();
@@ -340,9 +309,7 @@ describe("PublishService.retryPendingSourcePublish — mainnet archive eligibili
 });
 
 describe("PublishService.retryPendingSourcePublish — SCVS_SOURCE_ARCHIVE_ENABLED defaults off (design.md §8, MSA-5)", () => {
-  // configuration() snapshots process.env once at ConfigModule.forRoot time, so the suite-wide moduleRef
-  // (built with SCVS_SOURCE_ARCHIVE_ENABLED=true above) would never observe a later env mutation — this
-  // test builds its own module instead.
+  // `configuration()` reads process.env once at module compile, so this case builds its own module.
   it("a mainnet+public job never becomes archive-eligible when SCVS_SOURCE_ARCHIVE_ENABLED is unset", async () => {
     const previous = process.env.SCVS_SOURCE_ARCHIVE_ENABLED;
     delete process.env.SCVS_SOURCE_ARCHIVE_ENABLED;
@@ -352,8 +319,6 @@ describe("PublishService.retryPendingSourcePublish — SCVS_SOURCE_ARCHIVE_ENABL
       disabledModuleRef = await Test.createTestingModule({
         imports: [
           ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
-          // The schedulers register their intervals through `SchedulerRegistry` now, so the harness
-          // needs the module that provides it.
           ScheduleModule.forRoot(),
           DbModule.forRootAsync({
             inject: [ConfigService],
@@ -395,10 +360,6 @@ describe("PublishService.retryPendingSourcePublish — SCVS_SOURCE_ARCHIVE_ENABL
 });
 
 describe("PublishService.completeArchiveObligationsForAdoptedJob", () => {
-  /**
-   * Marks the obligation only — SourcePublishRecoveryScheduler/SourceArchiveRecoveryScheduler do the actual
-   * work, exactly as they already do for a first-attempt `writePublication` failure.
-   */
   function jobArgs(opts: {
     network: "mainnet" | "testnet";
     visibility?: "public" | "private";
@@ -429,7 +390,6 @@ describe("PublishService.completeArchiveObligationsForAdoptedJob", () => {
     };
   }
 
-  /** A published job carrying a real `result.artifact_url`, standing in for the donor. */
   async function createDonor(opts: {
     network: "mainnet" | "testnet";
     visibility?: "public" | "private";
@@ -469,10 +429,6 @@ describe("PublishService.completeArchiveObligationsForAdoptedJob", () => {
     return donor;
   }
 
-  /**
-   * The adopting job's own row, as `adoptPublishedVerdict` would leave it just before calling
-   * `completeArchiveObligationsForAdoptedJob`: `comparing`, never itself published.
-   */
   async function createAdopter(opts: {
     network: "mainnet" | "testnet";
     visibility?: "public" | "private";
@@ -495,8 +451,6 @@ describe("PublishService.completeArchiveObligationsForAdoptedJob", () => {
 
     await publish.completeArchiveObligationsForAdoptedJob(adopter, donor);
 
-    // B's own public declaration earns the obligation the private donor never could have — the scheduler picks
-    // it up from here exactly as it would for any other pending job.
     expect((await jobs.getJobById(adopter.jobId))?.sourcePublishPendingSince).toBeDefined();
   });
 
@@ -516,7 +470,7 @@ describe("PublishService.completeArchiveObligationsForAdoptedJob", () => {
   it("marks nothing, and logs, when the donor carries no published result to locate", async () => {
     const wasmHash = randomUUID().replace(/-/g, "").padEnd(64, "3");
     const { sourceSha256, uploadId: uploadA } = freshSource();
-    const undonor = await createAdopter({ network: "testnet", sourceSha256, uploadId: uploadA, wasmHash }); // never published
+    const undonor = await createAdopter({ network: "testnet", sourceSha256, uploadId: uploadA, wasmHash });
 
     const { uploadId: uploadB } = freshSource();
     const adopter = await createAdopter({ network: "testnet", visibility: "public", sourceSha256, uploadId: uploadB, wasmHash });

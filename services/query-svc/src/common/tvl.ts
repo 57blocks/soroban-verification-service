@@ -14,11 +14,6 @@ export { TRUSTED_VERIFIERS_LIST_SCHEMA, TRUSTED_VERIFIERS_LIST_SCHEMA_VERSION };
 
 const logger = new ScvsLogger("tvl");
 
-/**
- * The list comes from `@scvs/db-query`'s `trusted_verifiers` table (seeded from the document
- * `SCVS_TRUSTED_VERIFIERS_SOURCE` names via scripts/seed-tvl.ts), not a static hosted URL, and maps straight
- * into the object `newClient` takes.
- */
 export function toTrustedVerifier(
   record: TrustedVerifierRecord
 ): TrustedVerifier {
@@ -31,7 +26,6 @@ export function toTrustedVerifier(
   }
 
   if (record.bulkLoadUrl === undefined) {
-    // A row missing it is malformed the same way an unrecognised status is.
     throw new Error(
       `trusted_verifiers row "${record.verifierId}" has no bulk_load_url; static-only TVL membership ` +
         `is not supported`,
@@ -49,7 +43,6 @@ export function toTrustedVerifier(
   };
 }
 
-/** Loads the Trusted Verifiers List this instance aggregates across. */
 export async function loadTrustedVerifiersList(
   verifiers: TrustedVerifiersRepository,
   opts: { activeOnly?: boolean } = {}
@@ -58,7 +51,6 @@ export async function loadTrustedVerifiersList(
   return {
     schema: TRUSTED_VERIFIERS_LIST_SCHEMA,
     schema_version: TRUSTED_VERIFIERS_LIST_SCHEMA_VERSION,
-    // One bad row must not take down every other verifier's presence in the list a caller builds from this.
     verifiers: rows.flatMap((row) => {
       try {
         return [toTrustedVerifier(row)];

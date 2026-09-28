@@ -2,16 +2,10 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * All three are properties of what this package *can reach*, and all three fail the same way — not with a
- * broken test elsewhere, but silently, the next time someone adds a convenient import.
- */
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(HERE, "..");
 const SRC = join(PACKAGE_ROOT, "src");
 
-/** Anything that would hand this package a credential, a database, or a signing capability. */
 const FORBIDDEN_DEPENDENCIES = [
   "@scvs/db",
   "@scvs/aws",
@@ -52,8 +46,6 @@ describe("TB1 — nothing here can reach the database, object storage, or a cred
 
   it.each(FORBIDDEN_DEPENDENCIES)("does not depend on %s", (name) => {
     expect(Object.keys(manifest.dependencies ?? {})).not.toContain(name);
-    // devDependencies too: a test-only AWS client still puts the SDK in the image's node_modules if anyone ever
-    // builds this package without `--prod`, and it makes the forbidden import *available*.
     expect(Object.keys(manifest.devDependencies ?? {})).not.toContain(name);
   });
 
@@ -62,8 +54,6 @@ describe("TB1 — nothing here can reach the database, object storage, or a cred
     for (const file of sourceFiles(SRC)) {
       const contents = readFileSync(file, "utf8");
       for (const name of FORBIDDEN_DEPENDENCIES) {
-        // Match an import specifier, not a mention: every one of these names appears in prose in this package's
-        // comments, which is exactly how a naive substring check would become useless noise.
         if (importSpecifierPattern(name).test(contents)) offenders.push(`${file.replace(PACKAGE_ROOT, "")} -> ${name}`);
       }
     }
@@ -76,7 +66,6 @@ describe("importSpecifierPattern — the escape that TB1 depends on", () => {
     const name = "a+b(c)d?e.f*g";
     const pattern = importSpecifierPattern(name);
     expect(pattern.test(`import x from "${name}";`)).toBe(true);
-    // Distinguishes a literal match from the metacharacters going unescaped and matching as operators instead.
     expect(pattern.test(`import x from "aXXbXcXdXeXfXXg";`)).toBe(false);
   });
 
@@ -90,8 +79,6 @@ describe("TB2 — the only way bytes leave is a presigned PUT", () => {
   it("has exactly one module performing network writes, and it uses plain fetch", () => {
     const upload = readFileSync(join(SRC, "modules/builder/upload.ts"), "utf8");
     expect(upload).toContain('method: "PUT"');
-    // No SDK, no signing: the URL arrives pre-signed on `BatchJobParams`, which is the whole point — a sandbox
-    // that could sign its own requests could write anywhere the signer can.
     expect(upload).not.toMatch(/from\s+["']@aws-sdk/);
     expect(upload).not.toMatch(/from\s+["']@scvs\/aws/);
   });
@@ -102,7 +89,6 @@ describe("TB2 — the only way bytes leave is a presigned PUT", () => {
       "modules/builder/fetch-source.ts",
       "modules/builder/job-params.ts",
     ];
-    // The failure was benign only because the sanctioned list is asserted both ways.
     const EGRESS_CALLS = [/\bfetch\s*\(/, /\bcreateGuardedFetch\s*\(/];
     const callers = sourceFiles(SRC)
       .filter((file) => {
@@ -111,7 +97,6 @@ describe("TB2 — the only way bytes leave is a presigned PUT", () => {
       })
       .map((file) => file.slice(SRC.length + 1).split("\\").join("/"));
 
-    // Both halves of the assertion matter.
     expect(callers.sort()).toEqual(sanctioned.sort());
   });
 });

@@ -21,15 +21,6 @@ import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.service.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 
-/**
- * Sibling of `source-archive-concurrent-dedup.spec.ts` (the source path). See
- * archive-and-recovery/decisions/report-archive-dedup-needs-a-claim-row-too.md for why this file exists.
- *
- * Deliberately not `SCVS_ARWEAVE_MODE=dry-run`: its `tx_id` is derived from `contentSha256`, so a real
- * double-spend would be invisible to a URL-count assertion. `uploadToIrys` is stubbed to a genuinely
- * random `tx_id` per call instead.
- */
-
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
 
 const sourceRef = {
@@ -55,11 +46,9 @@ beforeAll(async () => {
   process.env.SCVS_PUBLISHER_STORAGE = "filesystem";
   process.env.SCVS_RESULT_ROOT = resultRoot;
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4999";
-  // Not "dry-run" — see file header. uploadToIrys is stubbed per-test, so no real upload happens.
+  // Not dry-run: its content-derived `tx_id` would make a double upload invisible.
   process.env.SCVS_ARWEAVE_MODE = "irys";
   process.env.SCVS_ARWEAVE_NETWORK = "devnet";
-  // A placeholder: getUploader() (the only reader) is never invoked, since findExistingUpload is stubbed
-  // per-test and never falls through to it. Set only to satisfy env.dto.ts's boot-time validation.
   process.env.SCVS_ARWEAVE_WALLET_PRIVATE_KEY = "0x" + "1".repeat(64);
   process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
 
@@ -84,7 +73,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    // Scheduled archives write to the rows cleanup deletes, so they finish first.
+    // Stop background archive work before deleting the rows it writes.
     if (arweaveArchive) await arweaveArchive.onModuleDestroy();
     if (prisma) await createdRows.cleanup(prisma);
   } finally {
@@ -110,7 +99,6 @@ function freshWasmHash(): string {
   return randomUUID().replace(/-/g, "").padEnd(64, "0");
 }
 
-/** Every archive reference now on the published status object for this Wasm. */
 async function archiveUrlsFor(wasmHash: string): Promise<string[]> {
   const storage = createResultStorage({
     kind: "filesystem",
@@ -121,11 +109,6 @@ async function archiveUrlsFor(wasmHash: string): Promise<string[]> {
   return (status?.source_code_verifications[0]?.results_urls ?? []).map((link) => toResultUrl(link).url);
 }
 
-/**
- * Advances a job to `comparing`, verified, with a fresh, unique wasm_hash — but does NOT publish it.
- * `result.artifact_sha256` (this content's `reportSha256`) is only assigned inside `publishJobResult`
- * itself, so every test below calls that explicitly, with its own stubs already in place first.
- */
 async function createComparingJob(): Promise<JobRecord> {
   const wasmHash = freshWasmHash();
 
@@ -173,7 +156,6 @@ async function createComparingJob(): Promise<JobRecord> {
   return (await jobs.getJobById(job.jobId))!;
 }
 
-/** Reaches into the private methods, the same convention `archive-and-recovery.spec.ts` already uses. */
 function internals(service: ArweaveArchiveService) {
   return service as unknown as {
     findExistingUpload: (kind: string, contentSha256: string) => Promise<{ tx_id: string; archive_url: string } | undefined>;
@@ -181,13 +163,6 @@ function internals(service: ArweaveArchiveService) {
   };
 }
 
-/**
- * Publishes a job and waits for its live backfill to settle, with uploadToIrys/findExistingUpload
- * stubbed to a fast, guaranteed-success fake for the duration — `SCVS_ARWEAVE_MODE=irys` means the real
- * implementation would otherwise try to resolve an Ethereum wallet and query a real balance (see file
- * header for why this suite cannot use `dry-run` instead). Restores the real implementations before
- * returning, so a test's OWN stubbing (installed after this returns) is what governs its actual scenario.
- */
 async function publishWithStubbedUpload(jobId: string): Promise<void> {
   const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
   const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
@@ -215,37 +190,26 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     let uploadCalls = 0;
     const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
-    // Never finds a pre-existing upload — forces both callers to actually race on uploadToIrys if the
-    // claim were not serializing them.
     internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
       kind === "report" ? undefined : realFind(kind, contentSha256);
     internals(arweaveArchive).uploadToIrys = async (kind, input) => {
       if (kind !== "report") return realUpload(kind, input);
       uploadCalls += 1;
-      // A small, randomised delay widens the window in which both concurrent callers are past
-      // findOrCreate and mid-"upload" at once, and a genuinely random tx_id (not content-derived) is
-      // what makes a real double-spend surface as two different URLs instead of two identical ones.
       await new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * 15));
       const txId = `real-upload-${randomUUID()}`;
       return { ok: true, tx_id: txId, archive_url: `https://gateway.irys.xyz/${txId}` };
     };
 
     try {
-      // publishJobResult schedules scheduleArweaveBackfill fire-and-forget (the live path) — reading
-      // the freshly-published job back and firing a manual retryPendingArchive right after, before
-      // either has resolved findOrCreate, is what makes this a real race on report_archive_uploads
-      // rather than two calls that happen to run one after the other.
       await publish.publishJobResult(job.jobId);
       const published = (await jobs.getJobById(job.jobId))!;
-      // Registered before any assertion below: a failing assertion must not leak the claim row into the
-      // shared, never-reset Postgres (ADR-015).
+      // Before any assertion, so a failure cannot leak the claim row into the shared database.
       createdRows.reportArchiveUpload(published.result?.artifact_sha256);
       await Promise.all([
         waitUntil(() => archiveSettled(job.jobId), "the live path's own backfill to settle"),
         arweaveArchive.retryPendingArchive(published),
       ]);
-      // A short settle window makes "exactly one" a real assertion, not a race the first waitUntil
-      // happened to win — same pattern as archive-and-recovery.spec.ts's own 2026-08-05 regression test.
+      // Settle window, so "exactly one" is not a race the `waitUntil` above happened to win.
       await new Promise((resolve) => setTimeout(resolve, 100));
     } finally {
       internals(arweaveArchive).uploadToIrys = realUpload;
@@ -270,12 +234,10 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     const reportSha256 = published.result!.artifact_sha256!;
     createdRows.reportArchiveUpload(reportSha256);
 
-    // Simulate "archived, but we forgot, and the claimant crashed mid-upload too": reset the job's own
-    // pending flag and force the existing claim row back to "claimed" with a stale updatedAt.
     await jobs.updateJob(job.jobId, { archivePendingSince: new Date() });
     await prisma.reportArchiveUpload.update({
       where: { reportSha256 },
-      data: { status: "claimed", txId: null, updatedAt: new Date(Date.now() - 10 * 60_000) }, // 10 minutes ago, past the 5-minute default
+      data: { status: "claimed", txId: null, updatedAt: new Date(Date.now() - 10 * 60_000) }, // past the 5-minute stale-claim timeout
     });
 
     const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
@@ -310,8 +272,6 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     const published = (await jobs.getJobById(job.jobId))!;
     const reportSha256 = published.result!.artifact_sha256!;
     createdRows.reportArchiveUpload(reportSha256);
-    // Real, already-"done" state to reuse: the initial publish above already claimed and marked it done
-    // via its own real (stubbed-random-tx_id) upload; simulate "archived, but we forgot" on top of that.
     await jobs.updateJob(job.jobId, { archivePendingSince: new Date() });
 
     let uploadCalls = 0;
@@ -371,14 +331,12 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     }
     createdRows.reportArchiveUpload(reportSha256);
 
-    // Released, not stranded at "claimed": immediately queryable as gone, well under the 5-minute
-    // stale-claim timeout the OTHER recovery path relies on.
     const claim = await reportArchiveUploads.getByReportSha256(reportSha256);
     expect(claim).toBeUndefined();
 
     const settled = await jobs.getJobById(job.jobId);
     expect(settled?.archivedTxId).toBeUndefined();
-    expect(settled?.archivePendingSince).toBeDefined(); // still owed — the existing retry path picks it up later
+    expect(settled?.archivePendingSince).toBeDefined();
   });
 
   it("an upload that outlives its own reaped claim still records its txId, rather than throwing it away", async () => {
@@ -388,8 +346,6 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
     internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
       kind === "report" ? undefined : realFind(kind, contentSha256);
-    // Reaps this call's OWN claim from under it mid-upload — the shape a slow upload outliving
-    // SCVS_REPORT_ARCHIVE_CLAIM_TIMEOUT_MS produces, without waiting out a real 5-minute timeout.
     internals(arweaveArchive).uploadToIrys = async (kind, input) => {
       if (kind !== "report") return realUpload(kind, input);
       const sha = (input as { contentSha256: string }).contentSha256;
@@ -409,7 +365,6 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
       internals(arweaveArchive).findExistingUpload = realFind;
     }
 
-    // The obligation is discharged against the real, paid-for tx — not left pending for a second upload.
     const settled = await jobs.getJobById(job.jobId);
     expect(settled?.archivedTxId).toMatch(/^paid-but-reaped-/);
     expect(settled?.archivePendingSince).toBeUndefined();
@@ -422,12 +377,10 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     const reportSha256 = published.result!.artifact_sha256!;
     createdRows.reportArchiveUpload(reportSha256);
 
-    // Corrupt the claim out-of-band: "done" with no txId, a state markDone cannot produce.
     await prisma.reportArchiveUpload.update({
       where: { reportSha256 },
       data: { status: "done", txId: null },
     });
-    // `archivedTxId` is not on UpdateJobInput (only recordArchiveOutcome sets it), so clear it directly.
     await prisma.job.update({
       where: { id: job.jobId },
       data: { archivePendingSince: new Date(), archivedTxId: null },
@@ -435,14 +388,11 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
 
     await arweaveArchive.retryPendingArchive(published);
 
-    // The corrupt row is gone, so the next attempt can re-archive from scratch...
     expect(await reportArchiveUploads.getByReportSha256(reportSha256)).toBeUndefined();
-    // ...and the job stays owed rather than being settled against a bogus URL.
     const settled = await jobs.getJobById(job.jobId);
     expect(settled?.archivedTxId).toBeUndefined();
     expect(settled?.archivePendingSince).toBeDefined();
 
-    // Nothing resembling `${gateway}/undefined` reached the published status object.
     const urls = await archiveUrlsFor(published.target.wasm_hash!);
     expect(urls.some((url) => url.endsWith("/undefined"))).toBe(false);
   });

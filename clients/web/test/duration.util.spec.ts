@@ -17,7 +17,6 @@ describe("formatDuration", () => {
     expect(formatDuration(1_999)).toBe("1s");
   });
 
-  // A clock skew between the verifier and this browser can put `updated_at` fractionally before `created_at`.
   test("never renders a negative or non-finite duration", () => {
     expect(formatDuration(-5_000)).toBe("0s");
     expect(formatDuration(0)).toBe("0s");
@@ -32,7 +31,6 @@ describe("parseTimestamp", () => {
     );
   });
 
-  // Absent and unparsable both mean "this page cannot state when that happened".
   test("is undefined for anything that is not one, rather than 0", () => {
     expect(parseTimestamp(undefined)).toBeUndefined();
     expect(parseTimestamp("")).toBeUndefined();

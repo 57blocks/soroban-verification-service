@@ -1,5 +1,4 @@
-// Subpath imports, not the barrels: those re-export `node:crypto`, `node:fs` and the AWS SDK, none of which can
-// reach a browser bundle.
+// Subpath imports, not the barrels: those pull in `node:crypto`, `node:fs` and the AWS SDK.
 import {
   parseDto,
   flattenValidationErrors,
@@ -39,21 +38,13 @@ import {
   type UnavailableVerifier,
 } from "./registry-read.js";
 
-// Runs in Node and in a browser: nothing here touches a `node:` builtin, and a caller who wants files supplies
-// a `fetch` that reads them.
-
 export type SoveClientOptions = {
-  /** The list itself, not a URL. A caller whose list lives at a URL fetches it and passes the object. */
+  /** The list itself, not a URL. */
   tvl: PeerTrustedVerifiersList;
   /** Absolute base for resolving relative references in TVL entries (`url`, `manifest_url`). */
   baseUrl?: string;
   fetch?: typeof fetch;
-  /**
-   * Same shape as `fetch`, built from the policy this client resolves internally (TVL origins, scheme,
-   * private-range setting) rather than handed one ready-made — a transport that pins DNS resolution against
-   * private ranges needs to know `allowedOrigins` before its first request, and only `newClient` knows that
-   * once `policy` below and the TVL have both been applied. Takes precedence over `fetch` when both are given.
-   */
+  /** Builds the transport from the resolved policy (e.g. to pin DNS); takes precedence over `fetch`. */
   fetchFactory?: (policy: FetchPolicy) => typeof fetch;
   /** Applied to every fetch this client makes. Default 5_000. */
   timeoutMs?: number;
@@ -63,17 +54,10 @@ export type SoveClientOptions = {
 
 export interface SoveClient {
   readonly verifiers: readonly ResolvedVerifier[];
-  /**
-   * The public metadata each TVL member advertises beside its result root, one outcome per member, in the
-   * list's own order. Never throws and never drops an entry: a verifier that advertises no manifest and one
-   * whose manifest cannot be read are different answers, and both are answers.
-   */
+  /** Each member's advertised metadata, in list order; never throws and never drops an entry. */
   discover(): Promise<readonly VerifierDiscovery[]>;
   readonly results: {
-    /**
-     * Fetches an artifact a result points at, under this client's own policy — which is the only way the
-     * TVL-derived origin allowlist reaches a peer-supplied URL.
-     */
+    /** Fetches and hash-checks an artifact a result points at, under this client's TVL-derived policy. */
      verifyUrl(
       entry: ResultUrlEntry,
       options?: Omit<VerifyResultUrlOptions, "policy" | "fetch">,
@@ -81,11 +65,7 @@ export interface SoveClient {
   };
   /** The Registry API vocabulary: `wasms/<hash>.json` read straight from a verifier's result root. */
   readonly registry: {
-    /**
-     * `PeerRegistryStatusObject`, not `RegistryStatusObject`: every document this client reads is a peer's, so
-     * its `schema_version` is any MINOR of the MAJOR we understand (SO7) rather than the exact `"1.0"` our own
-     * published documents declare (CV1).
-     */
+    /** Reads a peer's document, accepting any MINOR of the supported MAJOR. */
     statusObject(
       verifier: ResolvedVerifier,
       wasmHash: string,
@@ -101,25 +81,18 @@ export interface SoveClient {
   };
 }
 
-/**
- * One member's discovery outcome. A discriminated union rather than `{ manifest?, policy? }`: optional fields
- * would collapse "advertises nothing" (a conformance class — `manifest_url` is OPTIONAL, and nothing this SEP
- * specifies is read out of a manifest), "advertised but unreachable", and "served something unparseable" into
- * one absent value, which is the same conflation `unavailable_verifiers` exists to prevent in the aggregate.
- */
 export type VerifierDiscovery =
   | {
       verifier: ResolvedVerifier;
       outcome: "available";
       manifest: PeerVerifierManifest;
-      /** Present only here: a manifest whose `policy_url` cannot be read is `unavailable`, not half-available. */
+      /** Present only here: a manifest whose `policy_url` cannot be read is `unavailable`. */
       policy: VerifierPolicy;
     }
   | { verifier: ResolvedVerifier; outcome: "not_advertised" }
   | {
       verifier: ResolvedVerifier;
       outcome: "unavailable";
-      /** Reusing the aggregate's vocabulary, so a caller classifies both fan-outs the same way. */
       reason: UnavailableVerifier["reason"];
       error?: string;
     };
@@ -132,12 +105,10 @@ export function newClient(options: SoveClientOptions): SoveClient {
     resolveVerifierReference(verifier, base, index),
   );
 
-  // From the resolved entries, so a relative `url` contributes the origin its `baseUrl` gave it.
   const policy = normalizePolicy({
     allowedOrigins: originsFromVerifiers(verifiers),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-    // Stated fields only: `{ allowedOrigins: undefined }` would otherwise erase the line above and leave every
-    // origin allowed.
+    // Defined fields only: `{ allowedOrigins: undefined }` would erase the line above and allow every origin.
     ...definedOnly(options.policy),
   });
   const impl = options.fetchFactory ? options.fetchFactory(policy) : (options.fetch ?? fetch);
@@ -149,11 +120,10 @@ export function newClient(options: SoveClientOptions): SoveClient {
       // Nothing reads this body, and an unread one holds its connection open.
       await response.body?.cancel().catch(() => undefined);
       const error = new Error(`Unable to load ${url}: ${response.status}`);
-      // `errorResult` classifies `not_found` off this, so the status has to survive.
+      // `isNotFoundError` reads this, so the status has to survive.
       (error as Error & { status?: number }).status = response.status;
       throw error;
     }
-    // Bounded before parsing: an endless body must not hold the aggregation open.
     const bytes = await readBoundedBytes(response, policy.maxResponseBytes);
     return JSON.parse(decoder.decode(bytes));
   };
@@ -161,14 +131,11 @@ export function newClient(options: SoveClientOptions): SoveClient {
   return {
     verifiers,
     async discover() {
-      // `allSettled`, not `all`: one peer's dead manifest host used to reject the whole fan-out, which is the
-      // one failure mode a discovery call across independent operators must not have.
+      // `allSettled`, not `all`: one peer's failure must not reject the whole fan-out.
       const settled = await Promise.allSettled(
         verifiers.map(async (verifier): Promise<VerifierDiscovery> => {
           const manifestUrl = verifier.manifest_url;
           if (manifestUrl === undefined) return { verifier, outcome: "not_advertised" };
-          // The peer class: a manifest still spelling its root `cdn_root` is a lagging rollout, not
-          // a verifier to drop.
           const manifest = parseSchema(PeerVerifierManifest, await getJson(manifestUrl), manifestUrl);
           const policyUrl = resolveReference(manifestUrl, manifest.policy_url);
           const policy = parseSchema(VerifierPolicy, await getJson(policyUrl), policyUrl);
@@ -192,9 +159,7 @@ export function newClient(options: SoveClientOptions): SoveClient {
     },
     results: {
       verifyUrl(entry, verifyOptions) {
-        // `impl`, not `options.fetch`: a caller that supplied only `fetchFactory` (the pinned-DNS transport,
-        // for instance) must not have a peer-supplied results_urls entry silently fetched through the
-        // unpinned global `fetch` instead — `impl` is the one transport every other method here already uses.
+        // `impl`, not `options.fetch`: a `fetchFactory`-only caller must not fall back to the unpinned global `fetch`.
         return fetchAndVerifyResultUrl(entry, {
           ...verifyOptions,
           policy,
@@ -209,7 +174,6 @@ export function newClient(options: SoveClientOptions): SoveClient {
       async bulkLoad(verifier, bulkOptions) {
         if (verifier.bulk_load_url === undefined) {
           throw new SchemaValidationError(
-            // `url` is the identity the SEP defines; `id` is optional and may not be there.
             `${verifier.id ?? verifier.url} names no bulk_load_url and cannot be enumerated`,
           );
         }
@@ -225,7 +189,6 @@ export function newClient(options: SoveClientOptions): SoveClient {
           wasmHash,
           getJson,
           isNotFound: isNotFoundError,
-          // Mapped here because this layer owns the transport; registry-read imports no policy types.
           classifyError: classifyFetchError,
           ...(options?.validation !== undefined ? { validation: options.validation } : {}),
         });
@@ -244,7 +207,6 @@ export function definedOnly<T extends object>(value: T | undefined): Partial<T> 
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
-// A base URL subsumes the already-absolute and root-relative cases, so no `node:path` is needed.
 function resolveReference(base: string | undefined, reference: string): string {
   if (isAbsolute(reference)) return reference;
   if (base === undefined) {
@@ -264,10 +226,7 @@ function isAbsolute(value: string): boolean {
   }
 }
 
-/**
- * An unresolvable reference is kept as published rather than thrown: it fails this verifier's own fetch, as an
- * entry, instead of failing the whole aggregation before it starts.
- */
+/** Unresolvable references are kept as published, so they fail one verifier's fetch, not the whole aggregation. */
 function resolveVerifierReference(
   verifier: PeerTrustedVerifier,
   base: string | undefined,
@@ -275,19 +234,14 @@ function resolveVerifierReference(
 ): ResolvedVerifier {
   const root = resultRootOf(verifier);
   if (root === undefined) {
-    // Named by position, not by `id`: `id` is optional, and an entry with no result root has no identity to
-    // name it by either — the position is the only thing that points a list author at the right entry.
     throw new SchemaValidationError(
       `trusted verifiers list: verifier at index ${index}${verifier.id !== undefined ? ` (${verifier.id})` : ""} names no result root (neither "url" nor "cdn_root")`,
     );
   }
-  // `cdn_root` is dropped rather than carried: past this point there is one spelling of the result root, so
-  // no later reader has to know both.
   const { cdn_root: _cdnRoot, ...entry } = verifier;
   return {
     ...entry,
     url: resolveOrKeep(base, root),
-    // Resolved when advertised, absent when not: resolution cannot invent a reference the peer never made.
     ...(verifier.manifest_url !== undefined
       ? { manifest_url: resolveOrKeep(base, verifier.manifest_url) }
       : {}),
@@ -297,15 +251,12 @@ function resolveVerifierReference(
   };
 }
 
-/** Transport failures, in the aggregate's own vocabulary. Shared by `byHash` and `discover`. */
 function classifyFetchError(error: unknown): UnavailableVerifier["reason"] | undefined {
   if (error instanceof FetchPolicyError) return "refused";
   if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
     return "timeout";
   }
-  // `getJson` parses, so a peer answering 200 with an HTML error page or a truncated body surfaces as
-  // `JSON.parse`'s SyntaxError. That is a peer serving the wrong thing, not a peer we could not reach —
-  // classifying it `fetch_failed` would have an operator checking the network for a content problem.
+  // A 200 with a non-JSON body surfaces as `SyntaxError`: the peer served the wrong thing.
   if (error instanceof SyntaxError) return "invalid_response";
   return undefined;
 }
@@ -340,10 +291,6 @@ export class SchemaValidationError extends Error {
   }
 }
 
-/**
- * Validation is delegated to the `@scvs/storage-layout` class-validator classes — the single source of truth
- * for these shapes.
- */
 function parseSchema<T extends object>(cls: ClassConstructor<T>, value: unknown, source: string): T {
   // An array or a primitive carries no metadata, so `validateSync` returns zero errors for it.
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

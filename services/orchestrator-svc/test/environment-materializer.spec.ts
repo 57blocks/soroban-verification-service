@@ -9,8 +9,6 @@ import type { ComposeIntent, ComposedEnvironmentRecipe } from "@scvs/core";
 import { CachingBuildEnvironmentMaterializer } from "../src/modules/build-environments/caching-build-environment-materializer.service.js";
 import type { ComposerDispatchService } from "../src/modules/build-environments/composer-dispatch.service.js";
 
-/** Phase 4's state machine, tested against fakes rather than Postgres. */
-
 const PAIR = { cliver: "25.1.0", rsver: "1.95.0" };
 const INTENT: ComposeIntent = { pair: PAIR, template_version: "v1" };
 const RECIPE_SHA = "a".repeat(64);
@@ -24,7 +22,6 @@ const RECIPE = {
 
 type Seed = Partial<EnvironmentRecord> & { status: EnvironmentStatus };
 
-/** A single-row stand-in for the environments table. */
 class FakeEnvironments {
   row: EnvironmentRecord | undefined;
   readonly calls: string[] = [];
@@ -106,7 +103,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
 
     const result = await materializerFor(environments, composer).materialize(INTENT, "job-1");
 
-    // The id is the `randomUUID()` the materializer minted for `findOrCreate`, not a fixture value.
     expect(result).toEqual({
       kind: "composing",
       environmentId: environments.row!.environmentId,
@@ -116,8 +112,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   });
 
   it("does not resubmit for a second job attached to the same pair", async () => {
-    // The second caller loses the CAS and simply waits; its tick costs one row read and no Batch call, which is
-    // what makes this safe to run from the 2-second poll loop for every attached job.
     const environments = new FakeEnvironments();
     const composer = new FakeComposer();
     const materializer = materializerFor(environments, composer);
@@ -125,7 +119,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
     const first = await materializer.materialize(INTENT, "job-1");
     const second = await materializer.materialize(INTENT, "job-2");
 
-    // Both callers attach to the *same* row.
     expect(second).toEqual({
       kind: "composing",
       environmentId: (first as { environmentId: string }).environmentId,
@@ -164,11 +157,9 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   });
 
   it("reports a half-recorded ready row as a failure rather than dispatching against it", async () => {
-    // `markReady` requires all three identities together, so a `ready` row missing one is corrupt, not a state.
     const environments = new FakeEnvironments({
       status: "ready",
       recipeSha256: RECIPE_SHA,
-      // no imageDigest, no recipe
     });
 
     const result = await materializerFor(environments).materialize(INTENT, "job-1");
@@ -181,7 +172,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   });
 
   it("never retries a failed environment automatically, and surfaces its recorded error code", async () => {
-    // Recovery is a manual reset to `pending`.
     const environments = new FakeEnvironments({ status: "failed", errorCode: "unreleased_cli" });
     const composer = new FakeComposer();
 
@@ -207,8 +197,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   });
 
   it("releases the claim when the composer submission throws, so the next tick can retry", async () => {
-    // Marking the row `failed` here would poison a perfectly good pair permanently on the strength of an
-    // operator's misconfiguration — and nothing retries a `failed` row.
     const environments = new FakeEnvironments();
     const composer = new FakeComposer();
     composer.error = new Error("SCVS_COMPOSER_JOB_QUEUE_ARN is not configured");
@@ -222,8 +210,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   });
 
   it("re-throws the dispatch error rather than reporting a composing state that is not happening", async () => {
-    // The claim is released *and* the error propagates: swallowing it would tell the caller "composing" about a
-    // job nothing submitted, and the caller would wait for a terminal event that never comes.
     const environments = new FakeEnvironments();
     const composer = new FakeComposer();
     composer.error = new Error("Batch rejected the submission");
@@ -250,7 +236,6 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   });
 
   it("returns undefined for a recipe hash whose row is no longer ready", async () => {
-    // Reachable only if the row was reset after a rebuild was already keyed on its hash.
     const environments = new FakeEnvironments({ status: "pending", recipeSha256: RECIPE_SHA });
     await expect(
       materializerFor(environments).findReadyByRecipeSha256(RECIPE_SHA),

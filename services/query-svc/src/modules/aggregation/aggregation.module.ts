@@ -17,10 +17,6 @@ import { BulkLoadController } from "./bulk-load.controller.js";
     {
       provide: RESULT_FETCH_FACTORY,
       inject: [ConfigService],
-      // Pinned by default. `pinDnsResolution: false` (SCVS_QUERY_PIN_DNS_RESOLUTION) is the escape hatch a
-      // test double needs — the pinned transport bypasses `globalThis.fetch` by design (that bypass is what
-      // lets it see the real DNS answer), so anything that replaces `globalThis.fetch` to stand in for a peer
-      // needs this off to be seen at all. Production has no reason to ever set it.
       useFactory: (configService: AppConfigService): ResultFetchFactory =>
         configService.get("pinDnsResolution", { infer: true })
           ? (policy) => createPinnedFetch(policy)

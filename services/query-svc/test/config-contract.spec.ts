@@ -6,9 +6,6 @@ import {
   reportConfigContract,
 } from "@scvs/config";
 
-/** Deliberately not "the response looks right". */
-
-/** A value distinctive enough that finding it in a serialized report is unambiguous. */
 const CANARY = "SECRET-CANARY-3f9a1c";
 
 const SECRET_VARS = [
@@ -18,13 +15,11 @@ const SECRET_VARS = [
   "SCVS_ARWEAVE_WALLET_PRIVATE_KEY",
 ] as const;
 
-/** Every variable any contract service declares, set to the canary. */
 function envWithEverythingSet(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const descriptors of Object.values(ENV_CONTRACT)) {
     for (const d of descriptors) env[d.name] = CANARY;
   }
-  // The enum-valued ones must hold a legal value, since that is what gets reported verbatim.
   env.NODE_ENV = "production";
   env.POSTGRES_SSL = "true";
   env.SCVS_PUBLISHER_STORAGE = "s3";
@@ -55,12 +50,9 @@ describe("config contract report", () => {
 
       for (const secret of SECRET_VARS) {
         if (!(secret in report.variables)) continue;
-        // A secret may only ever be a presence boolean — check H in check:env enforces the manifest side of
-        // this; this is the runtime side.
         expect(typeof report.variables[secret]).toBe("boolean");
       }
 
-      // The strong form: the value appears nowhere at all, including inside a group digest.
       expect(serialized).not.toContain(CANARY);
     }
   });
@@ -76,9 +68,6 @@ describe("config contract report", () => {
     const report = reportConfigContract("query-svc", {});
     expect(report.variables.POSTGRES_HOST).toBe(false);
   });
-
-  // No replacement test exists on orchestrator-svc or verification-svc either — there is nothing left to
-  // digest-compare, so there is nothing to cover.
 
   describe("the boot log line", () => {
     it("carries a greppable prefix and parses as JSON", () => {

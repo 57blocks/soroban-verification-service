@@ -3,11 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseReferenceAlignment, referenceAlignment } from "../src/modules/builder/reference-alignment.js";
 
-/**
- * This suite asserted `MAIN_SHA` plus two PR SHAs, because `docker/stellar-cli.pin` described a three-way merge
- * CI compiled: the service needed `contract verify` and `contract archive`, which are in no stellar-cli
- * release.
- */
 const VERSION = "v28.0.0";
 
 describe("referenceAlignment", () => {
@@ -32,8 +27,6 @@ describe("referenceAlignment", () => {
   });
 
   it("★ reads the repository's real pin, so a pin edit that breaks this fails here", () => {
-    // The one assertion that cannot drift with the fixture above: `referenceAlignment()` with no argument
-    // locates `docker/stellar-cli.pin` itself.
     const alignment = referenceAlignment();
     expect(alignment.repo).toBe("stellar/stellar-cli");
     expect(alignment.version).toMatch(/^v?\d+\.\d+\.\d+/);
@@ -55,8 +48,6 @@ describe("referenceAlignment", () => {
   });
 
   it("ignores the digest lines the pin carries beside the version", () => {
-    // Those exist for `scripts/ci/fetch-or-build-stellar-cli.sh`, which verifies the download and the cache
-    // against them.
     const alignment = parseReferenceAlignment(
       [
         `STELLAR_CLI_VERSION=${VERSION}`,

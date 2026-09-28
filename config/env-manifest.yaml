@@ -1,18 +1,11 @@
-# Environment variable contract — machine-readable, one file, repo-owned.
-
 version: 1
 
 meta:
   supersedes: the per-service environment tables that used to live in the deployment design
-  # Adding an environment here generates its `config/deploy/<env>/` artifacts in the shape every entry already
-  # declares; it does NOT invent values.
-  environments: [] # list your own; `pnpm run generate:deploy-env` writes config/deploy/<env>/
+  environments: []
   aws_account: "123456789012"
   aws_region: ap-southeast-2
-  # Local development does not use this file; it uses the root `.env` (see `.env.example`).
 
-# ─────────────────────────────────────────────────────────────────────────────────────────────────
-# Groups — bundles of variables that must move together.
 groups:
   base:
     description: Every resident (ECS) service. The builder deliberately inherits none of this.
@@ -273,8 +266,6 @@ groups:
         secret: true
         source: secret
         tier: secret
-        # `inject` is recorded for completeness only — `deploy: never` means nothing injects this in a deployed
-        # environment.
         inject: ecs-secrets
         deploy: never
         default: ~
@@ -476,10 +467,8 @@ groups:
           named a backend nobody wrote, so it passed boot and then failed at first publish.
       SCVS_PUBLISHER_BUCKET:
         type: string
-        required: yes # when storage != filesystem
+        required: yes
         required_when: SCVS_PUBLISHER_STORAGE != filesystem
-        # `boot` only under that condition: ResultStorageEnvDto's cross-field rule rejects an s3/r2 kind with
-        # no bucket at startup. Unset alongside `filesystem` is not a failure at all.
         fail: boot
         source: terraform
         value_from_output: buckets.results
@@ -600,8 +589,6 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: http://localhost:5000/public
-        # `dev` now has a CDN, which is the exact condition the previous decision named for its own supersession
-        # — so this carries a real value again rather than a `value_ref` to that record.
         envs:
           {
             dev: "https://results.dev.sv.example.com",
@@ -868,8 +855,6 @@ groups:
           per-service rather than one flat table.
       SCVS_MAINNET_RPC_URL:
         type: url
-        # `required: no` is the right GLOBAL answer — a testnet-only deployment needs no mainnet endpoint and
-        # still boots.
         required: no
         required_in: [dev, staging]
         fail: n/a
@@ -916,16 +901,13 @@ groups:
           leaves this unset and still starts; that arm is unchanged. Any environment beyond these
           two supplies its own node.
 
-# ─────────────────────────────────────────────────────────────────────────────────────────────────
-# Services — what each deployable unit actually gets.
-# ─────────────────────────────────────────────────────────────────────────────────────────────────
 services:
   verification-svc:
     kind: ecs-service
     exposure: public (ALB)
     port: 5000
     env_dto: services/verification-svc/src/config/env.dto.ts
-    config_contract: true # serves /internal/config-contract (ADR-013)
+    config_contract: true
     inherits: [base, postgres, stellar-cli, result-storage, verifier-identity]
     variables:
       PORT:
@@ -985,7 +967,7 @@ services:
         inject: ecs-secrets
         default: 10000
         note: Coupled to the ALB idle timeout — read §4 of the deployment doc before changing.
-    tunables: # all validated-if-present, all have working defaults
+    tunables:
       SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE:
         type: number
         default: 60
@@ -1310,7 +1292,7 @@ services:
     exposure: internal — no ALB
     port: 5002
     env_dto: services/orchestrator-svc/src/config/env.dto.ts
-    config_contract: true # serves /internal/config-contract (ADR-013)
+    config_contract: true
     inherits:
       [
         base,
@@ -1458,7 +1440,7 @@ services:
         inject: ecs-secrets
         default: ~
         terraform: module.batch.job_state_change_queue_url
-        resource: scvs-<env>-batch-job-state-change # name, not the URL — it embeds the account id
+        resource: scvs-<env>-batch-job-state-change
         note: >-
           Without it no build result is ever consumed — jobs queue and dispatch normally and then
           never complete. Boots healthy. This is the highest-consequence `fail: silent` in the system.
@@ -1483,7 +1465,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: sv-<env>-builders-arm-queue # DevOps-managed; the ARN embeds account + region
+        resource: sv-<env>-builders-arm-queue
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           One queue per architecture, replacing the single `SCVS_BATCH_JOB_QUEUE_ARN` (retired
@@ -1510,7 +1492,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: sv-<env>-builders-x86-queue # DevOps-managed; the ARN embeds account + region
+        resource: sv-<env>-builders-x86-queue
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           The x86 half of the pair above. Note the spelling difference on purpose: the variable carries
@@ -1559,7 +1541,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: scvs-builder-<env> # and this is now the whole value — see the note
+        resource: scvs-builder-<env>
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           **The value is a bare family name, not an ARN** — `scvs-builder-<env>`, per environment
@@ -1591,8 +1573,6 @@ services:
           and looks like a queue problem.
       SCVS_BATCH_JOB_DEFINITION_ARN_AMD64:
         type: string
-        # `required: no` is the right GLOBAL answer — a deployment whose builder fleet is Graviton-only needs no
-        # amd64 family, and the arm64 half above stays the unsuffixed, always-present one.
         required: no
         required_in: [dev, staging]
         fail: first-use
@@ -1601,7 +1581,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: scvs-builder-<env>-amd64 # a bare family name, like the arm64 half
+        resource: scvs-builder-<env>-amd64
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           The amd64 counterpart of SCVS_BATCH_JOB_DEFINITION_ARN_ARM64, added by the same split. A bare family name,
@@ -1680,7 +1660,6 @@ services:
       SCVS_COMPOSER_JOB_QUEUE_ARN:
         type: string
         required: no
-        # `required: no` stays the right GLOBAL answer.
         required_in: [dev, staging]
         fail: first-use
         source: terraform
@@ -1688,7 +1667,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: sv-<env>-composers-queue # DevOps-managed; the ARN embeds account + region
+        resource: sv-<env>-composers-queue
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           ADR-017's composer fleet — a SECOND Batch queue, deliberately not `SCVS_BATCH_JOB_QUEUE_ARN`.
@@ -1713,7 +1692,6 @@ services:
       SCVS_COMPOSER_JOB_DEFINITION_ARN:
         type: string
         required: no
-        # `required: no` stays the right GLOBAL answer.
         required_in: [dev, staging]
         fail: first-use
         source: terraform
@@ -1721,8 +1699,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: scvs-composer-<env> # and this is now the whole value — see the note
-        # One account-wide `scvs-composer` family could not carry two roles.
+        resource: scvs-composer-<env>
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           **The value is a bare family name, not an ARN** — `scvs-composer-<env>`, same as the builder
@@ -1742,7 +1719,6 @@ services:
       SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI:
         type: string
         required: no
-        # `required: no` stays the right GLOBAL answer.
         required_in: [dev, staging]
         fail: first-use
         source: terraform
@@ -1750,7 +1726,7 @@ services:
         tier: infrastructure
         inject: ecs-secrets
         default: ~
-        resource: sv-<env>-composed-environments # repository name; the URI embeds account + region
+        resource: sv-<env>-composed-environments
         code: services/orchestrator-svc/src/config/env.dto.ts (Matches)
         note: >-
           The private ECR repository composed environments are pushed to and pulled from (ADR-017 §3).
@@ -1883,12 +1859,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: ~
-        # No `envs:` deliberately. This is only ever set for a mainnet deployment; devnet's default
-        # is baked into getArweaveConfig. It previously recorded the PROSE "~ (devnet default
-        # applies)" for both environments, which read as documentation but is emitted as a value —
-        # so ADR-025's CI wrote that sentence into the config secret and the process would have
-        # received it as the RPC URL. Under the old flow a human binding values by hand would have
-        # caught it; nothing mechanical did. An entry with no value to record records none.
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
           Ethereum RPC endpoint the archiving wallet signs through. devnet has a working default
@@ -2081,10 +2051,7 @@ services:
     exposure: public (ALB)
     port: 5001
     env_dto: services/query-svc/src/config/env.dto.ts
-    config_contract: true # serves /internal/config-contract (ADR-013)
-    # NOT verifier-identity: `getVerifierIdentity()` is read only by orchestrator-svc, which stamps it into
-    # artifacts at publish time. query-svc serves artifacts that already carry the identity, so it needs the
-    # storage location, not the identity.
+    config_contract: true
     inherits: [base, query-postgres]
     variables:
       PORT:
@@ -2237,12 +2204,9 @@ services:
           default; an operator with their own node points it there instead.
       STELLAR_RPC_URL_MAINNET:
         type: string
-        # `fail: first-use` makes it the worse of the two to leave unenforced — the service boots healthy and
-        # only the first mainnet address query finds out.
         required: false
         required_in: [dev, staging]
         fail: first-use
-        # An operator's own node, usually.
         tier: infrastructure
         envs:
           {
@@ -2291,8 +2255,6 @@ services:
           disables a defense. The only known reason to set it is a test double that intercepts peer
           responses via `globalThis.fetch`, which the pinned transport bypasses by design and so
           cannot see. Do NOT set `false` in a deployed environment.
-    # Not read by this service, but validated anyway because QuerySvcEnvDto extends SharedEnvDto directly, and
-    # SharedEnvDto covers the `stellar-cli` group's four variables in the same class as `base`/`postgres`.
     dto_over_declares:
       - STELLAR_CLI_PATH
       - SCVS_CLI_TIMEOUT_MS
@@ -2307,19 +2269,17 @@ services:
   web:
     kind: ecs-service
     exposure: public — :443 at the ALB, :80 in the container
-    env_dto: ~ # a Vite bundle, not a Nest app — nothing to validate at boot
+    env_dto: ~
     inherits: []
     variables:
       SCVS_ENABLE_AGGREGATOR:
         type: string
         required: no
         fail: silent
-        # `literal`, like SERVICE_ENTRYPOINT — the other variable a container entrypoint consumes.
         source: literal
         tier: knob
         inject: ecs-secrets
         default: ~
-        # Both shared environments enable it.
         envs: { dev: "true", staging: "true" }
         code: docker/web-entrypoint.sh -> clients/web/src/config/features.ts::isAggregatorEnabled
         note: >-
@@ -2358,7 +2318,7 @@ services:
         tier: knob
         inject: docker-build-arg
         default: ~
-        envs: {} # local-only: no deployed environment sets it, and a null key serialises as "null"
+        envs: {}
         code: clients/web/src/config/features.ts::isAggregatorEnabled
         note: >-
           **Local development only** — `pnpm run dev:web`, where there is no container and no
@@ -2386,16 +2346,16 @@ services:
       give the container its own certificate.
 
   builder:
-    kind: batch-job-definition # NOT ECS
+    kind: batch-job-definition
     exposure: none — runs the only untrusted code in the system
     env_dto: services/builder/src/config/env.dto.ts
-    inherits: [] # deliberately nothing — see trust_boundary below
+    inherits: []
     trust_boundary:
       ADR-002 — this unit holds no business credentials, no database access, and no
       AWS credentials beyond ECR pull + logs. Its env DTO deliberately does not extend SharedEnvDto,
       because listing the Postgres and result-storage variables even as optional would document a
       surface the sandbox must never have.
-    forbidden: # presence of ANY of these is a trust-boundary defect, not a misconfiguration
+    forbidden:
       - POSTGRES_HOST
       - POSTGRES_PORT
       - POSTGRES_DB
@@ -2420,8 +2380,6 @@ services:
       - SCVS_BATCH_JOB_DEFINITION_ARN_AMD64
       - SCVS_VERIFIER_ID
       - SCVS_ARWEAVE_AUTH_TOKEN
-      # Giving it the composer fleet's coordinates would hand untrusted code a way to submit jobs into the one
-      # fleet that CAN push to our environment registry.
       - SCVS_COMPOSER_JOB_QUEUE_ARN
       - SCVS_COMPOSER_JOB_DEFINITION_ARN
     variables:
@@ -2477,7 +2435,7 @@ services:
         tier: knob
         inject: batch-job-definition
         default: $TMPDIR/scvs-artifacts
-    tunables: # sandbox knobs — every one is a security-relevant limit
+    tunables:
       SCVS_DOCKER_CPUS: { type: string, default: "2" }
       SCVS_DOCKER_MEMORY: { type: string, default: 2g }
       SCVS_DOCKER_PIDS_LIMIT: { type: number, default: 512 }
@@ -2535,10 +2493,10 @@ services:
         note: 600000 here, NOT the 120000 the resident services use. Same name, different default.
         tier: knob
   composer:
-    kind: batch-job-definition # NOT ECS, and NOT the builder's definition
+    kind: batch-job-definition
     exposure: none — reaches only official component sources and our own ECR repository
     env_dto: services/composer/src/config/env.dto.ts
-    inherits: [] # deliberately nothing, same argument as `builder` above
+    inherits: []
     trust_boundary: >-
       ADR-017 §Placement. Container-execution-capable, like the builder, and therefore governed by the
       same CE1–CE5 — but for the opposite reason: the builder is dangerous because it RUNS untrusted
@@ -2552,11 +2510,8 @@ services:
       push/pull scoped to the one `scvs-composed-environments` repository and nothing else. Not the
       builder's role (it must never gain push), not the resident role (the composer has no business
       reason to reach the database, the result buckets, or `batch:SubmitJob`).
-    # The builder's list is the FLOOR, not a copy of it — checked, not asserted in prose (rule 3).
     forbidden_superset_of: builder
-    forbidden: # presence of ANY of these is a trust-boundary defect, not a misconfiguration
-      # The builder's list, for the same reasons — the composer is no more trusted with business credentials
-      # than the sandbox is.
+    forbidden:
       - POSTGRES_HOST
       - POSTGRES_PORT
       - POSTGRES_DB
@@ -2573,8 +2528,6 @@ services:
       - SCVS_PUBLISHER_BUCKET
       - SCVS_PUBLISHER_PREFIX
       - SCVS_JOB_STATE_CHANGE_QUEUE_URL
-      # One queue per architecture since batch-queue-arch-routing; the single `SCVS_BATCH_JOB_QUEUE_ARN` they
-      # replaced is retired and must not be named here (rule 2).
       - SCVS_BATCH_JOB_QUEUE_ARN_ARM64
       - SCVS_BATCH_JOB_QUEUE_ARN_AMD64
       - SCVS_BATCH_DEFAULT_ARCH
@@ -2584,8 +2537,6 @@ services:
       - SCVS_COMPOSER_JOB_DEFINITION_ARN
       - SCVS_VERIFIER_ID
       - SCVS_ARWEAVE_AUTH_TOKEN
-      # The last two are the composer's alone — `SCVS_STORAGE_BUCKET` is on the builder's list as well — and
-      # they are why the relationship above is `superset_of` and not equality.
       - SCVS_STORAGE_BUCKET
       - SCVS_UPLOAD_DIR
       - SCVS_PREFETCH_ALLOWED_HOSTS
@@ -2640,7 +2591,7 @@ services:
           Root for the per-composition scratch directory (`composer.service.ts` mkdtemp's `compose-*`
           under it). Same variable and same shape as the builder's, and read for the same reason: the
           Batch host's default temp dir is not always the writable one.
-    tunables: # composition knobs
+    tunables:
       SCVS_COMPOSER_BUILD_TIMEOUT_MS:
         {
           type: number,
@@ -2656,9 +2607,9 @@ services:
       SCVS_COMPOSER_DOCKER_HOST: { type: string, default: ~ }
 
   db-migrate:
-    kind: ecs-task # one-off, run by .github/workflows/db-migrate.yml
+    kind: ecs-task
     exposure: none
-    env_dto: ~ # a `prisma migrate deploy` command override, not a Nest app
+    env_dto: ~
     inherits: [postgres]
     variables:
       SCVS_TRUSTED_VERIFIERS_SOURCE:
@@ -2753,8 +2704,6 @@ services:
       `packages/db-query` since the split — see `SCVS_TRUSTED_VERIFIERS_SOURCE` above and
       The deployment pipeline seeds the Trusted Verifiers List.
 
-# ─────────────────────────────────────────────────────────────────────────────────────────────────
-# Retired — declared somewhere but read by nothing.
 retired:
   SCVS_POLICY_SOURCE_MODES:
     last_seen: >-
@@ -2888,9 +2837,6 @@ retired:
       `node eng-tools/check-service-cutover.mjs --env <env>` needs credentials, which is
       why this line can go stale in the first place and why it now carries the date it was last checked.
 
-# ─────────────────────────────────────────────────────────────────────────────────────────────────
-# Decided — recorded here because each answer constrains something, and an answer nobody can find gets
-# re-litigated.
 decided:
   - id: Q1
     decided: 2026-08-04

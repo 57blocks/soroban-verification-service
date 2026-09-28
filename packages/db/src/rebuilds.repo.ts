@@ -11,11 +11,9 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { RebuildModel as PrismaRebuild } from "../generated/prisma/models.js";
 
-/** A rebuild's lifecycle. See schema.prisma's `Rebuild.status` for what each means. */
 export const rebuildStatuses = ["pending", "dispatching", "running", "done"] as const;
 export type RebuildStatus = (typeof rebuildStatuses)[number];
 
-/** Mirrors services/builder's `classifyRunCliOutcome` output — no new vocabulary. */
 export const rebuildOutcomes = ["success", "comparison_mismatch", "cli_failure"] as const;
 export type RebuildOutcome = (typeof rebuildOutcomes)[number];
 
@@ -34,21 +32,11 @@ export type RebuildRecord = {
   rebuiltWasmHash?: string;
   errorCode?: string;
   diagnostics?: unknown;
-  /**
-   * The `source_sha256` this rebuild's chain section records — read once at creation and never re-read, because
-   * it is immutable for a given Wasm.
-   */
   chainSourceSha256?: string;
-  /**
-   * sha256 of the **canonical source archive** — the archive this rebuild actually built from, which is not the
-   * submitted bytes when a container was peeled or a rebuilt archive was adopted.
-   */
+  /** sha256 of the archive actually built from, which can differ from the submitted bytes. */
   canonicalSourceSha256?: string;
-  /** Where those bytes are, when they are not the submitted ones. Absent otherwise. */
   canonicalSourceKey?: string;
-  /** `BuildArtifact.source_canonicalisation` as reported. Evidence; no verdict reads it. */
   sourceCanonicalisation?: unknown;
-  /** Kept because rows written before then carry it and `verdict.util.ts` still publishes it for them. */
   verifyFailureCode?: string;
   createdAt: string;
   updatedAt: string;
@@ -60,13 +48,8 @@ export type CreateRebuildInput = {
   sourceRef: SourceReference;
   buildOptions: unknown;
   imageDigest: string;
-  /**
-   * A property of the rebuild rather than of a job, because one rebuild serves every job whose recipe hashes
-   * the same and there is only one build.
-   */
   buildMode: BuildMode;
   mechanismReason: MechanismReason;
-  /** Set only when this call **creates** the row, like `buildMode` above. */
   chainSourceSha256?: string;
 };
 
@@ -79,11 +62,9 @@ export type MarkRebuildTerminalInput = {
   canonicalSourceSha256?: string;
   canonicalSourceKey?: string;
   sourceCanonicalisation?: unknown;
-  /** See `verifyFailureCode` on `RebuildRecord` for the whole picture. */
   verifyFailureCode?: string;
 };
 
-/** Nothing here decides a verdict. */
 @Injectable()
 export class RebuildsRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
@@ -120,10 +101,6 @@ export class RebuildsRepository {
     return rowToRebuild(row);
   }
 
-  /**
-   * Find-or-create, safe against two jobs discovering the same missing recipe in one poll tick:
-   * `idempotency_key` is UNIQUE, so the loser gets P2002 and re-reads the winner's row.
-   */
   async findOrCreate(input: CreateRebuildInput): Promise<RebuildRecord> {
     const existing = await this.findByIdempotencyKey(input.idempotencyKey);
     if (existing) return existing;
@@ -141,7 +118,6 @@ export class RebuildsRepository {
     }
   }
 
-  /** Compare-and-set claim on the right to dispatch: `pending -> dispatching`. */
   async claimForDispatch(rebuildId: string): Promise<boolean> {
     const { count } = await this.prisma.rebuild.updateMany({
       where: { id: rebuildId, status: "pending" satisfies RebuildStatus },
@@ -150,7 +126,6 @@ export class RebuildsRepository {
     return count === 1;
   }
 
-  /** `dispatching -> running`: Batch accepted the submission and gave us its job id. */
   async markDispatched(
     rebuildId: string,
     input: { batchJobId: string; buildMode: BuildMode },
@@ -165,10 +140,6 @@ export class RebuildsRepository {
     });
   }
 
-  /**
-   * Releases a claim that could not be turned into a dispatch (Batch `SubmitJob` threw), so the next poll tick
-   * retries it rather than leaving the rebuild.
-   */
   async releaseClaim(rebuildId: string): Promise<void> {
     await this.prisma.rebuild.updateMany({
       where: { id: rebuildId, status: "dispatching" satisfies RebuildStatus },
@@ -200,13 +171,6 @@ export class RebuildsRepository {
     });
   }
 
-  // `requeueForRetry` stood here: the verify->build fallback, as a CAS from the terminal state that authorised
-  // it.
-
-  /**
-   * Gives one fresh full attempt to a rebuild that exhausted its verify->build retry and still came back
-   * `cli_failure`.
-   */
   async requeueStaleCliFailure(rebuildId: string, buildMode: BuildMode): Promise<boolean> {
     const { count } = await this.prisma.rebuild.updateMany({
       where: {
@@ -223,10 +187,8 @@ export class RebuildsRepository {
         rebuiltWasmHash: null,
         errorCode: null,
         diagnostics: Prisma.DbNull,
-        // Keeping the previous lifecycle's code would let an attempt that then *succeeds* publish
-        // `metadata_backed` beside a `verify_attempt_reason` from an attempt that is no longer this rebuild's.
+        // Cleared with the rest: a stale code would be published beside the next attempt's success.
         verifyFailureCode: null,
-        // Same reason: this attempt materialises again and writes its own.
         canonicalSourceSha256: null,
         canonicalSourceKey: null,
         sourceCanonicalisation: Prisma.DbNull,
@@ -235,13 +197,7 @@ export class RebuildsRepository {
     return count === 1;
   }
 
-  /**
-   * Moves a not-yet-dispatched rebuild onto the mode routing actually chose. `selectBuildMechanism` is total
-   * on `"build"`, so a persisted `"verify"` cannot be a decision any live routing would make — it is a row
-   * that outlived the CLI path. A CAS on `pending` because that is the one status where nothing has been
-   * submitted yet: a claimed or finished rebuild's mode describes an attempt that really happened, and
-   * rewriting it would make its own record untrue.
-   */
+  /** Only on `pending`: once claimed, the mode describes an attempt that really happened. */
   async reconcileBuildMode(rebuildId: string, buildMode: BuildMode): Promise<boolean> {
     const { count } = await this.prisma.rebuild.updateMany({
       where: {
@@ -254,7 +210,6 @@ export class RebuildsRepository {
     return count === 1;
   }
 
-  /** Rebuilds that were mid-`SubmitJob` when a process died — the reason `"dispatching"` is a distinct status. */
   async listStuckDispatching(): Promise<RebuildRecord[]> {
     const rows = await this.prisma.rebuild.findMany({
       where: { status: "dispatching" satisfies RebuildStatus },
@@ -263,10 +218,6 @@ export class RebuildsRepository {
     return rows.map(rowToRebuild);
   }
 
-  /**
-   * Rebuilds sitting in one non-terminal status since before `olderThan` — the input to
-   * `scheduler/rebuild-reaper.scheduler.ts`.
-   */
   async listStuckByStatus(status: RebuildStatus, olderThan: Date): Promise<RebuildRecord[]> {
     const rows = await this.prisma.rebuild.findMany({
       where: { status, updatedAt: { lt: olderThan } },
@@ -275,7 +226,6 @@ export class RebuildsRepository {
     return rows.map(rowToRebuild);
   }
 
-  /** `running -> done(cli_failure)` for a rebuild whose Batch job never reported back. */
   async markRunTimedOut(rebuildId: string, detail: string): Promise<boolean> {
     const { count } = await this.prisma.rebuild.updateMany({
       where: { id: rebuildId, status: "running" satisfies RebuildStatus },
@@ -299,8 +249,6 @@ export class RebuildsRepository {
   }
 }
 
-// Same contract as jobs.repo.ts's `rowToJob`: anything derived from a raw column rather than passed straight
-// through is validated here, because the DB layer has no enum types of its own.
 function rowToRebuild(row: PrismaRebuild): RebuildRecord {
   return {
     rebuildId: row.id,

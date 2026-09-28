@@ -9,10 +9,6 @@ import {
   stripTomlComments,
 } from "../src/modules/builder/egress-policy.js";
 
-/**
- * So its only job is to name a would-be opaque cargo network failure, and every false positive is a build it
- * failed for nothing.
- */
 const ALLOWED = ["crates.io", "github.com", "githubusercontent.com"];
 
 async function sourceTree(files: Record<string, string>): Promise<string> {
@@ -27,9 +23,6 @@ async function sourceTree(files: Record<string, string>): Promise<string> {
 
 describe("collectCargoPrefetchUrls — only what cargo dereferences", () => {
   it("ignores the documentation link that failed a real job", async () => {
-    // Verbatim shape of the `Cargo.toml` behind
-    // https://staging.sv.example.com/verify/jobs/ab67e22e-5bc4-41c4-a6d1-b6cbae9640a3: a docs link to the
-    // logging example contract, which cargo never requests.
     const root = await sourceTree({
       "Cargo.toml": [
         "[package]",

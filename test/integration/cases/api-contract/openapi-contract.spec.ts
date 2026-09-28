@@ -1,4 +1,3 @@
-/** E2E-API-01/02 — deployed OpenAPI contract coverage. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingDeployedTarget, submissionFor } from "../../support/fixtures.js";
@@ -16,7 +15,6 @@ import {
   STATUS_AGREEMENT_TIMEOUT_MS,
 } from "../../support/status-agreement.js";
 
-/** RFC 8594's `Sunset`, as `packages/core/src/deprecated-json-routes.ts` spells it. */
 const JSON_ROUTE_SUNSET_HTTP_DATE = "Mon, 01 Dec 2026 00:00:00 GMT";
 
 type HttpMethod = "get" | "post";
@@ -33,9 +31,6 @@ const verificationOperations: readonly OperationExpectation[] = [
   ["/health/live", "get"],
   ["/health/ready", "get"],
   ["/api/verification/v1/health", "get"],
-  // The operator's versioned legal documents. Public, ETagged by the sha256 a job binds — added with the
-  // route, which this list did not learn about, and `publishedSpec` asserts the documented set EXACTLY,
-  // so one undeclared route fails every case in this file rather than one.
   ["/api/verification/v1/legal", "get"],
   ["/api/verification/v1/preflight", "post"],
   ["/api/verification/v1/verifications", "post"],
@@ -162,14 +157,12 @@ caseBlock(
       const response = await http(verifyWasmStatusUrl("not-a-wasm-hash"));
       expectStatus(response, 400);
       expectDocumentedStatus(spec, "/api/verification/v1/wasms/{wasm_hash}.json", "get", response);
-      // RC2's narrow body: the two identifiers, `error`, `message`. `schema` joined it later.
       expect(response.json).toEqual({
         schema: "stellar-verification-error",
         schema_version: "1.0",
         error: "400_invalid_wasm_hash",
         message: "wasm_hash must be a lowercase-hex SHA-256.",
       });
-      // `status_code` staying out is a property of THIS ROUTE, not of the document type.
       expect(response.json).not.toHaveProperty("status_code");
     });
 
@@ -178,11 +171,7 @@ caseBlock(
       const response = await http(verifyWasmStatusUrl(NEVER_SEEN_WASM_HASH));
       expectStatus(response, 404);
       expectDocumentedStatus(spec, "/api/verification/v1/wasms/{wasm_hash}.json", "get", response);
-      // SEP §8: every non-2xx body of an API route carries the envelope. The Registry API draft this
-      // replaced defined no body here, and `expectDocumentedStatus` never reads one — so this assertion,
-      // not that one, is what holds the route to the SEP.
       expect(expectErrorEnvelope(response).error).toBe("not_found");
-      // `status_code` is a property of the general envelope; these two read routes omit it.
       expect(response.json).not.toHaveProperty("status_code");
     });
 
@@ -210,11 +199,6 @@ caseBlock(
       expectWasmStatus(response, NEVER_SEEN_WASM_HASH);
     });
 
-    /**
-     * The three spellings later deprecated; why they must still answer is in
-     * `packages/core/src/deprecated-json-routes.ts`. Removed with them after 2026-12-01. The
-     * verifier's own `/v1/wasms/{hash}.json` keeps its suffix and is `E2E-PUB-15`'s, not this table's.
-     */
     it.each([
       ["the verifier's own bulk load", () => deprecatedOwnBulkLoadUrl()],
       ["the aggregate bulk load", () => deprecatedAggregatedBulkLoadUrl()],
@@ -228,8 +212,7 @@ caseBlock(
     });
 
     it("the deprecated per-hash spelling answers its own route, not `wasm_hash = \"<hash>.json\"`", async () => {
-      // The echoed key, not the status code: Express's `:wasm_hash` takes the dot with it, so a wrong
-      // declaration order answers 200 with an empty aggregate for `"<hash>.json"`.
+      // Express's `:wasm_hash` swallows the dot, so a wrong route order answers 200 for "<hash>.json".
       const response = await http(deprecatedAggregatedByHashUrl(NEVER_SEEN_WASM_HASH));
       if (response.status === 503) return;
       expectWasmStatus(response, NEVER_SEEN_WASM_HASH);
@@ -297,8 +280,6 @@ caseBlock(
         const wasmHash = terminal.body.result?.wasm_hash ?? fixtures.contracts["F-LEG-1"].wasm_hash;
         expect(typeof wasmHash).toBe("string");
 
-        // Once published, it must return the result-root document's exact bytes, including formatting and any
-        // archive-backfill fields the static tree gained after the job completed.
         const {
           dynamicRead: ownStatus,
           staticRead: staticStatus,
@@ -369,11 +350,9 @@ function expectSafeError(
 ): void {
   expectStatus(response, status);
   expectDocumentedStatus(spec, path, method, response);
-  // One envelope, both services (RC6); `expectErrorEnvelope` asserts the two identifiers.
   const error = expectErrorEnvelope(response);
   expect(error.error).toBe(errorCode);
   expect(error.status_code).toBe(status);
-  // Kept as a parameter so the call sites still read as "this is the query API's error", and unused on purpose.
   expect(error.schema).toBe("stellar-verification-error");
   expect(error.schema_version).toBe("1.0");
 }
@@ -401,7 +380,6 @@ function expectHealth(response: HttpResult): void {
 
 function expectBulkPage(response: HttpResult, order: "asc" | "desc"): void {
   expectStatus(response, 200);
-  // Both bulk pages are `stellar-verification-page`; the version is the envelope's only.
   expect(response.json?.schema).toBe("stellar-verification-page");
   expect(response.json?.schema_version).toBe("1.0");
   expect(response.json?.order).toBe(order);
@@ -421,7 +399,6 @@ function expectQueryBulkPageOrUnavailable(response: HttpResult, order: "asc" | "
 
 function expectWasmStatus(response: HttpResult, wasmHash: string): void {
   expectStatus(response, 200);
-  // CV1 — the document names its own type beside its version.
   expect(response.json?.schema).toBe("stellar-verification-aggregate");
   expect(response.json?.schema_version).toBe("1.0");
   expect(response.json?.wasm_hash).toBe(wasmHash);

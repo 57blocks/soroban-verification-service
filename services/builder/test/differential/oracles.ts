@@ -1,36 +1,16 @@
-/** The official `stellar-cli` images the differential harness compares our builder against. */
-
 export type Oracle = {
-  /** Stable, kebab-case; names the leg in the harness's output. */
   readonly id: string;
   readonly cliver: string;
   readonly rsver: string;
-  /** The tag this image is published under, spelled as the registry spells it. */
   readonly tag: string;
-  /** Environment variable that supplies the digest-pinned reference, when it is not committed. */
   readonly env?: string;
-  /** A digest-pinned reference, when one is committed or supplied. */
   readonly image?: string;
-  /** The digest `tag` resolves to, when that is deliberately **not** `image`. */
   readonly tagResolvesElsewhere?: string;
 };
 
-/** The image every existing fixture and every E2E purpose-built contract already uses. */
 export const CLI_27_0_0_RUST_1_96_0_IMAGE =
   "docker.io/stellar/stellar-cli@sha256:cddfdee493f09feb3a52f1a7d185fc0c9391d841422cbcbd9cde0a4293e9ab43";
 
-/**
- * Why these are committed literals and not `SCVS_DIFFERENTIAL_ORACLE_*` variables: seven of them once were,
- * `differential.yml` passed none of them, and every run exercised one toolchain while reporting green — the
- * seven legs were not failing, they were never reached. On 2026-08-19 all seven were resolved from the
- * registry and RUST_VERSION-verified, so a digest now lives beside the pair it claims, re-pinning is a
- * reviewed commit rather than a `gh variable set` nobody can `git blame`, and the run reproduces on a laptop.
- * `env` survives on the type for the case that has not arrived: a pair Docker Hub publishes unpinned needs an
- * `env` on its row AND a matching line in the workflow's `env:` block. Adding one before then is a lie — an
- * empty variable that looks like configuration.
- */
-
-/** The pairs Docker Hub publishes. Ordered with the committed one first, then by CLI version. */
 export const ORACLES: readonly Oracle[] = [
   {
     id: "cli-27.0.0-rust-1.96.0",
@@ -82,7 +62,6 @@ export const ORACLES: readonly Oracle[] = [
     tag: "docker.io/stellar/stellar-cli:27.1.0-rust1.96.1-slim-trixie",
     image: "docker.io/stellar/stellar-cli@sha256:41ed60fb8dfdf10ee2fe125f459ae8b1d19823eea8ac4d9cab7cffc2d1778da6",
   },
-  // The row that reaches a toolchain nothing else can.
   {
     id: "cli-27.1.0-rust-1.97.1",
     cliver: "27.1.0",
@@ -94,16 +73,13 @@ export const ORACLES: readonly Oracle[] = [
 
 const DIGEST_PINNED = /@sha256:[0-9a-f]{64}$/;
 
-/** The oracle every committed fixture uses, and the only one guaranteed to be resolvable. */
 export const BASELINE_ORACLE = ORACLES[0]!;
 
-/** The digest-pinned reference for an oracle, or `undefined` when nobody has supplied one. */
 export function resolveOracleImage(oracle: Oracle): string | undefined {
   const candidate = oracle.image ?? (oracle.env ? process.env[oracle.env] : undefined);
   return candidate && DIGEST_PINNED.test(candidate) ? candidate : undefined;
 }
 
-/** Why an oracle cannot be run, phrased so the skip line is the instruction for fixing it. */
 export function missingOracleReason(oracle: Oracle): string | undefined {
   if (resolveOracleImage(oracle)) return undefined;
   const supplied = oracle.env ? process.env[oracle.env] : undefined;

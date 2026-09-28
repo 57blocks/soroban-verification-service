@@ -1,11 +1,7 @@
 import type { RegisteredTaskProperties } from "@scvs/aws";
 
-/**
- * AWS Batch rejects a SubmitJob when the **merged** ECS `taskProperties` payload — the static container fields
- * from the registered job definition *plus* our override — reaches 8192 bytes.
- */
+// Batch rejects a SubmitJob whose merged taskProperties (definition's static fields plus override) reach 8192 bytes.
 
-/** The ceiling AWS enforces on the merged ECS taskProperties payload, in bytes. */
 export const TASKPROPERTIES_LIMIT_BYTES = 8192;
 
 /** Slack for serialization differences between our merged JSON and AWS's internal document. */
@@ -17,11 +13,8 @@ export type OverrideContainer = {
 };
 
 export type MergedPayloadMeasurement = {
-  /** Bytes of the merged document — the number to compare against the limit. */
   totalBytes: number;
-  /** Bytes of the override alone. Same semantics as the `overrides_bytes` log field. */
   overrideBytes: number;
-  /** Bytes contributed by the registered definition's static fields. */
   staticBytes: number;
 };
 
@@ -50,8 +43,6 @@ export function measureMergedTaskProperties(
       };
     }),
   );
-  // An override naming a container the definition does not have would be rejected by Batch for a different
-  // reason — but its bytes are still in the submitted document, so they still count here.
   const unmatchedOverrides = overrideContainers.filter(
     (container) => !registeredNames.has(container.name),
   );
@@ -65,10 +56,6 @@ export function measureMergedTaskProperties(
   };
 }
 
-/**
- * Thrown by `BatchDispatchService` *before* SubmitJob when the merged measurement is at or over the limit minus
- * margin.
- */
 export class TaskPropertiesTooLargeError extends Error {
   readonly measurement: MergedPayloadMeasurement;
 

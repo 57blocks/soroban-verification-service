@@ -2,10 +2,6 @@ import { describe, expect, test } from "vitest";
 import { buildTarget, normalizeWasmHash } from "@/features/verification/utils/manifest.util";
 import type { VerifyFormValues } from "@/features/verification/types";
 
-/**
- * The console is the shortest path to an uppercase `wasm_hash`: `TargetCard`'s field rule accepts either
- * case deliberately (`HEX_SHA256_ANY_CASE` in `src/lib/field-shapes.ts`).
- */
 const UPPERCASE = "A2E60E0FB85C39AFA7930FC889CF55B93CFDA930F16D2D419B4E18EEEA7B4957";
 const LOWERCASE = UPPERCASE.toLowerCase();
 

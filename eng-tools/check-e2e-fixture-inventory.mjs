@@ -34,7 +34,6 @@ const expectedPrivateCli58SourcePath = relative(
   repoRoot,
   resolve(fixtureOutputRoot, "archives/private-cli58-canary.tar.gz")
 );
-// PERF-01 uses F-LEG-1's public source URI and its committed target pool.
 const requireLocalSourceArchives = process.env.SCVS_E2E_FIXTURE_REQUIRE_LOCAL_SOURCES !== "0";
 const fixtureOverlay = process.env.SCVS_E2E_FIXTURE_OVERLAY;
 if (fixtureOverlay !== undefined && fixtureOverlay !== "zip" && fixtureOverlay !== "timeout") {
@@ -114,8 +113,6 @@ const buildManifest = existsSync(buildManifestPath) ? readNdjson(buildManifestPa
 const sourceTreeZipFixturePath = resolve(repoRoot, "artifacts/e2e-fixtures/archives/f58-source-tree.zip");
 const publicSourceTreeZipFixturePath = resolve(repoRoot, "artifacts/e2e-fixtures/archives/f58-public-source-tree.zip");
 
-// F-58 is the stable cli-58 reference fixture. Its generated Wasm is checked against the committed testnet
-// target rather than only against the deployment record (which is copied from the same file).
 const stableF58Build = buildManifest?.find((record) => record.fixture_id === "F-58-testnet");
 const stableF58ContractName = registry.required_contracts?.["F-58-testnet-supplemental"]?.contract;
 const stableF58Contract = stableF58ContractName ? registry.contracts?.[stableF58ContractName] : undefined;
@@ -381,14 +378,10 @@ for (const { id, expectedImage } of imagePolicyFixtures) {
   }
 }
 
-// ── The SEP-55 corpus (E2E-SEP55-01/03/04) ───────────────────────────────────────────────────────
-// A/B/C/E/F differ only in the on-chain `source_repo` value. D is the separate cli-58 coexistence
-// fixture. E/F are run-scoped because their boundary values should never become shared deployment state.
 const sep55Fixtures = [
   { id: "F-S55-A", prefixed: true, legacyRecipe: true, sourceRepo: "github:example/contract" },
   { id: "F-S55-B", prefixed: false, legacyRecipe: true, sourceRepo: "https://example.com/src.tar.gz" },
   { id: "F-S55-C", prefixed: false, legacyRecipe: true, sourceRepo: "https://mirror.example.com/github:foo" },
-  // cli-58: submitted target-only, so it carries no recipe in the inventory by design.
   { id: "F-S55-D", prefixed: true, legacyRecipe: false, sourceRepo: "github:example/contract" },
   { id: "F-S55-E", prefixed: false, legacyRecipe: true, sourceRepo: "GitHub:example/contract", runScoped: true },
   { id: "F-S55-F", prefixed: true, legacyRecipe: true, sourceRepo: "github:", runScoped: true },
@@ -460,7 +453,6 @@ for (const { id, prefixed, legacyRecipe, sourceRepo: expectedSourceRepo, runScop
   }
 
   if (!runScoped) {
-    // cli-legacy: the submitter supplies the recipe, so it must be the reviewed one verbatim.
     expectEqual(
       `${id} bldopt`,
       JSON.stringify(fixture.bldopt),
@@ -474,13 +466,9 @@ for (const { id, prefixed, legacyRecipe, sourceRepo: expectedSourceRepo, runScop
     );
   }
 
-  // An adopted publication predating RA5 carries the old hardcoded `false`, which would decide the run's
-  // assertion instead of the deployment under test.
   expectEqual(`${id} run_scoped_recipe`, fixture.run_scoped_recipe, true);
 }
 
-// Distinct hashes, or two cases would read one another's status document and one expectation would silently
-// overwrite the other.
 expect(
   new Set(sep55WasmHashes).size === sep55WasmHashes.length,
   `the SEP-55 fixtures must carry distinct wasm_hashes; got ${JSON.stringify(sep55WasmHashes)}`

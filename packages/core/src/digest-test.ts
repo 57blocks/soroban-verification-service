@@ -22,8 +22,6 @@ test("a digest is written in lower case, and only in lower case", () => {
   assert.equal(PREFIXED_SHA256.test(`sha256:${UPPER}`), false);
 });
 
-// The two shapes exist because two vocabularies do, and mixing them is the mistake worth catching: a DTO
-// field that takes the bare form must refuse the prefixed one, and the reverse.
 test("the two shapes do not accept each other's spelling", () => {
   assert.equal(HEX_SHA256.test(`sha256:${LOWER}`), false);
   assert.equal(PREFIXED_SHA256.test(LOWER), false);
@@ -39,15 +37,10 @@ test("neither accepts a short, long, or non-hex digest", () => {
   }
 });
 
-// `SEP58_HEX_SHA256` is the published contract's name for the same shape. Keeping it as a name rather than a
-// second literal is the point: a reader of `registry.ts` sees the SEP's vocabulary, and there is still only
-// one pattern to change.
 test("the SEP-58 name and the house shape are the same pattern", () => {
   assert.equal(SEP58_HEX_SHA256, HEX_SHA256);
 });
 
-// No `g` or `y` flag, so one shared instance carries no `lastIndex` between call sites. Sharing a stateful
-// regex across a dozen DTO decorators would make validation depend on call order.
 test("the shared instances are stateless", () => {
   for (const shape of [HEX_SHA256, PREFIXED_SHA256]) {
     assert.equal(shape.global, false);

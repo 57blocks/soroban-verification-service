@@ -1,4 +1,3 @@
-/** Reads `GET /api/verification/v1/verifications/:job_id/events`. */
 import { env } from "./env.js";
 import { jobEventsUrl } from "./routes.js";
 import { TERMINAL_JOB_STATUSES, type JobStatusBody } from "./types.js";
@@ -10,13 +9,11 @@ export interface SseFrame {
 
 export interface SseSession {
   readonly frames: SseFrame[];
-  /** Resolves when the server closes the stream, or when `stop()` is called. */
   readonly closed: Promise<"server_closed" | "client_closed">;
   stop(): void;
 }
 
 export interface SseOptions {
-  /** Stop reading once a frame satisfies this. */
   readonly until?: (frame: SseFrame, all: SseFrame[]) => boolean;
   readonly timeoutMs?: number;
 }
@@ -51,7 +48,7 @@ export function openJobStream(jobId: string, options: SseOptions = {}): SseSessi
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        // SSE frames are separated by a blank line. Tolerate CRLF: some proxies rewrite it.
+        // Frames end at a blank line; tolerate CRLF, which some proxies emit.
         let boundary = /\r?\n\r?\n/.exec(buffer);
         while (boundary) {
           const raw = buffer.slice(0, boundary.index);
@@ -91,7 +88,6 @@ export function openJobStream(jobId: string, options: SseOptions = {}): SseSessi
   };
 }
 
-/** Collects the whole stream, from connect to the server closing it at a terminal status. */
 export async function readJobStreamToClose(
   jobId: string,
   options: SseOptions = {}

@@ -25,8 +25,6 @@ test("errorBody stamps both identifiers and the status code", () => {
   });
 });
 
-// The index signature on `ErrorDetail` would otherwise let a caller overwrite the two things the envelope
-// exists to guarantee — `errorEnvelope` spreads them last for this reason.
 test("a caller cannot overwrite the envelope identifiers", () => {
   const body = errorBody(400, {
     error: "invalid_request",
@@ -49,8 +47,6 @@ test("every errorBody output validates against the published DTO", () => {
   assert.deepEqual(problems(errorBody(500, { error: "internal_error", message: "boom" })), []);
 });
 
-// The drift this package exists to end: one service required `status_code`, the other made it optional, for
-// a field no code path has ever omitted.
 test("a body without status_code is rejected", () => {
   assert.deepEqual(
     problems({ schema: ERROR_SCHEMA, schema_version: ERROR_SCHEMA_VERSION, error: "x", message: "y" }),

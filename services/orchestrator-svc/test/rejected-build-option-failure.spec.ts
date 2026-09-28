@@ -5,11 +5,6 @@ import {
 } from "../src/modules/verification-pipeline/failure-reason.util.js";
 import type { RebuildRecord } from "@scvs/db";
 
-/**
- * The failure was `build_failed` + *"The sandbox rebuild could not be completed for this source and image."*
- * That is wrong twice: the submitted source builds fine, and nothing said which of the recorded options the
- * image refused.
- */
 const rebuild = (
   errorCode: string,
   diagnostics: Record<string, unknown> = {},
@@ -25,7 +20,6 @@ describe("a recorded build option the image rejects", () => {
   });
 
   it("is policy_rejected, not build_failed", () => {
-    // The recipe is inadmissible in this environment; the source is not the problem.
     expect(rebuildFailureReason(record)).toBe("policy_rejected");
   });
 
@@ -63,7 +57,6 @@ describe("a build option the verifier added and the image rejects", () => {
 
     expect(detail).toContain("--out-dir");
     expect(detail).toContain("verifier fault");
-    // The one thing this arm must not do is send the submitter to inspect their own recipe.
     expect(detail).not.toContain("source is not the problem");
   });
 });
@@ -72,7 +65,6 @@ describe("an artifact no report stated a hash for", () => {
   const record = rebuild("artifact_report_hash_missing");
 
   it("is build_failed, and deliberately not internal_error", () => {
-    // The same code also covers a compile that printed a report of its own — the source's doing, not ours.
     expect(rebuildFailureReason(record)).toBe("build_failed");
   });
 
@@ -88,7 +80,6 @@ describe("everything else is unchanged", () => {
   });
 
   it("keeps the generic detail when an origin arrives with no flag", () => {
-    // Half-populated diagnostics must not produce a sentence with a hole in it.
     expect(
       rebuildFailureDetail(rebuild("rebuild_command_failed", { rejected_build_option_origin: "recorded_bldopt" })),
     ).toBe(GENERIC);
@@ -98,7 +89,6 @@ describe("everything else is unchanged", () => {
     expect(rebuildFailureReason(rebuild("source_hash_mismatch"))).toBe("source_unreachable");
     expect(rebuildFailureReason(rebuild("manifest_path_escapes_source"))).toBe("policy_rejected");
     expect(rebuildFailureReason(rebuild("toolchain_probe_failed"))).toBe("internal_error");
-    // A timeout outranks everything, including a named rejected option.
     expect(
       rebuildFailureReason(
         rebuild("recorded_build_option_unsupported", {
@@ -112,7 +102,6 @@ describe("everything else is unchanged", () => {
 
 describe("the value of a rejected option never reaches the submitter", () => {
   it("repeats only what the builder already stripped", () => {
-    // The builder strips at the source (`argument-policy.ts:flagName`) so there is one owner for the rule.
     const detail = rebuildFailureDetail(
       rebuild("recorded_build_option_unsupported", {
         rejected_build_option: "--env",

@@ -42,7 +42,6 @@ const wasmHashRule = {
   },
 };
 
-/** Step one: which deployed contract or Wasm hash to verify. */
 export const TargetCard = ({
   form,
   targetType,
@@ -66,8 +65,6 @@ export const TargetCard = ({
           </p>
         </div>
 
-        {/* The fields sit on the card. Tinting a block inside a white panel gave the form a second surface
-            to read past before reaching the first input. */}
         <div className="grid gap-4 md:grid-cols-2">
           <FieldShell label="Network" htmlFor="network">
             <Controller
@@ -129,11 +126,6 @@ export const TargetCard = ({
           )}
         </div>
 
-        {/* The action sits immediately after the field it acts on, not in the card
-            header. The header button read as a page-level action — reviewers reached it before
-            they had typed the identifier it needs, and its distance from the input is what made
-            the ordering unclear. The consent line is here for the same reason: beside the control
-            it qualifies, not as grey type under the heading. */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-line pt-4">
           <SubmissionAgreement className="max-w-[68ch] flex-1" />
           <Button

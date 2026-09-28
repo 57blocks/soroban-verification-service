@@ -11,7 +11,6 @@ import { PublishRecoveryScheduler } from "../src/modules/scheduler/publish-recov
 import { RebuildReconcilerScheduler } from "../src/modules/scheduler/rebuild-reconciler.scheduler.js";
 import { StartupRecoveryService } from "../src/modules/scheduler/startup-recovery.service.js";
 
-// Compile the real AppModule, but replace resident background workers before app.init().
 let app: NestExpressApplication;
 let server: Server;
 

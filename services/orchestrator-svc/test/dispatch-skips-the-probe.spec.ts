@@ -3,7 +3,6 @@ import { BatchDispatchService } from "../src/modules/verification-pipeline/batch
 import type { BuilderInvocationParams } from "../src/modules/verification-pipeline/builder-invocation.util.js";
 import type { ImagePlatformService } from "../src/modules/verification-pipeline/image-platform.service.js";
 
-/** The correctness of the routing is `queue-selection.spec.ts`'s job, on a pure function. */
 type ProbeStub = ImagePlatformService & { calls: number };
 
 const probeStub = (): ProbeStub => {
@@ -11,7 +10,6 @@ const probeStub = (): ProbeStub => {
     calls: 0,
     async resolveArchitectures() {
       stub.calls += 1;
-      // Whatever a real probe would say is irrelevant; empty is what private ECR actually produces.
       return { architectures: [], resolvedFrom: "unresolved" as const };
     },
   };
@@ -27,8 +25,6 @@ const CONFIG = {
     arm64: "arn:aws:batch:ap-southeast-2:111:job-queue/arm",
     amd64: "arn:aws:batch:ap-southeast-2:111:job-queue/x86",
   },
-  // Both halves set, so neither the queue nor the family can be the thing that throws before the probe is
-  // reached.
   batchJobDefinitionArns: {
     arm64: "scvs-builder-dev",
     amd64: "scvs-builder-dev-amd64",
@@ -41,16 +37,10 @@ const configStub = {
 
 const BATCH_JOB_ID = "b0000000-0000-0000-0000-000000000000";
 
-/**
- * Every outbound request a dispatch can send, substituted per instance so the dispatch itself stays real. The
- * params-document write is unreachable while the config stub leaves `jobParamsTransport` unset, and a throw is
- * what keeps a future case that sets it from quietly reaching S3.
- */
 const dispatchWith = (probe: ProbeStub): BatchDispatchService => {
   const service = new BatchDispatchService(
     configStub as never,
     {} as never,
-    // `submitBatchJob`'s last step. Real enough to let the dispatch finish; nothing here asserts on it.
     { async markDispatched() {} } as never,
     probe,
   );
@@ -62,8 +52,6 @@ const dispatchWith = (probe: ProbeStub): BatchDispatchService => {
   jest
     .spyOn(internals, "putParamsDocument")
     .mockRejectedValue(new Error("dispatch-skips-the-probe: putParamsDocument() was called; see dispatchWith()."));
-  // No claim here rests on the payload measurement, and `undefined` is the service's own reading of "nothing
-  // ACTIVE to measure against".
   jest.spyOn(internals, "describeRegisteredDefinition").mockResolvedValue(undefined);
   jest.spyOn(internals, "submitToBatch").mockResolvedValue({ jobId: BATCH_JOB_ID });
   return service;
@@ -85,8 +73,6 @@ const PARAMS: BuilderInvocationParams = {
 };
 
 describe("dispatch and the architecture probe", () => {
-  // Each case asserts the dispatch ran to completion, which is what keeps its probe count from being the
-  // vacuous 0 of a dispatch that threw before the probe was reached.
   it("CONTROL: probes when the environment recorded no architecture", async () => {
     const probe = probeStub();
 

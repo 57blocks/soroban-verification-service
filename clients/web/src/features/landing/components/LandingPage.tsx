@@ -9,7 +9,6 @@ import { SecuritySection } from "./SecuritySection";
 import { TrustModelSection } from "./TrustModelSection";
 import { TrustStrip } from "./TrustStrip";
 
-/** Section order is the narrative order; the nav anchors depend on it. */
 export const LandingPage = () => (
   <main className="min-h-screen bg-surface font-sans leading-normal text-ink antialiased">
     <LandingNav />

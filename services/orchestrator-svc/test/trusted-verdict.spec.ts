@@ -11,11 +11,6 @@ import type {
 import { resolveJobVerdict } from "../src/modules/verification-pipeline/verdict.util.js";
 import type { AppConfigService } from "../src/config/configuration.js";
 
-/**
- * Written as the attack rather than as a unit test of a getter: the artifact claims the deployed hash, the
- * bytes are something else, and the question is which one reaches `resolveJobVerdict`.
- */
-
 const getObjectTextBounded = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const getObjectBytesBounded = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const putObjectText = jest.fn<(...args: unknown[]) => Promise<void>>();
@@ -36,14 +31,11 @@ const { RebuildOutcomeService } = await import(
   "../src/modules/batch-events/rebuild-outcome.service.js"
 );
 
-/** `recipe.json` as the bounded reader now returns it. */
 const givenArtifact = (json: string) => getObjectTextBounded.mockResolvedValue({ text: json });
 
-/** What the contract actually deploys, and what a false `verified` would have to claim. */
 const DEPLOYED_HASH = "d".repeat(64);
 const MAX_BYTES = 16 * 1024 * 1024;
 
-/** Bytes that are emphatically *not* the deployed contract — a minimal Wasm header plus a marker. */
 const HONEST_BYTES = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0xde, 0xad]);
 const HONEST_HASH = createHash("sha256").update(HONEST_BYTES).digest("hex");
 
@@ -77,7 +69,6 @@ function artifact(over: Partial<BuildArtifact> = {}): string {
   });
 }
 
-/** Captures what `markTerminal` was asked to persist — the value every attached job then verdicts on. */
 function harness() {
   const recorded: MarkRebuildTerminalInput[] = [];
   const rebuilds = {
@@ -93,8 +84,6 @@ function harness() {
           : undefined,
   } as unknown as AppConfigService & ConfigService;
 
-  // Recorded rather than faked away — `build-log-key.spec.ts` covers the query itself against the real
-  // database; what this file needs is the *ordering* (see its own describe).
   const buildLogKeys: { rebuildId: string; key: string }[] = [];
   const jobs = {
     recordBuildLogKeyForRebuild: async (rebuildId: string, key: string) => {
@@ -118,7 +107,6 @@ beforeEach(() => {
 
 describe("T7 — a lying sandbox cannot change the verdict", () => {
   it("records the hash of the uploaded bytes, not the one the artifact claims", async () => {
-    // The attack: claim the deployed hash, upload anything.
     givenArtifact(artifact({ rebuilt_wasm_hash: DEPLOYED_HASH }));
     getObjectBytesBounded.mockResolvedValue({ bytes: HONEST_BYTES, size: HONEST_BYTES.byteLength });
 
@@ -130,7 +118,6 @@ describe("T7 — a lying sandbox cannot change the verdict", () => {
     expect(recorded).toHaveLength(1);
     expect(recorded[0].rebuiltWasmHash).toBe(HONEST_HASH);
 
-    // And the consequence that matters: the target the attacker aimed at comes out mismatched.
     const verdict = resolveJobVerdict({
       rebuild: { rebuiltWasmHash: recorded[0].rebuiltWasmHash, buildMode: "build" },
       freshDeployedHash: DEPLOYED_HASH,
@@ -141,7 +128,6 @@ describe("T7 — a lying sandbox cannot change the verdict", () => {
   });
 
   it("still verifies a truthful rebuild — the field is not merely being ignored", async () => {
-    // Same bytes, and this time the artifact tells the truth about them; the deployed hash is theirs.
     givenArtifact(artifact({ rebuilt_wasm_hash: HONEST_HASH }));
     getObjectBytesBounded.mockResolvedValue({ bytes: HONEST_BYTES, size: HONEST_BYTES.byteLength });
 
@@ -166,7 +152,6 @@ describe("T7 — a lying sandbox cannot change the verdict", () => {
     const { recorded, service } = harness();
     await service.recordFromBatchTerminalState(REBUILD, { status: "SUCCEEDED" });
 
-    // The old code had nothing to record here and the job failed `comparison_not_available`.
     expect(recorded[0].rebuiltWasmHash).toBe(HONEST_HASH);
   });
 });
@@ -181,7 +166,6 @@ describe("the bytes cannot be hashed — every path fails closed", () => {
 
     expect(outcome.outcome).toBe("cli_failure");
     expect(outcome.errorCode).toBe("rebuilt_bytes_absent");
-    // The critical assertion: the claimed hash is nowhere near what gets persisted.
     expect(recorded[0].rebuiltWasmHash).toBeUndefined();
     expect(JSON.stringify(recorded[0])).not.toContain(DEPLOYED_HASH);
   });
@@ -204,7 +188,6 @@ describe("the bytes cannot be hashed — every path fails closed", () => {
     const { recorded, service } = harness();
     await service.recordFromBatchTerminalState(REBUILD, { status: "SUCCEEDED" });
 
-    // `runner` is required on `SandboxDiagnostics`, and the artifact's own diagnostics were absent here.
     expect(recorded[0].diagnostics).toMatchObject({ runner: "docker_build_image_rebuild" });
     expect(String((recorded[0].diagnostics as { stderr_excerpt: string }).stderr_excerpt)).toContain(
       "No rebuilt Wasm at staging/",
@@ -223,17 +206,11 @@ describe("a cli_failure is not asked for bytes it never produced", () => {
 
     expect(outcome.outcome).toBe("cli_failure");
     expect(outcome.errorCode).toBe("manifest_path_not_found");
-    // No wasted S3 round trip, and no chance of a stale object from an earlier attempt being hashed into a
-    // rebuild that failed before it produced anything.
     expect(getObjectBytesBounded).not.toHaveBeenCalled();
     expect(recorded[0].rebuiltWasmHash).toBeUndefined();
   });
 });
 
-/**
- * `verification-svc`'s log route answers **502**, not 404, for a row that names an object that is not there
- * (`jobs.service.ts`: "the row points at an object that is not there — a real fault").
- */
 describe("the build log's key is never recorded without its object", () => {
   it("records the key when the object was written", async () => {
     givenArtifact(artifact({ rebuilt_wasm_hash: HONEST_HASH, build_log: "$ cargo build\nok\n" }));
@@ -259,7 +236,6 @@ describe("the build log's key is never recorded without its object", () => {
     await service.recordFromBatchTerminalState(REBUILD, { status: "SUCCEEDED" });
 
     expect(buildLogKeys).toEqual([]);
-    // The half that stops this being a fail-closed diagnostic: the rebuild's outcome is unaffected.
     expect(recorded).toHaveLength(1);
   });
 

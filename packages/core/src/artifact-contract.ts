@@ -1,17 +1,13 @@
 import { parseSchemaVersion } from "./validators/schema-version.js";
 
-/** The `recipe.json` shape this build of the code writes and reads, as `MAJOR.MINOR`. */
 export const BUILD_ARTIFACT_SCHEMA_VERSION = "1.0";
 
 export const PRE_VERSIONED_BUILD_ARTIFACT_SCHEMA_VERSION = "0.0";
 
-/** The reader declares a MAJOR below the document's. Terminal, and the reason a job fails visibly. */
 export const ARTIFACT_SCHEMA_UNSUPPORTED = "artifact_schema_unsupported";
 
-/** The bytes are there and are not a readable artifact. Also terminal, for the same reason. */
 export const ARTIFACT_UNREADABLE = "artifact_unreadable";
 
-/** A `schema_version` is a version string, so a long one is a sandbox writing something else. */
 const MAX_REPORTED_VERSION_CHARS = 32;
 
 export type BuildArtifactProbe =
@@ -19,11 +15,7 @@ export type BuildArtifactProbe =
   | { kind: "unsupported"; declared: string; supported: string }
   | { kind: "readable"; declared: string; document: Record<string, unknown> };
 
-/**
- * Reads `schema_version` off a `recipe.json` **without validating the rest of it**, which is the whole point: a
- * document from a builder ahead of this reader must fail as a known, terminal version mismatch rather than as
- * whichever field happens to have moved.
- */
+/** Reads only `schema_version`, never validating the rest, so a newer builder's document fails as a version mismatch. */
 export function probeBuildArtifactDocument(
   text: string,
   supported: string = BUILD_ARTIFACT_SCHEMA_VERSION,

@@ -1,9 +1,4 @@
-# gitleaks configuration for `pnpm run check:secrets`, which scans the snapshot the public mirror
-# will carry — tracked files only, minus the docs/ entries scripts/public-sync/doc-scope.txt keeps
-# private. Vendored code and build output are outside that snapshot and need no allowlist here.
-#
-# An entry below asserts "this string is not a credential". Adding one to quiet a real finding is the
-# failure this file exists to prevent: rotate first, then decide whether the string may stay.
+# Each allowlist entry asserts its string is not a credential: rotate a real finding, never allowlist it.
 
 title = "SCVS publication snapshot"
 

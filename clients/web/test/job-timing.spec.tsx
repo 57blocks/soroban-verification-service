@@ -11,7 +11,6 @@ vi.mock("@scvs/verify-api-client", async () => ({
   useSubmitVerification: () => ({ mutateAsync: vi.fn() }),
   useUploadSource: () => ({ mutateAsync: vi.fn() }),
   getBuildLog: vi.fn().mockResolvedValue({ data: "" }),
-  // The real path, not a fake one: a spec that invented its own would pass against its own copy.
   jobEventsPath: (await vi.importActual<typeof import("@scvs/verify-api-client")>("@scvs/verify-api-client"))
     .jobEventsPath,
   AXIOS_INSTANCE: { defaults: {} },
@@ -95,7 +94,6 @@ describe("a settled job's total time is the verifier's measurement, not this tab
     await emit(stream, {
       ...queuedEvent,
       status: "verified",
-      // Four minutes twelve seconds after it was queued.
       updated_at: "2026-08-18T05:56:42.000Z",
     });
 
@@ -104,7 +102,6 @@ describe("a settled job's total time is the verifier's measurement, not this tab
     expect(result.current.jobTiming?.startedMs).toBe(Date.parse(QUEUED_AT));
   });
 
-  /** `jobs.service.ts` synthesises `job_timeout` from `{status, reason, detail, job_id}` — no timestamps at all. */
   test("a job_timeout, which carries no timestamps, keeps the created_at already received", async () => {
     const { result, stream } = openJob();
     await emit(stream, queuedEvent);
@@ -119,7 +116,6 @@ describe("a settled job's total time is the verifier's measurement, not this tab
     expect(result.current.jobTiming?.startedMs).toBe(Date.parse(QUEUED_AT));
   });
 
-  // A stopwatch that keeps running after the job stopped is a lie about the job.
   test("a running job is marked running; a settled one is not", async () => {
     const { result, stream } = openJob();
     await emit(stream, queuedEvent);
@@ -143,7 +139,6 @@ describe("a settled job's total does not grow when the row is written again", ()
     expect(first.result.current.jobTiming?.elapsedMs).toBe(4 * 60_000 + 12_000);
     first.unmount();
 
-    // The same job, re-opened after an archive backfill wrote the row an hour later.
     const again = openJob();
     await emit(again.stream, {
       ...queuedEvent,
@@ -153,14 +148,11 @@ describe("a settled job's total does not grow when the row is written again", ()
 
     await waitFor(() => expect(again.result.current.jobTiming?.isRunning).toBe(false));
     expect(again.result.current.jobTiming?.elapsedMs).toBe(4 * 60_000 + 12_000);
-    // The third tile agrees with the total rather than contradicting it.
     expect(again.result.current.jobTiming?.updatedMs).toBe(
       Date.parse("2026-08-18T05:56:42.000Z"),
     );
   });
 
-  // Reached only by a terminal event whose result carries no `verified_at` — every arm that writes a result
-  // writes one, so this is the "no result at all" case.
   test("a job first opened already-settled, with no result, falls back to updated_at", async () => {
     const { result, stream } = openJob();
     await emit(stream, {
@@ -175,12 +167,10 @@ describe("a settled job's total does not grow when the row is written again", ()
   });
 });
 
-/** `result.verified_at` is written in the same `advanceJob` call as the terminal status and never rewritten. */
 describe("a settled job's total comes from the server's own finish instant", () => {
   const withVerifiedAt = {
     ...queuedEvent,
     status: "verified",
-    // The archive backfill's write, four hours after the verdict.
     updated_at: "2026-08-18T09:56:42.000Z",
     result: {
       status_summary: "verified",
@@ -200,7 +190,6 @@ describe("a settled job's total comes from the server's own finish instant", () 
     expect(result.current.jobTiming?.finishIsExact).toBe(true);
   });
 
-  // The case the browser-local freeze could never reach: no `finished_at` of this tab's own.
   test("a shared link, opened cold, reports the same total the submitter saw", async () => {
     const { result, stream } = openJob();
     await emit(stream, withVerifiedAt);
@@ -210,7 +199,6 @@ describe("a settled job's total comes from the server's own finish instant", () 
     expect(result.current.jobTiming?.finishIsExact).toBe(true);
   });
 
-  // A mismatch is a finished verification, not an unfinished one.
   test("a mismatch's verified_at counts the same way", async () => {
     const { result, stream } = openJob();
     await emit(stream, {
@@ -223,7 +211,6 @@ describe("a settled job's total comes from the server's own finish instant", () 
     expect(result.current.jobTiming?.elapsedMs).toBe(4 * 60_000 + 12_000);
   });
 
-  // While the job is moving, the third tile is "Last update" and `updated_at` is exactly that.
   test("a running job still tracks updated_at", async () => {
     const { result, stream } = openJob();
     await emit(stream, queuedEvent);
@@ -233,12 +220,10 @@ describe("a settled job's total comes from the server's own finish instant", () 
   });
 });
 
-/** `completed_at` is the job's own settling instant on every terminal path. */
 describe("completed_at is what the total is measured to", () => {
   const settledAtFiveFiftySix = {
     ...queuedEvent,
     status: "verified",
-    // The archive backfill's write, four hours after the verdict.
     updated_at: "2026-08-18T09:56:42.000Z",
     completed_at: "2026-08-18T05:56:42.000Z",
     result: {
@@ -258,7 +243,6 @@ describe("completed_at is what the total is measured to", () => {
     expect(result.current.jobTiming?.finishIsExact).toBe(true);
   });
 
-  // A dry run is terminal with a real verdict and no `verified_at`.
   test("a dry run, which has no verified_at, still reports an exact total", async () => {
     const { result, stream } = openJob();
     await emit(stream, queuedEvent);
@@ -275,8 +259,6 @@ describe("completed_at is what the total is measured to", () => {
     expect(result.current.jobTiming?.finishIsExact).toBe(true);
   });
 
-  // An adopted verdict settles in seconds against a publication from last week, so its `verified_at` is the
-  // donor's and precedes this job's own `created_at`.
   test("an adopted verdict is measured to its own completion, not the donor's", async () => {
     const { result, stream } = openJob();
     await emit(stream, {
@@ -287,19 +269,16 @@ describe("completed_at is what the total is measured to", () => {
       result: {
         status_summary: "verified",
         wasm_hash: "8e".repeat(32),
-        // A week before this job existed.
         verified_at: "2026-08-11T00:00:00.000Z",
       },
     });
 
     await waitFor(() => expect(result.current.jobTiming?.isRunning).toBe(false));
-    // Submitted 05:52:30, adopted 05:52:45. Not "0s", and not a week.
     expect(result.current.jobTiming?.elapsedMs).toBe(15_000);
     expect(result.current.jobTiming?.updatedMs).toBe(Date.parse("2026-08-18T05:52:45.000Z"));
     expect(result.current.jobTiming?.finishIsExact).toBe(true);
   });
 
-  // Such a candidate is now discarded rather than clamped.
   test("a donor instant older than the job is discarded, not clamped to zero", async () => {
     const { result, stream } = openJob();
     await emit(stream, {
@@ -320,7 +299,6 @@ describe("completed_at is what the total is measured to", () => {
   });
 });
 
-/** A job that took four minutes last week then reported however long ago it had been submitted. */
 describe("the recent-jobs entry records the verifier's timestamps", () => {
   test("re-opening a finished job does not stretch its recorded duration", async () => {
     const { result, stream } = openJob();
@@ -338,8 +316,6 @@ describe("the recent-jobs entry records the verifier's timestamps", () => {
     expect(stored.finished_at).toBe("2026-08-18T05:56:42.000Z");
   });
 
-  // Write-once, like `created_at` — and for a stronger reason: a later `updated_at` is not a later finish, it
-  // is a later write to a row that already finished.
   test("a later write to the settled row does not move the recorded finish", async () => {
     const first = openJob();
     await emit(first.stream, queuedEvent);
@@ -390,7 +366,6 @@ describe("the timing card", () => {
     expect(screen.queryByText("In progress")).not.toBeInTheDocument();
   });
 
-  // An `updated_at`-derived total is an upper bound, and must not read as the verifier's measurement.
   test("marks the total approximate when it did not come from verified_at", () => {
     render(
       <JobTimingCard
@@ -424,10 +399,6 @@ describe("the timing card", () => {
     expect(screen.getByText("In progress")).toBeInTheDocument();
   });
 
-  /**
-   * The label is bounded by what the record holds. `created_at` is when the submission was *accepted*; no
-   * column records when the sandbox began compiling, so this must not claim to.
-   */
   test("does not claim to be when the build started", () => {
     render(
       <JobTimingCard

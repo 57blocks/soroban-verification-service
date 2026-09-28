@@ -122,8 +122,6 @@ docker run --rm \
   --exit-code-on-error 1 \
   --csv /results/perf-02 --html /results/perf-02.html || exit_code=$?
 
-# Locust's HTML report is a fixed SPA template and cannot show the run's own parameters, so splice a parameter
-# banner into the generated report.
 [ -f "$output_root/perf-02.html" ] || exit "$exit_code"
 python3 - "$output_root/perf-02.html" "$duration_seconds" "$burst_size" "$interval_seconds" "$max_in_flight" "$max_rebuilds" "$run_id" <<'PYEOF'
 import sys

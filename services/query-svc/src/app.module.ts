@@ -22,15 +22,9 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-      // Without this, ConfigModule reads only `<cwd>/.env` — the reason the same POSTGRES_* block had to exist
-      // in every service directory.
       envFilePath: envFilePaths(),
-      // Runs BEFORE the `load` factory below, so a malformed variable is reported ahead of any single-variable
-      // throw inside configuration.ts.
       validate: createEnvValidator(QuerySvcEnvDto, "query-svc"),
     }),
-    // Provides the PrismaClient + this package's repositories (TrustedVerifiersRepository, the AB-table
-    // AggregationRepository) — replaces main.ts's configureDb() call.
     DbModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) =>
@@ -41,18 +35,12 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
       useFactory: (configService: AppConfigService) =>
         configService.get("drainGraceMs", { infer: true }),
     }),
-    // The read surface's only entry control, this service having no account to bound instead. The counter is
-    // per (caller, route handler), not one bucket per caller, so each route carries this ceiling
-    // independently — which is what keeps the tight address tier out of reach of traffic to any other route.
     ThrottlerModule.forRootAsync({
-      // Throttler 6.7's options type cannot resolve Nest 12's `@nestjs/common/interfaces`, which makes `imports` required.
+      // Throttler's options type cannot resolve Nest 12's interfaces, which makes `imports` required.
       imports: [],
       inject: [ConfigService],
       useFactory: (configService: AppConfigService) => ({
         throttlers: [{ ttl: 60_000, limit: configService.get("queryThrottleLimit", { infer: true }) }],
-        // Not the bundled storage — see fixed-window-throttler.storage.ts for the cross-caller defect that
-        // one carries. Constructed here rather than provided, so `main.ts` can hand the same instance to the
-        // middleware guarding the routes Swagger mounts outside the guard chain.
         storage: new FixedWindowThrottlerStorage(),
       }),
     }),
@@ -61,7 +49,7 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
     AggregationModule,
     ResultsModule,
     VerifiersModule,
-    // Must stay last — its `*path` route only acts as a fallback for whatever nothing above matched.
+    // Must stay last: its `*path` route is the fallback for whatever nothing above matched.
     NotFoundModule,
   ],
   providers: [

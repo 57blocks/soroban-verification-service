@@ -1,6 +1,5 @@
 import type { AggregatedWasmStatus, QueryApiFailure } from "soroban-verification-client";
 
-/** One lookup against query-svc, by hash or by address. */
 export type LookupState =
   | { phase: "idle" }
   | { phase: "invalid" }

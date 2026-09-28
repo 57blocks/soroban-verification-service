@@ -1,10 +1,5 @@
 #!/usr/bin/env node
-/**
- * Black-box: asserts a deployed origin answers every position `docs/design/aws-deployment.md` §4 names. No
- * credentials of any kind — HTTPS only, which is why it can run on a deploy runner and from a runbook alike.
- *
- *   node eng-tools/assert-host-routing.mjs --env dev [--origin https://…]
- */
+/** Black-box: asserts a deployed origin answers every routing position. HTTPS only, no credentials. */
 import { ERROR_SCHEMA, ERROR_SCHEMA_VERSION } from "../packages/core/src/error-envelope.ts";
 
 const args = process.argv.slice(2);
@@ -17,13 +12,11 @@ const targetEnv = flag("env", process.env.SCVS_ENV ?? "dev");
 const origin = (flag("origin", process.env.SCVS_HOST_ORIGIN) ?? `https://${targetEnv}.sv.example.com`)
   .replace(/\/+$/, "");
 
-/** Scoped to this run so no cached answer for it can predate the deploy being asserted. */
 const nonce = `scvs-routing-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 const findings = [];
 const fail = (message) => findings.push(message);
 
-/** Takes a path on the target origin, or an absolute URL for the plaintext probe. */
 const ask = async (target, method = "GET") => {
   const url = target.startsWith("http") ? target : `${origin}${target}`;
   try {
@@ -43,7 +36,6 @@ const ask = async (target, method = "GET") => {
 
 const describe = (probe) => `${probe.method} ${probe.url}`;
 
-/** Reports the reachability failure once, so an unreachable host is one line and not one line per probe. */
 const reachable = (probe) => {
   if (probe.status !== 0) return true;
   fail(`${describe(probe)} did not answer: ${probe.error?.message ?? "unknown error"}`);
@@ -64,7 +56,6 @@ const expect = (probe, { status, type }) => {
   return ok;
 };
 
-/** Every 4xx inside `/api/` carries the same four fields, whichever hop produced it. */
 const expectEnvelope = (probe, producedBy) => {
   let body;
   try {
@@ -91,27 +82,19 @@ const expectEnvelope = (probe, producedBy) => {
 
 console.log(`Checking ${origin} (${targetEnv})`);
 
-// ── the console: its routes serve the shell, everything else at the root does not ───────────────
-
 expect(await ask("/"), { status: 200, type: "text/html" });
 expect(await ask("/verify"), { status: 200, type: "text/html" });
 expect(await ask(`/verify/jobs/${nonce}`), { status: 200, type: "text/html" });
 expect(await ask("/healthz"), { status: 200, type: "text/plain" });
 
-// The status is the whole discriminator: HTML is a legitimate answer at this origin, a 200 for a path
-// nothing routes is not.
 for (const path of [`/${nonce}`, "/admin/policy", "/docs-json", "/verify/submit"]) {
   expect(await ask(path), { status: 404, type: "text/html" });
 }
 
-// A POST used to be refused by nginx with 405 text/html, which points a reader at the web config rather than
-// at the routing.
 const posted = await ask(`/${nonce}`, "POST");
 if (reachable(posted) && posted.status === 405) {
   fail(`${describe(posted)} answers 405 — the default target is refusing the method instead of the path`);
 }
-
-// ── `/api/`: the two services' namespaces, and the rule that closes the rest ────────────────────
 
 for (const [path, producedBy] of [
   [`/api/verification/v1/${nonce}`, "verification-svc's catch-all controller"],
@@ -121,8 +104,6 @@ for (const [path, producedBy] of [
   const probe = await ask(path);
   if (expect(probe, { status: 404, type: "application/json" })) expectEnvelope(probe, producedBy);
 }
-
-// ── the two documents whose healthy answer is also `200 text/html` ──────────────────────────────
 
 for (const [service, title] of [
   ["verification", "Soroban Verification API"],
@@ -151,8 +132,6 @@ for (const [service, title] of [
   }
 }
 
-// ── plaintext upgrades rather than serving ──────────────────────────────────────────────────────
-
 const plain = await ask(`${origin.replace(/^https:/, "http:")}/${nonce}`);
 if (reachable(plain)) {
   if (plain.status !== 301) {
@@ -161,8 +140,6 @@ if (reachable(plain)) {
     fail(`${describe(plain)} redirects to "${plain.location}", expected an https:// target`);
   }
 }
-
-// ── report ──────────────────────────────────────────────────────────────────────────────────────
 
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
 for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);

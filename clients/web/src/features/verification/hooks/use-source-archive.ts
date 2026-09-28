@@ -16,41 +16,31 @@ import {
   readArchiveHead,
 } from "../utils/source-archive.util";
 
-/** How the verifier will get the source bytes. Either a public URI it fetches itself, or an archive picked here. */
 export const useSourceArchive = (
   form: UseFormReturn<VerifyFormValues>,
-  /** What preflight read off the chain, when it read one. */
   chainSourceSha256?: string,
 ) => {
   const [mode, setMode] = useState<SourceAccessMode>("public_uri");
   const [archive, setArchive] = useState<SourceArchiveInfo | null>(null);
-  /** Why the picked archive is not an answer — rendered next to the picker by `SourceAccessCard`. */
   const [error, setError] = useState<string | null>(null);
   const uploadSourceMutation = useUploadSource();
 
-  /** Every refusal path, so a rejected pick reads the same in the toast and beside the control. */
   const refuse = (message: string, options?: { duration?: number }) => {
     setArchive(null);
     setError(message);
-    // Called without the second argument when there is none, rather than with `undefined`: the chain-hash
-    // refusal is the only one that wants a longer dwell, and every other caller should keep sonner's own
-    // default rather than pass a placeholder.
     if (options) toast.error(message, options);
     else toast.error(message);
   };
 
   const selectMode = (nextMode: SourceAccessMode) => {
     setMode(nextMode);
-    // The refusal belonged to the mode being left.
     setError(null);
     if (nextMode === "upload_archive") {
       form.clearErrors("source_uri");
-      // Only the URI is cleared.
       form.setValue("source_uri", "");
     }
   };
 
-  /** The upload path's own required-field check, run before a submission is sent rather than after. */
   const requireArchive = (): string | null => {
     if (archive) return null;
     const message = "Select the exact source archive to upload.";
@@ -66,8 +56,7 @@ export const useSourceArchive = (
     }
 
     try {
-      // The `accept` attribute only filters the picker — "All Files" defeats it — so the format is decided
-      // here, off the head, exactly as the endpoint decides it off the body.
+      // `accept` only filters the picker, so the format is decided here from the file's head.
       const formatRefusal = archiveFormatRefusal(await readArchiveHead(file));
       if (formatRefusal) {
         refuse(formatRefusal);
@@ -76,8 +65,6 @@ export const useSourceArchive = (
 
       const sha256 = await fileToSha256(file);
 
-      // Refusing at the picker rather than at submit keeps the reason next to the control that caused it,
-      // exactly as the suffix refusal above does, and costs no upload.
       const refusal = chainSourceRefusal(chainSourceSha256, sha256);
       if (refusal) {
         form.setValue("source_sha256", "", { shouldValidate: true });
@@ -90,8 +77,6 @@ export const useSourceArchive = (
       form.setValue("source_sha256", sha256, { shouldValidate: true });
       toast.success("Source archive SHA-256 calculated");
     } catch (cause) {
-      // Swallowing this made every cause look identical: a missing SubtleCrypto, a file the browser can no
-      // longer read, a permission prompt the user dismissed.
       console.error("Source archive could not be read", cause);
       refuse(
         cause instanceof Error
@@ -101,10 +86,6 @@ export const useSourceArchive = (
     }
   };
 
-  /**
-   * Uploads the picked archive to the staging bucket. Throws with a user-facing message — the caller surfaces
-   * it as the submission's error state.
-   */
   const upload = async (
     declaredSha256?: string,
   ): Promise<SourceUploadResponse> => {
@@ -137,12 +118,9 @@ export const useSourceArchive = (
     return data;
   };
 
-  // Stable identity: the console clears this from an effect keyed on the target, and an unstable callback there
-  // would re-run it on every render.
   const reset = useCallback(() => {
     setArchive(null);
     setError(null);
-    // The mode was chosen for the target being left; a new one starts at the default again.
     setMode("public_uri");
   }, []);
 
@@ -150,7 +128,6 @@ export const useSourceArchive = (
     mode,
     selectMode,
     archive,
-    /** The picker's own refusal, for rendering beside it. `null` when there is nothing to say. */
     error,
     onSelectArchive,
     requireArchive,

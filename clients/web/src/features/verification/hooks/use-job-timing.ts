@@ -2,15 +2,12 @@ import { useEffect, useState } from "react";
 import type { JobTiming } from "../types";
 import { parseTimestamp } from "../utils/duration.util";
 
-/** One second. A verification runs for minutes, so anything finer is a re-render nobody can read. */
 const TICK_MS = 1000;
 
-/** The job's timing, as the console shows it. */
 export const useJobTiming = (
   createdAt: string | undefined,
   updatedAt: string | undefined,
   isRunning: boolean,
-  /** The frozen instant this job settled, where this browser recorded one. */
   finishedAt?: string,
   verifiedAt?: string,
   completedAt?: string,
@@ -34,13 +31,10 @@ export const useJobTiming = (
   const verifiedMs =
     rawVerifiedMs !== undefined && rawVerifiedMs >= startedMs ? rawVerifiedMs : undefined;
 
-  // While running, the third tile is "Last update" and `updated_at` is exactly that.
   const updatedMs = isRunning
     ? lastChangeMs
     : (completedMs ?? verifiedMs ?? finishedMs ?? lastChangeMs);
 
-  // A settled job with no timestamp at all falls back to the live clock rather than to `startedMs`: "we did not
-  // record when it finished" must not render as "it took 0s".
   const endMs = isRunning || updatedMs === undefined ? now : updatedMs;
 
   return {
@@ -48,7 +42,6 @@ export const useJobTiming = (
     ...(updatedMs === undefined ? {} : { updatedMs }),
     elapsedMs: Math.max(0, endMs - startedMs),
     isRunning,
-    // Only the server's own instant makes the total exact; the card labels the rest "at most".
     finishIsExact: !isRunning && (completedMs ?? verifiedMs) !== undefined,
   };
 };

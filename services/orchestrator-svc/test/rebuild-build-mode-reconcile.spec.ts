@@ -7,10 +7,6 @@ import {
 } from "@scvs/db";
 import { CreatedRows } from "@scvs/db/testing";
 
-/**
- * `selectBuildMechanism` is total on `"build"`, so a persisted `"verify"` is a row that outlived the CLI
- * path rather than a decision. Reconciling it is safe only before dispatch.
- */
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"f".repeat(64)}`;
 
 let client: PrismaClient;

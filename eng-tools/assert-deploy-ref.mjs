@@ -1,10 +1,5 @@
 #!/usr/bin/env node
-/**
- * Refuses a deploy from a ref that is not an ancestor of main, so an environment cannot run a commit a
- * release could not be cut from. Pure git — no credentials.
- *
- *   node eng-tools/assert-deploy-ref.mjs --env staging [--sha <commit>] [--main <ref>]
- */
+/** Refuses a deploy from a ref that is not an ancestor of main. Pure git, no credentials. */
 import { fail, git, inGha, requireOnMain } from "./release-channels.mjs";
 
 const tryGit = (...args) => {
@@ -22,8 +17,7 @@ const flag = (name, fallback) => {
 };
 
 const targetEnv = flag("env", process.env.SCVS_ENV ?? "dev");
-// The checked-out commit before the ambient one: under `workflow_call` GITHUB_SHA names the caller, and a
-// caller's commit is never on this repository's main. GITHUB_SHA remains the fallback for a run without one.
+// Under `workflow_call` GITHUB_SHA names the caller's commit, so the checkout's HEAD comes first.
 const sha = flag("sha") ?? tryGit("rev-parse", "HEAD") ?? process.env.GITHUB_SHA;
 if (!sha) fail("no commit to check: pass --sha, or run this where a checkout or GITHUB_SHA exists");
 

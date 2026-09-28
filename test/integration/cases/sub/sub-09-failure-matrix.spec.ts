@@ -1,4 +1,3 @@
-/** E2E-SUB-09 — the asynchronous failure classifications. */
 import { deploymentParameters, env } from "../../support/env.js";
 import { fixture, fixtures, missingFixture, missingRunScopedTarget, submissionFor } from "../../support/fixtures.js";
 import { caseBlock } from "../../support/gate.js";
@@ -48,10 +47,8 @@ caseBlock(
         await submissionFor("F-LEG-1", { source_uri: fixtures.unreachable_source_uri! })
       );
 
-      // A vocabulary drift must cost one assertion, not the case.
       expect(run.jobId).toEqual(expect.any(String));
       expect(run.body.status).toBe("source_unavailable");
-      // Independent of which code is in play: whatever `error` says, `result.reason` says the same.
       expect(run.body.result?.reason).toBe(run.body.error);
 
       await assertFailureDidNotPublish(before, target.wasm_hash!, run.body.result);
@@ -67,14 +64,10 @@ caseBlock(
           /404/,
         ]);
       } else {
-        // A pre-builder failure is expected to have no log. Still validate the stable envelope so a missing
-        // object is not confused with an unrelated route or authorization failure.
         expect(log.json?.error).toBe("not_found");
         expect(log.json?.failure_reason).toBe("source_unreachable");
       }
 
-      // Last, and on its own: source materialisation happens in orchestrator-svc before a Batch job is
-      // dispatched, and its public detail is intentionally generic.
       expect(run.body.error).toBe("source_uri_not_materialized");
     }, env.jobTimeoutMs + 60_000);
   }
@@ -136,13 +129,11 @@ caseBlock(
       }), {
         timeoutMs: Math.max(env.jobTimeoutMs, limit * 2),
         requireFreshTargetJob: true,
-        // `build_timeout` is retryable, so settling would follow the retry instead of reading this timeout.
+        // build_timeout is retryable; settling would read the retry instead.
         settleMs: 0,
       });
 
       expect(run.body.status).toBe("build_failed");
-      // The public error code is the builder's raw command outcome. The trusted side derives the retryable
-      // `build_timeout` classification from the diagnostics instead of rewriting it.
       expect(run.body.error).toBe("rebuild_command_failed");
       expect(run.body.result?.reason).toBe(run.body.error);
       expect(run.body.result?.sandbox_diagnostics).toEqual(
@@ -154,7 +145,7 @@ caseBlock(
       const log = await readJobLog(run.jobId);
       expectStatus(log, 200);
       assertBuildLogRedacted(log.text);
-      // Cargo does not promise to forward a still-running build script's stderr when its parent is terminated.
+      // Cargo need not forward a running build script's stderr once its parent is killed.
       assertBuildLogContainsAny(log.text, "timed-out command", [/\[timed out\]/]);
     }, Math.max(env.jobTimeoutMs, (deploymentParameters.limitWallclockMs ?? 0) * 2) + 60_000);
   }

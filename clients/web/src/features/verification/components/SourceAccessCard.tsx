@@ -23,7 +23,6 @@ type SourceAccessCardProps = {
   onModeChange: (mode: SourceAccessMode) => void;
   archive: SourceArchiveInfo | null;
   onSelectArchive: (file: File | null) => void;
-  /** Why the picker is not yet an answer — set when a submission was refused for want of an archive. */
   archiveError?: string | null;
 };
 
@@ -34,7 +33,6 @@ const hintCopy: Record<SourceAccessMode, string> = {
     "Select the exact gzip tarball or zip used for the contract build — the archive is read by its bytes, whatever it is named. Its SHA-256 is recorded in the submission.",
 };
 
-/** Where the verifier gets the exact source bytes: a public URL, or an upload from this browser. */
 export const SourceAccessCard = ({
   form,
   mode,
@@ -44,8 +42,7 @@ export const SourceAccessCard = ({
   archiveError = null,
 }: SourceAccessCardProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Only read on the path that renders the field: react-hook-form keeps a field's error after its input
-  // unmounts, and `selectMode` clears this one when switching away from `public_uri`.
+  // react-hook-form keeps a field's error after its input unmounts, so read it only on this path.
   const sourceUriError =
     mode === "public_uri" ? form.formState.errors.source_uri?.message : undefined;
   const problem = mode === "public_uri" ? sourceUriError : archiveError ?? undefined;
@@ -85,8 +82,6 @@ export const SourceAccessCard = ({
             aria-label="Source URI"
             aria-invalid={sourceUriError ? true : undefined}
             placeholder="https://example.com/my-contract-v1.0.0.tar.gz"
-            // The same rule the console applies before submitting, registered here so a blur marks the field up
-            // too.
             {...form.register("source_uri", {
               validate: (value) => sourceUriRefusal(value) ?? true,
             })}
@@ -130,8 +125,6 @@ export const SourceAccessCard = ({
         )}
       </div>
 
-      {/* One line, and the refusal displaces the hint rather than sitting under it: the hint
-          describes what to provide, which is exactly what the refusal is already saying. */}
       <p
         data-testid="source-access-message"
         className={[
@@ -148,24 +141,6 @@ export const SourceAccessCard = ({
         </p>
       )}
 
-      {/* The public declaration, offered on both paths.
-
-          It used to be `public_uri`-only, because "Private archive" and a "publish this publicly"
-          checkbox under it read as a contradiction — and the note taken when that was removed said
-          the honest fix was to rename the mode rather than re-add the checkbox under the old label.
-          That is what happened here: the mode is "Upload archive", which says how the bytes arrive
-          and claims nothing about visibility, so the declaration is a coherent question on it.
-
-          The wire contract never changed and is not changing now: `is_public` is declared on every
-          submission (`manifest.util.ts` sends `false`, it does not omit the field) and the verifier
-          still never infers visibility from `upload_id` (source-storage plan.md §5). What returns is
-          the *offer* — an uploaded archive declared public is a submission the API has always
-          accepted (`PrivateTarballSourceRef.visibility` was widened from the `"private"` literal for
-          exactly this), and `publish.service.ts` gates `sources/{sha256}` on
-          `sourceRef.visibility === "public"` alone, never on how the source was supplied.
-
-          Unchecked remains the default and means not public — TRD §6.1's "defaulting to not
-          public". */}
       <label className="mt-4 flex items-start gap-2.5">
         <input
           type="checkbox"

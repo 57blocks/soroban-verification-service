@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-/**
- * The only writer of a real `soroban-verification-client` version: the tag is the version, so the committed manifest holds a
- * placeholder and CI stamps the resolved one in. It also records the commit, which is what lets the publish
- * step tell an idempotent re-run apart from a version being quietly reused for different source.
- */
+/** Stamps the resolved version and commit into `clients/sdk/package.json`; the committed manifest holds a placeholder. */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -18,7 +14,7 @@ function required(name) {
 
 const version = required("SDK_VERSION");
 const channel = required("CHANNEL");
-// The commit being released, which a dispatch may point away from the one the run started on.
+// SDK_COMMIT first: a dispatch may release a commit other than the one the run started on.
 const sha = process.env.SDK_COMMIT?.trim() || required("GITHUB_SHA");
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));

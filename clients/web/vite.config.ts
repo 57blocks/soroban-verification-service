@@ -10,12 +10,9 @@ import {
 import { spaRoutesPlugin } from "./spa-routes";
 import { buildStampPlugin } from "./build-stamp";
 
-// The repository has exactly one `.env`, at the root, read by every service (AGENTS.md).
 const envDir = fileURLToPath(new URL("../..", import.meta.url));
 
 export default defineConfig(({ mode }) => {
-  // Read through `loadEnv` rather than `process.env` so `VITE_DEV_API_PROXY` lives in the same root
-  // `.env.local` as the other `VITE_*` variables.
   const env = loadEnv(mode, envDir);
   const proxy = devProxyServerConfig(resolveDevProxy(env));
 
@@ -33,8 +30,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },
-      // `@scvs/verify-api-client` resolves these from its own `node_modules`, and a second copy of
-      // react-query in the bundle is a second context: every generated hook throws "No QueryClient set".
+      // A second react-query copy is a second context: every generated hook throws "No QueryClient set".
       dedupe: ["@tanstack/react-query", "react", "react-dom", "axios"],
     },
     server: {

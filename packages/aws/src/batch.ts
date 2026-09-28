@@ -4,8 +4,6 @@ import {
   DescribeJobsCommand,
   SubmitJobCommand,
 } from "@aws-sdk/client-batch";
-// Referenced only from the JSDoc {@link BatchJobParams} below, to document the follow-up mapping work — not
-// used as a runtime or parameter type in this file.
 import type { BatchJobParams } from "@scvs/core";
 
 export function createBatchClient(region?: string): BatchClient {
@@ -20,7 +18,6 @@ export type SubmitJobParams = {
   containerOverrides?: {
     environment?: Array<{ name: string; value: string }>;
   };
-  /** Multi-container (ecsProperties) job definition overrides. */
   ecsPropertiesOverride?: {
     taskProperties: Array<{
       containers: Array<{
@@ -31,12 +28,10 @@ export type SubmitJobParams = {
   };
 };
 
-/** Thin wrapper over Batch `SubmitJob`. */
 export async function submitJob(client: BatchClient, params: SubmitJobParams): Promise<{ jobId: string }> {
   const response = await client.send(
     new SubmitJobCommand({
       jobName: params.jobName,
-      // The Batch SDK's own field names are `jobQueue`/`jobDefinition` (each accepts either a name or an ARN).
       jobQueue: params.jobQueueArn,
       jobDefinition: params.jobDefinitionArn,
       ...(params.parameters ? { parameters: params.parameters } : {}),
@@ -66,7 +61,6 @@ export async function describeJob(
   };
 }
 
-/** `familyOrArn` accepts a bare family name or a full ARN (same as SubmitJob's `jobDefinition`). */
 export async function describeActiveJobDefinition(
   client: BatchClient,
   familyOrArn: string,
@@ -117,7 +111,6 @@ export async function describeActiveJobDefinition(
   };
 }
 
-/** The subset of a registered definition's `ecsProperties` that participates in the merged payload. */
 export type RegisteredTaskProperties = {
   revision: number;
   taskProperties: Array<{

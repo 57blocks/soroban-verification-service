@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-/**
- * Static inputs, real nginx: serves `docker/web-nginx.conf` and the generated route allowlist over a synthetic
- * document root in a throwaway container, then probes what each position answers. No AWS, no network beyond
- * the image pull.
- */
+/** Serves `docker/web-nginx.conf` on real nginx in a throwaway container and probes each position. Needs Docker; no AWS. */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,17 +9,11 @@ import { renderSpaRoutesConf } from "../clients/web/spa-routes.ts";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-/** Read from `docker/web.Dockerfile`, so this tests the config on the runtime that serves it. */
 const IMAGE = readFileSync(join(repoRoot, "docker/web.Dockerfile"), "utf8").match(/^FROM (nginx:\S+)$/m)?.[1];
 if (!IMAGE) throw new Error("docker/web.Dockerfile has no `FROM nginx:<tag>` line to test against");
 
-/** Recognisable enough that a body assertion cannot pass on nginx's own error page. */
 const SHELL_MARKER = "<title>scvs-host-routing-probe</title>";
 
-/**
- * One expectation per position the host answers. `html` means the console's entry document — at 200 for a
- * route, at 404 for everything else.
- */
 const EXPECTATIONS = [
   { path: "/", status: 200, type: "text/html", shell: true, why: "the landing page" },
   { path: "/healthz", status: 200, type: "text/plain", why: "the load balancer's target" },
@@ -89,8 +79,6 @@ try {
   process.exit(1);
 }
 
-// ── the generated allowlist must not be reachable as a static file ──────────────────────────────
-
 const dockerfile = readFileSync(join(repoRoot, "docker/web.Dockerfile"), "utf8");
 if (!/mv\s+\/usr\/share\/nginx\/html\/spa-routes\.conf\s+\/etc\/nginx\/scvs\//.test(dockerfile)) {
   fail(
@@ -98,8 +86,6 @@ if (!/mv\s+\/usr\/share\/nginx\/html\/spa-routes\.conf\s+\/etc\/nginx\/scvs\//.t
       "it there, and `try_files $uri` would serve the origin's own nginx config to anyone who asks"
   );
 }
-
-// ── a synthetic document root: one of each thing the real bundle carries ────────────────────────
 
 const workdir = mkdtempSync(join(tmpdir(), "scvs-host-routing-"));
 const docroot = join(workdir, "html");
@@ -123,8 +109,6 @@ const stop = () => {
 };
 
 try {
-  // Parsed before anything is served, so a syntax error or an unresolved include reports as itself rather
-  // than as eighteen failed probes.
   try {
     docker("run", "--rm", ...mounts, IMAGE, "nginx", "-t");
   } catch (error) {
@@ -138,7 +122,6 @@ try {
   const port = Number(mapped.split("\n")[0].split(":").pop());
   const origin = `http://127.0.0.1:${port}`;
 
-  // The daemon binds within a few hundred milliseconds; poll rather than sleep a guessed amount.
   let up = false;
   for (let attempt = 0; attempt < 50 && !up; attempt += 1) {
     try {
@@ -173,8 +156,6 @@ try {
     }
   }
 
-  // Every method, because E2E-SEC-14 asserts a management path answers 404 from an auditor's position and
-  // 405 there would read as "something is here, and it refused you".
   for (const method of ["POST", "DELETE", "PUT"]) {
     const response = await fetch(`${origin}/admin/policy`, { method, redirect: "manual" });
     if (response.status !== 404) {
@@ -182,8 +163,6 @@ try {
     }
   }
 
-  // The one header that is not about routing but is delivered by it: try_files serves index.html without
-  // re-matching a location, so a per-location no-cache would be bypassed for every route above.
   const shellCache = (await fetch(`${origin}/verify`)).headers.get("cache-control") ?? "";
   if (!shellCache.includes("no-cache")) {
     fail(
@@ -198,8 +177,6 @@ try {
 } finally {
   stop();
 }
-
-// ── report ──────────────────────────────────────────────────────────────────────────────────────
 
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
 for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);

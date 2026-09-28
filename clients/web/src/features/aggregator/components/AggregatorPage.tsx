@@ -15,7 +15,6 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-/** The aggregator: what the verifiers this deployment trusts say about one subject. */
 export const AggregatorPage = () => {
   const [active, setActive] = useState<TabId>("hash");
   const { list, isLoading, failure } = useTrustedVerifiers();
@@ -34,8 +33,6 @@ export const AggregatorPage = () => {
         <div className="mt-8 space-y-3">
           <CollapsibleSection
             title="Trusted verifiers"
-            // Undefined, not 0, whenever the number is unknown — a failed read is exactly that, and a collapsed
-            // section showing 0 claims this deployment aggregates across nobody.
             count={isLoading || failure ? undefined : list?.verifiers?.length}
             testId="tvl-section"
           >
@@ -72,8 +69,6 @@ export const AggregatorPage = () => {
         </nav>
 
         <div className="mt-8">
-          {/* Both stay mounted: switching tabs must not throw away a typed subject or its answer,
-              and the contract tab's lookup includes a ledger read worth not repeating. */}
           <div hidden={active !== "hash"} data-testid="tab-panel-hash">
             <HashLookup additionalRoots={roots} />
           </div>

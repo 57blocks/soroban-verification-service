@@ -2,7 +2,6 @@ import { MonoChip } from "@/components/mono-chip";
 import { formatValue } from "../utils/format.util";
 import { MonoLabel } from "./MonoLabel";
 
-/** What the verifier could already resolve from chain metadata, one monospace strip per field. */
 export const EvidenceMetadata = ({
   availableFields,
 }: {

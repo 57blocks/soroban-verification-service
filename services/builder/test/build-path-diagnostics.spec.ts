@@ -36,8 +36,6 @@ const buildDiagnostics = () =>
 
 describe("a failure on the build path is never an infrastructure failure", () => {
   it("carries no docker_error, which is what keeps it out of internal_error", () => {
-    // `rebuildFailureReason` returns the retryable `internal_error` on the mere presence of this key, so
-    // adding it here would reclassify every build-path refusal at once.
     expect(buildDiagnostics()).not.toHaveProperty("docker_error");
   });
 

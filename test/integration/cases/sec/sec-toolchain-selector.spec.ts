@@ -1,4 +1,3 @@
-/** E2E-SEC-06 -- a submitted rust-toolchain.toml cannot select the compiler. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixture, missingFixture, submissionFor } from "../../support/fixtures.js";
@@ -34,8 +33,6 @@ caseBlock(
         const target = fixture("F-ADV-TOOLCHAIN");
         const run = await submitAndWait(await submissionFor(target.id));
 
-        // The fixture's source differs only by its selector, so a completed build is the prerequisite for
-        // reading the effective environment.
         expect(["verified", "mismatch"]).toContain(run.body.status);
 
         const diagnostics = run.body.result?.sandbox_diagnostics;
@@ -45,8 +42,6 @@ caseBlock(
         expect(diagnostics.source_rust_toolchain_file).toBe("rust-toolchain.toml");
         expect(diagnostics.toolchain_pinned).toBe(true);
 
-        // This is V_img: resolveTrustedToolchain probes the digest-pinned build image and passes the result as
-        // RUSTUP_TOOLCHAIN.
         const imageToolchain = requiredString(diagnostics, "rustup_toolchain");
         expect(imageToolchain).not.toBe(SOURCE_REQUESTED_TOOLCHAIN);
         expect(imageToolchain).not.toMatch(/^1\.99\.0(?:-|$)/);
@@ -57,8 +52,6 @@ caseBlock(
         expect(log.text).toContain(`RUSTUP_TOOLCHAIN=${imageToolchain}`);
         expect(log.text).not.toMatch(new RegExp(`RUSTUP_TOOLCHAIN=${SOURCE_REQUESTED_TOOLCHAIN.replace(".", "\\.")}`));
 
-        // A rustup sync/install for the source-selected channel would prove the selector escaped the trusted
-        // pin during acquisition.
         expect(log.text).not.toMatch(new RegExp(`(?:syncing|installing|downloading)[^\\n]{0,160}${SOURCE_REQUESTED_TOOLCHAIN.replace(".", "\\.")}`, "i"));
       },
       env.jobTimeoutMs + 60_000

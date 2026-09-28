@@ -1,6 +1,5 @@
 import type { AggregatedWasmStatus } from "soroban-verification-client";
 
-/** Verifiers this deployment could not reach. */
 export const UnavailableVerifiers = ({
   verifiers,
 }: {

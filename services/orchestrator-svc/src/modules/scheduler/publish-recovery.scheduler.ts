@@ -7,10 +7,8 @@ import { PublishService } from "../publish/index.js";
 import { StartupRecoveryService } from "./startup-recovery.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
-/** Enough ids to act on; a backlog-sized array in one log record helps nobody. */
 const LOGGED_ID_LIMIT = 20;
 
-/** How long a job may sit in `publishing` before its worker is presumed dead. */
 const PUBLISH_STALE_MS = Number(process.env.SCVS_PUBLISH_STALE_MS || 600_000);
 
 @Injectable()
@@ -45,8 +43,6 @@ export class PublishRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
     try {
       const maxAttempts = this.configService.get("maxPublishAttempts", { infer: true });
 
-      // `publishing` is the one non-terminal state outside the dispatch poll loop, so it is the one a crashed
-      // worker can strand.
       const released = await this.jobs.releaseStalePublishing(new Date(Date.now() - PUBLISH_STALE_MS));
       if (released.length > 0) {
         this.logger.warn("released jobs left mid-publication by a stopped worker", {
@@ -58,15 +54,10 @@ export class PublishRecoveryScheduler implements OnModuleInit, OnModuleDestroy {
 
       const pending = await this.jobs.listJobsByStatus(["publish_pending"]);
       for (const job of pending) {
-        // Releasing says "the worker holding this has gone quiet for `PUBLISH_STALE_MS`"; it does not say the
-        // worker is *gone*.
+        // Released does not mean the worker is gone; skip jobs this tick just released.
         if (released.includes(job.jobId)) continue;
-        if (!job.result) continue; // nothing to publish; a verdict write that did not land
-        // Bounded, so a permanently misconfigured publisher stops being retried every minute for the life of
-        // the process.
+        if (!job.result) continue;
         if (job.publishAttempts >= maxAttempts) continue;
-        // No in-process `Set` guarding this loop any more: `publishJobResult` claims `publish_pending ->
-        // publishing` itself, so two replicas scanning in the same second produce exactly one publish.
         this.detached.start(() =>
           this.publish.publishJobResult(job.jobId).catch((error) => {
             this.logger.error("recovery failed to publish job", {

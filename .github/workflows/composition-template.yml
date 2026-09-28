@@ -1,22 +1,14 @@
 name: Composition template gate
 
-# Builds the composition template `CURRENT_COMPOSE_TEMPLATE_VERSION` names and proves the resulting image can
-# run the binaries it installed.
-
 on:
   push:
     branches:
       - main
-    # Duplicated below rather than shared through a YAML anchor: GitHub Actions' workflow parser does not
-    # support anchors or aliases, and it rejects the file rather than ignoring them.
     paths:
       - "docker/composed-environments/**"
       - "services/composer/**"
-      # `CURRENT_COMPOSE_TEMPLATE_VERSION` lives here, and it is what decides which template this gate builds.
       - "packages/core/src/build-environment.ts"
       - "eng-tools/check-composition-template.mjs"
-      # The matrix driver and its pair table. Neither runs on a pull request, so `pins` below syntax-checks
-      # them.
       - "eng-tools/check-composition-matrix.mjs"
       - "eng-tools/composition-pairs.mjs"
       - ".github/workflows/composition-template.yml"
@@ -26,14 +18,9 @@ on:
       - "services/composer/**"
       - "packages/core/src/build-environment.ts"
       - "eng-tools/check-composition-template.mjs"
-      # The matrix driver and its pair table. Neither runs on a pull request, so `pins` below syntax-checks
-      # them.
       - "eng-tools/check-composition-matrix.mjs"
       - "eng-tools/composition-pairs.mjs"
       - ".github/workflows/composition-template.yml"
-  # The matrix job below is gated **on** `run_matrix`, and `pins`/`compose` are gated off it: a dispatch with
-  # `run_matrix: true` runs the matrix alone, and one without it re-runs the per-PR gate against the
-  # `cliver`/`rsver`/`template_version` given here.
   workflow_dispatch:
     inputs:
       cliver:
@@ -57,14 +44,11 @@ on:
 permissions:
   contents: read
 
-# Keyed on the pull request number, not `head_ref`: two forks can both offer a branch called `main` or
-# `patch-1`, and keying on the branch name would let either one cancel the other's run.
 concurrency:
   group: composition-template-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Fast, hermetic half: does the template contradict itself?
   pins:
     if: ${{ !inputs.run_matrix }}
     runs-on: ubuntu-latest
@@ -77,20 +61,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The gate imports the composer's real `loadCompositionTemplate` from its build output rather than
-      # reimplementing the parse.
       - run: pnpm --filter @scvs/composer... run build
       - run: node eng-tools/check-composition-template.mjs --pins-only
-      # Costs milliseconds and closes the gap left by the matrix job being hand-run: a syntax error in
-      # either file would otherwise surface whenever somebody next dispatches it, which may be weeks
-      # after the commit that introduced it.
       - run: node --check eng-tools/check-composition-matrix.mjs
       - run: node --check eng-tools/composition-pairs.mjs
 
   compose:
     if: ${{ !inputs.run_matrix }}
-    # Native arm64, matching the template's own `platform` and the Graviton compute environment the composed
-    # image is actually pulled by.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     steps:
@@ -103,8 +80,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @scvs/composer... run build
 
-      # Fetches and checksum-verifies every component from its real source, runs the real `docker build`, then
-      # runs `rustc --version` and `stellar version` inside the result and compares both halves of the pair.
       - name: Compose the current template, smoke-test it, and build a contract in it
         run: |
           node eng-tools/check-composition-template.mjs \
@@ -112,13 +87,9 @@ jobs:
             ${{ inputs.cliver && format('--cliver {0}', inputs.cliver) || '' }} \
             ${{ inputs.rsver && format('--rsver {0}', inputs.rsver) || '' }}
 
-  # The same gate, across the `(cliver, rsver)` pairs `eng-tools/composition-pairs.mjs` argues are worth
-  # composing — not the one pair `compose` above happens to default to.
   matrix:
     if: ${{ inputs.run_matrix }}
     runs-on: ubuntu-24.04-arm
-    # `composition-pairs.mjs` is ten rows. Seven are expected to compose: ~12 min each for the rustup layer plus
-    # the scaffolded contract build, so ~84 min.
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -130,8 +101,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @scvs/composer... run build
 
-      # Cheap and standalone: one HTTP request per distinct rsver, asking rustup's own channel manifest whether
-      # that toolchain distributes the target every shipped template hardcodes.
       - name: Probe rustup channel manifests for the template's targets
         run: |
           set -o pipefail

@@ -5,7 +5,6 @@ import { ScvsLogger, stderrOnlySink } from "@scvs/core";
 import { AppModule } from "./app.module.js";
 import { ComposerService } from "./modules/composer/composer.service.js";
 
-/** `services/composer`'s AWS Batch container entrypoint (`docker/composer.Dockerfile`). */
 async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger:

@@ -12,8 +12,6 @@ import {
 } from "class-validator";
 import { verificationStatuses, type VerificationStatus } from "./enums.js";
 
-// Shared result/diagnostics domain model.
-
 export class WasmSection {
   @IsNumber() id!: number;
   @IsString() name!: string;
@@ -95,12 +93,9 @@ export class ReferenceAlignmentCommit {
   @IsString() sha!: string;
 }
 
-/** Which upstream `stellar` the sandbox's reference was aligned to, read off `docker/stellar-cli.pin`. */
 export class ReferenceAlignmentDto {
   @IsIn(["stellar/stellar-cli"]) repo!: "stellar/stellar-cli";
-  /** The pinned official release tag, e.g. `v28.0.0`. */
   @IsOptional() @IsString() version?: string;
-  /** Present on artifacts written before it, absent after. */
   @IsOptional() @IsString() base_commit?: string;
   @IsOptional()
   @IsArray()
@@ -111,8 +106,6 @@ export class ReferenceAlignmentDto {
   read_from!: "docker/stellar-cli.pin";
 }
 
-// Emitted by services/builder (run-cli.ts / recipe.ts) and consumed by services/orchestrator-svc/src/publish
-// (compare.ts / build-result.ts) as part of the published VerificationResultSummary.
 export class SandboxDiagnostics {
   @IsIn(sandboxRunners) runner!: (typeof sandboxRunners)[number];
   @IsOptional() @IsString() build_image?: string;
@@ -153,20 +146,10 @@ export class SandboxDiagnostics {
   @IsOptional() @IsString() dependency_prefetch_blocked_url?: string;
   @IsOptional() @IsString() cargo_home?: string;
   @IsOptional() @IsBoolean() cargo_net_offline?: boolean;
-  /**
-   * Where the vendored-sources/offline config was written. Kept out of the submitted source tree so the build
-   * never mutates the bytes that `source_sha256` describes, and so a project's own `.cargo/config.toml`.
-   */
   @IsOptional() @IsString() cargo_config_path?: string;
-  /** The toolchain pinned via `RUSTUP_TOOLCHAIN`, probed from the digest-pinned build image. */
   @IsOptional() @IsString() rustup_toolchain?: string;
   @IsOptional() @IsBoolean() toolchain_pinned?: boolean;
-  /**
-   * Set when the submitted source carries a `rust-toolchain`/`rust-toolchain.toml` file — the case where a
-   * failed toolchain probe is fatal rather than merely unpinned.
-   */
   @IsOptional() @IsString() source_rust_toolchain_file?: string;
-  /** `bldopt` tokens the rebuild did not replay and does not re-issue itself. */
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -179,15 +162,8 @@ export class SandboxDiagnostics {
   @IsArray()
   @IsString({ each: true })
   unparsable_bldopts?: string[];
-  /**
-   * The one build-command argument the image's CLI rejected, when it named one. **The flag only, never its
-   * value**.
-   */
+  /** The flag only, never its value. */
   @IsOptional() @IsString() rejected_build_option?: string;
-  /**
-   * Who owns the rejection. `recorded_bldopt` means the recipe asked for a flag this image does not accept —
-   * the recipe is inadmissible here and the submitted source is fine.
-   */
   @IsOptional()
   @IsIn(["recorded_bldopt", "verifier_added"])
   rejected_build_option_origin?: "recorded_bldopt" | "verifier_added";
@@ -204,17 +180,10 @@ export class SandboxDiagnostics {
   @IsIn(["deployed_wasm_contractmetav0"])
   metadata_replay_source?: "deployed_wasm_contractmetav0";
   @IsOptional() @IsString() extraction_normalisation?: string;
-  /**
-   * How the rebuilt artifact was chosen. `output_mount_confirmed_by_report` means the sole artifact in the
-   * output mount, named by the build tool's own report. `build_tool_report` is the earlier mechanism, where the
-   * report alone chose the file; rows and reports already published carry it.
-   */
   @IsOptional()
   @IsIn(["build_tool_report", "output_mount_confirmed_by_report"])
   artifact_selection?: "build_tool_report" | "output_mount_confirmed_by_report";
-  /** The in-container path the build tool reported producing. */
   @IsOptional() @IsString() reported_artifact_path?: string;
-  /** Whether the build tool's reported hash matched the bytes found on disk afterwards. */
   @IsOptional()
   @IsBoolean()
   reported_artifact_hash_verified?: boolean;
@@ -239,11 +208,6 @@ export class SandboxDiagnostics {
 
 const sourceReconstructionOutcomes = ["adopted", "hash_mismatch", "failed"] as const;
 
-/**
- * Only the three outcomes that say something are published: `adopted` explains why the published
- * `source_sha256` is not the hash of the uploaded bytes, and the other two are what the submitter is owed when
- * the chain correspondence is lost.
- */
 export class SourceReconstruction {
   @IsIn(sourceReconstructionOutcomes) outcome!: (typeof sourceReconstructionOutcomes)[number];
   @IsOptional() @IsString() detail?: string;
@@ -255,22 +219,12 @@ export class VerificationResultSummary {
   @IsOptional() @IsString() expected_wasm_hash?: string;
   @IsOptional() @IsString() rebuilt_wasm_hash?: string;
   @IsOptional() @IsBoolean() matched?: boolean;
-  /**
-   * The byte-level verdict (`rebuilt_wasm_hash` vs the hash actually compared against) still publishes and is
-   * permanently true, but the *contract → hash* binding recorded at submission no longer holds, so the
-   * by-contract index is deliberately not updated for this job: asserting a binding we know is stale would be
-   * worse than asserting nothing.
-   */
   @IsOptional()
   @IsBoolean()
   contract_binding_drifted?: boolean;
   @IsOptional()
   @IsIn(["metadata_backed", "retroactive_manual"])
   verification_path?: "metadata_backed" | "retroactive_manual";
-  /**
-   * `source_archive_not_chain_recorded`. Its presence *is* the statement that the CLI path was tried; absence
-   * means it was never routed, which `provenance.recipe_source` already says.
-   */
   @IsOptional() @IsString() verify_attempt_reason?: string;
   @IsOptional()
   @ValidateNested()
@@ -291,9 +245,6 @@ export class VerificationResultSummary {
   @IsOptional() @IsString() verified_at?: string;
 }
 
-// One verifier's pointer to its own published result. The by-hash/by-contract indexes this
-// described were deleted (ADR-010), and its producer (toResultPointer) with them — no code
-// constructs or reads this class today. Kept as a type, not deleted, pending an owner's call.
 export class ResultPointer {
   @IsString() status!: string;
   @IsOptional() @IsString() wasm_hash?: string;

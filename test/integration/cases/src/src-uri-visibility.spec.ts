@@ -1,4 +1,3 @@
-/** URI visibility matrix: private verified has no copy; public mismatch retains one. */
 import { caseBlock } from "../../support/gate.js";
 import { env } from "../../support/env.js";
 import { fixtures, missingDeployedTarget, submissionFor } from "../../support/fixtures.js";
@@ -122,7 +121,6 @@ caseBlock(
       async () => {
         const fixture = fixtures.contracts[URI_PUBLIC_MISMATCH];
         await assertFixtureOrigin(fixture);
-        // A previous run may already have retained this fixed public fixture.
         await assertExistingPublicSourceIsCorrect(fixture);
 
         const run = await submitAndWait(

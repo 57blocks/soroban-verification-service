@@ -32,7 +32,6 @@ const str = (value: unknown): string | null => (typeof value === "string" && val
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 
-/** `recipe_source` decides a provenance heading, so an unrecognised value is null, never a guess. */
 const recipeSource = (value: unknown): ArtifactRecipeFacts["recipeSource"] =>
   value === "on_chain_metadata" || value === "submitted" ? value : null;
 
@@ -68,7 +67,6 @@ const readRecipe = (document: ArtifactDocument): ArtifactRecipeFacts => {
   };
 };
 
-/** The published report artifact for a job, read from the URL the job itself carries. */
 export const usePublishedArtifact = (
   artifactUrl: string | undefined,
   artifactSha256: string | undefined,
@@ -81,8 +79,6 @@ export const usePublishedArtifact = (
     queryFn: async () => {
       const verified = await fetchAndVerifyResultUrl(
         { type: "report", url: artifactUrl!, ...(artifactSha256 ? { sha256: artifactSha256 } : {}) },
-        // Without a declared hash there is nothing to check the bytes against, and the SDK refuses rather than
-        // pretending.
         artifactSha256 ? undefined : { allowUnverified: true },
       );
 

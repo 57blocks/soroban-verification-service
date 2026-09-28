@@ -23,7 +23,6 @@ afterAll(async () => {
   await app?.close();
 });
 
-/** A `LegalService` with no database behind it — every case here is about loading, not about TA-5. */
 function serviceFor(source: string): LegalService {
   return new LegalService(
     { get: () => source } as never,
@@ -44,8 +43,6 @@ async function writeBundle(mutate: (bundle: Record<string, unknown>) => void): P
 
 describe("GET /api/verification/v1/legal", () => {
   it("serves the operator's bytes verbatim, with their sha256 as the ETag", async () => {
-    // Byte equality, not deep equality of parsed objects: "the hash of the text shown" is only an identity
-    // while the response body IS the hashed file (design.md TA-3).
     const raw = await readFile(examplePath, "utf8");
     const expected = createHash("sha256").update(raw, "utf8").digest("hex");
 
@@ -58,7 +55,6 @@ describe("GET /api/verification/v1/legal", () => {
   });
 
   it("is cacheable, unlike every job-bearing response", async () => {
-    // Public text, so RP-5's `no-store` does not reach it.
     const response = await request(server).get("/api/verification/v1/legal");
     expect(response.headers["cache-control"]).toBe("public, max-age=60");
   });
@@ -67,7 +63,6 @@ describe("GET /api/verification/v1/legal", () => {
     const response = await request(server).get("/api/verification/v1/legal");
     expect(response.body.schema).toBe("scvs-legal-documents-v1");
     expect(typeof response.body.version).toBe("string");
-    // The example is placeholder text, so enforcement is off (TA-7) and a fresh checkout still boots.
     expect(response.body.effective_date).toBeNull();
     expect(response.body.documents.map((d: { slug: string }) => d.slug).sort()).toEqual(["privacy", "terms"]);
   });

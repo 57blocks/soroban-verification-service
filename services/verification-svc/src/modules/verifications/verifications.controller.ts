@@ -54,7 +54,6 @@ import { ApiError, ApiErrorResponse } from "@scvs/http";
 
 @Controller()
 export class VerificationsController {
-  // Explicit `@Inject()` on every parameter — see preflight.controller.ts's comment.
   constructor(
     @Inject(SubmitService) private readonly submitService: SubmitService,
     @Inject(JobsService) private readonly jobsService: JobsService,
@@ -63,15 +62,12 @@ export class VerificationsController {
   ) {}
 
   @Post("api/verification/v1/verifications")
-  // Job content, so no intermediary may hold it (retention-and-pseudonymisation design.md RP-5).
   @Header("Cache-Control", "no-store")
-  // DrainGuard before AbuseGuard: refusing a submission we are about to stop serving should not consume the
-  // submitter's quota.
+  // DrainGuard before AbuseGuard: a submission refused for draining must not consume the submitter's quota.
   @UseGuards(DrainGuard, AbuseGuard)
   @ApiOperation({ operationId: "submitVerification" })
   @ApiBody({ type: SubmitRequestDto })
   @ApiExtraModels(...submitResponseVariants)
-  // One shape per status code, because that is how they are sent.
   @ApiOkResponse({ schema: submitIncompleteSchema(), description: "Manifest required — `incomplete`." })
   @ApiAcceptedResponse({ schema: submitAcceptedSchema(), description: "A job exists for this target — `queued`." })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_request, a rejected manifest, a rejected upload reference, or terms_acceptance_required / terms_version_outdated — both distinct from invalid_request (TRD §8.1)." })
@@ -116,8 +112,6 @@ export class VerificationsController {
 
   @Get("api/verification/v1/verifications/:job_id/log")
   @Header("Cache-Control", "no-store")
-  // The exemption is gone: this route now authenticates, and an unauthenticated caller guessing
-  // tokens against it must be metered like any other write-shaped attempt (build-log-access design.md BL-5).
   @UseGuards(AbuseGuard)
   @ApiOperation({ operationId: "getBuildLog" })
   @ApiHeader({
@@ -129,8 +123,7 @@ export class VerificationsController {
   @ApiResponse({ status: 410, type: ApiErrorResponse, description: "build_log_expired" })
   @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   @ApiParam({ name: "job_id", format: "uuid" })
-  // The content type is declared rather than described: without a schema the generated client types this
-  // operation's body `void`, and the 404.
+  // Declared content type: without a schema the generated client types this body `void`.
   @ApiOkResponse({ description: "Redacted build output.", content: { "text/plain": { schema: { type: "string" } } } })
   @ApiNotFoundResponse({ type: BuildLogUnavailableResponse })
   @ApiBadRequestResponse({ description: "invalid_job_id" })
@@ -188,21 +181,13 @@ export class VerificationsController {
 
   @Sse("api/verification/v1/verifications/:job_id/events")
   @Header("Cache-Control", "no-store")
-  // The fixed-window throttler counts requests, and waiting on an already-open stream is not a request, so
-  // @SkipThrottle applies. Opening a stream is a different action: it holds a socket/listener for the
-  // connection's life, so it is metered by AbuseGuard on its own (looser) tier — JobsService.streamJob's
-  // StreamConcurrencyLimiter bounds how many stay open at once; this bounds how fast new ones may be opened.
+  // Exempt from the request-rate throttler (an open stream is not a request); opening one is metered by AbuseGuard.
   @SkipThrottle()
   @UseGuards(AbuseGuard)
-  // Streaming (`text/event-stream`) endpoint, not a normal request/response route.
   @ApiExcludeEndpoint()
   @ApiParam({ name: "job_id", format: "uuid" })
   @ApiOkResponse({ type: JobStatusResponse, description: "One event per status change, `text/event-stream`." })
   @ApiBadRequestResponse({ description: "invalid_job_id" })
-  // A real 429 from AbuseGuard, thrown before the SSE response starts. The separate concurrency-ceiling
-  // rejection (JobsService.streamJob's StreamConcurrencyLimiter) is a different path: the connection has
-  // already opened at 200 by then, so that one answers in-band as an SSE `data` event carrying
-  // `stream_connection_limit_reached`, not as an HTTP status code.
   @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   jobEvents(
     @Param(
@@ -220,18 +205,14 @@ export class VerificationsController {
 
   @Post("api/verification/v1/uploads/source")
   @Header("Cache-Control", "no-store")
-  // Neither DrainGuard nor AbuseGuard is applied here: RawArchiveBodyMiddleware runs both checks — drain
-  // first, then abuse — before the body is buffered rather than after.
-  // Reads `process.env` directly rather than through `ConfigService`: `@Throttle(...)` is a decorator argument,
-  // evaluated at class-definition time (module load), before Nest's DI container exists.
+  // No DrainGuard/AbuseGuard: RawArchiveBodyMiddleware runs both before the body is buffered.
+  // `process.env`, not ConfigService: a decorator argument is evaluated at module load, before DI exists.
   @Throttle({ default: { limit: Number(process.env.SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE || 60), ttl: 60_000 } })
   @ApiOperation({ operationId: "uploadSource" })
   @ApiConsumes("application/gzip")
   @ApiHeader({ name: "x-filename", required: false, description: "Original filename of the uploaded archive." })
   @ApiBody({ schema: { type: "string", format: "binary" } })
   @ApiOkResponse({ type: UploadSourceResponse })
-  // Both were already sent and neither was described: the format gate reads the archive's magic number off the
-  // body (uploads.service.ts), and the ceiling refuses mid-upload (raw-archive-body.middleware.ts).
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_upload, or source_archive_format_unsupported — a gzip tarball (.tar.gz/.tgz/.gz) or a zip (.zip) is accepted." })
   @ApiResponse({ status: 413, type: ApiErrorResponse, description: "source_archive_too_large." })
   @ApiServiceUnavailableResponse({ type: ApiErrorResponse, description: "draining" })

@@ -6,14 +6,12 @@ import type { ReferenceAlignmentDto } from "@scvs/core";
 export type ReferenceAlignment = ReferenceAlignmentDto;
 
 const PIN_RELATIVE_PATH = join("docker", "stellar-cli.pin");
-// `v28.0.0`, or a bare `28.0.0` if the pin is ever written without the tag prefix.
 const VERSION = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 export function referenceAlignment(pinFile = findPinFile()): ReferenceAlignment {
   return parseReferenceAlignment(readFileSync(pinFile, "utf8"));
 }
 
-/** This required `MAIN_SHA` + two PR SHAs, because the pin described a three-way merge CI compiled. */
 export function parseReferenceAlignment(pinText: string): ReferenceAlignment {
   const version = parsePinValues(pinText).get("STELLAR_CLI_VERSION");
   if (!version || !VERSION.test(version)) {

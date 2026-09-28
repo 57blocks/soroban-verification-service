@@ -3,7 +3,6 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-/** Every button is a pill; a trailing `PillIcon` badge sits in the right padding the pill sizes reserve. */
 const buttonVariants = cva(
   "group relative inline-flex select-none items-center justify-center whitespace-nowrap font-sans font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
@@ -22,11 +21,8 @@ const buttonVariants = cva(
           "border border-line-strong bg-surface text-ink hover:border-ink hover:bg-yellow",
       },
       size: {
-        // 44px tall pill with room on the right for the 32px icon badge.
         pill: "min-h-11 gap-2.5 rounded-full py-1.5 pl-[22px] pr-1.5 text-[0.9rem]",
-        // The job page's slightly smaller 36px pill with a 26px badge.
         pillSm: "min-h-9 gap-2.5 rounded-full py-1 pl-[18px] pr-1 text-[0.85rem]",
-        // The landing hero/CTA pill: 38px, 28px badge.
         pillHero:
           "min-h-[38px] gap-3 rounded-full py-1 pl-[18px] pr-1 text-[0.9rem] font-semibold",
         pillHeroFlat:
@@ -48,8 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Comp
         ref={ref}
-        // The console wraps its two stages in one <form>; without this a plain <Button> would default to
-        // type="submit" and fire the form on every click.
+        // Default to type="button": inside the console's <form> a plain <Button> would otherwise submit it.
         {...(asChild ? {} : { type: type ?? "button" })}
         className={cn(buttonVariants({ variant, size }), className)}
         {...props}

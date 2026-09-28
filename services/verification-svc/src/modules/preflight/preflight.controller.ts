@@ -11,7 +11,7 @@ import { ApiError, errorBody } from "@scvs/http";
 @Controller("api/verification/v1/preflight")
 @UseGuards(AbuseGuard)
 export class PreflightController {
-  // `@Inject()` is required here.
+  // Explicit `@Inject()`: tsx/esbuild emit no decorator metadata for Nest's DI to infer the type from.
   constructor(@Inject(PreflightService) private readonly preflightService: PreflightService) {}
 
   @Post()

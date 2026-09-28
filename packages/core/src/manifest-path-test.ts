@@ -23,7 +23,6 @@ test("extractManifestPath: returns undefined when the recipe records none", () =
 });
 
 test("extractManifestPath: unescapes the recorded value like every other bldopt reader", () => {
-  // `bldopt` entries are shell-escaped (BE4) — reading them raw would corrupt any quoted path.
   assert.equal(
     extractManifestPath(["--manifest-path='contracts/with space/Cargo.toml'"]),
     "contracts/with space/Cargo.toml",
@@ -44,7 +43,6 @@ test("resolveContainerManifestPath: maps a relative manifest under the mount, no
     ok: true,
     path: "/source/contracts/a/Cargo.toml",
   });
-  // A directory is completed to its Cargo.toml.
   assert.deepEqual(resolveContainerManifestPath("contracts/a"), {
     ok: true,
     path: "/source/contracts/a/Cargo.toml",
@@ -60,8 +58,6 @@ test("resolveContainerManifestPath: refuses an absolute path", () => {
 });
 
 test("resolveContainerManifestPath: refuses a path that escapes the mount, rather than clamping it", () => {
-  // Clamping would build *something* for a recipe that asked for something else — a wrong verdict rather than a
-  // failure.
   for (const escape of ["../Cargo.toml", "../../etc/Cargo.toml", "contracts/../../outside/Cargo.toml", ".."]) {
     const result = resolveContainerManifestPath(escape);
     assert.equal(result.ok, false, `expected ${JSON.stringify(escape)} to be refused`);
@@ -70,7 +66,6 @@ test("resolveContainerManifestPath: refuses a path that escapes the mount, rathe
 });
 
 test("resolveContainerManifestPath: allows a `..` that stays inside the tree, because the check is on the outcome", () => {
-  // `a/../b` normalises to `b`. Refusing on the spelling would reject a legitimate recorded value.
   assert.deepEqual(resolveContainerManifestPath("contracts/../packages/x/Cargo.toml"), {
     ok: true,
     path: "/source/packages/x/Cargo.toml",
