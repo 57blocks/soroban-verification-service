@@ -28,3 +28,10 @@ export const formatDateTime = (ms: number): string =>
     second: "2-digit",
     hour12: false,
   });
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+export const formatTimestamp = (ms: number): string => {
+  const d = new Date(ms);
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};

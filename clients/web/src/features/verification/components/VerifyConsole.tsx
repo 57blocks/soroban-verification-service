@@ -11,7 +11,6 @@ import { FlowProgress } from "./FlowProgress";
 import { JobTimingCard } from "./JobTimingCard";
 import { BuildLogPanel } from "./BuildLogPanel";
 import { PreflightCard } from "./PreflightCard";
-import { SourceVisibilityRow } from "./SourceVisibilityRow";
 import { RecentJobsCard } from "./RecentJobsCard";
 import { ResultPanel } from "./ResultPanel";
 import { StatusBanner } from "./StatusBanner";
@@ -59,7 +58,6 @@ export const VerifyConsole = ({
     copyJobLink,
     buildLog,
     buildLogToken,
-    publishedArtifact,
     targetType,
     selectTargetType,
     submitTarget,
@@ -69,7 +67,7 @@ export const VerifyConsole = ({
     availableFields,
     sourceArchive,
     submitCompletedManifest,
-    provenanceGroups,
+    rebuildInputs,
   } = useVerificationConsole({ mode, initialJobId, forceNew });
 
   return (
@@ -142,13 +140,11 @@ export const VerifyConsole = ({
                   />
                 )}
 
-                <RebuildCard groups={provenanceGroups} />
+                <RebuildCard inputs={rebuildInputs} />
 
                 {RESULT_STATES.includes(submissionState) && jobResult && (
                   <ResultPanel state={submissionState} result={jobResult} />
                 )}
-
-                <SourceVisibilityRow state={publishedArtifact} />
 
                 <BuildLogPanel state={buildLog} token={buildLogToken} />
 

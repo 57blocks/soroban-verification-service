@@ -347,7 +347,7 @@ describe("the timing card", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  test("a settled job reads as a total, with the instant it finished", () => {
+  test("a settled job reads as one start ~ finish range with its total", () => {
     render(
       <JobTimingCard
         timing={{
@@ -360,10 +360,11 @@ describe("the timing card", () => {
       />,
     );
 
-    expect(screen.getByText("Total time")).toBeInTheDocument();
+    const text = screen.getByTestId("job-timing").textContent ?? "";
+    expect(text).toMatch(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2} ~ \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/);
     expect(screen.getByTestId("job-timing-elapsed")).toHaveTextContent("4m 12s");
-    expect(screen.getByText("Finished at")).toBeInTheDocument();
-    expect(screen.queryByText("In progress")).not.toBeInTheDocument();
+    expect(screen.getByTestId("job-timing").querySelectorAll("time")).toHaveLength(2);
+    expect(screen.queryByText(/in progress/i)).not.toBeInTheDocument();
   });
 
   test("marks the total approximate when it did not come from verified_at", () => {
@@ -393,10 +394,9 @@ describe("the timing card", () => {
       />,
     );
 
-    expect(screen.getByText("Elapsed")).toBeInTheDocument();
     expect(screen.getByTestId("job-timing-elapsed")).toHaveTextContent("1m 35s");
-    expect(screen.getByText("Last update")).toBeInTheDocument();
-    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getByText(/in progress/i)).toBeInTheDocument();
+    expect(screen.getByTestId("job-timing").querySelectorAll("time")).toHaveLength(1);
   });
 
   test("does not claim to be when the build started", () => {
@@ -407,7 +407,7 @@ describe("the timing card", () => {
     );
 
     const text = screen.getByTestId("job-timing").textContent ?? "";
-    expect(text).toMatch(/Queued at/);
+    expect(text).toMatch(/Build timing/);
     expect(text).not.toMatch(/build started/i);
     expect(text).toMatch(/waiting for a build slot is included/i);
   });

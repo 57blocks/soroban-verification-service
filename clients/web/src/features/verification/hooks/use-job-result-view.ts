@@ -49,7 +49,7 @@ export const useJobResultView = ({
   const jobDiagnostics = getSandboxDiagnostics(jobResult);
   const publishedRecipe =
     publishedArtifact.phase === "published" ? publishedArtifact.recipe : undefined;
-  const provenanceGroups = publishedRecipe
+  const rebuildInputs = publishedRecipe
     ? rebuildProvenance({
         recipe: publishedRecipe,
         sourceUri: publishedArtifact.phase === "published" ? publishedArtifact.source.sourceUri : null,
@@ -57,7 +57,7 @@ export const useJobResultView = ({
           publishedArtifact.phase === "published" ? publishedArtifact.source.sourceSha256 : null,
         diagnostics: jobDiagnostics,
       })
-    : [];
+    : null;
 
   return {
     jobTiming,
@@ -65,6 +65,6 @@ export const useJobResultView = ({
     buildLogToken: readBuildLogToken(currentJobId ?? null),
     jobResult,
     publishedArtifact,
-    provenanceGroups,
+    rebuildInputs,
   };
 };

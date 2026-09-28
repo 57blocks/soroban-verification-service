@@ -6,11 +6,10 @@ export type ProvenanceField = {
   label: string;
   value: string;
   href?: string;
+  onChain?: boolean;
 };
 
-export type ProvenanceGroup = {
-  key: "declared" | "recipe";
-  title: string;
+export type RebuildInputs = {
   origin: string;
   fields: ProvenanceField[];
 };
@@ -34,18 +33,11 @@ const parsePairs = (entries: string[]): Map<string, string> => {
   return pairs;
 };
 
-const RECIPE_ORIGINS: Record<
-  NonNullable<ArtifactRecipeFacts["recipeSource"]>,
-  { title: string; origin: string }
-> = {
-  on_chain_metadata: {
-    title: "Reproduced from the contract's own recipe",
-    origin: "provenance.recipe_source: on_chain_metadata",
-  },
-  submitted: {
-    title: "Supplied with the submission",
-    origin: "provenance.recipe_source: submitted",
-  },
+const splitOptions = (value: string | undefined) => (value ? value.split(/\s+/).filter(Boolean) : []);
+
+const RECIPE_ORIGINS: Record<NonNullable<ArtifactRecipeFacts["recipeSource"]>, string> = {
+  on_chain_metadata: "Reproduced from the contract's own on-chain recipe.",
+  submitted: "Recipe supplied with the submission.",
 };
 
 type ProvenanceInput = {
@@ -55,86 +47,70 @@ type ProvenanceInput = {
   diagnostics?: Record<string, unknown> | undefined;
 };
 
+// One list of the inputs a rebuild needs; a value also read from contractmetav0 is tagged onChain.
 export const rebuildProvenance = ({
   recipe,
   sourceUri,
   sourceSha256,
   diagnostics,
-}: ProvenanceInput): ProvenanceGroup[] => {
-  const groups: ProvenanceGroup[] = [];
+}: ProvenanceInput): RebuildInputs | null => {
+  const meta = parsePairs(recipe.metadataReplay);
+  const fields: ProvenanceField[] = [];
 
-  const declared: ProvenanceField[] = [];
-  if (recipe.pair?.cliver) {
-    declared.push({
-      key: "cliver",
-      label: "Stellar CLI (cliver)",
-      value: recipe.pair.cliver,
-    });
+  const repo = meta.get("source_repo");
+  if (repo) {
+    const href = repoHref(repo);
+    fields.push({ key: "source_repo", label: "Source repository", value: repo, onChain: true, ...(href ? { href } : {}) });
   }
-  if (recipe.pair?.rsver) {
-    declared.push({ key: "rsver", label: "Rust (rsver)", value: recipe.pair.rsver });
-  }
-  const chainMetadata = parsePairs(recipe.metadataReplay);
-  for (const [key, value] of chainMetadata) {
-    const href = key === "source_repo" ? repoHref(value) : httpHref(value);
-    declared.push({
-      key: `meta_${key}`,
-      label: key === "source_repo" ? "Source repository" : key,
-      value,
+
+  const archive = sourceUri ?? meta.get("source_uri") ?? null;
+  if (archive) {
+    const href = httpHref(archive);
+    fields.push({
+      key: "source_uri",
+      label: "Source archive",
+      value: archive,
+      onChain: meta.get("source_uri") === archive,
       ...(href ? { href } : {}),
     });
   }
-  if (declared.length) {
-    groups.push({
-      key: "declared",
-      title: "Declared by the contract",
-      origin: "Read from its on-chain contractmetav0 — a submitter cannot choose these.",
-      fields: declared,
-    });
+
+  const sha = sourceSha256 ?? meta.get("source_sha256") ?? null;
+  if (sha) {
+    fields.push({ key: "source_sha256", label: "Source SHA-256", value: sha, onChain: meta.get("source_sha256") === sha });
   }
 
-  const recipeFields: ProvenanceField[] = [];
-  if (sourceUri) {
-    recipeFields.push({
-      key: "source_uri",
-      label: "Source archive",
-      value: sourceUri,
-      ...(httpHref(sourceUri) ? { href: sourceUri } : {}),
-    });
-  }
-  if (sourceSha256) {
-    recipeFields.push({
-      key: "source_sha256",
-      label: "Source SHA-256",
-      value: sourceSha256,
-    });
-  }
-  if (recipe.buildOptions.length) {
-    recipeFields.push({
+  const image = meta.get("bldimg");
+  if (image) fields.push({ key: "bldimg", label: "Build image", value: image, onChain: true });
+
+  const cliver = recipe.pair?.cliver ?? meta.get("cliver");
+  if (cliver) fields.push({ key: "cliver", label: "Stellar CLI (cliver)", value: cliver, onChain: true });
+  const rsver = recipe.pair?.rsver ?? meta.get("rsver");
+  if (rsver) fields.push({ key: "rsver", label: "Rust (rsver)", value: rsver, onChain: true });
+
+  const declaredOptions = splitOptions(meta.get("bldopt"));
+  const options = [...new Set([...recipe.buildOptions.flatMap((option) => splitOptions(option)), ...declaredOptions])];
+  if (options.length) {
+    fields.push({
       key: "bldopt",
       label: "Build options",
-      value: recipe.buildOptions.join(" "),
-    });
-  }
-  const manifestPath =
-    typeof diagnostics?.container_manifest_path === "string"
-      ? diagnostics.container_manifest_path
-      : undefined;
-  if (manifestPath) {
-    recipeFields.push({ key: "manifest", label: "Manifest", value: manifestPath });
-  }
-  if (recipeFields.length && recipe.recipeSource) {
-    groups.push({ key: "recipe", ...RECIPE_ORIGINS[recipe.recipeSource], fields: recipeFields });
-  } else if (recipeFields.length) {
-    groups.push({
-      key: "recipe",
-      title: "Build inputs",
-      origin: "This report did not state where the recipe came from.",
-      fields: recipeFields,
+      value: options.join(" "),
+      onChain: options.every((option) => declaredOptions.includes(option)),
     });
   }
 
-  return groups;
+  const bldarg = meta.get("bldarg");
+  if (bldarg) fields.push({ key: "bldarg", label: "Build arguments", value: bldarg, onChain: true });
+
+  const manifestPath =
+    typeof diagnostics?.container_manifest_path === "string" ? diagnostics.container_manifest_path : undefined;
+  if (manifestPath) fields.push({ key: "manifest", label: "Manifest", value: manifestPath });
+
+  if (!fields.length) return null;
+  return {
+    origin: recipe.recipeSource ? RECIPE_ORIGINS[recipe.recipeSource] : "This report did not state where the recipe came from.",
+    fields,
+  };
 };
 
 export const wasmStatusUrlFromReportUrl = (
