@@ -158,6 +158,12 @@ export const toneSurface: Record<ResultTone, string> = {
   danger: "bg-danger-surface",
 };
 
+export const toneBorder: Record<ResultTone, string> = {
+  success: "border-success-fg/60",
+  warning: "border-warning-fg/60",
+  danger: "border-danger-fg/60",
+};
+
 export const toneText: Record<ResultTone, string> = {
   success: "text-success-fg",
   warning: "text-warning-fg",
