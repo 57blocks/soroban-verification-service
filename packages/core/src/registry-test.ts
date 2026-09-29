@@ -65,7 +65,7 @@ function main(): void {
   parseStrictRegistryStatusObject(pending);
   for (const [field, value] of [
     ["recipe_source", "submitted"],
-    ["image_trust_level", "sdf_trusted"],
+    ["image_trust_level", "official_trusted"],
     ["source_sha256", "b".repeat(64)],
     ["processed_at", "2026-09-02T09:30:00Z"],
   ] as const) {
@@ -374,11 +374,11 @@ function main(): void {
     });
   }
   {
-    const notOutOfBand = upgradeLegacyEntry({ ...legacy, out_of_band: undefined }, { imageTrustLevel: "sdf_trusted" });
+    const notOutOfBand = upgradeLegacyEntry({ ...legacy, out_of_band: undefined }, { imageTrustLevel: "official_trusted" });
     assert.equal(notOutOfBand?.recipe_source, "on_chain_metadata");
   }
   assert.equal(
-    upgradeLegacyEntry({ ...legacy, source_sha256: undefined }, { imageTrustLevel: "sdf_trusted" }),
+    upgradeLegacyEntry({ ...legacy, source_sha256: undefined }, { imageTrustLevel: "official_trusted" }),
     undefined,
     "a verdict with no source_sha256 cannot be made conformant",
   );
@@ -399,7 +399,7 @@ function main(): void {
   {
     const mismatched = upgradeLegacyEntry(
       { ...legacy, status: "mismatched", rebuilt_hash: "0".repeat(64), verified_source_code_uris: undefined, verified_source_code_uri: "https://v.example/s.tar.gz" } as PeerRegistryVerification,
-      { imageTrustLevel: "sdf_trusted" },
+      { imageTrustLevel: "official_trusted" },
     );
     assert.equal(mismatched?.rebuilt_hash, "0".repeat(64));
     assert.deepEqual(mismatched?.verified_source_code_uris, [

@@ -17,7 +17,7 @@ function baseParams(overrides: Partial<BuildWasmStatusParams> = {}): BuildWasmSt
     verifier: OURS,
     verdict: "verified",
     recipeSource: "on_chain_metadata",
-    imageTrustLevel: "sdf_trusted",
+    imageTrustLevel: "official_trusted",
     sourceSha256: "b".repeat(64),
     processedAt: "2026-09-02T00:00:00Z",
     resultsUrls: [{ type: "report", url: REPORT_URL, sha256: REPORT_SHA }],

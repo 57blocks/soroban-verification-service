@@ -9,7 +9,7 @@ export type ImagePolicyResult =
   | {
       ok: true;
       image: string;
-      trust_level: "sdf_trusted";
+      trust_level: "official_trusted";
       evidence: {
         checked: "digest_pinned_stellar_cli_image";
         reference: string;
@@ -17,14 +17,14 @@ export type ImagePolicyResult =
     }
   | {
       ok: false;
-      reason: "image_not_digest_pinned" | "image_not_sdf_trusted";
+      reason: "image_not_digest_pinned" | "image_not_official_trusted";
       detail: string;
     };
 
 export function imagePolicyErrorCode(
   reason: Extract<ImagePolicyResult, { ok: false }>["reason"],
 ): "unsupported" | "policy_rejected" {
-  return reason === "image_not_sdf_trusted" ? "unsupported" : "policy_rejected";
+  return reason === "image_not_official_trusted" ? "unsupported" : "policy_rejected";
 }
 
 export function evaluateBuildImage(image: unknown): ImagePolicyResult {
@@ -40,7 +40,7 @@ export function evaluateBuildImage(image: unknown): ImagePolicyResult {
   if (!STELLAR_CLI_IMAGE_RE.test(image)) {
     return {
       ok: false,
-      reason: "image_not_sdf_trusted",
+      reason: "image_not_official_trusted",
       detail:
         "M1 only accepts docker.io/stellar/stellar-cli digest-pinned images. Later policy adapters can verify SLSA/Sigstore/SBOM evidence from the official publish pipeline.",
     };
@@ -49,7 +49,7 @@ export function evaluateBuildImage(image: unknown): ImagePolicyResult {
   return {
     ok: true,
     image,
-    trust_level: "sdf_trusted",
+    trust_level: "official_trusted",
     evidence: {
       checked: "digest_pinned_stellar_cli_image",
       reference:

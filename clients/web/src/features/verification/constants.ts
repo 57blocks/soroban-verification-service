@@ -43,7 +43,7 @@ export const preflightBlockedCopy: Record<string, { title: string; description: 
     description:
       "The deployed Wasm records no usable toolchain pair, so its build environment cannot be resolved from the chain. Verifying it is out of scope for this launch.",
   },
-  image_not_sdf_trusted: {
+  image_not_official_trusted: {
     title: "This contract cannot be verified yet",
     description:
       "The build image this contract records is digest-pinned but is not one this verifier accepts yet. This is a property of the contract, not of your submission — there is nothing to correct.",

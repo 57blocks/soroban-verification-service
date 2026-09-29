@@ -1,6 +1,6 @@
 # Results SEP
 
-**Two drafts since 2026-09-10, on SDF's advice** (`docs/invariants.md` rule 27's amendment): the per-verifier read
+**Two drafts since 2026-09-10, on the SEP maintainers' advice** (`docs/invariants.md` rule 27's amendment): the per-verifier read
 surface goes up first and on its own, and aggregation follows behind it.
 
 | Draft | Covers | Serves it here |
@@ -234,7 +234,7 @@ once means one of them cites a SEP that does not exist yet.
    `status/`, `page/`, `error/` subdirectories and dropping the `results/` level.
 5. Run upstream's `./bin/prettier.sh`.
 6. `Discussion:` per whatever @fnando decides about #1945 and its thread — the draft ships pointing at
-   the existing one. `Author:` stays singular: SDF's answer (2026-09-09) was to credit @fnando in the
+   the existing one. `Author:` stays singular: the SEP maintainers' answer (2026-09-09) was to credit @fnando in the
    text and link #1944 as prior art, which the draft's *Prior art and acknowledgements* section does,
    rather than to add a co-author key.
 6b. **Reset the changelog to a single `0.1.0` entry, and `Version:` with it.** Neither draft has ever

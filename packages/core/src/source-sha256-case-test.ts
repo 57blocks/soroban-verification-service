@@ -32,7 +32,7 @@ function statusObject(sourceSha256: string): unknown {
         verifier: { url: "https://v.example/public/", name: "scvs" },
         status: "verified",
         recipe_source: "on_chain_metadata",
-        image_trust_level: "sdf_trusted",
+        image_trust_level: "official_trusted",
         processed_at: "2026-09-02T00:00:00Z",
         source_sha256: sourceSha256,
       },

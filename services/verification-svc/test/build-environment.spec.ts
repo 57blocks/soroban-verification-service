@@ -13,7 +13,7 @@ describe("classifyPreflightBuildEnvironment", () => {
     expect(resolution).toEqual({
       kind: "chain_named",
       image: VALID_STELLAR_CLI_IMAGE,
-      trustLevel: "sdf_trusted",
+      trustLevel: "official_trusted",
     });
   });
 

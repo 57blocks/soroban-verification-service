@@ -178,9 +178,9 @@
         },
         "image_trust_level": {
           "type": "string",
-          "description": "How the build environment came about: an image SDF publishes; composed by the verifier from pinned official components; digest-pinned with a public reproducible definition; digest-pinned with provenance not established.",
+          "description": "How the build environment came about: an image the official Stellar pipeline publishes; composed by the verifier from pinned official components; digest-pinned with a public reproducible definition; digest-pinned with provenance not established.",
           "enum": [
-            "sdf_trusted",
+            "official_trusted",
             "upstream_pinned",
             "publicly_auditable",
             "arbitrary"

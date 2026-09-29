@@ -161,7 +161,7 @@ caseBlock(
 
         const buildEnvironment = recipe?.build_environment as { trust_level?: string } | undefined;
         if (buildEnvironment?.trust_level) {
-          expect(["sdf_trusted", "upstream_pinned"]).toContain(buildEnvironment.trust_level);
+          expect(["official_trusted", "upstream_pinned"]).toContain(buildEnvironment.trust_level);
         }
 
         expectPerTrd("REPORT_LOG_POINTER", "E2E-PUB-07/log_pointer", () => {

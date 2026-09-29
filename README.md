@@ -54,7 +54,7 @@ scripts/              seed-tvl.ts, plus ci/ helper scripts
 - Verification API and queue-backed orchestrator-svc.
 - SEP-58 metadata parser and submitted-source manifest flow.
 - Public `source_uri` archive and private uploaded tarball source modes.
-- Digest-pinned SDF trusted build image policy.
+- Digest-pinned official trusted build image policy.
 - Sandbox runner with resource limits and controlled egress.
 - Result publishing (in orchestrator-svc): hash-keyed status objects and full artifacts (docs/invariants.md rule 14).
 - Public Query API.

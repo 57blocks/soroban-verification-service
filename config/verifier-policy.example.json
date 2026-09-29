@@ -1,8 +1,8 @@
 {
   "schema": "stellar-verifier-policy-v1",
-  "id": "sdf-trusted-public-and-private-upload-v1",
+  "id": "official-trusted-public-and-private-upload-v1",
   "build_images": {
-    "accepted_trust_levels": ["sdf_trusted"],
+    "accepted_trust_levels": ["official_trusted"],
     "digest_pinned_only": true,
     "tag_only_allowed": false,
     "arbitrary_user_images_allowed": false

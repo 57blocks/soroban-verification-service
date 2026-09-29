@@ -8,7 +8,7 @@
       "verifier": { "name": "57Blocks", "url": "https://verify.example.com/public" },
       "status": "verified",
       "recipe_source": "on_chain_metadata",
-      "image_trust_level": "sdf_trusted",
+      "image_trust_level": "official_trusted",
       "bldimg": "docker.io/stellar/stellar-cli@sha256:c280e6461f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8",
       "bldarg": ["contract", "build"],
       "bldopt": ["--package=foo", "--features=std", "--optimize"],

@@ -137,7 +137,7 @@ export interface RegistryVerification {
   verifier: { url?: string; name?: string; logo_url?: string };
   status: RegistryStatus;
   recipe_source?: "on_chain_metadata" | "submitted";
-  image_trust_level?: "sdf_trusted" | "upstream_pinned" | "publicly_auditable" | "arbitrary";
+  image_trust_level?: "official_trusted" | "upstream_pinned" | "publicly_auditable" | "arbitrary";
   out_of_band?: boolean;
   bldimg?: string;
   bldarg?: string[];

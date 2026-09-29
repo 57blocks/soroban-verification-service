@@ -3,11 +3,11 @@ import { legacyCustodyFromReport } from "../src/modules/publish/arweave-archive.
 describe("legacyCustodyFromReport", () => {
   it("reads the top-level image_trust_level when present", () => {
     const report = JSON.stringify({
-      image_trust_level: "sdf_trusted",
+      image_trust_level: "official_trusted",
       build_recipe: { build_environment: { trust_level: "upstream_pinned" } },
     });
 
-    expect(legacyCustodyFromReport(report)).toEqual({ imageTrustLevel: "sdf_trusted" });
+    expect(legacyCustodyFromReport(report)).toEqual({ imageTrustLevel: "official_trusted" });
   });
 
   it("falls back to the nested build_recipe.build_environment.trust_level for a pre-existing report", () => {

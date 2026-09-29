@@ -168,7 +168,7 @@ Normative schema:
       },
       "status": "verified",
       "recipe_source": "on_chain_metadata",
-      "image_trust_level": "sdf_trusted",
+      "image_trust_level": "official_trusted",
       "bldimg": "docker.io/stellar/stellar-cli@sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
       "bldarg": [],
       "bldopt": ["--package=token"],
@@ -225,8 +225,8 @@ provenance has not run, and the build environment may still be resolving.
 - `recipe_source` — where the build recipe came from: `on_chain_metadata` (the
   SEP-58 fields carried in the contract's SEP-46 meta) or `submitted` (supplied
   with the verification request).
-- `image_trust_level` — how the build environment came about: `sdf_trusted` (an
-  image the SDF publishes), `upstream_pinned` (composed by the verifier from
+- `image_trust_level` — how the build environment came about: `official_trusted` (an
+  image the official Stellar pipeline publishes), `upstream_pinned` (composed by the verifier from
   pinned official components), `publicly_auditable` (digest-pinned with a
   public reproducible definition), or `arbitrary` (digest-pinned, provenance
   not established).

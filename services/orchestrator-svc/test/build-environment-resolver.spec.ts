@@ -10,12 +10,12 @@ const OTHER_DIGEST_PINNED_IMAGE = "docker.io/library/debian@sha256:" + "b".repea
 describe("DeterministicBuildEnvironmentResolver", () => {
   const resolver = new DeterministicBuildEnvironmentResolver();
 
-  it("resolves a chain-injected, policy-clean bldimg as chain_named/sdf_trusted", async () => {
+  it("resolves a chain-injected, policy-clean bldimg as chain_named/official_trusted", async () => {
     const resolution = await resolver.resolve({ sep58Image: VALID_STELLAR_CLI_IMAGE });
     expect(resolution).toEqual({
       kind: "chain_named",
       image: VALID_STELLAR_CLI_IMAGE,
-      trustLevel: "sdf_trusted",
+      trustLevel: "official_trusted",
     });
   });
 

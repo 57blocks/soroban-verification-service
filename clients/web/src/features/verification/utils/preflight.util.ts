@@ -2,7 +2,7 @@ import type { PreflightResponseBuildEnvironment } from "@scvs/verify-api-client"
 import type { ImagePolicyReason, PreflightVerdict } from "../types";
 
 const imagePolicyLabel = (reason: ImagePolicyReason): "unsupported" | "policy_rejected" =>
-  reason === "image_not_sdf_trusted" ? "unsupported" : "policy_rejected";
+  reason === "image_not_official_trusted" ? "unsupported" : "policy_rejected";
 
 export const readVerdict = (buildEnvironment: unknown): PreflightVerdict | null => {
   if (typeof buildEnvironment !== "object" || buildEnvironment === null) return null;
@@ -35,7 +35,7 @@ export const readVerdict = (buildEnvironment: unknown): PreflightVerdict | null 
 };
 
 const unsupportedReasons = ["unreleased_cli", "undated_nightly", "missing_toolchain_pair"] as const;
-const imagePolicyReasons = ["image_not_digest_pinned", "image_not_sdf_trusted"] as const;
+const imagePolicyReasons = ["image_not_digest_pinned", "image_not_official_trusted"] as const;
 
 const isUnsupportedReason = (value: unknown): value is (typeof unsupportedReasons)[number] =>
   typeof value === "string" && (unsupportedReasons as readonly string[]).includes(value);
