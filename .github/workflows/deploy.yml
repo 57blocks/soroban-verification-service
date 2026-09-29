@@ -113,7 +113,7 @@ jobs:
               echo "ready=true" >> "$GITHUB_OUTPUT"
               # GitHub drops a job output containing a secret's value, and account_id is one.
               echo "descriptor=$(jq -c 'del(.account_id)' <<<"$DESC")" >> "$GITHUB_OUTPUT"
-              echo "COMPOSER_ECR_REPOSITORY=$(jq -r '.ecr.composer' <<<"$DESC")" >> "$GITHUB_ENV"
+              echo "COMPOSER_JOB_DEFINITION=$(jq -r '.batch.composer_job_definition // empty' <<<"$DESC")" >> "$GITHUB_ENV"
               ;;
             3)
               echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -133,6 +133,7 @@ jobs:
           esac
 
       - name: Refuse to deploy services that would outrun the composer
+        if: steps.check.outputs.ready == 'true'
         run: |
           set -euo pipefail
           version=$(sed -n 's/.*CURRENT_COMPOSE_TEMPLATE_VERSION = "\([^"]*\)".*/\1/p' \
@@ -142,38 +143,68 @@ jobs:
             exit 1
           fi
 
-          # Sorted in jq, not --query: the CLI applies --query per 100-image page.
-          newest=$(aws ecr describe-images --repository-name "$COMPOSER_ECR_REPOSITORY" \
-            --region "${{ env.AWS_REGION }}" --output json 2>/dev/null \
-            | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty' || true)
+          refuse() {
+            {
+              echo "### Deploy refused — the composer cannot serve template \`$version\`"
+              echo
+              echo "orchestrator-svc built from this commit asks for \`$version\`, but $1."
+              echo
+              echo "Deploying now would fail **every** cli-legacy verification with"
+              echo "\`composition_template_missing\`, and the \`Environment\` rows it writes are terminal."
+              echo
+              echo "Run **Build & deploy composer image** (\`deploy-composer.yml\`) first, then re-run this."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$2 — run deploy-composer.yml first"
+            exit 1
+          }
 
-          if [ -z "$newest" ] || [ "$newest" = "None" ]; then
-            echo "::notice::no $COMPOSER_ECR_REPOSITORY image in ECR yet; nothing to compare against"
+          if [ -z "$COMPOSER_JOB_DEFINITION" ]; then
+            echo "::notice::the descriptor names no composer job definition, so this environment runs no composer fleet; nothing to compare against"
             exit 0
           fi
 
-          echo "orchestrator will request template : $version"
-          echo "newest $COMPOSER_ECR_REPOSITORY image commit : $newest"
+          image=$(aws batch describe-job-definitions --job-definition-name "$COMPOSER_JOB_DEFINITION" \
+            --status ACTIVE --region "$AWS_REGION" --output json \
+            | jq -r '.jobDefinitions | max_by(.revision) | .containerProperties.image // .ecsProperties.taskProperties[0].containers[0].image // empty')
+          if [ -z "$image" ]; then
+            refuse "\`$COMPOSER_JOB_DEFINITION\` has no ACTIVE revision" \
+              "$COMPOSER_JOB_DEFINITION has no ACTIVE revision"
+          fi
 
-          if git cat-file -e "$newest:docker/composed-environments/$version/template.json" 2>/dev/null; then
+          if [[ ! "$image" =~ ^([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com/([^@:]+)@(sha256:[0-9a-f]{64})$ ]]; then
+            refuse "the latest ACTIVE \`$COMPOSER_JOB_DEFINITION\` revision runs an image that is not an ECR image pinned by digest" \
+              "$COMPOSER_JOB_DEFINITION runs $image, not an ECR image pinned by digest"
+          fi
+          registry=${BASH_REMATCH[1]} region=${BASH_REMATCH[2]} repo=${BASH_REMATCH[3]} digest=${BASH_REMATCH[4]}
+
+          if ! tags=$(aws ecr describe-images --registry-id "$registry" --region "$region" \
+            --repository-name "$repo" --image-ids imageDigest="$digest" \
+            --query 'imageDetails[0].imageTags' --output json); then
+            echo "::error::could not read the tags of $repo@$digest, the image $COMPOSER_JOB_DEFINITION runs; on AccessDenied the deploy role needs ecr:DescribeImages on $repo"
+            exit 1
+          fi
+          commit=$(jq -r '[.[]? | select(test("^[0-9a-f]{40}$"))] | first // empty' <<<"$tags")
+          if [ -z "$commit" ]; then
+            refuse "the image \`$COMPOSER_JOB_DEFINITION\` runs, \`$repo@$digest\`, carries no commit tag" \
+              "$repo@$digest carries no commit tag: $tags"
+          fi
+
+          echo "orchestrator requests template : $version"
+          echo "composer job definition runs   : $repo@$digest ($COMPOSER_JOB_DEFINITION)"
+          echo "that image's commit            : $commit"
+
+          if ! git cat-file -e "$commit^{commit}" 2>/dev/null; then
+            echo "::error::composer commit $commit is not in this checkout's history, so what it ships cannot be read"
+            exit 1
+          fi
+
+          if git cat-file -e "$commit:docker/composed-environments/$version/template.json" 2>/dev/null; then
             echo "✓ that image's commit ships template $version"
             exit 0
           fi
 
-          {
-            echo "### Deploy refused — the composer cannot serve template \`$version\`"
-            echo
-            echo "orchestrator-svc built from this commit asks for \`$version\`, but the newest"
-            echo "\`$COMPOSER_ECR_REPOSITORY\` image in ECR is commit \`$newest\`, whose tree has no"
-            echo "\`docker/composed-environments/$version/\`."
-            echo
-            echo "Deploying now would fail **every** cli-legacy verification with"
-            echo "\`composition_template_missing\`, and the \`Environment\` rows it writes are terminal."
-            echo
-            echo "Run **Build & deploy composer image** (\`deploy-composer.yml\`) first, then re-run this."
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::composer image $newest does not ship template $version — run deploy-composer.yml first"
-          exit 1
+          refuse "the image \`$COMPOSER_JOB_DEFINITION\` runs is commit \`$commit\`, whose tree has no \`docker/composed-environments/$version/\`" \
+            "composer image $commit does not ship template $version"
 
   stage-service-image:
     needs: preflight
