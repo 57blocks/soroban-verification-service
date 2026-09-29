@@ -504,7 +504,7 @@ export class PublishService {
     if (identity.kind === "chain_named") {
       return {
         kind: "chain_named",
-        trustLevel: "sdf_trusted",
+        trustLevel: "official_trusted",
         buildImage: identity.image,
       };
     }

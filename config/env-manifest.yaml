@@ -732,11 +732,11 @@ groups:
         source: literal
         tier: knob
         inject: ecs-secrets
-        default: sdf-trusted-public-and-private-upload-v1
+        default: official-trusted-public-and-private-upload-v1
         envs:
           {
-            dev: sdf-trusted-public-and-private-upload-v1,
-            staging: sdf-trusted-public-and-private-upload-v1,
+            dev: official-trusted-public-and-private-upload-v1,
+            staging: official-trusted-public-and-private-upload-v1,
           }
         code: packages/config/src/index.ts::getVerifierIdentity
         note: >-
@@ -762,8 +762,8 @@ groups:
         source: literal
         tier: knob
         inject: ecs-secrets
-        default: sdf_trusted
-        envs: { dev: sdf_trusted, staging: sdf_trusted }
+        default: official_trusted
+        envs: { dev: official_trusted, staging: official_trusted }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
         note: A wrong or stale value publishes a policy this verifier does not actually enforce.
       SCVS_POLICY_DIGEST_PINNED_ONLY:
@@ -2200,7 +2200,7 @@ services:
         tier: infrastructure
         code: services/query-svc/src/config/configuration.ts::configuration
         note: >-
-          Soroban RPC for testnet address lookup. SDF hosts a public endpoint, so this has a working
+          Soroban RPC for testnet address lookup. Stellar hosts a public endpoint, so this has a working
           default; an operator with their own node points it there instead.
       STELLAR_RPC_URL_MAINNET:
         type: string
@@ -2215,7 +2215,7 @@ services:
           }
         code: services/query-svc/src/config/configuration.ts::configuration
         note: >-
-          Soroban RPC for mainnet address lookup. **No default: SDF hosts no public mainnet
+          Soroban RPC for mainnet address lookup. **No default: Stellar hosts no public mainnet
           endpoint.** A deployment serving mainnet address queries must supply one, or
           `GET /v1/query/mainnet/contracts/...` fails at the first request rather than at boot —
           deliberately, so a testnet-only deployment still starts.
@@ -2289,7 +2289,7 @@ services:
           reading it as off.
 
           Setting this to `"true"` in a public deployment ships an aggregator UI, which TRD §1.4
-          lists as a non-goal. That is a product decision with SDF, and **nothing in the application
+          lists as a non-goal. That is a product decision with the SEP maintainers, and **nothing in the application
           repository can stop you making it here** — no check validates which environment binds this,
           and the page needs no rebuild to appear. This note is the control; the 2026-08-24 decision
           is dev + staging on. The page lives at `/query`.

@@ -11,7 +11,7 @@ import { createResultStorage } from "./storage-backend.js";
 
 const PARAMS = {
   policyId: "test-policy-v1",
-  acceptedTrustLevels: ["sdf_trusted"],
+  acceptedTrustLevels: ["official_trusted"],
   digestPinnedOnly: true,
   tagOnlyAllowed: false,
   arbitraryUserImagesAllowed: false,

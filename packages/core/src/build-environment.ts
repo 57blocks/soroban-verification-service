@@ -77,7 +77,7 @@ export type UnsupportedToolchainReason =
   | "missing_toolchain_pair";
 
 export type BuildEnvironmentResolution =
-  | { kind: "chain_named"; image: string; trustLevel: "sdf_trusted" }
+  | { kind: "chain_named"; image: string; trustLevel: "official_trusted" }
   | { kind: "compose"; intent: ComposeIntent; trustLevel: "upstream_pinned" }
   | { kind: "unsupported"; reason: UnsupportedToolchainReason };
 
@@ -93,7 +93,7 @@ export function classifyBuildEnvironment(input: {
   pair?: RecordedToolchainPair;
 }): BuildEnvironmentResolution {
   if (input.policyCheckedImage !== undefined) {
-    return { kind: "chain_named", image: input.policyCheckedImage, trustLevel: "sdf_trusted" };
+    return { kind: "chain_named", image: input.policyCheckedImage, trustLevel: "official_trusted" };
   }
 
   if (input.pair === undefined) {

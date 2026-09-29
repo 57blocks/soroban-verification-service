@@ -13,7 +13,7 @@ export type UnsupportedReason =
   | "undated_nightly"
   | "missing_toolchain_pair";
 
-export type ImagePolicyReason = "image_not_digest_pinned" | "image_not_sdf_trusted";
+export type ImagePolicyReason = "image_not_digest_pinned" | "image_not_official_trusted";
 
 export type PreflightVerdict =
   | { gate: "ready"; kind: "chain_named" | "compose" }

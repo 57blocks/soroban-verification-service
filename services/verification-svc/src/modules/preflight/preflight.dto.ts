@@ -89,7 +89,7 @@ const buildEnvironmentSchema: Parameters<typeof ApiProperty>[0] = {
       properties: {
         kind: { type: "string", enum: ["chain_named"] },
         image: { type: "string" },
-        trustLevel: { type: "string", enum: ["sdf_trusted"] },
+        trustLevel: { type: "string", enum: ["official_trusted"] },
       },
       required: ["kind", "image", "trustLevel"],
     },
@@ -119,7 +119,7 @@ const buildEnvironmentSchema: Parameters<typeof ApiProperty>[0] = {
         kind: { type: "string", enum: ["chain_named_policy_rejected"] },
         reason: {
           type: "string",
-          enum: ["image_not_digest_pinned", "image_not_sdf_trusted"],
+          enum: ["image_not_digest_pinned", "image_not_official_trusted"],
         },
         detail: { type: "string" },
       },

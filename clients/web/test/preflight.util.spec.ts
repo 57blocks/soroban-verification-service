@@ -4,7 +4,7 @@ import { readVerdict } from "@/features/verification/utils/preflight.util";
 describe("readVerdict — the two passing arms", () => {
   test("chain_named is ready", () => {
     expect(
-      readVerdict({ kind: "chain_named", image: "docker.io/stellar/stellar-cli@sha256:" + "a".repeat(64), trustLevel: "sdf_trusted" }),
+      readVerdict({ kind: "chain_named", image: "docker.io/stellar/stellar-cli@sha256:" + "a".repeat(64), trustLevel: "official_trusted" }),
     ).toEqual({ gate: "ready", kind: "chain_named" });
   });
 
@@ -30,14 +30,14 @@ describe("readVerdict — unsupported toolchains", () => {
 });
 
 describe("readVerdict — one arm, two labels", () => {
-  test("image_not_sdf_trusted is unsupported, not policy_rejected", () => {
+  test("image_not_official_trusted is unsupported, not policy_rejected", () => {
     const verdict = readVerdict({
       kind: "chain_named_policy_rejected",
-      reason: "image_not_sdf_trusted",
+      reason: "image_not_official_trusted",
       detail: "M1 only accepts docker.io/stellar/stellar-cli digest-pinned images.",
     });
 
-    expect(verdict).toEqual({ gate: "blocked", label: "unsupported", reason: "image_not_sdf_trusted" });
+    expect(verdict).toEqual({ gate: "blocked", label: "unsupported", reason: "image_not_official_trusted" });
   });
 
   test("image_not_digest_pinned is policy_rejected, and carries the detail to act on", () => {
@@ -56,7 +56,7 @@ describe("readVerdict — one arm, two labels", () => {
   });
 
   test("the two reasons never share a label", () => {
-    const a = readVerdict({ kind: "chain_named_policy_rejected", reason: "image_not_sdf_trusted", detail: "" });
+    const a = readVerdict({ kind: "chain_named_policy_rejected", reason: "image_not_official_trusted", detail: "" });
     const b = readVerdict({ kind: "chain_named_policy_rejected", reason: "image_not_digest_pinned", detail: "" });
 
     expect(a).not.toBeNull();

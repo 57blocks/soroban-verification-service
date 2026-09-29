@@ -114,7 +114,7 @@ describe("BuildEnvironmentIdentityService.resolve", () => {
     expect(outcome.kind).toBe("failed");
     if (outcome.kind !== "failed") throw new Error("unreachable");
     expect(outcome.reason).toBe("unsupported");
-    expect(outcome.reasonCode).toBe("image_not_sdf_trusted");
+    expect(outcome.reasonCode).toBe("image_not_official_trusted");
     expect(outcome.detail).toBeDefined();
   });
 

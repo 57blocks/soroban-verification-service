@@ -53,7 +53,7 @@ export const REGISTRY_SCHEMA_MAJOR = 1;
 export const RECIPE_SOURCES = ["on_chain_metadata", "submitted"] as const;
 export type RecipeSource = (typeof RECIPE_SOURCES)[number];
 
-export const IMAGE_TRUST_LEVELS = ["sdf_trusted", "upstream_pinned", "publicly_auditable", "arbitrary"] as const;
+export const IMAGE_TRUST_LEVELS = ["official_trusted", "upstream_pinned", "publicly_auditable", "arbitrary"] as const;
 export type ImageTrustLevel = (typeof IMAGE_TRUST_LEVELS)[number];
 
 export const RESULT_URL_TYPES = ["report", "provenance", "attestation", "sbom", "audit"] as const;

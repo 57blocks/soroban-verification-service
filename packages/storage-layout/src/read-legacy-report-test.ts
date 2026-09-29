@@ -24,7 +24,7 @@ function preExistingShapedReport(overrides: { build_recipe?: unknown } = {}): Re
       build_image: `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`,
       build_environment: {
         kind: "chain_named",
-        trust_level: "sdf_trusted",
+        trust_level: "official_trusted",
         image_reference: `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`,
       },
     },
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   assert.equal(report.image_trust_level, undefined);
 
   const custody = await readLegacyCustody(storage, reportSha256);
-  assert.deepEqual(custody, { imageTrustLevel: "sdf_trusted" });
+  assert.deepEqual(custody, { imageTrustLevel: "official_trusted" });
 
   const composedSha256 = "e".repeat(64);
   await writeFile(

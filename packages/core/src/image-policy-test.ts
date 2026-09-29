@@ -20,7 +20,7 @@ test("the official digest-pinned CLI image is accepted, with its evidence", () =
   const result = evaluateBuildImage(ACCEPTED_IMAGE);
   assert.ok(result.ok);
   assert.equal(result.image, ACCEPTED_IMAGE);
-  assert.equal(result.trust_level, "sdf_trusted");
+  assert.equal(result.trust_level, "official_trusted");
   assert.equal(result.evidence.checked, "digest_pinned_stellar_cli_image");
 });
 
@@ -28,7 +28,7 @@ test("a well-formed but not-yet-accepted image is unsupported", () => {
   const result = evaluateBuildImage(UNTRUSTED_IMAGE);
   assert.equal(result.ok, false);
   if (result.ok) throw new Error("unreachable");
-  assert.equal(result.reason, "image_not_sdf_trusted");
+  assert.equal(result.reason, "image_not_official_trusted");
   assert.equal(imagePolicyErrorCode(result.reason), "unsupported");
 });
 
@@ -42,7 +42,7 @@ test("a non-digest-pinned reference is policy_rejected", () => {
 
 test("the two reasons map to two distinct codes", () => {
   assert.notEqual(
-    imagePolicyErrorCode("image_not_sdf_trusted"),
+    imagePolicyErrorCode("image_not_official_trusted"),
     imagePolicyErrorCode("image_not_digest_pinned"),
   );
 });
@@ -52,7 +52,7 @@ test("an upper-case digest is judged by trust, not by shape", () => {
   const result = evaluateBuildImage(upper);
   assert.equal(result.ok, false);
   if (result.ok) throw new Error("unreachable");
-  assert.equal(result.reason, "image_not_sdf_trusted");
+  assert.equal(result.reason, "image_not_official_trusted");
 });
 
 test("anything that is not a string is refused on shape", () => {

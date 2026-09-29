@@ -14,7 +14,7 @@ export type VerifierIdentity = { id: string; displayName: string; policyId: stri
 export type PublishedBuildEnvironment =
   | {
       kind: "chain_named";
-      trustLevel: "sdf_trusted";
+      trustLevel: "official_trusted";
       buildImage: string;
     }
   | {

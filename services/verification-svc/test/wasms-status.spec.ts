@@ -80,7 +80,7 @@ function publishedDocument(wasmHash: string): string {
         verifier: { name: getVerifierIdentity().displayName, url: "https://results.dev.sv.example.com" },
         status: "verified",
         recipe_source: "on_chain_metadata",
-        image_trust_level: "sdf_trusted",
+        image_trust_level: "official_trusted",
         bldimg: `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`,
         source_sha256: "0".repeat(64),
         processed_at: "2026-08-25T00:00:00.000Z",

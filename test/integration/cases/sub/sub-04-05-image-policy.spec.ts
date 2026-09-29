@@ -98,7 +98,7 @@ caseBlock(
         });
         expectStatus(response, 200);
         expect(response.json.build_environment?.kind).toBe("chain_named_policy_rejected");
-        expect(response.json.build_environment?.reason).toBe("image_not_sdf_trusted");
+        expect(response.json.build_environment?.reason).toBe("image_not_official_trusted");
       }
     );
 
@@ -161,7 +161,7 @@ caseBlock(
       expectStatus(outcome.response, 400);
       const envelope = expectErrorEnvelope(outcome.response);
       expect(envelope.error).toBe("unsupported");
-      expect(envelope.reason).toBe("image_not_sdf_trusted");
+      expect(envelope.reason).toBe("image_not_official_trusted");
       expect(outcome.jobId).toBeUndefined();
       expect(outcome.response.text).not.toMatch(/"job_id"/);
       expectPerTrd("ERROR_ENVELOPE_SCHEMA_VERSION", "E2E-SUB-08/unsupported", () => {

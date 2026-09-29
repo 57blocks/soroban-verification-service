@@ -42,7 +42,7 @@ function baseParams(overrides: Partial<BuildWasmStatusParams> = {}): BuildWasmSt
     verifier: OURS,
     verdict: "verified",
     recipeSource: "on_chain_metadata",
-    imageTrustLevel: "sdf_trusted",
+    imageTrustLevel: "official_trusted",
     sourceSha256: "b".repeat(64),
     processedAt: "2026-09-02T00:00:00Z",
     resultsUrls: [{ type: "report", url: REPORT_URL, sha256: REPORT_SHA }],
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     assert.deepEqual(entry.verifier, OURS);
     assert.equal(entry.status, "verified");
     assert.equal(entry.recipe_source, "on_chain_metadata");
-    assert.equal(entry.image_trust_level, "sdf_trusted");
+    assert.equal(entry.image_trust_level, "official_trusted");
     assert.deepEqual(entry.bldarg, ["contract", "build"]);
     assert.equal(entry.rebuilt_hash, undefined);
     assert.equal("out_of_band" in entry, false, "the draft's boolean is not published");
@@ -261,7 +261,7 @@ async function main(): Promise<void> {
         reportUrl: REPORT_URL,
         reportSha256: REPORT_SHA,
         archiveUrl: gatewayUrl("tx-1"),
-        legacyCustody: { imageTrustLevel: "sdf_trusted" },
+        legacyCustody: { imageTrustLevel: "official_trusted" },
       }),
       "written",
     );
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
     assert.equal(entry.verifier.url, OURS.url, "the identity is recovered from our own root, not invented");
     assert.equal(entry.verifier.name, OURS.name);
     assert.equal(entry.recipe_source, "on_chain_metadata", "out_of_band: false ⇒ on_chain_metadata");
-    assert.equal(entry.image_trust_level, "sdf_trusted");
+    assert.equal(entry.image_trust_level, "official_trusted");
     assert.deepEqual(plain(entry.results_urls), [
       { type: "report", url: REPORT_URL, sha256: REPORT_SHA },
       { type: "report", location: "arweave", url: gatewayUrl("tx-1"), sha256: REPORT_SHA },

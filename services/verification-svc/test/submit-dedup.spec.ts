@@ -161,7 +161,7 @@ describe("POST /api/verification/v1/verifications job creation and target dedup"
     });
     await jobsRepository.advanceJob(failedJobId, "queued", "failed", {
       failureReason: "policy_rejected",
-      error: "image_not_sdf_trusted",
+      error: "image_not_official_trusted",
       progress: undefined,
     });
 
