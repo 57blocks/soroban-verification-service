@@ -27,7 +27,7 @@ export class AggregationReadService {
       this.aggregation.listCachedEntriesForHash(wasmHash),
       this.assemblyContext(),
     ]);
-    return assemble(wasmHash, entries, this.unavailableFor(context), context);
+    return assemble(wasmHash, served(entries, context), this.unavailableFor(context), context);
   }
 
   async page(opts: {
@@ -42,7 +42,7 @@ export class AggregationReadService {
     ]);
 
     const byHash = new Map<string, VerifierResultCacheRecord[]>();
-    for (const entry of cached) {
+    for (const entry of served(cached, context)) {
       byHash.set(entry.wasmHash, [...(byHash.get(entry.wasmHash) ?? []), entry]);
     }
 
@@ -69,6 +69,9 @@ export class AggregationReadService {
       ),
       resultRoots: new Map(active.map((record) => [record.verifierId, record.resultsRoot])),
       knownVerifierIds: new Set(active.map((record) => record.verifierId)),
+      disabledVerifierIds: new Set(
+        records.filter((record) => record.status === "disabled").map((record) => record.verifierId),
+      ),
       stateByVerifier: new Map(state.map((entry) => [entry.verifierId, entry])),
     };
   }
@@ -95,8 +98,17 @@ type AssemblyContext = {
   displayNames: Map<string, string>;
   resultRoots: Map<string, string>;
   knownVerifierIds: Set<string>;
+  disabledVerifierIds: Set<string>;
   stateByVerifier: Map<string, VerifierSyncCursorRecord>;
 };
+
+/** A disabled member's retained entries are neither served nor counted; a paused member's still are. */
+function served(
+  cached: readonly VerifierResultCacheRecord[],
+  context: AssemblyContext,
+): VerifierResultCacheRecord[] {
+  return cached.filter((record) => !context.disabledVerifierIds.has(record.verifierId));
+}
 
 /** Takes the whole context: `displayNames` and `resultRoots` share a type, so passing one map invites a mix-up. */
 function assemble(

@@ -361,6 +361,62 @@ describe("the aggregate relays the peer's own identity, keyed by result root", (
     expect(oursOnly(res.body.unavailable_verifiers)).toEqual([]);
   });
 
+  it("neither serves nor counts a disabled member's retained entry, on either route", async () => {
+    const [hash] = HASHES;
+    await seed(VERIFIER_A, { status: "disabled" });
+    await seed(VERIFIER_B);
+    await record(VERIFIER_A, hash, { url: `https://${VERIFIER_A}.spec.test/` });
+    await record(VERIFIER_B, hash, { url: `https://${VERIFIER_B}.spec.test/` });
+
+    const single = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${hash}`);
+    expect(single.status).toBe(200);
+    expect(single.body.source_code_verifications.map((served: { verifier: { url: string } }) => served.verifier.url)).toEqual([
+      `https://${VERIFIER_B}.spec.test/`,
+    ]);
+
+    const stream = await request(app.getHttpServer()).get("/api/query/v1/wasms?limit=100");
+    const streamed = stream.body.records.find((candidate: { wasm_hash: string }) => candidate.wasm_hash === hash);
+    expect(streamed.source_code_verifications).toHaveLength(1);
+    expect(streamed.source_code_verifications[0].verifier.url).toBe(`https://${VERIFIER_B}.spec.test/`);
+  });
+
+  it("withdraws a disabled member's cache on sync, re-timing the hash and resetting its cursor", async () => {
+    const [hash, pausedHash] = HASHES;
+    await seed(VERIFIER_A, { status: "disabled" });
+    await seed(VERIFIER_B, { status: "paused" });
+    await record(VERIFIER_A, hash);
+    await record(VERIFIER_B, hash);
+    await record(VERIFIER_B, pausedHash);
+    await aggregation.setCursor(VERIFIER_A, "cursor-before-disabling");
+    const [before] = (await aggregation.listAggregationIndex({ order: "asc", limit: 100 })).filter(
+      (row) => row.wasmHash === hash,
+    );
+
+    await app.get(AggregationSyncService).withdrawDisabled();
+
+    expect((await aggregation.listCachedEntriesForHash(hash)).map((row) => row.verifierId)).toEqual([VERIFIER_B]);
+    expect(await aggregation.listCachedEntriesForHash(pausedHash)).toHaveLength(1);
+    const [after] = (await aggregation.listAggregationIndex({ order: "asc", limit: 100 })).filter(
+      (row) => row.wasmHash === hash,
+    );
+    expect(new Date(after.aggregationUpdatedAt).getTime()).toBeGreaterThan(new Date(before.aggregationUpdatedAt).getTime());
+    expect(await aggregation.getCursor(VERIFIER_A)).toBeUndefined();
+  });
+
+  it("disables, never deletes, a member the seeded document no longer lists", async () => {
+    await seed(VERIFIER_A);
+    await seed(VERIFIER_B);
+    const others = (await trustedVerifiers.listTrustedVerifiers())
+      .map((row) => row.verifierId)
+      .filter((verifierId) => verifierId !== VERIFIER_B);
+
+    expect(await trustedVerifiers.disableVerifiersNotIn(others)).toEqual([VERIFIER_B]);
+    const rows = await trustedVerifiers.listTrustedVerifiers();
+    expect(rows.find((row) => row.verifierId === VERIFIER_A)?.status).toBe("active");
+    expect(rows.find((row) => row.verifierId === VERIFIER_B)?.status).toBe("disabled");
+    expect(await trustedVerifiers.disableVerifiersNotIn(others)).toEqual([]);
+  });
+
   it("serves the same identities on the bulk-load stream as on the single-hash route", async () => {
     const [hash] = HASHES;
     await seed(VERIFIER_A, { displayName: "Verifier A" });

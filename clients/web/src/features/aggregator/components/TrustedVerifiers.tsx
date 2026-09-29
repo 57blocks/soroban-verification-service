@@ -27,9 +27,10 @@ export const TrustedVerifiers = () => {
   return (
     <div>
       <p className="m-0 max-w-[62ch] text-[0.8rem] text-ink-body">
-        Who this deployment aggregates across. A verifier that is not <code>active</code> is skipped
-        when an answer is assembled — that is the operator&apos;s own decision, not a claim about the
-        verifier.
+        Who this deployment aggregates across. A <code>paused</code> verifier is not asked for new
+        results, but its last answer is still shown with its age; a <code>disabled</code> one&apos;s
+        answers are neither shown nor counted. Either is the operator&apos;s own decision, not a claim
+        about the verifier.
       </p>
 
       <ul className="mt-6 space-y-3 pl-0" data-testid="tvl-list">

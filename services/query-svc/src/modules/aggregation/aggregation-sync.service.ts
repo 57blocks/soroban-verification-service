@@ -49,6 +49,7 @@ export class AggregationSyncService {
   }
 
   async syncAll(): Promise<void> {
+    await this.withdrawDisabled();
     const records = await this.verifiers.listTrustedVerifiers({ activeOnly: true });
     const verifiers = records
       .flatMap((record) => {
@@ -68,6 +69,21 @@ export class AggregationSyncService {
       await this.syncOne(verifier);
     }
     this.firstPassComplete = true;
+  }
+
+  /** Runs every tick, so a member disabled by any path stops counting even if the seed never ran. */
+  async withdrawDisabled(): Promise<void> {
+    const records = await this.verifiers.listTrustedVerifiers();
+    const now = new Date().toISOString();
+    for (const record of records.filter((candidate) => candidate.status === "disabled")) {
+      const withdrawn = await this.aggregation.withdrawVerifier({ verifierId: record.verifierId, now });
+      if (withdrawn.length > 0) {
+        this.logger.warn("withdrew a disabled verifier's retained results", {
+          verifier_id: record.verifierId,
+          wasm_hashes: withdrawn.length,
+        });
+      }
+    }
   }
 
   async syncOne(verifier: TrustedVerifier): Promise<void> {

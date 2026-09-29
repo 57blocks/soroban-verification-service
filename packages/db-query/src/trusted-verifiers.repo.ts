@@ -59,8 +59,17 @@ export class TrustedVerifiersRepository {
     return rows.map(rowToTrustedVerifier);
   }
 
-  async setTrustedVerifierStatus(verifierId: string, status: string): Promise<void> {
-    await this.prisma.trustedVerifier.update({ where: { verifierId }, data: { status } });
+  /** Disables rather than deletes: a member leaves the list only by staying listed with its status. */
+  async disableVerifiersNotIn(verifierIds: readonly string[]): Promise<string[]> {
+    const rows = await this.prisma.trustedVerifier.findMany({
+      where: { verifierId: { notIn: [...verifierIds] }, status: { not: "disabled" } },
+      select: { verifierId: true },
+    });
+    const ids = rows.map((row) => row.verifierId);
+    if (ids.length > 0) {
+      await this.prisma.trustedVerifier.updateMany({ where: { verifierId: { in: ids } }, data: { status: "disabled" } });
+    }
+    return ids;
   }
 }
 

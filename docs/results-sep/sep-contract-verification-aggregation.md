@@ -297,7 +297,11 @@ defines no verifier-registration API.
 **`status` is `active`, `paused` or `disabled`, and paused and disabled members
 stay listed.** Removing a member from the document is how an aggregator
 silently omits a verifier; keeping it listed is what makes the promise
-checkable from outside.
+checkable from outside. A `paused` member is not read, and its retained
+entries are still served with their `retrieved_at`. A `disabled` member's
+entries are neither served nor counted in `agreement`, and disabling it moves
+the aggregation time of every hash it contributed to, so a synchronising
+consumer sees the withdrawal.
 
 `url` is the entry's identity. `display_name` is the operator's own label —
 distinct from the verifier's self-claimed `name` in *Contract Verification
