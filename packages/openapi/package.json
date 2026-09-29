@@ -26,8 +26,8 @@
   },
   "devDependencies": {
     "@scvs/storage-layout": "workspace:*",
-    "@types/node": "^22.20.1",
-    "tsx": "^4.23.13",
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }
 }

@@ -73,10 +73,10 @@
     "@scvs/db": "workspace:*",
     "@scvs/db-query": "workspace:*",
     "@scvs/storage-layout": "workspace:*",
-    "tsx": "^4.23.13",
-    "turbo": "^2.10.12",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.4",
     "typescript": "^5.9.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "pnpm": {
     "overrides": {
