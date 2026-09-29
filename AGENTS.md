@@ -59,9 +59,9 @@ the whole tree — every row below is under a few KB.
   [`eng-tools/README.md`](eng-tools/README.md).
 - **A rule that constrains code beyond your change belongs in `docs/invariants.md`**, as a new row —
   not in a comment, not in a new standalone document. See that file's own header for the format.
-- **A comment explains what the code cannot say for itself** — a trap, an ordering requirement, a
-  bound that looks arbitrary. It is never a place to restate `docs/`, cite a rule number as running
-  commentary, or narrate a decision's rationale. See CONTRIBUTING.md's "Comments explain the code"
+- **Default to no comment.** Write one only for what the code cannot say for itself — a trap, an
+  ordering requirement, a security invariant — in one line, two at most. Never history, ticket or rule
+  IDs, dates, doc citations, rationale, or narration. See CONTRIBUTING.md's "Comments explain the code"
   section.
 - **The pull request is the record of a change.** What you did, why, and what you rejected goes in
   the PR description, next to the diff. There is no separate per-change document to write.
