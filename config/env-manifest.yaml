@@ -2611,6 +2611,7 @@ services:
     exposure: none
     env_dto: ~
     inherits: [postgres]
+    stores_of: target
     variables:
       SCVS_TRUSTED_VERIFIERS_SOURCE:
         type: string
@@ -2635,12 +2636,11 @@ services:
           stayed green.
 
           `inject: ecs-run-task-override` is the only accurate answer, and it is why this entry
-          carries no `envs:`. This task has no task definition of its own — `db-migrate.yml` borrows
-          the target service's and overrides the command — and nothing writes or mounts
-          `scvs/<env>/db-migrate/config`, because `db-migrate` is not in deploy.yml's service matrix.
-          So a value recorded here could reach nothing: the only channel into the task is the
-          `run-task` `containerOverrides` the workflow composes, and the variable lands in the
-          generated contract's `per_invocation` list for exactly that reason.
+          carries no `envs:`. This task has no secret of its own (`stores_of: target`): its task
+          definition references the target service's secrets, and only for the variables this block
+          and `postgres` declare. So a value recorded here could reach nothing: the only channel into
+          the task is the `run-task` `containerOverrides` the workflow composes, and the variable
+          lands in the generated contract's `per_invocation` list for exactly that reason.
 
           What a deployment owns is the DOCUMENT, not this path. It travels in the `deploy-contracts`
           artifact as `<env>/trusted-verifiers.json` — the same carrier, and the same ownership shape,
@@ -2686,19 +2686,18 @@ services:
           report bytes), though this variable's purpose is different: verifying fetched content
           against tampering, not addressing self-generated output.
     note: >-
-      Same image and same secrets as the services, with a command override running
-      `prisma migrate deploy`. Requires the migration user to hold DDL rights. Runs in the services
-      subnet because RDS is in the isolated data subnets — it cannot be run from a laptop or a
-      GitHub-hosted runner.
+      The service image, run once with a command override running `prisma migrate deploy`, as the
+      image's own unprivileged user. Requires the migration user to hold DDL rights. Runs in the
+      services subnet because RDS is in the isolated data subnets — it cannot be run from a laptop or
+      a GitHub-hosted runner.
 
-      `inherits: [postgres]` understates this task since the split. The workflow takes
-      a `target` input and borrows **that** service's task definition, so `target=verification-svc`
-      runs against the `postgres` group's instance and `target=query-svc` against `query-postgres`'s —
-      the same five variable names, resolved from a different Terraform output and a different secret.
-      Both groups are therefore reachable through this one block, and the generated
-      `config/deploy/<env>/db-migrate.json` shows only the first. Left as-is rather than modelled here:
-      the split is still in flight and owns that work. Flagged so this block is not read as a claim that
-      the migration task only ever touches the verifier's database.
+      The variables this block and `postgres` declare are an allowlist, not a description.
+      `db-migrate.yml` renders the task definition from the target service's running one, keeping only
+      the `secrets` entries named here, under a dedicated execution role and with no task role — the
+      container holds no AWS credential. `stores_of: target` is why the generated contract names no
+      secret: `target=verification-svc` reads the `postgres` group's values from verification-svc's
+      config secret and credential, `target=query-svc` the same names from query-svc's, which
+      `query-postgres` describes.
 
       The seed step is on the `target=query-svc` path only, because `trusted_verifiers` lives in
       `packages/db-query` since the split — see `SCVS_TRUSTED_VERIFIERS_SOURCE` above and

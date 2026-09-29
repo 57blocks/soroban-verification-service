@@ -48,6 +48,7 @@
     "check:tool-index": "node eng-tools/check-tool-index.mjs",
     "check:docs": "node eng-tools/check-docs.mjs",
     "deploy:render-taskdef": "node eng-tools/render-taskdef.mjs",
+    "deploy:render-migrate-taskdef": "node eng-tools/render-migrate-taskdef.mjs",
     "deploy:sync-secrets": "node eng-tools/sync-secrets.mjs",
     "deploy:check-taskdef": "node eng-tools/check-taskdef-boundary.mjs",
     "deploy:check-descriptor": "node eng-tools/check-descriptor-fields.mjs",

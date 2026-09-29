@@ -97,6 +97,7 @@ export function buildArtifacts(manifest, environments) {
           const tier = entry.tier ?? "knob";
           d.store = tier === "secret" ? "credential" : "config";
           if (d.store === "config") d.json_key = name;
+          if (svc.stores_of === "target") delete d.secret;
           secrets[name] = d;
         } else if (inject === "docker-build-arg") {
           buildArgs[name] = describe(entry, targetEnv, name);
@@ -132,7 +133,19 @@ export function buildArtifacts(manifest, environments) {
         kind: svc.kind ?? null,
         exposure: svc.exposure ?? null,
         environment,
-        ...(Object.keys(secrets).length
+        ...(Object.keys(secrets).length && svc.stores_of === "target"
+          ? {
+              secrets: {
+                $note:
+                  "This task has no secret of its own: each variable is read from the migration " +
+                  "target's own store — `config` from that service's config secret, `credential` from " +
+                  "the credential that service's contract names for the same variable. The list is an " +
+                  "allowlist: the target's task definition is rendered down to exactly these.",
+                stores_of: "target",
+                variables: secrets,
+              },
+            }
+          : Object.keys(secrets).length
           ? {
               secrets: {
                 $note:

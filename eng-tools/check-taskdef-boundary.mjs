@@ -14,7 +14,7 @@ const files = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsW
 
 if (!service || files.length !== 1) {
   console.error(
-    "usage: check-taskdef-boundary.mjs --env <env> --service <name> <rendered-taskdef.json>"
+    "usage: check-taskdef-boundary.mjs --env <env> --service <name> [--contract <path>] [--target-contract <path>] <rendered-taskdef.json>"
   );
   process.exit(2);
 }
@@ -136,10 +136,43 @@ if (contract.kind === "batch-job-definition" && SANDBOX_SERVICES.has(service)) {
   }
 }
 
+const storedByTarget = contract.secrets?.stores_of === "target";
+let storeContract = contract;
+if (storedByTarget) {
+  const targetPath = flag("target-contract");
+  if (!targetPath || !existsSync(targetPath)) {
+    console.error(
+      `::error::${service}'s values live in its target's stores, so --target-contract must name that ` +
+        `service's contract (got ${targetPath ?? "none"})`
+    );
+    process.exit(1);
+  }
+  storeContract = JSON.parse(readFileSync(targetPath, "utf8"));
+
+  const allowed = new Set([
+    ...Object.keys(contract.secrets?.variables ?? {}),
+    ...Object.keys(contract.environment ?? {}),
+  ]);
+  for (const name of declared) {
+    if (!allowed.has(name)) {
+      fail("allowlist", `${name} is not a variable ${service}'s contract declares, so it must not be in its task definition`);
+    }
+  }
+  if (rendered.taskRoleArn) {
+    fail("taskRoleArn", `${service} must run with no task role, but the rendered document carries ${rendered.taskRoleArn}`);
+  }
+  for (const { container, where } of containers) {
+    if (container.user && container.user !== "node") {
+      fail("user", `${where} runs as ${container.user}; ${service} runs as the image's own user`);
+    }
+  }
+}
+
 const allowedSecretNames = new Set();
-if (contract.secrets?.config_secret) allowedSecretNames.add(contract.secrets.config_secret);
-for (const entry of Object.values(contract.secrets?.variables ?? {})) {
-  if (entry.store === "credential" && entry.secret) allowedSecretNames.add(entry.secret);
+if (storeContract.secrets?.config_secret) allowedSecretNames.add(storeContract.secrets.config_secret);
+for (const [name, entry] of Object.entries(storeContract.secrets?.variables ?? {})) {
+  if (entry.store !== "credential" || !entry.secret) continue;
+  if (!storedByTarget || contract.secrets?.variables?.[name]) allowedSecretNames.add(entry.secret);
 }
 
 /** Name from a `valueFrom`: a Secrets Manager ARN ends in AWS's `-<6 random>` suffix, which is stripped. */
@@ -176,7 +209,7 @@ for (const [name, valueFrom] of secretRefs) {
   if (!allowedSecretNames.has(secretName)) {
     fail(
       "valueFrom",
-      `CROSS-SERVICE READ: ${name} reads secret "${secretName}", which is not ${service}'s own ` +
+      `CROSS-SERVICE READ: ${name} reads secret "${secretName}", which is not ${storeContract.service ?? service}'s own ` +
         `config secret nor a credential its contract names (allowed: ${[...allowedSecretNames].join(", ") || "none"})`
     );
   }
