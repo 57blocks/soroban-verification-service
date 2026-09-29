@@ -38,7 +38,8 @@ on:
           ECR repository (name only) of the image to run the migration from — deploy.yml passes the
           one it just staged. Split from the digest, never a full reference: the registry hostname
           embeds the account id, and a job output carrying it would be stripped by GitHub's
-          secret filter. Omitted by a standalone run, which resolves an image instead.
+          secret filter. Omitted by a standalone run, which resolves the environment's `:deployed`
+          image to its digest instead.
         type: string
         required: false
         default: ""
@@ -49,9 +50,9 @@ on:
         default: ""
       image_tag:
         description: >-
-          Standalone runs only, and optional even then: the tag to migrate from. With none, the
-          newest image in the repository by push time — a manual run should not have to know a
-          commit SHA to apply already-released migrations.
+          Standalone runs only, and optional even then: the tag to migrate from, resolved to its
+          digest before anything runs. With none, `deployed` — the image the environment is meant to
+          be running, so a manual run never moves the schema ahead of the deployed code.
         type: string
         required: false
         default: ""
@@ -168,6 +169,20 @@ jobs:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Mint a read token for the application repository
+        id: source_token
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
+        with:
+          app_id: ${{ secrets.SOURCE_APP_ID }}
+          private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
+          repository: ${{ inputs.source_repository }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.source_repository }}
+          token: ${{ steps.source_token.outputs.token }}
+          ref: ${{ inputs.source_sha }}
+
       # --cluster must be the full ARN: the CI role's ecs:RunTask grant is conditioned on ecs:cluster.
       - name: Resolve the running task definition
         run: |
@@ -187,11 +202,9 @@ jobs:
             exit 1
           fi
           echo "TASK_DEFINITION=$TD" >> "$GITHUB_ENV"
-          echo "Borrowing: $TD"
+          echo "Rendering from: $TD"
 
       - name: Take this deployment's contracts
-        if: inputs.action == 'deploy' && inputs.target == 'query-svc'
-        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: deploy-contracts
@@ -204,32 +217,70 @@ jobs:
           CALLED_DIGEST: ${{ inputs.image_digest }}
           MANUAL_TAG: ${{ inputs.image_tag }}
         run: |
+          set -euo pipefail
           REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           if [ -n "$CALLED_REPO" ] && [ -n "$CALLED_DIGEST" ]; then
-            IMAGE="${REGISTRY}/${CALLED_REPO}@${CALLED_DIGEST}"
+            REPO="$CALLED_REPO"
+            DIGEST="$CALLED_DIGEST"
           else
-            TAG="${MANUAL_TAG:-}"
-            if [ -z "$TAG" ]; then
-              # Sorted in jq, not --query: the CLI applies --query per 100-image page.
-              TAG=$(aws ecr describe-images --repository-name "$SERVICE_ECR_REPOSITORY" \
-                --region "$AWS_REGION" --output json \
-                | jq -r '.imageDetails | sort_by(.imagePushedAt) | last | .imageTags[0] // empty')
-            fi
-            if [ -z "$TAG" ]; then
-              echo "::error::$SERVICE_ECR_REPOSITORY holds no tagged image to migrate from"
+            REPO="$SERVICE_ECR_REPOSITORY"
+            TAG="${MANUAL_TAG:-deployed}"
+            DETAIL=$(aws ecr describe-images --repository-name "$REPO" --image-ids "imageTag=$TAG" \
+              --region "$AWS_REGION" --output json) || {
+              echo "::error::$REPO has no image tagged $TAG to migrate from"
               exit 1
-            fi
-            IMAGE="${REGISTRY}/${SERVICE_ECR_REPOSITORY}:${TAG}"
+            }
+            DIGEST=$(jq -r '.imageDetails[0].imageDigest' <<<"$DETAIL")
+            echo "$REPO:$TAG is $DIGEST, tagged $(jq -r '.imageDetails[0].imageTags | sort | join(", ")' <<<"$DETAIL")"
           fi
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::'$DIGEST' is not an image digest"
+            exit 1
+          fi
+          IMAGE="${REGISTRY}/${REPO}@${DIGEST}"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "Migrating from: $IMAGE"
+
+      - name: Render the migration task definition
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          TARGET: ${{ inputs.target }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          EXECUTION_ROLE: ${{ fromJSON(needs.preflight.outputs.descriptor).db_migrate_execution_role }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EXECUTION_ROLE" ]; then
+            echo "::error::the $ENVIRONMENT descriptor has no db_migrate_execution_role — apply the infrastructure change that creates the migration's execution role first"
+            exit 1
+          fi
+          CONTRACTS="/tmp/deploy-contracts/${ENVIRONMENT}"
+          for f in db-migrate.json "${TARGET}.json"; do
+            if [ ! -f "$CONTRACTS/$f" ]; then
+              echo "::error::the deploy-contracts artifact has no ${ENVIRONMENT}/$f; the migration task is rendered from it"
+              exit 1
+            fi
+          done
+          aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
+            --region "$AWS_REGION" --output json > /tmp/target-taskdef.json
+          node eng-tools/render-migrate-taskdef.mjs \
+            --target "$TARGET" \
+            --image "$IMAGE" \
+            --family "$MIGRATE_FAMILY" \
+            --execution-role "arn:aws:iam::${ACCOUNT_ID}:role/${EXECUTION_ROLE}" \
+            --baseline /tmp/target-taskdef.json \
+            --contract "$CONTRACTS/db-migrate.json" > /tmp/migrate-taskdef.json
+          node eng-tools/check-taskdef-boundary.mjs \
+            --env "$ENVIRONMENT" \
+            --service db-migrate \
+            --contract "$CONTRACTS/db-migrate.json" \
+            --target-contract "$CONTRACTS/${TARGET}.json" \
+            /tmp/migrate-taskdef.json
 
       - name: Run migration task
         id: run
         env:
           ACTION: ${{ inputs.action }}
           ENVIRONMENT: ${{ inputs.environment }}
-          IMAGE: ${{ steps.image.outputs.image }}
           TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
@@ -248,18 +299,17 @@ jobs:
 
           # Prisma is invoked directly: pnpm is not on PATH in the runtime image.
           COMMAND="cd /app/$MIGRATE_PACKAGE && ./node_modules/.bin/$PRISMA_CMD"
+          OVERRIDE_ENV='[]'
 
           # Never fall through: the image's trusted-verifiers.local.json would seed localhost URLs and exit 0.
           if [ "$ACTION" = "deploy" ] && [ "$TARGET" = "query-svc" ]; then
             TVL_DOC="/tmp/deploy-contracts/${ENVIRONMENT}/trusted-verifiers.json"
 
-            DECLARED=$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
-              --region "$AWS_REGION" --output json \
-              | jq -r '[.taskDefinition.containerDefinitions[]
+            HOSTED=$(jq -c '[.taskDefinition.containerDefinitions[]
                         | ((.environment // []) + (.secrets // []))[]
-                        | select(.name == "SCVS_TRUSTED_VERIFIERS_SOURCE")] | length')
+                        | select(.name == "SCVS_TRUSTED_VERIFIERS_SOURCE")] | first // empty' /tmp/target-taskdef.json)
 
-            if [ -f "$TVL_DOC" ] && [ "$DECLARED" != "0" ]; then
+            if [ -f "$TVL_DOC" ] && [ -n "$HOSTED" ]; then
               echo "::error::two Trusted Verifiers Lists are on offer for $ENVIRONMENT — a document in the deploy-contracts artifact AND SCVS_TRUSTED_VERIFIERS_SOURCE on $TASK_DEFINITION. Which verifiers this deployment trusts is not something to resolve by precedence. Remove one."
               exit 1
             elif [ -f "$TVL_DOC" ]; then
@@ -275,7 +325,20 @@ jobs:
               COMMAND="$COMMAND && cd /app && SCVS_TRUSTED_VERIFIERS_SOURCE=/tmp/trusted-verifiers.json ./node_modules/.bin/tsx scripts/seed-tvl.ts"
               COMMAND="$COMMAND && echo '--- SEED_OK: TVL seed complete ---'"
               echo "Will seed the TVL from this deployment's own document ($(jq -r '.verifiers | length' "$TVL_DOC") verifier(s), $(wc -c <"$TVL_DOC" | tr -d ' ') bytes)"
-            elif [ "$DECLARED" != "0" ]; then
+            elif [ -n "$HOSTED" ]; then
+              # The rendered task definition cannot carry a per-invocation variable, so its value travels in the override.
+              SOURCE=$(jq -r '.value // empty' <<<"$HOSTED")
+              if [ -z "$SOURCE" ]; then
+                REF=$(jq -r '.valueFrom' <<<"$HOSTED")
+                KEY=$(awk -F: '{print $8}' <<<"$REF")
+                SOURCE=$(aws secretsmanager get-secret-value --secret-id "$(cut -d: -f1-7 <<<"$REF")" \
+                  --region "$AWS_REGION" --query SecretString --output text | jq -r --arg k "$KEY" '.[$k] // empty')
+              fi
+              if [ -z "$SOURCE" ]; then
+                echo "::error::$TASK_DEFINITION declares SCVS_TRUSTED_VERIFIERS_SOURCE, but its value could not be read"
+                exit 1
+              fi
+              OVERRIDE_ENV=$(jq -nc --arg v "$SOURCE" '[{name:"SCVS_TRUSTED_VERIFIERS_SOURCE", value:$v}]')
               COMMAND="$COMMAND && echo '--- MIGRATE_OK: DDL applied, seeding TVL ---'"
               COMMAND="$COMMAND && cd /app && ./node_modules/.bin/tsx scripts/seed-tvl.ts"
               COMMAND="$COMMAND && echo '--- SEED_OK: TVL seed complete ---'"
@@ -286,23 +349,16 @@ jobs:
             fi
           fi
 
-          REGISTER_ARNS=$(aws ecs register-task-definition \
+          MIGRATE_TD=$(aws ecs register-task-definition \
             --region "$AWS_REGION" \
-            --cli-input-json "$( \
-              aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" --region "$AWS_REGION" \
-                --query 'taskDefinition.{containerDefinitions:containerDefinitions,requiresCompatibilities:requiresCompatibilities,networkMode:networkMode,cpu:cpu,memory:memory,executionRoleArn:executionRoleArn,taskRoleArn:taskRoleArn,runtimePlatform:runtimePlatform}' \
-                --output json \
-              | jq --arg img "$IMAGE" --arg ru "root" --arg fam "$MIGRATE_FAMILY" \
-                  '.containerDefinitions |= map(.image=$img | .user=$ru) | .family=$fam' \
-            )" \
+            --cli-input-json file:///tmp/migrate-taskdef.json \
             --query 'taskDefinition.taskDefinitionArn' --output text)
-
-          MIGRATE_TD="$REGISTER_ARNS"
 
           OVERRIDES=$(jq -nc \
             --arg name "$CONTAINER_NAME" \
             --arg cmd "$COMMAND" \
-            '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd]}]}')
+            --argjson env "$OVERRIDE_ENV" \
+            '{containerOverrides:[{name:$name, command:["sh","-lc",$cmd]} + (if ($env | length) > 0 then {environment:$env} else {} end)]}')
 
           OVERRIDES_BYTES=$(printf %s "$OVERRIDES" | wc -c | tr -d ' ')
           if [ "$OVERRIDES_BYTES" -gt 8192 ]; then

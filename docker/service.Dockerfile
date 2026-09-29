@@ -1,6 +1,11 @@
 FROM node:24-slim AS build
 WORKDIR /app
 
+# Prisma picks its schema engine by the libssl it detects here, so it must match the runtime stage's.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY . .
 
 RUN corepack enable \
@@ -37,4 +42,7 @@ COPY --from=build /app .
 ENV SERVICE_ENTRYPOINT=verification-svc
 
 USER node
+RUN cd packages/db \
+    && POSTGRES_HOST=localhost POSTGRES_PORT=5432 POSTGRES_DB=x POSTGRES_USER=x POSTGRES_PASSWORD=x \
+       ./node_modules/.bin/prisma --version >/dev/null
 CMD ["sh", "-c", "node services/${SERVICE_ENTRYPOINT}/dist/main.js"]

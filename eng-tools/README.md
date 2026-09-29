@@ -79,6 +79,7 @@ Read-only unless the row says otherwise. Each takes `--env` and `--service`; the
 | file | command | run by | what it does |
 | :---- | :---- | :---- | :---- |
 | [`render-taskdef.mjs`](render-taskdef.mjs) | `deploy:render-taskdef` | your deployment pipeline | prints the task definition CI would register — the RUNNING one with the image and every variable replaced, everything else byte-for-byte |
+| [`render-migrate-taskdef.mjs`](render-migrate-taskdef.mjs) | `deploy:render-migrate-taskdef` | `db-migrate.yml` | prints the one-off migration task definition: the target service's running one cut down to the variables `db-migrate.json` allows, pinned by digest, under the migration's own execution role and with no task role |
 | [`sync-secrets.mjs`](sync-secrets.mjs) | `deploy:sync-secrets` | your deployment pipeline | **writes** one service's configuration into `scvs/<env>/<service>/config`. Never touches a credential |
 | [`check-taskdef-boundary.mjs`](check-taskdef-boundary.mjs) | `deploy:check-taskdef` | your deployment pipeline, before every register | asserts a rendered task or job definition against rule 1's trust boundary (`docs/invariants.md`) before anything registers it. Fails closed |
 | [`check-descriptor-fields.mjs`](check-descriptor-fields.mjs) | `deploy:check-descriptor` | an operator | does `/scvs/<env>/ci/descriptor` carry every field the manifest resolves from it? The acceptance test for a descriptor change applied in `soroban-aws-infrastructure` |
