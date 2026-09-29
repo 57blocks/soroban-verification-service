@@ -22,19 +22,26 @@ reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Comments explain the code, and nothing else
 
-A comment earns its place by saying something the code cannot: a non-obvious mechanism, a platform
-trap, an ordering requirement, a bound that looks arbitrary but is not.
+**The default is no comment.** Write one only for what the code cannot say for itself: a non-obvious
+mechanism, a platform or library trap, an ordering or concurrency requirement, a security invariant
+("never logged"), or the meaning of a magic number, regex or byte layout. One line; two at most.
+Before writing it, ask whether a better name, a type or a test would say it instead.
 
-It is **not** the place for:
+Never in a comment:
 
-- **Restating `docs/`.** The same sentence in two files is two things that can disagree.
-- **Citing TRD sections, ADR numbers, or rule IDs** (`S30`, `CV6`, `SDK1`) as running commentary. Cite
-  one when a reader cannot otherwise find the constraint, not to show the code is authorized.
-- **Narrating decisions and their rationale.** That belongs in the PR description or an ADR. A
-  comment arguing for a design ages into a comment defending one nobody proposed.
+- **History.** What the code used to do, "now", "no longer", "after X changed", incidents, dates, authors.
+- **Tracker and rule references.** Ticket, ADR, TRD or rule IDs, PR numbers.
+- **Documents as authority.** "See docs/…", or restating `docs/`: the same sentence in two files is two
+  things that can disagree.
+- **Rationale.** Trade-offs, "deliberately", "why not X". That belongs in the PR description or an ADR;
+  a comment arguing for a design ages into one defending a design nobody proposed.
+- **What the code already says.** Restated names and types, `@param x the x`.
+- **Scaffolding.** Section banners, commented-out code, `TODO`/`FIXME`.
+- **Test narration.** A test's comment names only a setup trap that would otherwise be "fixed" into a bug.
 
-Length is the smell test: **over 3 lines be careful, over 5 lines be suspicious, over 10 lines avoid.**
-A long comment usually means the reasoning wants a different file, or the code wants a better name.
+Always kept: tool directives (`eslint-disable`, `@ts-expect-error`, shebangs, `# syntax=`), license and
+attribution headers, generated-file headers, the `# vX.Y.Z` notes beside SHA-pinned actions, and a
+one-line JSDoc on the SDK's exported API where it tells a consumer something the name does not.
 
 ## Before opening a PR
 

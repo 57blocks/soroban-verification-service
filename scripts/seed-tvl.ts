@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { readDbEnv } from "@scvs/db";
 import {
+  AggregationRepository,
   createPrismaClient,
   TrustedVerifiersRepository,
 } from "@scvs/db-query";
@@ -156,9 +157,9 @@ async function main(): Promise<void> {
     }
   }
 
-  const verifiersRepository = new TrustedVerifiersRepository(
-    createPrismaClient(readDbEnv()),
-  );
+  const prisma = createPrismaClient(readDbEnv());
+  const verifiersRepository = new TrustedVerifiersRepository(prisma);
+  const aggregationRepository = new AggregationRepository(prisma);
 
   for (const verifier of doc.verifiers) {
     const manifestUrl = verifier.manifest_url;
@@ -183,7 +184,23 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(`[seed-tvl] ${doc.verifiers.length} verifier(s) from ${label}.`);
+  const dropped = await verifiersRepository.disableVerifiersNotIn(doc.verifiers.map((verifier) => verifier.id));
+  for (const verifierId of dropped) {
+    console.log(`[seed-tvl] Disabled ${verifierId}: listed in the table, absent from ${label}`);
+  }
+
+  const now = new Date().toISOString();
+  const disabled = (await verifiersRepository.listTrustedVerifiers()).filter((record) => record.status === "disabled");
+  for (const record of disabled) {
+    const withdrawn = await aggregationRepository.withdrawVerifier({ verifierId: record.verifierId, now });
+    if (withdrawn.length > 0) {
+      console.log(`[seed-tvl] Withdrew ${withdrawn.length} retained result(s) from disabled ${record.verifierId}`);
+    }
+  }
+
+  console.log(
+    `[seed-tvl] ${doc.verifiers.length} verifier(s) from ${label}; ${dropped.length} newly disabled.`,
+  );
 }
 
 main()

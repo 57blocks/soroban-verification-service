@@ -115,6 +115,19 @@ export class AggregationRepository {
     });
   }
 
+  /** Resets the cursor too, so re-admitting the verifier re-reads everything rather than resuming past it. */
+  async withdrawVerifier(input: { verifierId: string; now: string }): Promise<string[]> {
+    const rows = await this.prisma.verificationResult.findMany({
+      where: { verifierId: input.verifierId },
+      select: { wasmHash: true },
+    });
+    for (const { wasmHash } of rows) {
+      await this.withdrawVerifierEntry({ verifierId: input.verifierId, wasmHash, now: input.now });
+    }
+    await this.prisma.verifierSyncCursor.deleteMany({ where: { verifierId: input.verifierId } });
+    return rows.map((row) => row.wasmHash);
+  }
+
   async listCachedEntriesForHash(wasmHash: string): Promise<VerifierResultCacheRecord[]> {
     const rows = await this.prisma.verificationResult.findMany({
       where: { wasmHash },
