@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   type BuildArchitecture,
   composedEnvironmentImageReference,
+  DENIED_IMAGE_DIGESTS,
   evaluateBuildImage,
   type FailureReason,
   isPermanentCompositionFailure,
@@ -35,6 +36,7 @@ export type EnvironmentImageReference = {
 @Injectable()
 export class BuildEnvironmentIdentityService {
   private readonly logger = new ScvsLogger("build-environment-identity");
+  protected readonly deniedImageDigests: readonly string[] = DENIED_IMAGE_DIGESTS;
 
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
@@ -53,7 +55,7 @@ export class BuildEnvironmentIdentityService {
     // The chain decides the build class: a chain-recorded bldimg means cli-58.
     const chainNamedImage = metadata.sep58.bldimg;
     if (chainNamedImage) {
-      const imagePolicy = evaluateBuildImage(chainNamedImage);
+      const imagePolicy = evaluateBuildImage(chainNamedImage, this.deniedImageDigests);
       if (!imagePolicy.ok) {
         return {
           kind: "failed",
@@ -142,6 +144,12 @@ export class BuildEnvironmentIdentityService {
   ): Promise<EnvironmentImageReference | undefined> {
     const identity = parseRebuildEnvironmentIdentity(persistedIdentity);
     if (identity.kind === "chain_named") {
+      if (!evaluateBuildImage(identity.image, this.deniedImageDigests).ok) {
+        this.logger.warn("refusing to dispatch against a chain-named image the policy no longer accepts", {
+          image: identity.image,
+        });
+        return undefined;
+      }
       return { pullReference: identity.image };
     }
     const environment =

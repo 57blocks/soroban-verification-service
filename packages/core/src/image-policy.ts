@@ -5,6 +5,13 @@ const DIGEST_PINNED_IMAGE_RE = new RegExp(BLDIMG_PATTERN.source, "i");
 
 const STELLAR_CLI_IMAGE_RE = /^docker\.io\/stellar\/stellar-cli@sha256:[0-9a-f]{64}$/i;
 
+// `sha256:<64 lowercase hex>`; covers official images and composed environments alike.
+export const DENIED_IMAGE_DIGESTS: readonly string[] = [];
+
+export function isDeniedImageDigest(digest: string, denied: readonly string[] = DENIED_IMAGE_DIGESTS): boolean {
+  return denied.includes(digest.toLowerCase());
+}
+
 export type ImagePolicyResult =
   | {
       ok: true;
@@ -27,7 +34,10 @@ export function imagePolicyErrorCode(
   return reason === "image_not_official_trusted" ? "unsupported" : "policy_rejected";
 }
 
-export function evaluateBuildImage(image: unknown): ImagePolicyResult {
+export function evaluateBuildImage(
+  image: unknown,
+  denied: readonly string[] = DENIED_IMAGE_DIGESTS,
+): ImagePolicyResult {
   if (typeof image !== "string" || !DIGEST_PINNED_IMAGE_RE.test(image)) {
     return {
       ok: false,
@@ -43,6 +53,14 @@ export function evaluateBuildImage(image: unknown): ImagePolicyResult {
       reason: "image_not_official_trusted",
       detail:
         "M1 only accepts docker.io/stellar/stellar-cli digest-pinned images. Later policy adapters can verify SLSA/Sigstore/SBOM evidence from the official publish pipeline.",
+    };
+  }
+
+  if (isDeniedImageDigest(image.slice(image.indexOf("@") + 1), denied)) {
+    return {
+      ok: false,
+      reason: "image_not_official_trusted",
+      detail: "This verifier has withdrawn trust from this image digest.",
     };
   }
 

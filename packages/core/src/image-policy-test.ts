@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { evaluateBuildImage, imagePolicyErrorCode } from "./image-policy.js";
+import { DENIED_IMAGE_DIGESTS, evaluateBuildImage, imagePolicyErrorCode, isDeniedImageDigest } from "./image-policy.js";
 
 function test(name: string, fn: () => void): void {
   try {
@@ -61,5 +61,30 @@ test("anything that is not a string is refused on shape", () => {
     assert.equal(result.ok, false, `${String(bad)} must be refused`);
     if (result.ok) continue;
     assert.equal(result.reason, "image_not_digest_pinned");
+  }
+});
+
+test("a denied digest of the official repository is unsupported", () => {
+  const result = evaluateBuildImage(ACCEPTED_IMAGE, [`sha256:${DIGEST}`]);
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("unreachable");
+  assert.equal(result.reason, "image_not_official_trusted");
+  assert.equal(imagePolicyErrorCode(result.reason), "unsupported");
+});
+
+test("denying one digest leaves the rest of the repository accepted", () => {
+  const other = `docker.io/stellar/stellar-cli@sha256:${"b".repeat(64)}`;
+  assert.ok(evaluateBuildImage(other, [`sha256:${DIGEST}`]).ok);
+});
+
+test("an upper-case reference to a denied digest is still denied", () => {
+  const upper = `docker.io/stellar/stellar-cli@sha256:${"A".repeat(64)}`;
+  assert.equal(evaluateBuildImage(upper, [`sha256:${DIGEST}`]).ok, false);
+  assert.ok(isDeniedImageDigest(`sha256:${"A".repeat(64)}`, [`sha256:${DIGEST}`]));
+});
+
+test("every shipped denylist entry is a lowercase prefixed digest, or it would match nothing", () => {
+  for (const entry of DENIED_IMAGE_DIGESTS) {
+    assert.match(entry, /^sha256:[0-9a-f]{64}$/);
   }
 });

@@ -486,7 +486,7 @@ export class VerificationPipelineService {
         job,
         "internal_error",
         "environment_not_ready",
-        "The composed build environment this rebuild is keyed on is no longer available."
+        "The build environment this rebuild is keyed on is no longer available."
       );
       return;
     }
