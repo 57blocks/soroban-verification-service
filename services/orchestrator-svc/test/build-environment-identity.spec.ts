@@ -64,6 +64,7 @@ function service(options: {
   materialization?: MaterializationResult;
   ready?: MaterializedEnvironment;
   repositoryUri?: string | undefined;
+  denied?: string[];
 }): {
   identity: BuildEnvironmentIdentityService;
   resolver: StubResolver;
@@ -83,12 +84,12 @@ function service(options: {
           : REPO
         : undefined,
   };
+  const denied = options.denied ?? [];
+  class Denying extends BuildEnvironmentIdentityService {
+    protected override readonly deniedImageDigests = denied;
+  }
   return {
-    identity: new BuildEnvironmentIdentityService(
-      config as never,
-      resolver,
-      materializer,
-    ),
+    identity: new Denying(config as never, resolver, materializer),
     resolver,
   };
 }
@@ -116,6 +117,16 @@ describe("BuildEnvironmentIdentityService.resolve", () => {
     expect(outcome.reason).toBe("unsupported");
     expect(outcome.reasonCode).toBe("image_not_official_trusted");
     expect(outcome.detail).toBeDefined();
+  });
+
+  it("fails on a chain-named official image whose digest is denied", async () => {
+    const { identity } = service({ denied: [`sha256:${"c".repeat(64)}`] });
+
+    const outcome = await identity.resolve("job-1", metadata({ bldimg: TRUSTED_IMAGE }));
+
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind !== "failed") throw new Error("unreachable");
+    expect(outcome.reasonCode).toBe("image_not_official_trusted");
   });
 
   it("fails when the recorded toolchain cannot be served at all", async () => {
@@ -181,6 +192,12 @@ describe("BuildEnvironmentIdentityService.resolveImageReference", () => {
     expect(await identity.resolveImageReference(TRUSTED_IMAGE)).toEqual({
       pullReference: TRUSTED_IMAGE,
     });
+  });
+
+  it("answers undefined for a chain-named identity whose digest was denied after it was keyed", async () => {
+    const { identity } = service({ denied: [`sha256:${"c".repeat(64)}`] });
+
+    expect(await identity.resolveImageReference(TRUSTED_IMAGE)).toBeUndefined();
   });
 
   it("qualifies a composed identity against the configured repository, carrying the stored arch", async () => {

@@ -1364,7 +1364,7 @@
   "images": {
     "$note": [
       "`accepted` is the digest the live policy.json accepts: accepted_trust_levels is exactly",
-      "[\"official_trusted\"], digest_pinned_only true, tag_only_allowed false.",
+      "[\"official_trusted\", \"upstream_pinned\"], digest_pinned_only true, tag_only_allowed false.",
       "",
       "`digest_pinned_untrusted` is the published OCI index digest for rust:1.96.0-slim-bookworm.",
       "It is well-formed and immutable, but outside the trusted Stellar CLI image class."

@@ -732,11 +732,11 @@ groups:
         source: literal
         tier: knob
         inject: ecs-secrets
-        default: official-trusted-public-and-private-upload-v1
+        default: official-trusted-public-and-private-upload-v2
         envs:
           {
-            dev: official-trusted-public-and-private-upload-v1,
-            staging: official-trusted-public-and-private-upload-v1,
+            dev: official-trusted-public-and-private-upload-v2,
+            staging: official-trusted-public-and-private-upload-v2,
           }
         code: packages/config/src/index.ts::getVerifierIdentity
         note: >-
@@ -762,8 +762,8 @@ groups:
         source: literal
         tier: knob
         inject: ecs-secrets
-        default: official_trusted
-        envs: { dev: official_trusted, staging: official_trusted }
+        default: official_trusted,upstream_pinned
+        envs: { dev: "official_trusted,upstream_pinned", staging: "official_trusted,upstream_pinned" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
         note: A wrong or stale value publishes a policy this verifier does not actually enforce.
       SCVS_POLICY_DIGEST_PINNED_ONLY:

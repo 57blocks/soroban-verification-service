@@ -86,11 +86,16 @@ class FakeComposer {
   }
 }
 
+class DenyingMaterializer extends CachingBuildEnvironmentMaterializer {
+  protected override readonly deniedImageDigests = [IMAGE_DIGEST];
+}
+
 function materializerFor(
   environments: FakeEnvironments,
   composer: FakeComposer = new FakeComposer(),
+  Materializer: typeof CachingBuildEnvironmentMaterializer = CachingBuildEnvironmentMaterializer,
 ): CachingBuildEnvironmentMaterializer {
-  return new CachingBuildEnvironmentMaterializer(
+  return new Materializer(
     environments as unknown as EnvironmentsRepository,
     composer as unknown as ComposerDispatchService,
   );
@@ -245,6 +250,38 @@ describe("CachingBuildEnvironmentMaterializer", () => {
   it("returns undefined for a recipe hash no environment carries", async () => {
     await expect(
       materializerFor(new FakeEnvironments()).findReadyByRecipeSha256(RECIPE_SHA),
+    ).resolves.toBeUndefined();
+  });
+
+  it("fails a ready environment whose image digest is denied, composing nothing", async () => {
+    const environments = new FakeEnvironments({
+      status: "ready",
+      recipeSha256: RECIPE_SHA,
+      imageDigest: IMAGE_DIGEST,
+      recipe: RECIPE,
+    });
+    const composer = new FakeComposer();
+
+    const result = await materializerFor(environments, composer, DenyingMaterializer).materialize(INTENT, "job-1");
+
+    expect(result).toEqual({
+      kind: "failed",
+      environmentId: "env-1",
+      errorCode: "environment_image_denied",
+    });
+    expect(composer.submissions).toBe(0);
+    expect(environments.row?.status).toBe("ready");
+  });
+
+  it("does not hand dispatch a ready environment whose image digest is denied", async () => {
+    const environments = new FakeEnvironments({
+      status: "ready",
+      recipeSha256: RECIPE_SHA,
+      imageDigest: IMAGE_DIGEST,
+      recipe: RECIPE,
+    });
+    await expect(
+      materializerFor(environments, new FakeComposer(), DenyingMaterializer).findReadyByRecipeSha256(RECIPE_SHA),
     ).resolves.toBeUndefined();
   });
 });

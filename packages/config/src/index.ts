@@ -31,7 +31,7 @@ export function getVerifierIdentity(): VerifierIdentity {
       process.env.SCVS_VERIFIER_DISPLAY_NAME || "Local Soroban Verifier",
     policyId:
       process.env.SCVS_VERIFIER_POLICY_ID ||
-      "official-trusted-public-and-private-upload-v1",
+      "official-trusted-public-and-private-upload-v2",
   };
 }
 
@@ -61,7 +61,7 @@ function parseCsv(value: string | undefined, fallback: string[]): string[] {
 /** Reads each `SCVS_POLICY_*` literally at its call site, which check-env-manifest.mjs's static scan requires. */
 export function getVerifierPolicyConfig(): VerifierPolicyConfig {
   return {
-    acceptedTrustLevels: parseCsv(process.env.SCVS_POLICY_ACCEPTED_TRUST_LEVELS, ["official_trusted"]),
+    acceptedTrustLevels: parseCsv(process.env.SCVS_POLICY_ACCEPTED_TRUST_LEVELS, ["official_trusted", "upstream_pinned"]),
     digestPinnedOnly: boolEnv("SCVS_POLICY_DIGEST_PINNED_ONLY", true),
     tagOnlyAllowed: boolEnv("SCVS_POLICY_TAG_ONLY_ALLOWED", false),
     arbitraryUserImagesAllowed: boolEnv("SCVS_POLICY_ARBITRARY_IMAGES_ALLOWED", false),

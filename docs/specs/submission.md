@@ -132,8 +132,10 @@ Verified by: `test/integration/cases/sec/sec-surface-and-quota.spec.ts`
 No runtime API adds, removes, or lists a trusted build image. What this verifier trusts is fixed at
 deploy time: an official image recognised by a rule in source code and changed through review, or an
 environment this verifier composes itself from pinned official components
-([rule 16 of `docs/invariants.md`](../invariants.md)). A contract whose recorded image cannot be
-resolved to a trusted environment is `unsupported` — never verified on an operator's say-so.
+([rule 16 of `docs/invariants.md`](../invariants.md)). Trust in a single image digest of either kind
+is withdrawn the same way, by listing it in `DENIED_IMAGE_DIGESTS` beside that rule. A contract whose
+recorded image cannot be resolved to a trusted environment is `unsupported` — never verified on an
+operator's say-so.
 `policy.json` is published from configuration at process start and has no runtime mutation path.
 
 Verified by: `test/integration/cases/sub/sub-04-05-image-policy.spec.ts`

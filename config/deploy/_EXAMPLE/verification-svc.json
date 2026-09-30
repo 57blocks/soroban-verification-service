@@ -364,7 +364,7 @@
         "required": true,
         "fail": "silent",
         "source": "literal",
-        "value": "official-trusted-public-and-private-upload-v1",
+        "value": "official-trusted-public-and-private-upload-v2",
         "store": "config",
         "json_key": "SCVS_VERIFIER_POLICY_ID"
       },

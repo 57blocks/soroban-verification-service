@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { EnvironmentsRepository, type EnvironmentRecord } from "@scvs/db";
 import {
+  DENIED_IMAGE_DIGESTS,
+  isDeniedImageDigest,
   ScvsLogger,
   ScvsMetrics,
   type ComposeIntent,
@@ -15,6 +17,7 @@ import { ComposerDispatchService } from "./composer-dispatch.service.js";
 export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMaterializer {
   private readonly logger = new ScvsLogger("build-environments");
   private readonly metrics = new ScvsMetrics("build-environments", { logger: this.logger });
+  protected readonly deniedImageDigests: readonly string[] = DENIED_IMAGE_DIGESTS;
 
   constructor(
     @Inject(EnvironmentsRepository) private readonly environments: EnvironmentsRepository,
@@ -68,6 +71,13 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
       });
       return undefined;
     }
+    if (this.isDenied(environment)) {
+      this.logger.warn("refusing to dispatch against a composed environment whose image digest is denied", {
+        environment_id: environment.environmentId,
+        image_digest: environment.imageDigest,
+      });
+      return undefined;
+    }
     return this.materializedFrom(environment);
   }
 
@@ -112,6 +122,17 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
   }
 
   private readyResult(environment: EnvironmentRecord): MaterializationResult {
+    if (this.isDenied(environment)) {
+      this.logger.error("a ready environment's image digest is denied; it must be recomposed", {
+        environment_id: environment.environmentId,
+        image_digest: environment.imageDigest,
+      });
+      return {
+        kind: "failed",
+        environmentId: environment.environmentId,
+        errorCode: "environment_image_denied",
+      };
+    }
     const materialized = this.materializedFrom(environment);
     if (!materialized) {
       this.logger.error("a ready environment is missing its recorded identities", {
@@ -131,6 +152,10 @@ export class CachingBuildEnvironmentMaterializer extends BuildEnvironmentMateria
       environmentId: environment.environmentId,
       environment: materialized,
     };
+  }
+
+  private isDenied(environment: EnvironmentRecord): boolean {
+    return environment.imageDigest !== undefined && isDeniedImageDigest(environment.imageDigest, this.deniedImageDigests);
   }
 
   private materializedFrom(
