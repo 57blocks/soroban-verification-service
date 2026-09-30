@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { PillIcon } from "@/components/ui/pill-icon";
 import { FadeUp } from "@/components/ui/fade-up";
+import { TextType } from "@/components/ui/text-type";
 import type { LiquidEtherProps } from "@/components/ui/liquid-ether";
 import { heroCopy } from "../content";
 import { RebuildPipeline } from "./RebuildPipeline";
@@ -44,16 +45,60 @@ const HeroFluid = () => {
   );
 };
 
-const Headline = () => {
-  const [before, after] = heroCopy.title.split(heroCopy.highlight);
+const renderTitle = (displayed: string) => {
+  const start = heroCopy.title.indexOf(heroCopy.highlight);
+  const end = start + heroCopy.highlight.length;
+  const highlighted = displayed.slice(start, end);
 
   return (
-    <h1 className="m-0 mx-auto max-w-[820px] text-4xl font-bold leading-[1.12] tracking-tight text-ink md:text-5xl lg:text-[54px]">
-      {before}
-      <span className="bg-gradient-to-b from-transparent from-64% to-yellow to-64%">
-        {heroCopy.highlight}
-      </span>
-      {after}
+    <>
+      {displayed.slice(0, start)}
+      {highlighted && (
+        <span className="animate-gradient-pan bg-hero-spectrum bg-[length:200%_auto] bg-clip-text text-transparent motion-reduce:animate-none">
+          {highlighted}
+        </span>
+      )}
+      {displayed.slice(end)}
+    </>
+  );
+};
+
+const headlineCursor = "_";
+
+const prefersReducedMotion = () =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const Headline = () => {
+  const [animate] = useState(() => !prefersReducedMotion());
+
+  return (
+    <h1 className="m-0 mx-auto max-w-[13.6em] text-4xl font-bold leading-[1.12] tracking-tight text-ink md:text-5xl lg:text-[54px]">
+      {animate ? (
+        <>
+          <span className="sr-only">{heroCopy.title}</span>
+          <span aria-hidden="true" className="grid">
+            <span className="invisible col-start-1 row-start-1 whitespace-pre-wrap">
+              {renderTitle(heroCopy.title)}
+              <span className="ml-1 inline-block">{headlineCursor}</span>
+            </span>
+            <TextType
+              as="span"
+              className="col-start-1 row-start-1"
+              text={heroCopy.title}
+              loop={true}
+              typingSpeed={120}
+              initialDelay={800}
+              deletingSpeed={120}
+              cursorCharacter={headlineCursor}
+              cursorClassName="font-light text-ink-body"
+              renderText={renderTitle}
+            />
+          </span>
+        </>
+      ) : (
+        renderTitle(heroCopy.title)
+      )}
     </h1>
   );
 };

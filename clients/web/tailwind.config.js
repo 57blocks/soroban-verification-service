@@ -112,7 +112,20 @@ export default {
         console: "1120px",
       },
 
+      backgroundImage: {
+        "hero-spectrum":
+          "linear-gradient(90deg, #d97706, #ea580c, #db2777, #7c3aed, #db2777, #ea580c, #d97706)",
+      },
+
       keyframes: {
+        "cursor-blink": {
+          "0%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+        "gradient-pan": {
+          "0%": { backgroundPosition: "0% 50%" },
+          "100%": { backgroundPosition: "200% 50%" },
+        },
         "arrow-slide": {
           "0%": { transform: "translateX(0)", opacity: "1" },
           "45%": { transform: "translateX(150%)", opacity: "0" },
@@ -137,6 +150,9 @@ export default {
       },
 
       animation: {
+        "cursor-blink":
+          "cursor-blink 0.5s cubic-bezier(0.645, 0.045, 0.355, 1) infinite alternate",
+        "gradient-pan": "gradient-pan 6s linear infinite",
         "arrow-slide": "arrow-slide 0.4s ease",
         "flow-x": "flow-x 1.5s linear infinite",
         "flow-y": "flow-y 1.5s linear infinite",
