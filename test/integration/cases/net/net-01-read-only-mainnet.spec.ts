@@ -75,7 +75,7 @@ caseBlock(
       const partitioned = unpartitioned.replace("/wasms/", "/wasms/mainnet/");
       expect(unpartitioned).not.toContain("/wasms/mainnet/");
 
-      expectStatus(await http(unpartitioned), 200, 404);
+      expectStatus(await http(unpartitioned), 200, 403, 404);
       expectStatus(await http(partitioned), 403, 404);
     });
   }

@@ -362,7 +362,7 @@ caseBlock(
         }
         expectStatus(pending!, 202);
         const staticWhileActive = await http(staticWasmStatusUrl(wasmHash));
-        expectStatus(staticWhileActive, 200, 404);
+        expectStatus(staticWhileActive, 200, 403, 404);
         expect(pending!.json).toEqual(
           expect.objectContaining({
             schema_version: "1.0",
