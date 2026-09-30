@@ -127,7 +127,7 @@ export function buildArtifacts(manifest, environments) {
         $generated:
           "from config/env-manifest.yaml by eng-tools/generate-deploy-env.mjs — do not edit; " +
           "run `pnpm run generate:deploy-env`",
-        $contract: "docs/design/aws-deployment.md §6 · ADR-012 · ADR-025",
+        $contract: "config/env-manifest.yaml · docs/specs/configuration.md · docs/invariants.md rules 10, 22, 23",
         target_env: targetEnv,
         service,
         kind: svc.kind ?? null,
@@ -149,7 +149,7 @@ export function buildArtifacts(manifest, environments) {
           ? {
               secrets: {
                 $note:
-                  "Every deployed variable arrives via ECS `secrets`/`valueFrom` (ADR-025). `store` " +
+                  "Every deployed variable arrives via ECS `secrets`/`valueFrom` (docs/invariants.md rule 23). `store` " +
                   "says which secret: `config` is `" +
                   configSecretName(targetEnv, service) +
                   "`, written by CI on every deploy from `json_key`; `credential` names its own " +
@@ -174,7 +174,8 @@ export function buildArtifacts(manifest, environments) {
           : {}),
         forbidden: {
           $note:
-            "must never be set for this service. For the builder this is ADR-002's trust boundary and " +
+            "must never be set for this service. For the builder this is its trust boundary (docs/invariants.md " +
+            "rule 1) and " +
             "is normative for the Batch job definition, which CI cannot inspect.",
           variables: [...forbidden].sort(),
         },

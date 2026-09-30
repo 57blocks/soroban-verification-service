@@ -44,6 +44,10 @@ export class TrustedVerifier {
     { message: "bulk_load_url must be an https: URL" },
   )
   bulk_load_url!: string;
+  /** Set by the aggregator when it admits the member; an authored list does not carry it. */
+  @IsOptional()
+  @IsString()
+  added_at?: string;
 }
 
 export const TRUSTED_VERIFIERS_LIST_SCHEMA = "stellar-trusted-verifiers-list" as const;
