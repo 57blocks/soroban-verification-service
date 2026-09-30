@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { gsap } from "gsap";
 
 export interface TextTypeProps {
   className?: string;
@@ -59,7 +58,6 @@ export const TextType = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentTextIndex, setCurrentTextIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(!startOnVisible);
-  const cursorRef = useRef<HTMLSpanElement>(null);
   const containerRef = useRef<HTMLElement>(null);
 
   const textArray = useMemo(
@@ -93,23 +91,6 @@ export const TextType = ({
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, [startOnVisible]);
-
-  useEffect(() => {
-    const cursor = cursorRef.current;
-    if (!showCursor || !cursor) return;
-
-    gsap.set(cursor, { opacity: 1 });
-    const tween = gsap.to(cursor, {
-      opacity: 0,
-      duration: cursorBlinkDuration,
-      repeat: -1,
-      yoyo: true,
-      ease: "power2.inOut",
-    });
-    return () => {
-      tween.kill();
-    };
-  }, [showCursor, cursorBlinkDuration]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -192,8 +173,8 @@ export const TextType = ({
       </span>
       {showCursor && (
         <span
-          ref={cursorRef}
-          className={`ml-1 inline-block opacity-100 ${shouldHideCursor ? "hidden" : ""} ${cursorClassName}`}
+          className={`ml-1 inline-block animate-cursor-blink motion-reduce:animate-none ${shouldHideCursor ? "hidden" : ""} ${cursorClassName}`}
+          style={{ animationDuration: `${cursorBlinkDuration}s` }}
         >
           {cursorCharacter}
         </span>
