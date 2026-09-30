@@ -74,6 +74,10 @@ included. This is the aggregator's own document about itself, not something any 
 see [`docs/verifier-onboarding.md`](verifier-onboarding.md) if you're on the *publishing* side of this
 relationship instead of the querying side.
 
+The list's `updated_at` is when the aggregator assembled this response, not when the list last
+changed, so it differs on every request. To tell whether membership changed, compare the entries
+(`url`, `status`, `trust_tier`); each entry's `added_at` is when that member was admitted.
+
 ## Two fields that are easy to misread
 
 ### `agreement`

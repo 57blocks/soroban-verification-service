@@ -50,6 +50,13 @@ function nestedTypesResolve(): void {
   });
 }
 
+function addedAtIsDeclaredAndOptional(): void {
+  const schemas = schemasOf(applyDerivedSchemas(documentWith("TrustedVerifiersList")));
+  const entry = schemas.TrustedVerifier;
+  assert.ok("added_at" in (entry.properties as Record<string, unknown>), "GET /verifiers returns added_at but the schema does not declare it");
+  assert.ok(!((entry.required as string[] | undefined) ?? []).includes("added_at"), "added_at must stay optional");
+}
+
 function validatorsReachTheSchema(): void {
   const schemas = schemasOf(applyDerivedSchemas(documentWith("UnavailableVerifier")));
   const properties = schemas.UnavailableVerifier.properties as Record<string, Record<string, unknown>>;
@@ -81,7 +88,8 @@ function declaredWinsPerProperty(): void {
 everySchemaHasProperties();
 closureReachesNestedShapes();
 nestedTypesResolve();
+addedAtIsDeclaredAndOptional();
 validatorsReachTheSchema();
 hintsReachTheSchema();
 declaredWinsPerProperty();
-console.log("openapi derivation tests passed (non-empty schemas, $ref closure, nested types, validators, hints, per-property precedence)");
+console.log("openapi derivation tests passed (non-empty schemas, $ref closure, nested types, added_at, validators, hints, per-property precedence)");

@@ -146,9 +146,9 @@ for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);
 
 console.log(
   findings.length
-    ? `\n${findings.length} deviation(s) from docs/design/aws-deployment.md §4. Every position here is ` +
+    ? `\n${findings.length} deviation(s) from docs/specs/configuration.md §5. Every position here is ` +
         `black-box, so a red run means a client sees this too.`
-    : `✓ ${origin} answers §4 at every position: each service its own namespace, /api/ closed with an ` +
+    : `✓ ${origin} answers docs/specs/configuration.md §5 at every position: each service its own namespace, /api/ closed with an ` +
         `envelope, the console's routes served, everything else 404`
 );
 process.exit(findings.length ? 1 : 0);

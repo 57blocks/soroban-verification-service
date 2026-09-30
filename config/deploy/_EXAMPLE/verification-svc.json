@@ -1,13 +1,13 @@
 {
   "$generated": "Illustration only — a snapshot of what `pnpm run generate:deploy-env` writes. Regenerate for your own environments; do not edit.",
-  "$contract": "docs/design/aws-deployment.md §6 · ADR-012 · ADR-025",
+  "$contract": "config/env-manifest.yaml · docs/specs/configuration.md · docs/invariants.md rules 10, 22, 23",
   "target_env": "_EXAMPLE",
   "service": "verification-svc",
   "kind": "ecs-service",
   "exposure": "public (ALB)",
   "environment": {},
   "secrets": {
-    "$note": "Every deployed variable arrives via ECS `secrets`/`valueFrom` (ADR-025). `store` says which secret: `config` is `scvs/dev/verification-svc/config`, written by CI on every deploy from `json_key`; `credential` names its own pre-existing secret in `secret`, which CI has no grant to write. Keeping the two apart is load-bearing — a grant to read a timeout must not read a password.",
+    "$note": "Every deployed variable arrives via ECS `secrets`/`valueFrom` (docs/invariants.md rule 23). `store` says which secret: `config` is `scvs/dev/verification-svc/config`, written by CI on every deploy from `json_key`; `credential` names its own pre-existing secret in `secret`, which CI has no grant to write. Keeping the two apart is load-bearing — a grant to read a timeout must not read a password.",
     "config_secret": "scvs/dev/verification-svc/config",
     "variables": {
       "AWS_REGION": {
@@ -388,7 +388,7 @@
     }
   },
   "forbidden": {
-    "$note": "must never be set for this service. For the builder this is ADR-002's trust boundary and is normative for the Batch job definition, which CI cannot inspect.",
+    "$note": "must never be set for this service. For the builder this is its trust boundary (docs/invariants.md rule 1) and is normative for the Batch job definition, which CI cannot inspect.",
     "variables": [
       "AWS_ACCESS_KEY_ID",
       "AWS_SECRET_ACCESS_KEY",

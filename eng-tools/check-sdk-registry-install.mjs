@@ -92,8 +92,7 @@ try {
     registry = configureRegistry(consumer, scope);
   } catch (error) {
     findings.push(
-      `could not reach the registry: ${diagnose(error)} — ` +
-        `see aws-deployment.md §3.5 for the four grants this needs`,
+      `could not reach the registry: ${diagnose(error)}`,
     );
   }
 

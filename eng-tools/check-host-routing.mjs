@@ -183,9 +183,9 @@ for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);
 
 console.log(
   findings.length
-    ? `\n${findings.length} deviation(s) from what docs/design/aws-deployment.md §4 says the default target ` +
+    ? `\n${findings.length} deviation(s) from what docs/specs/configuration.md §5 says the default target ` +
         `answers. The routes come from clients/web/src/app/route-paths.ts; the rest is docker/web-nginx.conf.`
-    : `✓ ${EXPECTATIONS.length} position(s) answer as §4's default-target row states: a console route serves ` +
+    : `✓ ${EXPECTATIONS.length} position(s) answer as docs/specs/configuration.md §5 states: a console route serves ` +
         `the entry document, a real file serves itself, everything else 404s`
 );
 process.exit(findings.length ? 1 : 0);
