@@ -132,21 +132,6 @@ export default {
           "50%": { transform: "translateX(-150%)", opacity: "0" },
           "100%": { transform: "translateX(0)", opacity: "1" },
         },
-        "flow-x": {
-          "0%": { transform: "translateX(0)", opacity: "0" },
-          "15%, 80%": { opacity: "1" },
-          "100%": { transform: "translateX(26px)", opacity: "0" },
-        },
-        "flow-y": {
-          "0%": { transform: "translateY(0)", opacity: "0" },
-          "15%, 80%": { opacity: "1" },
-          "100%": { transform: "translateY(13px)", opacity: "0" },
-        },
-        "flow-path": {
-          "0%": { offsetDistance: "0%", opacity: "0" },
-          "15%, 80%": { opacity: "1" },
-          "100%": { offsetDistance: "100%", opacity: "0" },
-        },
       },
 
       animation: {
@@ -154,9 +139,6 @@ export default {
           "cursor-blink 0.5s cubic-bezier(0.645, 0.045, 0.355, 1) infinite alternate",
         "gradient-pan": "gradient-pan 6s linear infinite",
         "arrow-slide": "arrow-slide 0.4s ease",
-        "flow-x": "flow-x 1.5s linear infinite",
-        "flow-y": "flow-y 1.5s linear infinite",
-        "flow-path": "flow-path 1.5s linear infinite",
       },
 
       boxShadow: {
