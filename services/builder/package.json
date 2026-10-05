@@ -18,9 +18,9 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@nestjs/testing": "^12.1.0",
+    "@nestjs/testing": "^12.1.2",
     "@types/jest": "^30.0.0",
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "jest": "^30.5.2",
     "ts-jest": "^29.4.13",
     "tsx": "^4.23.15",
