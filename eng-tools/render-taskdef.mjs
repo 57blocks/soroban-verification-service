@@ -107,7 +107,7 @@ for (const [name, entry] of Object.entries(contract.secrets?.variables ?? {}).so
     if (!existing) {
       if (entry.required) {
         missing.push(
-          `${name} is a required credential, but the running ${family} does not reference it — ` +
+          `${name} is a required credential, but its baseline ${family}:${baseline.revision} does not reference it — ` +
             `adding it is the job of whoever owns the secret, not CI's`
         );
       }
@@ -159,7 +159,7 @@ if (plaintext.length) {
 
 const container = baseline.containerDefinitions?.find((c) => c.name === service);
 if (!container) {
-  die(`the running ${family} has no container named "${service}" (has: ${(baseline.containerDefinitions ?? []).map((c) => c.name).join(", ") || "none"})`);
+  die(`the baseline ${family}:${baseline.revision} has no container named "${service}" (has: ${(baseline.containerDefinitions ?? []).map((c) => c.name).join(", ") || "none"})`);
 }
 
 // register-task-definition rejects the read-only fields describe-task-definition returns.
@@ -177,4 +177,4 @@ rendered.containerDefinitions = baseline.containerDefinitions.map((c) =>
 process.stdout.write(`${JSON.stringify(rendered, null, 2)}\n`);
 
 const counts = `${secrets.length} secret reference(s), ${secretArns.size} secret(s)`;
-console.error(`✓ ${service} (${targetEnv}) rendered from running ${family}:${baseline.revision} — ${counts}, 0 plaintext`);
+console.error(`✓ ${service} (${targetEnv}) rendered from ${family}:${baseline.revision} — ${counts}, 0 plaintext`);
