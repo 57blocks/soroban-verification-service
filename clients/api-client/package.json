@@ -21,11 +21,11 @@
     "axios": "^1.20.0"
   },
   "peerDependencies": {
-    "@tanstack/react-query": "^5.102.8"
+    "@tanstack/react-query": "^5.104.0"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
-    "orval": "^8.37.0",
+    "@types/node": "^22.20.5",
+    "orval": "^8.39.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }

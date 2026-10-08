@@ -12,10 +12,10 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit"
   },
   "dependencies": {
-    "@nestjs/common": "^12.1.0",
+    "@nestjs/common": "^12.1.2",
     "@nestjs/config": "^12.0.1",
-    "@nestjs/core": "^12.1.0",
-    "@nestjs/platform-express": "^12.1.0",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/platform-express": "^12.1.2",
     "@nestjs/schedule": "^12.0.2",
     "@nestjs/swagger": "^12.0.2",
     "@nestjs/throttler": "^6.7.1",
@@ -28,7 +28,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cors": "^2.8.6",
-    "dotenv": "^18.0.3",
+    "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "reflect-metadata": "^0.2.2",
@@ -36,13 +36,12 @@
     "uuid": "^14.0.2"
   },
   "devDependencies": {
-    "@nestjs/testing": "^12.1.0",
+    "@nestjs/testing": "^12.1.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "@types/supertest": "^7.2.1",
-    "@types/uuid": "^10.0.0",
     "jest": "^30.5.2",
     "supertest": "^7.3.0",
     "ts-jest": "^29.4.13",

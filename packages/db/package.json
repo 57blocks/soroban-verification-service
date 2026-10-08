@@ -21,16 +21,16 @@
     "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@nestjs/common": "^12.1.0",
+    "@nestjs/common": "^12.1.2",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@scvs/core": "workspace:*",
-    "pg": "^8.23.0"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
-    "dotenv": "^18.0.3",
+    "dotenv": "^18.0.5",
     "prisma": "^7.10.0",
     "typescript": "^5.9.3"
   }

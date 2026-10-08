@@ -27,7 +27,7 @@ updates:
     cooldown:
       default-days: 3
     groups:
-      # A dependency joins the first group it matches, so these must stay above the risk classes.
+      # Dependabot ranks a dependency-type group above a patterns group, so the risk classes must exclude these.
       nestjs:
         patterns: ["@nestjs/*"]
       vitest:
@@ -37,11 +37,16 @@ updates:
       production-patch-and-minor:
         dependency-type: production
         update-types: ["minor", "patch"]
+        exclude-patterns: ["@nestjs/*", "vitest", "@vitest/*", "eslint", "@eslint/js"]
       development:
         dependency-type: development
         update-types: ["minor", "patch"]
+        exclude-patterns: ["@nestjs/*", "vitest", "@vitest/*", "eslint", "@eslint/js"]
     ignore:
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # tailwind-merge 3 only knows Tailwind 4 class names; it moves with the tailwindcss major.
+      - dependency-name: tailwind-merge
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker

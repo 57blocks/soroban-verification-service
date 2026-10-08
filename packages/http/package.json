@@ -17,7 +17,7 @@
     "test": "for f in src/*-test.ts; do tsx \"$f\" || exit 1; done"
   },
   "dependencies": {
-    "@nestjs/common": "^12.1.0",
+    "@nestjs/common": "^12.1.2",
     "@nestjs/swagger": "^12.0.2",
     "@scvs/core": "workspace:*",
     "class-transformer": "^0.5.1",
@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }

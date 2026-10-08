@@ -17,8 +17,8 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^22.20.4",
-    "dotenv": "^18.0.3",
+    "@types/node": "^22.20.5",
+    "dotenv": "^18.0.5",
     "jest": "^30.5.2",
     "ts-jest": "^29.4.13",
     "typescript": "^5.9.3"
