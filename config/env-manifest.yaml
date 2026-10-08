@@ -310,13 +310,9 @@ groups:
           is what makes pointing this at the wrong output a config typo rather than a schema error, so
           this is the one line worth double-checking on apply.
 
-          ✅ **In dev it resolves there, verified 2026-08-25.** The running `sv-dev-query-svc`
-          revision takes this value from `/scvs/dev/query-svc/POSTGRES_HOST` (whose value names
-          `sv-dev-postgres-query`) and its credentials from `sv-dev-rds-master-query`. Landed by the
-          ADR-016 `ecs-ssm` cutover 2026-08-22; before it `modules/ecs` set ONE `POSTGRES_HOST` for
-          every resident service, which also meant `db-migrate.yml`'s two targets applied both
-          migration histories into one database. **Staging is unverified** — re-check it there before
-          relying on the separation.
+          The running task reads this value from its config secret, `scvs/<env>/query-svc/config`,
+          and its credentials from `sv-<env>-rds-master-query`. In both environments it names
+          `sv-<env>-postgres-query`, a different instance from the one `verification-svc` reads.
       POSTGRES_PORT:
         type: number
         required: yes
@@ -561,12 +557,8 @@ groups:
           bucket dedicated, all three degenerate to the same statement and there is nothing left to
           keep in step.
 
-          **`tier: knob`, not `infrastructure`, for a mechanical reason.** AWS SSM cannot store an
-          empty parameter value, and this variable is `""` in every environment — there is nothing
-          for Parameter Store to protect. It had been declared `inject: ecs-ssm` while the
-          infrastructure could never have honoured it (the parameter was never created — see
-          `envs/<env>/main.tf`'s `ssm_shared` comment in soroban-aws-infrastructure). Changed
-          2026-08-22 with ADR-016's ecs-ssm application; it stays a plaintext `environment` entry.
+          **`tier: knob`, not `infrastructure`.** The value is `""` in every environment, so there is
+          nothing for the infrastructure to provide.
       SCVS_R2_REGION:
         type: string
         required: yes
