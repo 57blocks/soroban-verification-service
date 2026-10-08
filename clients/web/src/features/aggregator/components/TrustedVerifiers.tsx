@@ -58,12 +58,16 @@ export const TrustedVerifiers = () => {
             )}
             <div className="mt-3 space-y-1">
               {root ? (
-                <PeerLink url={root} label="url" />
+                <div className="flex gap-2 text-[0.75rem]" data-testid="tvl-result-root">
+                  <span className="shrink-0 text-ink-mute">url</span>
+                  <span className="min-w-0 break-all font-mono text-ink-value">{root}</span>
+                </div>
               ) : (
                 <p className="m-0 text-[0.75rem] text-ink-mute" data-testid="tvl-no-result-root">
                   Names no result root, so nothing of this verifier&apos;s can be read.
                 </p>
               )}
+              {verifier.manifest_url && <PeerLink url={verifier.manifest_url} label="manifest_url" />}
               {verifier.bulk_load_url ? (
                 <PeerLink url={verifier.bulk_load_url} label="bulk_load_url" />
               ) : (

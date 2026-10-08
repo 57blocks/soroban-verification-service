@@ -34,6 +34,50 @@ describe("peer content is untrusted (S24)", () => {
   });
 });
 
+describe("a verifier's result names its source", () => {
+  const SOURCE_SHA = "3".repeat(64);
+
+  test("source_sha256, source_uri and source copies are listed; reports and the status document are not", () => {
+    render(
+      <VerifierResult
+        entry={entry({
+          verifier: { name: "Peer", url: "https://results.peer.example" },
+          source_sha256: SOURCE_SHA,
+          source_uri: "https://github.example/org/repo/tarball/abc",
+          verified_source_code_uris: [
+            { location: "verifier_self_storage", url: `https://results.peer.example/sources/${SOURCE_SHA}.zip` },
+          ],
+          results_urls: [
+            { type: "report", location: "verifier_self_storage", url: "https://results.peer.example/reports/r.json" },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("verifier-result").textContent).toContain(SOURCE_SHA);
+    const pending = screen.getAllByTestId("peer-link-pending").map((node) => node.textContent);
+    expect(pending).toEqual([
+      "https://github.example/org/repo/tarball/abc",
+      `https://results.peer.example/sources/${SOURCE_SHA}.zip`,
+    ]);
+    expect(screen.getByTestId("verifier-result-links").textContent).toContain("source (verifier_self_storage)");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  test("the verifier's result root is text, never a link to a root that serves nothing", () => {
+    render(<VerifierResult entry={entry({ verifier: { name: "Peer", url: "https://results.peer.example" } })} />);
+
+    expect(screen.getByTestId("verifier-result").textContent).toContain("https://results.peer.example");
+    expect(screen.queryByTestId("peer-link-pending")).not.toBeInTheDocument();
+  });
+
+  test("a bare-string source copy from an older document is still listed", () => {
+    render(<VerifierResult entry={entry({ verified_source_code_uris: ["https://peer.example/sources/old.tar.gz"] })} />);
+
+    expect(screen.getByTestId("peer-link-pending").textContent).toBe("https://peer.example/sources/old.tar.gz");
+  });
+});
+
 describe("navigation to a peer destination is gated (S26)", () => {
   test("the origin is shown, and nothing is navigable, until it is confirmed", () => {
     render(<PeerLink url="https://peer.example/deep/path?x=1" label="verifier" />);
