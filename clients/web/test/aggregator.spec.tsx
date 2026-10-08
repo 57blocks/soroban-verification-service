@@ -437,14 +437,27 @@ describe("the trusted verifiers page treats peer fields as untrusted", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  test("url goes through the interstitial rather than straight to an anchor", async () => {
+  test("the result root is shown as text and the manifest_url goes through the interstitial", async () => {
     stubFetch(() => tvl());
 
     renderWithQuery(<TrustedVerifiers />);
 
     await screen.findByTestId("tvl-list");
-    expect(screen.getByTestId("peer-link-pending").textContent).toContain("https://peer.example");
+    expect(screen.getByTestId("tvl-result-root").textContent).toContain("https://peer.example/results/");
+    expect(screen.getByTestId("peer-link-pending").textContent).toBe(
+      "https://peer.example/results/verifier-manifest.json",
+    );
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  test("a bulk_load_url is shown in full, not cut to its origin", async () => {
+    stubFetch(() => tvl({ bulk_load_url: "https://peer.example/api/verification/v1/wasms" }));
+
+    renderWithQuery(<TrustedVerifiers />);
+
+    await screen.findByTestId("tvl-list");
+    const pending = screen.getAllByTestId("peer-link-pending").map((node) => node.textContent);
+    expect(pending).toContain("https://peer.example/api/verification/v1/wasms");
   });
 
   test.each([
