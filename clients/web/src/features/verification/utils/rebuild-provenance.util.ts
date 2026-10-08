@@ -21,14 +21,14 @@ const repoHref = (repo: string) => {
   return gh ? `https://github.com/${gh[1]}` : httpHref(repo);
 };
 
-const parsePairs = (entries: string[]): Map<string, string> => {
-  const pairs = new Map<string, string>();
+const parsePairs = (entries: string[]): Map<string, string[]> => {
+  const pairs = new Map<string, string[]>();
   for (const entry of entries) {
     const split = entry.indexOf("=");
     if (split <= 0) continue;
     const key = entry.slice(0, split).trim();
     const value = entry.slice(split + 1).trim();
-    if (key && value) pairs.set(key, value);
+    if (key && value) pairs.set(key, [...(pairs.get(key) ?? []), value]);
   }
   return pairs;
 };
@@ -54,41 +54,42 @@ export const rebuildProvenance = ({
   sourceSha256,
   diagnostics,
 }: ProvenanceInput): RebuildInputs | null => {
-  const meta = parsePairs(recipe.metadataReplay);
+  const declared = parsePairs(recipe.metadataReplay);
+  const metaValue = (key: string) => declared.get(key)?.at(-1);
   const fields: ProvenanceField[] = [];
 
-  const repo = meta.get("source_repo");
+  const repo = metaValue("source_repo");
   if (repo) {
     const href = repoHref(repo);
     fields.push({ key: "source_repo", label: "Source repository", value: repo, onChain: true, ...(href ? { href } : {}) });
   }
 
-  const archive = sourceUri ?? meta.get("source_uri") ?? null;
+  const archive = sourceUri ?? metaValue("source_uri") ?? null;
   if (archive) {
     const href = httpHref(archive);
     fields.push({
       key: "source_uri",
       label: "Source archive",
       value: archive,
-      onChain: meta.get("source_uri") === archive,
+      onChain: metaValue("source_uri") === archive,
       ...(href ? { href } : {}),
     });
   }
 
-  const sha = sourceSha256 ?? meta.get("source_sha256") ?? null;
+  const sha = sourceSha256 ?? metaValue("source_sha256") ?? null;
   if (sha) {
-    fields.push({ key: "source_sha256", label: "Source SHA-256", value: sha, onChain: meta.get("source_sha256") === sha });
+    fields.push({ key: "source_sha256", label: "Source SHA-256", value: sha, onChain: metaValue("source_sha256") === sha });
   }
 
-  const image = meta.get("bldimg");
+  const image = metaValue("bldimg");
   if (image) fields.push({ key: "bldimg", label: "Build image", value: image, onChain: true });
 
-  const cliver = recipe.pair?.cliver ?? meta.get("cliver");
+  const cliver = recipe.pair?.cliver ?? metaValue("cliver");
   if (cliver) fields.push({ key: "cliver", label: "Stellar CLI (cliver)", value: cliver, onChain: true });
-  const rsver = recipe.pair?.rsver ?? meta.get("rsver");
+  const rsver = recipe.pair?.rsver ?? metaValue("rsver");
   if (rsver) fields.push({ key: "rsver", label: "Rust (rsver)", value: rsver, onChain: true });
 
-  const declaredOptions = splitOptions(meta.get("bldopt"));
+  const declaredOptions = (declared.get("bldopt") ?? []).flatMap((option) => splitOptions(option));
   const options = [...new Set([...recipe.buildOptions.flatMap((option) => splitOptions(option)), ...declaredOptions])];
   if (options.length) {
     fields.push({
@@ -99,7 +100,7 @@ export const rebuildProvenance = ({
     });
   }
 
-  const bldarg = meta.get("bldarg");
+  const bldarg = declared.get("bldarg")?.join(" ");
   if (bldarg) fields.push({ key: "bldarg", label: "Build arguments", value: bldarg, onChain: true });
 
   const manifestPath =

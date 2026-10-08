@@ -176,6 +176,31 @@ describe("the rebuild inputs are one deduplicated list", () => {
     expect(bldopt?.onChain).toBe(false);
   });
 
+  test("build options declared one per entry are all on-chain", () => {
+    const bldopt = inputsFor({
+      ...ON_CHAIN_RECIPE,
+      buildOptions: ["--manifest-path=libs/counter/Cargo.toml", "--optimize", "--package=counter-contract"],
+      metadataReplay: [
+        "bldopt=--manifest-path=libs/counter/Cargo.toml",
+        "bldopt=--optimize",
+        "bldopt=--package=counter-contract",
+      ],
+    })?.fields.find((field) => field.key === "bldopt");
+
+    expect(bldopt?.value).toBe("--manifest-path=libs/counter/Cargo.toml --optimize --package=counter-contract");
+    expect(bldopt?.onChain).toBe(true);
+  });
+
+  test("every declared build argument is shown, not only the last", () => {
+    const bldarg = inputsFor({
+      ...ON_CHAIN_RECIPE,
+      metadataReplay: ["bldarg=--features=alpha", "bldarg=--no-default-features"],
+    })?.fields.find((field) => field.key === "bldarg");
+
+    expect(bldarg?.value).toBe("--features=alpha --no-default-features");
+    expect(bldarg?.onChain).toBe(true);
+  });
+
   test("the source SHA-256 falls back to the contract's declaration", () => {
     const sha = rebuildProvenance({
       recipe: ON_CHAIN_RECIPE,

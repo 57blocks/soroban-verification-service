@@ -87,9 +87,9 @@ const Headline = () => {
               className="col-start-1 row-start-1"
               text={heroCopy.title}
               loop={true}
-              typingSpeed={120}
+              typingSpeed={60}
               initialDelay={800}
-              deletingSpeed={120}
+              deletingSpeed={60}
               cursorCharacter={headlineCursor}
               cursorClassName="font-light text-ink-body"
               renderText={renderTitle}
