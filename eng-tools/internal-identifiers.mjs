@@ -9,10 +9,25 @@ import { fileURLToPath } from "node:url";
 export const rulesPath = fileURLToPath(new URL("./internal-identifiers.json", import.meta.url));
 export const rules = JSON.parse(readFileSync(rulesPath, "utf8"));
 
-const internalDomain = rules.rules["internal-hostname"]?.domain ?? null;
-const hostRe = internalDomain
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const internalDomains = rules.rules["internal-hostname"]?.domains ?? [];
+const hostRe = internalDomains.length
   ? (flags) =>
-      new RegExp(`\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)${internalDomain.replace(/\./g, "\\.")}\\b`, `${flags}i`)
+      new RegExp(
+        `\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)(?:${internalDomains.map(escape).join("|")})\\b`,
+        `${flags}i`,
+      )
+  : null;
+
+const resourcePrefixes = rules.rules["deployment-resource-name"]?.prefixes ?? [];
+const resourceRe = resourcePrefixes.length
+  ? new RegExp(`(?<![a-z0-9-])(?:${resourcePrefixes.map(escape).join("|")})[a-z0-9]`, "gi")
+  : null;
+
+const trackerKeys = rules.rules["internal-tracker"]?.keys ?? [];
+const trackerKeyRe = trackerKeys.length
+  ? new RegExp(`\\b(?:${trackerKeys.map(escape).join("|")})-\\d+\\b`, "gi")
   : null;
 
 const publishedHosts = new Set(
@@ -59,8 +74,16 @@ export const detectors = [
       ),
   },
   {
+    id: "deployment-resource-name",
+    find: (text) => (resourceRe ? [...text.matchAll(resourceRe)].map((m) => m.index) : []),
+    redact: null,
+  },
+  {
     id: "internal-tracker",
-    find: (text) => [...text.matchAll(/\b[a-z0-9-]+\.atlassian\.net\b/gi)].map((m) => m.index),
+    find: (text) => [
+      ...[...text.matchAll(/\b[a-z0-9-]+\.atlassian\.net\b/gi)].map((m) => m.index),
+      ...(trackerKeyRe ? [...text.matchAll(trackerKeyRe)].map((m) => m.index) : []),
+    ],
     redact: null,
   },
 ];
