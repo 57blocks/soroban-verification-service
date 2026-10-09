@@ -269,52 +269,31 @@ re-delivery is expected, not duplication.
 ## CI/CD prerequisites (GitHub Actions)
 
 Nothing above needs this — local development talks to AWS with your own credentials. This section is
-for a **fork or a fresh clone that must run the deploy workflows**, which authenticate to AWS by OIDC
-and therefore need two values GitHub cannot derive: they are the irreducible bootstrap, the values CI
-needs *before* it can read anything else.
+for deploying with this repository's pipeline.
 
-Everything else — cluster name, ECR repositories, Batch families, hosts — is read at run time from the
-per-environment CI descriptor in SSM, so only these two are configured by hand.
+This repository holds no AWS credential, secret, variable or GitHub Environment. Its deploy workflows
+(`deploy.yml`, `deploy-builder.yml`, `deploy-composer.yml`, `db-migrate.yml`, `rollback.yml`,
+`e2e-integration.yml`, `differential.yml`, `stellar-cli.yml`) are reusable: they run only under
+`workflow_call`, from a repository of your own that holds your deployment's configuration. Under
+`workflow_call` the OIDC token names the **caller**, and `vars` resolve against the caller's
+environment, so everything below is configured in that repository, not this one.
 
-### 1. Repository secret — the AWS account ID
-
-```bash
-gh secret set AWS_ACCOUNT_ID --body "<your-12-digit-account-id>"
-```
-
-Read by the deploy-role fallback in `deploy.yml`, `db-migrate.yml`, `deploy-builder.yml`, and
-`deploy-composer.yml`. It is set at the **repository** level, not per environment, because the
-account-wide workflows (deploy-builder, deploy-composer) pin `environment: dev` yet register job
-definitions for both environments.
-
-Two things worth knowing before you copy this pattern elsewhere. An account ID is an identifier, not a
-credential — it is stored as a secret here only so it stays out of the tree, and the cost is that
-Actions redacts it from logs, so ECR URLs and descriptor JSON print with `***` in the middle. And
-inside a workflow it must be passed as an **operand**, never interpolated into a quoted string:
-
-```yaml
-# ✗ nested ${{ }} inside a string literal is never expanded — yields a literal, broken ARN
-|| 'arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/scvs-github-actions-builder-deploy'
-
-# ✓ evaluated by the expression engine
-|| format('arn:aws:iam::{0}:role/scvs-github-actions-builder-deploy', secrets.AWS_ACCOUNT_ID)
-```
-
-### 2. Per-environment variable — the OIDC deploy role
-
-One `DEPLOY_ROLE_ARN` in each GitHub Environment (`dev`, `staging`), which is what the fallback above
-exists to cover. When it is set — as it is in this repository — it wins and the fallback never
-evaluates:
+Each calling job declares `environment: <env>` and `id-token: write`. Per GitHub Environment, set:
 
 ```bash
 gh variable set DEPLOY_ROLE_ARN --env dev     --body "arn:aws:iam::<account>:role/<dev-deploy-role>"
 gh variable set DEPLOY_ROLE_ARN --env staging --body "arn:aws:iam::<account>:role/<staging-deploy-role>"
 ```
 
-The roles themselves are Terraform's, in `soroban-aws-infrastructure` — this repository never creates
-AWS resources ([rule 8 of `docs/invariants.md`](docs/invariants.md)). Until
-`terragrunt apply` has run for an environment, its CI descriptor does not exist and deploys **skip
-with a notice rather than failing** — the honest signal that the infrastructure half has not landed.
+and pass your account id to the workflows that declare an `AWS_ACCOUNT_ID` secret. Trust each deploy
+role to your calling repository's `environment:` subjects only, never to this one. Everything else —
+cluster name, ECR repositories, Batch families, hosts — is read at run time from the per-environment
+CI descriptor in SSM.
+
+The roles themselves belong to your infrastructure code — this repository never creates AWS
+resources ([rule 8 of `docs/invariants.md`](docs/invariants.md)). Until your infrastructure has been
+applied for an environment, its CI descriptor does not exist and deploys **skip with a notice rather
+than failing**.
 
 After changing any workflow, run the gate that rejects what GitHub would reject:
 

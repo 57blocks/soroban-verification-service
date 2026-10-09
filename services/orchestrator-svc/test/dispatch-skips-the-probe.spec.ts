@@ -26,8 +26,8 @@ const CONFIG = {
     amd64: "arn:aws:batch:ap-southeast-2:111:job-queue/x86",
   },
   batchJobDefinitionArns: {
-    arm64: "scvs-builder-dev",
-    amd64: "scvs-builder-dev-amd64",
+    arm64: "example-builder-dev",
+    amd64: "example-builder-dev-amd64",
   },
 } as const;
 

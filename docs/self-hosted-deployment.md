@@ -51,8 +51,8 @@ the same architecture document.
   rule 8, but nothing about the shape below requires it specifically).
 - Docker with multi-platform build support if you intend to build the container images yourself rather
   than adapting this repository's.
-- A naming convention you will apply consistently. This project's own convention is
-  `{project}-{environment}-{type}` (for example `sv-dev-scratch`, `sv-staging-postgres-verify`) —
+- A naming convention you will apply consistently. A convention that works is
+  `{project}-{environment}-{type}` (for example `example-dev-scratch`, `example-staging-postgres-verify`) —
   **the convention matters more than the literal prefix**: nothing downstream in this codebase parses
   your resource names, but a missing environment segment on a resource meant to be per-environment is
   the single most common self-inflicted incident in this style of deployment (two environments racing

@@ -13,14 +13,14 @@ import {
 } from "../src/modules/verification-pipeline/taskproperties-size.util.js";
 
 const presigned = (key: string): string =>
-  `https://sv-dev-scratch.s3.ap-southeast-2.amazonaws.com/${key}` +
+  `https://example-dev-scratch.s3.ap-southeast-2.amazonaws.com/${key}` +
   "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD" +
   "&X-Amz-Credential=ASIAEXAMPLEEXAMPLE%2F20260810%2Fap-southeast-2%2Fs3%2Faws4_request" +
   "&X-Amz-Date=20260810T000000Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host" +
   `&X-Amz-Security-Token=${"T".repeat(1400)}&X-Amz-Signature=${"s".repeat(64)}&x-id=PutObject`;
 
 const presignedStaging = (key: string): string =>
-  `https://sv-staging-scratch.s3.ap-southeast-2.amazonaws.com/${key}` +
+  `https://example-staging-scratch.s3.ap-southeast-2.amazonaws.com/${key}` +
   "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD" +
   "&X-Amz-Credential=ASIAEXAMPLEEXAMPLE2%2F20260822%2Fap-southeast-2%2Fs3%2Faws4_request" +
   "&X-Amz-Date=20260822T000000Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host" +
@@ -45,7 +45,7 @@ const invocation: BuilderInvocationParams = {
     upload_id: "66666666-7777-8888-9999-000000000000",
     source_uri: SOURCE_URI,
   },
-  imageDigest: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/sv-staging-composed-environments@sha256:${"c".repeat(64)}`,
+  imageDigest: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/example-staging-composed-environments@sha256:${"c".repeat(64)}`,
   buildOptions: ["--package", "hello-world"],
   expectedSourceSha256: "f".repeat(64),
   metadataReplay: [
@@ -68,7 +68,7 @@ const REGISTERED_TASK_PROPERTIES: RegisteredTaskProperties = {
       containers: [
         {
           name: "materialise",
-          image: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/sv-staging-builder@sha256:${"d".repeat(64)}`,
+          image: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/example-staging-builder@sha256:${"d".repeat(64)}`,
           command: ["node", "services/builder/dist/materialise-entrypoint.js"],
           essential: false,
           resourceRequirements: [
@@ -85,7 +85,7 @@ const REGISTERED_TASK_PROPERTIES: RegisteredTaskProperties = {
         },
         {
           name: "runner",
-          image: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/sv-staging-builder@sha256:${"d".repeat(64)}`,
+          image: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/example-staging-builder@sha256:${"d".repeat(64)}`,
           command: ["node", "services/builder/dist/entrypoint.js"],
           essential: true,
           dependsOn: [{ containerName: "materialise", condition: "SUCCESS" }],

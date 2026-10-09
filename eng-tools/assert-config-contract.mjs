@@ -152,7 +152,7 @@ for (const [service, report] of reports) {
         unverifiable.push(
           `${service}.${name} — set, but its value is unverifiable here ` +
             (observabilityOf(entry) === "value"
-              ? `(no ${targetEnv} value recorded, per decided: Q2)`
+              ? `(no ${targetEnv} value recorded)`
               : `(observable: presence)`)
         );
       }

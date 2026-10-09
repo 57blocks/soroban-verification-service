@@ -1,6 +1,6 @@
 {
   "recipe": {
-    "image": "000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
+    "image": "000000000000.dkr.ecr.example.amazonaws.com/example-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
     "workspace_path": "contracts/verified-demo/Cargo.toml",
     "package": "verified-demo",
     "target": "wasm32v1-none",

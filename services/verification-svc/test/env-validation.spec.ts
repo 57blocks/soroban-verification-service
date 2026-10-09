@@ -42,7 +42,7 @@ describe("createEnvValidator", () => {
 
     it("accepts an object store that names one", () => {
       expect(() =>
-        validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "s3", SCVS_PUBLISHER_BUCKET: "sv-dev-results" }),
+        validate({ ...KEY, SCVS_PUBLISHER_STORAGE: "s3", SCVS_PUBLISHER_BUCKET: "example-dev-results" }),
       ).not.toThrow();
     });
 

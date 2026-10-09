@@ -1,7 +1,7 @@
 {
   "$comment": [
     "Rules and baseline for check-secrets.mjs: identifiers no entropy scanner recognises.",
-    "aws-account-id: `digests` holds SHA-256 digests, never the id itself. internal-hostname: `domain` arms it;",
+    "aws-account-id: `digests` holds SHA-256 digests, never the id itself. internal-hostname: `domains` arms it;",
     "`published` lists exact hosts under it that may appear. `pending` is a ratchet: `--write-baseline` only shrinks it."
   ],
   "rules": {
@@ -15,21 +15,45 @@
     },
     "internal-hostname": {
       "why": "Per-environment hostnames name endpoints that are not part of the published surface.",
-      "matches": "any subdomain of `domain` below, except an exact host in `published`; no rule fires when `domain` is absent",
+      "matches": "any subdomain of a domain in `domains` below, except an exact host in `published`; no rule fires when `domains` is empty",
       "redacts-to": "the same subdomains under example.com",
-      "domain": "blocksmith.co",
-      "published": ["sv.blocksmith.co"]
+      "domains": [
+        "blocksmith.co",
+        "57blocks.io"
+      ],
+      "published": [
+        "sv.blocksmith.co"
+      ]
     },
     "aws-resource-id": {
       "why": "A VPC, subnet or security-group id is the network topology of a live deployment.",
       "matches": "vpc- subnet- sg- igw- rtb- acl- eni- ami- vol- snap- followed by 8 or 17 hex digits",
       "redacts-to": "<prefix>-EXAMPLE — not a hex body, which would still match this rule"
     },
+    "deployment-resource-name": {
+      "why": "A resource name from our own deployment maps its topology and tells a reader what to look for.",
+      "matches": "a name starting with one of `prefixes` below, followed by a letter or digit",
+      "redacts-to": "nothing — rename it to an `example-` name by hand, so the export fails instead",
+      "prefixes": [
+        "sv-dev-",
+        "sv-staging-",
+        "stellar-dev-",
+        "stellar-staging-",
+        "scvs-github-actions-"
+      ]
+    },
     "internal-tracker": {
-      "why": "A tracker URL cites a record an outside reader cannot open, and names our instance.",
-      "matches": "any *.atlassian.net host",
-      "redacts-to": "nothing — the citing prose has to be rewritten by a human, so the export fails instead"
+      "why": "A tracker URL or issue key cites a record an outside reader cannot open, and names our instance.",
+      "matches": "any *.atlassian.net host, and `<KEY>-<number>` for a project key in `keys` below, in any case",
+      "redacts-to": "nothing — the citing prose has to be rewritten by a human, so the export fails instead",
+      "keys": [
+        "SCV"
+      ]
     }
   },
-  "pending": {}
+  "pending": {
+    "packages/db/prisma/migrations/20260818084712_drop_tables_moved_to_db_query/migration.sql": {
+      "deployment-resource-name": 2
+    }
+  }
 }
