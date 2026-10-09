@@ -11,9 +11,9 @@ function ref(source_uri: string) {
 describe("the sandbox fetches only a presigned staging URL", () => {
   it.each([
     ["a plain https host the submitter could have named", "https://evil.example.com/source.tar.gz"],
-    ["an http URL", `http://sv-dev-scratch.s3.amazonaws.com/staging/x/build/fetched-source?${PRESIGNED_QUERY}`],
-    ["a URL with no SigV4 parameters", "https://sv-dev-scratch.s3.amazonaws.com/staging/x/build/fetched-source"],
-    ["a signature without a credential", "https://sv-dev-scratch.s3.amazonaws.com/x?X-Amz-Signature=deadbeef"],
+    ["an http URL", `http://example-dev-scratch.s3.amazonaws.com/staging/x/build/fetched-source?${PRESIGNED_QUERY}`],
+    ["a URL with no SigV4 parameters", "https://example-dev-scratch.s3.amazonaws.com/staging/x/build/fetched-source"],
+    ["a signature without a credential", "https://example-dev-scratch.s3.amazonaws.com/x?X-Amz-Signature=deadbeef"],
   ])("refuses %s", async (_label, uri) => {
     const result = await materializeSource(ref(uri));
 
@@ -40,7 +40,7 @@ describe("the sandbox fetches only a presigned staging URL", () => {
 
   it("attempts a well-formed presigned URL rather than refusing it", async () => {
     const result = await materializeSource(
-      ref(`https://sv-dev-scratch.s3.ap-southeast-2.invalid/staging/rb/build/fetched-source?${PRESIGNED_QUERY}`),
+      ref(`https://example-dev-scratch.s3.ap-southeast-2.invalid/staging/rb/build/fetched-source?${PRESIGNED_QUERY}`),
     );
 
     expect(result.ok).toBe(false);

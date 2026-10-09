@@ -101,7 +101,7 @@ jobs:
           set -euo pipefail
           . docker/stellar-cli.pin
           KEY="scvs-ci/stellar-cli/${STELLAR_CLI_VERSION}/${SCVS_CLI_TARGET_ARCH}/stellar"
-          BUCKET="${SCVS_CI_CACHE_BUCKET:-sv-dev-artifacts}"
+          BUCKET="${SCVS_CI_CACHE_BUCKET}"
           arch_upper="$(printf '%s' "$SCVS_CLI_TARGET_ARCH" | tr '[:lower:]' '[:upper:]')"
           binary_var="STELLAR_CLI_BINARY_SHA256_${arch_upper}"
           {

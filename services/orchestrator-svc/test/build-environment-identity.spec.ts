@@ -16,7 +16,7 @@ const INTENT: ComposeIntent = { pair: PAIR, template_version: "v1" };
 const RECIPE_SHA = "a".repeat(64);
 const IMAGE_DIGEST = `sha256:${"b".repeat(64)}`;
 const TRUSTED_IMAGE = `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`;
-const REPO = "111122223333.dkr.ecr.us-east-1.amazonaws.com/sv-dev-composed-environments";
+const REPO = "111122223333.dkr.ecr.us-east-1.amazonaws.com/example-dev-composed-environments";
 
 function metadata(sep58: Record<string, unknown> = {}): WasmMetadata {
   return {

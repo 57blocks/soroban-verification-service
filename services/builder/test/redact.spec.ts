@@ -188,17 +188,17 @@ describe("redactSecrets — internal identifiers", () => {
 
   it("keeps the ECR registry host and repo while removing the account id", () => {
     const line =
-      "Pulling from 123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:abcd";
+      "Pulling from 123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:abcd";
 
     const redacted = redactSecrets(line);
 
     expect(redacted).not.toContain("123456789012");
     expect(redacted).toContain("<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com");
-    expect(redacted).toContain("sv-dev-composed-environments");
+    expect(redacted).toContain("example-dev-composed-environments");
   });
 
   it("redacts ECS task names but leaves the short public ecs-agent image alone", () => {
-    expect(redactSecrets("ecs-scvs-builder-dev-10-runner-bae1b39dc196fffb2300")).toBe("<redacted-ecs-name>");
+    expect(redactSecrets("ecs-example-builder-dev-10-runner-bae1b39dc196fffb2300")).toBe("<redacted-ecs-name>");
     expect(redactSecrets("amazon/amazon-ecs-agent:latest")).toBe("amazon/amazon-ecs-agent:latest");
   });
 

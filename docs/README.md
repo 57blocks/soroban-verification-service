@@ -27,7 +27,7 @@ The code map is [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 These are the interoperable part: other people's software reads them, and their `$id` values are
 stable identifiers that do not change when this code moves. They moved once, on 2026-09-21, when the
-deployment's own domain did (SCV-304); `results-sep/README.md`'s submission checklist rewrites them
+deployment's own domain did; `results-sep/README.md`'s submission checklist rewrites them
 again at number assignment, which is the rename they were always going to take.
 
 | | |

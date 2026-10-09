@@ -42,9 +42,9 @@ change to that document's shape visible and versioned instead of a runtime surpr
 
 ## Provenance of the corpus
 
-`v0.0` is real: four documents pulled from `sv-dev-scratch`'s `staging/` prefix (2026-08-25 rebuilds),
-with `build_log` and the stdout/stderr excerpts trimmed and the ECR registry host replaced by a
-placeholder. `success-version-alignment.json` is one of those with only its
+`v0.0` is real: four documents pulled from a deployment's scratch bucket, under its `staging/` prefix,
+with `build_log` and the stdout/stderr excerpts trimmed and the ECR registry host and repository name
+replaced by placeholders. `success-version-alignment.json` is one of those with only its
 `diagnostics.reference_alignment` swapped for the release-tag shape the CLI retirement introduced — that is the
 document whose arrival at an orchestrator still requiring `base_commit` wedged staging on 2026-09-01,
 which is why it is frozen here rather than described.

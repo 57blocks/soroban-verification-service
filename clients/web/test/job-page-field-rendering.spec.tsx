@@ -19,7 +19,7 @@ const SOURCE_URI =
 const DIAGNOSTICS = {
   runner: "docker_build_image_rebuild",
   build_image:
-    "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c",
+    "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c",
   container_manifest_path: "/source/Cargo.toml",
   rebuilt_wasm_hash: WASM,
   expected_wasm_hash: WASM,

@@ -6,8 +6,9 @@
 `meta.environments` — or, when your environment list is not this repository's to hold, for the ones
 you name: `pnpm run generate:deploy-env -- --env dev --env staging`.
 
-[`_EXAMPLE/verification-svc.json`](_EXAMPLE/verification-svc.json) is a snapshot of one such file, so
-you can see the shape before running anything. It is an illustration, not an input: nothing reads it.
+[`_EXAMPLE/verification-svc.json`](_EXAMPLE/verification-svc.json) is one such file, rendered for an
+environment named `<env>`, so you can see the shape before running anything. It is an illustration,
+not an input: nothing reads it, and `check:env` keeps it current with the manifest.
 
 ## What these are
 

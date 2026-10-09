@@ -69,9 +69,9 @@ test("the public root loses its trailing slashes", { SCVS_PUBLIC_RESULT_ROOT: "h
   assert.equal(resultStorageConfigFromEnv().publicRoot, "https://results.test");
 });
 
-test("s3 with a bucket is a complete object config", { SCVS_PUBLISHER_STORAGE: "s3", SCVS_PUBLISHER_BUCKET: "sv-dev-results" }, () => {
+test("s3 with a bucket is a complete object config", { SCVS_PUBLISHER_STORAGE: "s3", SCVS_PUBLISHER_BUCKET: "example-dev-results" }, () => {
   const config = objectArm(resultStorageConfigFromEnv());
-  assert.equal(config.bucket, "sv-dev-results");
+  assert.equal(config.bucket, "example-dev-results");
   assert.equal(config.prefix, "");
   assert.equal(config.endpoint, undefined);
 });

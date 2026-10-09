@@ -10,10 +10,10 @@ $ cp -R /tmp/<redacted> /tmp/<redacted>
 
 [exit 0]
 
-$ docker run --rm --entrypoint rustup <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 show active-toolchain
+$ docker run --rm --entrypoint rustup <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 show active-toolchain
 1.94.0-aarch64-unknown-linux-gnu (overridden by environment variable RUSTUP_TOOLCHAIN)
-Unable to find image '<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62' locally
-<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62: Pulling from sv-dev-composed-environments
+Unable to find image '<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62' locally
+<redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62: Pulling from example-dev-composed-environments
 4c8862d24541: Pulling fs layer
 225a0a6c500b: Pulling fs layer
 2c9a098bd641: Pulling fs layer
@@ -62,10 +62,10 @@ d89c9b8b61eb: Pull complete
 44d4a68d15d3: Pull complete
 4f4fb700ef54: Pull complete
 Digest: sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62
-Status: Downloaded newer image for <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62
+Status: Downloaded newer image for <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62
 [exit 0]
 
-$ docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --entrypoint cargo -v /tmp/<redacted>:/source:ro -v /tmp/<redacted>:/vendor -v /tmp/<redacted>:/out -w /source -e CARGO_HOME=/out/cargo-home -e RUSTUP_TOOLCHAIN=1.94.0-aarch64-unknown-linux-gnu <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 vendor --locked --manifest-path /source/Cargo.toml /vendor
+$ docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --entrypoint cargo -v /tmp/<redacted>:/source:ro -v /tmp/<redacted>:/vendor -v /tmp/<redacted>:/out -w /source -e CARGO_HOME=/out/cargo-home -e RUSTUP_TOOLCHAIN=1.94.0-aarch64-unknown-linux-gnu <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 vendor --locked --manifest-path /source/Cargo.toml /vendor
 [source.crates-io]
 replace-with = "vendored-sources"
 
@@ -449,7 +449,7 @@ To use vendored sources, add this to your .cargo/config.toml for this project:
 
 [exit 0]
 
-$ docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --network none -v /tmp/<redacted>:/source:ro -v /tmp/<redacted>:/vendor:ro -v /tmp/<redacted>:/out -w /source -e CARGO_TARGET_DIR=/out/target -e TMPDIR=/out/tmp -e CARGO_HOME=/out/cargo-home -e CARGO_NET_OFFLINE=true -e RUSTUP_TOOLCHAIN=1.94.0-aarch64-unknown-linux-gnu <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/sv-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 contract build --optimize --meta source_repo=github:reflector-network/reflector-contract --manifest-path /source/Cargo.toml --package reflector-pulse-contract --out-dir /out
+$ docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --network none -v /tmp/<redacted>:/source:ro -v /tmp/<redacted>:/vendor:ro -v /tmp/<redacted>:/out -w /source -e CARGO_TARGET_DIR=/out/target -e TMPDIR=/out/tmp -e CARGO_HOME=/out/cargo-home -e CARGO_NET_OFFLINE=true -e RUSTUP_TOOLCHAIN=1.94.0-aarch64-unknown-linux-gnu <redacted-aws-account>.dkr.ecr.ap-southeast-2.amazonaws.com/example-dev-composed-environments@sha256:945f7e8c62b13ac316e788417c65be65728d61800d3fbdbdc04324eb04e3dd62 contract build --optimize --meta source_repo=github:reflector-network/reflector-contract --manifest-path /source/Cargo.toml --package reflector-pulse-contract --out-dir /out
 ℹ️  CARGO_BUILD_RUSTFLAGS=--remap-path-prefix=/out/cargo-home/registry/src= cargo rustc --manifest-path=pulse-contract/Cargo.toml --crate-type=cdylib --target=wasm32v1-none --release
    Compiling proc-macro2 v1.0.95
    Compiling unicode-ident v1.0.12

@@ -1,6 +1,6 @@
 {
   "recipe": {
-    "image": "000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
+    "image": "000000000000.dkr.ecr.example.amazonaws.com/example-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
     "workspace_path": "contracts/verified-demo/Cargo.toml",
     "package": "verified-demo",
     "target": "wasm32v1-none",
@@ -26,7 +26,7 @@
   "rebuilt_wasm_uploaded": true,
   "diagnostics": {
     "runner": "docker_build_image_rebuild",
-    "build_image": "000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
+    "build_image": "000000000000.dkr.ecr.example.amazonaws.com/example-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
     "command": [
       "docker",
       "run",
@@ -70,7 +70,7 @@
       "RUSTUP_TOOLCHAIN=1.96.0-aarch64-unknown-linux-gnu",
       "-e",
       "SCVS_E2E_RECIPE_SCOPE=5a24d773d788c3c061660541",
-      "000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
+      "000000000000.dkr.ecr.example.amazonaws.com/example-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a",
       "contract",
       "build",
       "--locked",
@@ -82,7 +82,7 @@
       "--out-dir",
       "/out"
     ],
-    "command_summary": "docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --network none -v <source>:/source:ro -v <vendor>:/vendor:ro -v <out>:/out -w /source -e <env> 000000000000.dkr.ecr.example.amazonaws.com/sv-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a contract build --locked --optimize --manifest-path /source/contracts/verified-demo/Cargo.toml --package verified-demo --out-dir /out",
+    "command_summary": "docker run --rm --cpus 2 --memory 2g --pids-limit 512 --cap-drop ALL --security-opt no-new-privileges --read-only --user 1000:1000 --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /var/tmp:rw,nosuid,nodev,noexec,size=64m --network none -v <source>:/source:ro -v <vendor>:/vendor:ro -v <out>:/out -w /source -e <env> 000000000000.dkr.ecr.example.amazonaws.com/example-dev-composed-environments@sha256:b900082aeccf93c6b068a0958b9808b5745f8db3cb03e7db9b8a65e836fcb82a contract build --locked --optimize --manifest-path /source/contracts/verified-demo/Cargo.toml --package verified-demo --out-dir /out",
     "source_mount": "/source:ro",
     "output_mount": "/out",
     "cargo_target_dir": "/out/target",

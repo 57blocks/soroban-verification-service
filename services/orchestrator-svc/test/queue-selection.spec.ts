@@ -5,8 +5,8 @@ const ARM_QUEUE = "arn:aws:batch:ap-southeast-2:111:job-queue/arm";
 const X86_QUEUE = "arn:aws:batch:ap-southeast-2:111:job-queue/x86";
 const BOTH = { arm64: ARM_QUEUE, amd64: X86_QUEUE };
 
-const ARM_DEF = "scvs-builder-dev";
-const AMD_DEF = "scvs-builder-dev-amd64";
+const ARM_DEF = "example-builder-dev";
+const AMD_DEF = "example-builder-dev-amd64";
 const DEFS = { arm64: ARM_DEF, amd64: AMD_DEF };
 
 describe("selectJobQueue", () => {

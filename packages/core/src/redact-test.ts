@@ -13,7 +13,7 @@ function test(name: string, fn: () => void): void {
 
 test("drops a presigned URL's query string, keeps host and key", () => {
   const url =
-    "https://sv-staging-scratch.s3.ap-southeast-2.amazonaws.com/staging/r1/build/params/runner.json" +
+    "https://example-staging-scratch.s3.ap-southeast-2.amazonaws.com/staging/r1/build/params/runner.json" +
     "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAEXAMPLE123456789%2F20260822" +
     "&X-Amz-Security-Token=FwoGZXIvYXdzEDMaDF" +
     "&X-Amz-Signature=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
@@ -23,7 +23,7 @@ test("drops a presigned URL's query string, keeps host and key", () => {
   assert.ok(!redacted.includes("X-Amz-Signature"));
   assert.ok(!redacted.includes("X-Amz-Security-Token"));
   assert.ok(!redacted.includes("ASIAEXAMPLE123456789"));
-  assert.ok(redacted.includes("sv-staging-scratch.s3.ap-southeast-2.amazonaws.com"));
+  assert.ok(redacted.includes("example-staging-scratch.s3.ap-southeast-2.amazonaws.com"));
   assert.ok(redacted.includes("staging/r1/build/params/runner.json"));
 });
 

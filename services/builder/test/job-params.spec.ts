@@ -12,13 +12,13 @@ const materialise = {
     visibility: "private",
     tarball_sha256: "b".repeat(64),
     upload_id: "66666666-7777-8888-9999-000000000000",
-    source_uri: "https://sv-dev-scratch.s3.ap-southeast-2.amazonaws.com/staging/uploads/u/source.tar.gz?X-Amz-Signature=abc",
+    source_uri: "https://example-dev-scratch.s3.ap-southeast-2.amazonaws.com/staging/uploads/u/source.tar.gz?X-Amz-Signature=abc",
   },
   mode: "verify",
 } satisfies Record<string, unknown>;
 
 const PARAMS_URL =
-  "https://sv-dev-scratch.s3.ap-southeast-2.amazonaws.com/staging/r1/verify/params/materialise.json?X-Amz-Signature=abc";
+  "https://example-dev-scratch.s3.ap-southeast-2.amazonaws.com/staging/r1/verify/params/materialise.json?X-Amz-Signature=abc";
 
 function okResponse(body: string, headers: Record<string, string> = {}): Response {
   return new Response(body, { status: 200, headers });

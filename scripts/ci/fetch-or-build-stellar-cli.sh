@@ -9,10 +9,15 @@ source "$PIN_FILE"
 
 : "${STELLAR_CLI_VERSION:?docker/stellar-cli.pin must set STELLAR_CLI_VERSION}"
 
-S3_BUCKET="${SCVS_CI_CACHE_BUCKET:-sv-dev-artifacts}"
+S3_BUCKET="${SCVS_CI_CACHE_BUCKET:-}"
 AWS_REGION="${AWS_REGION:-ap-southeast-2}"
 
 SCVS_CI_CACHE="${SCVS_CI_CACHE:-s3}"
+
+if [ "$SCVS_CI_CACHE" != "off" ] && [ -z "$S3_BUCKET" ]; then
+  echo "[fetch-or-build-stellar-cli] SCVS_CI_CACHE_BUCKET is unset — name the cache bucket, or set SCVS_CI_CACHE=off" >&2
+  exit 1
+fi
 
 case "${SCVS_CLI_TARGET_ARCH:-$(uname -m)}" in
   arm64 | aarch64) TARGET_ARCH=arm64; TARGET_TRIPLE=aarch64-unknown-linux-gnu ;;

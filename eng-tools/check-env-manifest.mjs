@@ -10,7 +10,7 @@ import {
   resolveManifest,
 } from "./env-manifest.mjs";
 import { OUTPUT_PATH, render } from "./generate-env-contract.mjs";
-import { buildArtifacts, OUTPUT_DIR } from "./generate-deploy-env.mjs";
+import { buildArtifacts, buildExample, EXAMPLE_PATH, OUTPUT_DIR } from "./generate-deploy-env.mjs";
 
 const ROOT = process.cwd();
 const MANIFEST = MANIFEST_PATH;
@@ -531,7 +531,7 @@ for (const [where, block] of declarationSites) {
   }
 }
 
-for (const [rel, expected] of buildArtifacts(manifest)) {
+for (const [rel, expected] of [...buildArtifacts(manifest), [EXAMPLE_PATH, buildExample(manifest)]]) {
   const path = join(ROOT, rel);
   const current = existsSync(path) ? readFileSync(path, "utf8") : null;
   if (current === null) {
