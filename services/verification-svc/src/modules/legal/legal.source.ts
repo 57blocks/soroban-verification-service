@@ -9,8 +9,13 @@ export async function loadLegalDocumentsSource(configured: string | undefined): 
   if (!source) {
     throw new Error(
       `${VARIABLE} is required: this service serves the operator's legal documents and ships none of its own. ` +
-        `Point it at a JSON bundle (see config/legal-documents.example.json).`,
+        `Set it to a JSON bundle's path or https: URL, or to the bundle itself (see config/legal-documents.example.json).`,
     );
+  }
+
+  if (source.startsWith("{")) {
+    // Untrimmed: a job binds the sha256 of these exact bytes, trailing newline included.
+    return { label: `${VARIABLE} (inline)`, raw: configured as string };
   }
 
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(source)) {

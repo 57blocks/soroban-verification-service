@@ -45,12 +45,12 @@ dispatch fails naming whichever architecture's coordinate the submission's build
 
 **The legal documents are configuration, and the compose file supplies the placeholder ones.**
 `verification-svc` serves its Terms of Service and Privacy Notice from the bundle
-`SCVS_LEGAL_DOCUMENTS_SOURCE` names — a path or an `https:` URL, resolved against the workspace root, which
-is `/app` inside the image — and **refuses to boot without one**, because a console taking submissions while
-showing nobody any terms is the defect that requirement exists to remove. The compose file defaults it to
-`config/legal-documents.example.json`, whose text is obvious placeholder and whose `effective_date` is null,
-so acceptance is offered and not required. A self-hoster replaces it with their own; the reference
-deployment's own bundle is `config/legal-documents.json`, which is what `dev` and `staging` use.
+`SCVS_LEGAL_DOCUMENTS_SOURCE` names — a path resolved against the workspace root (`/app` inside the image), an
+`https:` URL, or the bundle's JSON itself — and **refuses to boot without one**, because a console taking
+submissions while showing nobody any terms is the defect that requirement exists to remove. The compose file
+defaults it to `config/legal-documents.example.json`, whose text is obvious placeholder and whose
+`effective_date` is null, so acceptance is offered and not required. A self-hoster replaces it with their own;
+this repository holds no operator's bundle.
 
 Three properties of this file are conformance, not style, and should survive edits:
 

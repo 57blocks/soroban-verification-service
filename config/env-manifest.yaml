@@ -1070,11 +1070,10 @@ services:
         code: services/verification-svc/src/modules/legal/legal.source.ts::loadLegalDocumentsSource
         note: >-
           Which `scvs-legal-documents-v1` bundle this deployment serves as its Terms of Service and
-          Privacy Notice: a path (relative to the workspace root, or absolute) or an `https:` URL.
-          `http:` is refused — a submitter's acceptance is recorded against these exact bytes, so they
-          must not be fetched over a channel anyone can rewrite. Same loader shape as
-          SCVS_TRUSTED_VERIFIERS_SOURCE, and deliberately a second copy of it: that one is
-          `fail: silent` with a committed default, this one is `fail: boot` with none.
+          Privacy Notice, in one of three forms: a path (relative to the workspace root, or
+          absolute), an `https:` URL, or the bundle itself — a value whose first non-blank character
+          is `{`. A submitter's acceptance is recorded against these exact bytes, so `http:` is
+          refused and the inline form is taken byte for byte, never trimmed.
 
           `fail: boot`, not `silent`, and it is the point rather than an oversight. This repository
           ships the assent *mechanism* and no operator's legal text, so there is nothing safe to fall
@@ -1085,15 +1084,14 @@ services:
 
           The committed **default** is a placeholder bundle whose `effective_date` is null, so a
           fresh checkout and a self-hoster's first boot both work, and enforcement stays off until
-          real text with a date is supplied. `dev` and `staging` override it with
-          `config/legal-documents.json`, the reference deployment's own bundle — the same
-          per-environment shape `SCVS_TRUSTED_VERIFIERS_SOURCE` already uses, and both point at one
-          file because legal text is not per-environment. Pointing an environment at the example
-          would serve sample text as terms.
+          real text with a date is supplied. Pointing a deployment at it would serve sample text as
+          terms.
 
-          A self-hoster points this at their own bundle and ships none of ours; the reference
-          deployment's presence here constrains nobody, exactly as
-          `config/trusted-verifiers.dev.json` constrains nobody.
+          A deployment keeps its bundle in its own repository, beside its deploy contracts. The
+          contract names the file with `value_file` instead of recording a `value`, and
+          `sync-secrets` writes that file's exact contents into the config secret, so the service
+          receives the bundle inline. The bundle shares that secret's 64 KiB limit with the
+          service's other configuration.
   orchestrator-svc:
     kind: ecs-service
     exposure: internal — no ALB

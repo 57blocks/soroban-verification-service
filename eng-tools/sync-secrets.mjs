@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /** Writes one service's configuration into `scvs/<env>/<service>/config`; never touches a credential secret. */
 import { readFileSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -100,10 +100,29 @@ function mint(kind, name) {
   process.exit(1);
 }
 
+const contractsRoot = dirname(dirname(contractPath));
+
+function readValueFile(name, file) {
+  const path = resolve(dirname(contractPath), file);
+  if (isAbsolute(file) || relative(contractsRoot, path).startsWith("..")) {
+    unresolved.push(`${name}: value_file "${file}" is outside the deploy contracts`);
+    return undefined;
+  }
+  if (!existsSync(path)) {
+    unresolved.push(`${name}: value_file "${file}" does not exist`);
+    return undefined;
+  }
+  const content = readFileSync(path, "utf8");
+  const sha256 = createHash("sha256").update(content, "utf8").digest("hex");
+  fromFiles.push(`${name} ← ${file} (${Buffer.byteLength(content)} bytes, sha256:${sha256})`);
+  return content;
+}
+
 const payload = {};
 const unresolved = [];
 const skipped = [];
 const minted = [];
+const fromFiles = [];
 
 for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.localeCompare(b))) {
   if (entry.store !== "config") continue;
@@ -135,6 +154,16 @@ for (const [name, entry] of Object.entries(variables).sort(([a], [b]) => a.local
     continue;
   }
 
+  if (entry.value_file !== undefined) {
+    if (entry.value !== undefined) {
+      unresolved.push(`${name} declares both value and value_file`);
+      continue;
+    }
+    const content = readValueFile(name, entry.value_file);
+    if (content !== undefined) payload[name] = content;
+    continue;
+  }
+
   if (entry.value !== undefined) {
     payload[name] = String(entry.value);
     continue;
@@ -159,6 +188,8 @@ if (unresolved.length) {
   console.error("\nNothing was written. Resolve these before deploying.");
   process.exit(1);
 }
+
+for (const line of fromFiles) console.log(line);
 
 const desired = JSON.stringify(payload, Object.keys(payload).sort(), 2);
 

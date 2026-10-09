@@ -69,6 +69,6 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_ACTIVE_JOB_DEDUP_STALE_MS must be a number" })
   SCVS_ACTIVE_JOB_DEDUP_STALE_MS?: string;
 
-  @IsNotEmpty({ message: "SCVS_LEGAL_DOCUMENTS_SOURCE must be set — see docs/features/versioned-terms-and-assent/design.md TA-4" })
+  @IsNotEmpty({ message: "SCVS_LEGAL_DOCUMENTS_SOURCE must be set: a bundle's path or https: URL, or the bundle itself" })
   SCVS_LEGAL_DOCUMENTS_SOURCE!: string;
 }
