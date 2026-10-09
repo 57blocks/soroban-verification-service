@@ -68,6 +68,21 @@ describe("GET /api/verification/v1/legal", () => {
   });
 });
 
+describe("the source may be the bundle itself", () => {
+  it("takes the value byte for byte, so it binds the same hash as the file it came from", async () => {
+    const raw = await readFile(examplePath, "utf8");
+    expect(raw.endsWith("\n")).toBe(true);
+
+    expect(await loadLegalDocumentsSource(raw)).toEqual({ label: "SCVS_LEGAL_DOCUMENTS_SOURCE (inline)", raw });
+
+    const fromFile = serviceFor(examplePath);
+    const inline = serviceFor(raw);
+    await Promise.all([fromFile.onModuleInit(), inline.onModuleInit()]);
+    expect(inline.raw()).toBe(raw);
+    expect(inline.contentSha256()).toBe(fromFile.contentSha256());
+  });
+});
+
 describe("the legal bundle is a boot-time gate", () => {
   it("refuses an unset source rather than serving no terms", async () => {
     await expect(loadLegalDocumentsSource(undefined)).rejects.toThrow(/SCVS_LEGAL_DOCUMENTS_SOURCE is required/);
@@ -119,6 +134,10 @@ describe("the legal bundle is a boot-time gate", () => {
       documents[0].sections[0].blocks = [{ list: [42] }];
     });
     await expect(bootWith(path)).rejects.toThrow(/must be a string or \{ list: string\[\] \}/);
+  });
+
+  it("refuses an inline value that is not JSON", async () => {
+    await expect(bootWith("{ not json")).rejects.toThrow(/SCVS_LEGAL_DOCUMENTS_SOURCE \(inline\) are not valid JSON/);
   });
 
   it("loads a bundle that declares an effective date, and reports itself enforced", async () => {

@@ -237,9 +237,9 @@ describe("a legal page that cannot load its text says so", () => {
   });
 });
 
-describe("the configured bundle renders", () => {
+describe("the committed example bundle renders", () => {
   const reference = JSON.parse(
-    readFileSync(resolve(__dirname, "../../../config/legal-documents.json"), "utf8"),
+    readFileSync(resolve(__dirname, "../../../config/legal-documents.example.json"), "utf8"),
   ) as ReturnType<typeof wireFrom>;
 
   const asBundle = (): LegalBundle => ({
@@ -269,17 +269,26 @@ describe("the configured bundle renders", () => {
     const doc = fixture.documents[slug];
     await renderInRouter(<LegalPage doc={doc} bundle={fixture} />);
 
-    expect(doc.sections.length).toBeGreaterThan(8);
+    expect(doc.sections.length).toBeGreaterThan(0);
     for (const { id, heading } of doc.sections) {
       expect(window.document.getElementById(id)).not.toBeNull();
       expect(screen.getByRole("navigation", { name: /contents/i }).textContent).toContain(heading);
     }
 
     const article = screen.getByRole("article");
-    expect(article.querySelector("strong")).not.toBeNull();
     expect(article.textContent).not.toMatch(/\*\*/);
     expect(article.textContent).not.toMatch(/\]\(/);
     expect(article.textContent).not.toContain("${");
+  });
+
+  test("its bold, link and list render as elements", async () => {
+    const fixture = asBundle();
+    await renderInRouter(<LegalPage doc={fixture.documents.terms} bundle={fixture} />);
+
+    const article = screen.getByRole("article");
+    expect(article.querySelector("strong")?.textContent).toBe("bold");
+    expect(article.querySelector('a[href="https://example.invalid"]')?.textContent).toBe("a link");
+    expect(article.querySelectorAll("li").length).toBeGreaterThanOrEqual(2);
   });
 
   test("it is still a draft, so the banner and the open items show", async () => {
