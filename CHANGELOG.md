@@ -12,10 +12,8 @@ mints a release, and the `latest` dist-tag never holds a prerelease.
 
 ## [Unreleased]
 
-## [0.1.0]
-
-The first public release. The project was developed privately before this point, and its history was
-not carried across — see [`AUTHORS`](AUTHORS) for the people who wrote it.
+The first public release, to be published as `0.1.0`. The project was developed privately before this
+point, and its history was not carried across — see [`AUTHORS`](AUTHORS) for the people who wrote it.
 
 ### Added
 
