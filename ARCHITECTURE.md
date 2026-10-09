@@ -57,7 +57,7 @@ repository. All five take `--env`; the two writers take `--dry-run`:
 pnpm run deploy:check-descriptor -- --env dev
                                   # does /scvs/<env>/ci/descriptor carry every field the manifest
                                   # resolves from it? Read-only, and the acceptance test for a
-                                  # descriptor change applied in soroban-aws-infrastructure
+                                  # descriptor change applied in your infrastructure
 pnpm run deploy:sync-secrets -- --env dev --service query-svc --dry-run
                                   # what CI would write into scvs/<env>/<service>/config. WRITES
                                   # without --dry-run; idempotent, so a redeploy that changes

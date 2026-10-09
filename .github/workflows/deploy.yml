@@ -122,7 +122,7 @@ jobs:
                 echo
                 echo "Terraform has not been applied to this environment (no"
                 echo "\`/scvs/${{ inputs.environment || 'dev' }}/ci/descriptor\`). Apply"
-                echo "soroban-aws-infrastructure first. The image build is skipped too, so nothing is"
+                echo "your infrastructure first. The image build is skipped too, so nothing is"
                 echo "pushed to ECR for a release that cannot land."
               } >> "$GITHUB_STEP_SUMMARY"
               ;;

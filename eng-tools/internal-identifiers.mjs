@@ -30,6 +30,15 @@ const trackerKeyRe = trackerKeys.length
   ? new RegExp(`\\b(?:${trackerKeys.map(escape).join("|")})-\\d+\\b`, "gi")
   : null;
 
+const repositoryDigests = new Set(rules.rules["internal-repository"]?.digests ?? []);
+const sha256 = (s) => createHash("sha256").update(s).digest("hex");
+const findRepositoryNames = (text) =>
+  [...text.matchAll(/[A-Za-z0-9][A-Za-z0-9_.]*(?:-[A-Za-z0-9_.]+)+/g)]
+    .filter((m) => repositoryDigests.has(sha256(m[0].toLowerCase())))
+    .map((m) => m.index);
+
+const secretArnRe = /\barn:aws[a-z-]*:secretsmanager:[a-z0-9-]*:\d*:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}\b/g;
+
 const publishedHosts = new Set(
   (rules.rules["internal-hostname"]?.published ?? []).map((h) => h.toLowerCase()),
 );
@@ -76,6 +85,16 @@ export const detectors = [
   {
     id: "deployment-resource-name",
     find: (text) => (resourceRe ? [...text.matchAll(resourceRe)].map((m) => m.index) : []),
+    redact: null,
+  },
+  {
+    id: "internal-repository",
+    find: (text) => (repositoryDigests.size ? findRepositoryNames(text) : []),
+    redact: null,
+  },
+  {
+    id: "secrets-manager-arn",
+    find: (text) => [...text.matchAll(secretArnRe)].map((m) => m.index),
     redact: null,
   },
   {
