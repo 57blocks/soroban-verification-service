@@ -116,8 +116,8 @@ for (const [name, entry] of Object.entries(contract.secrets?.variables ?? {}).so
     secrets.push({ name, valueFrom: existing });
     continue;
   }
-  // Only keys sync-secrets writes (a recorded value, a source path, or `generate:`); anything else would dangle.
-  if (entry.value === undefined && !entry.value_from_output && !entry.generate) {
+  // Only keys sync-secrets writes (a recorded value or file, a source path, or `generate:`); anything else would dangle.
+  if (entry.value === undefined && entry.value_file === undefined && !entry.value_from_output && !entry.generate) {
     if (entry.required) {
       missing.push(`${name} is required but the contract records neither a value nor a source path`);
     }
