@@ -26,7 +26,7 @@
 }
 
 @layer components {
-  .dot-field-container {
+  .dot-lattice {
     position: absolute;
     inset: 0;
     overflow: hidden;

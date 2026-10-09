@@ -32,10 +32,11 @@ src/
     router.tsx               assembles the route tree from each feature's exported routes
   components/ui/           shadcn/ui primitives, restyled to the design tokens:
                              button, input, label, select, collapsible, badge,
-                             sonner, fade-up, liquid-ether (the hero's WebGL
-                             fluid — see "The hero background" below),
-                             dot-field (the closing CTA's canvas dot lattice —
-                             see "The dot field" below)
+                             sonner, fade-up, hero-flow (the hero's WebGL
+                             wash — see "The hero background" below),
+                             dot-lattice (the canvas dot grid behind the closing
+                             CTA and the console — see "The dot lattice" below),
+                             typewriter (the hero headline)
   components/              site-nav + site-footer (the console and legal pages),
                              legal-links (the two legal documents, linked from both footers
                              and from the submission control), not-found (what an unrouted
@@ -164,54 +165,41 @@ does not exist. The console states the verdict and leaves both digests in the ra
 
 ## The hero background
 
-`components/ui/liquid-ether.tsx` is the landing hero's fluid: a WebGL Eulerian solve whose velocity
-field is read back as colour, adapted from React Bits' LiquidEther into this app's TypeScript and
-comment conventions. Four things about it are this app's decisions rather than upstream's:
+`components/ui/hero-flow.tsx` is the landing hero's background: one fragment shader drawing a
+domain-warped noise field as pale ink, on a plain WebGL context with no library. The pointer, and
+four slow wandering sources while nobody is moving it, add a local swirl to the warp; the wanderers
+hand over to the pointer within a quarter of a second and come back two seconds after it stops.
 
 - **It does not mount under `prefers-reduced-motion: reduce`.** The hero's own static wash is the
-  design; the fluid is an enhancement on top of it. That is the same answer `index.css` gives the
-  fade-up transition — switched off, not shortened.
-- **It is imported after mount, not statically.** `three` is 135 kB of gzip, and the landing page is
-  the first thing anyone loads: importing it statically put 58% onto the entry bundle to decorate the
-  top of it. `HeroSection` fetches the module in an effect instead, so a slow or failed chunk costs the
-  hero its background and nothing else. The type import there is deliberate — it is erased, and
-  importing the value would pull the module back into the entry chunk.
-- **The palette is pale yellows** (`HeroSection`'s `heroFluidColors`), which is a narrower choice than
-  it looks. `lightMode` normalises every stop to its own chroma, so saturation is not something a stop
-  can opt out of and only the *hue* survives: a ramp ending on the accent itself renders at 34°, an
-  orange, once it covers a third of the hero. These three land at 47° and up. The accent is then still
-  the accent — "Shared devices" above reserves it for a verdict or a highlight, and an ambient wash
-  painted the same gold would spend it.
-- **The output material sets `premultipliedAlpha: true`.** `color_frag` writes `mix(bgColor, ink, lenv)`
-  against a zero `bgColor`, which is premultiplied for the RGB and `lenv` for the alpha. three's default
-  for a transparent material is straight-alpha blending, which multiplies the colour by alpha a second
-  time — on a white page the layer then darkens its backdrop almost without tinting it, and reads as
-  grey smoke rather than ink.
+  design; the flow is an enhancement on top of it, switched off rather than slowed down.
+- **The palette is pale yellows** (`HeroSection`'s `heroFlowColors`), all at hue 45° or above. The
+  accent itself is not in it: "Shared devices" above reserves the accent for a verdict or a
+  highlight, and an ambient wash painted the same gold would spend it.
+- **It writes premultiplied colour** — `gl_FragColor` is `color * alpha, alpha` and the context is
+  created with `premultipliedAlpha: true`. Straight alpha over a white page darkens the backdrop
+  instead of tinting it, and reads as grey smoke.
+- **It renders at half the device resolution** and is stretched by CSS; the field is soft enough
+  that the difference does not show, and it quarters the fragment work.
 
-It pauses when the hero scrolls out of view or the tab is hidden, and it tracks the pointer from a
-window listener with the canvas left `pointer-events-none`, so the CTA and the nav keep their clicks.
+It pauses when the hero scrolls out of view or the tab is hidden, and it reads the pointer from a
+window listener with the canvas `pointer-events-none`, so the CTA and the nav keep their clicks.
 
-## The dot field
+## The dot lattice
 
-`components/ui/dot-field.tsx` is the closing CTA's background: a canvas lattice of accent-coloured dots that
-bulge away from the pointer and spring back. It is the only background the dark band has, and it is
-`pointer-events: none`, so the section is `relative` and the content is lifted above it with `relative` —
-nothing else in the section has to know it is there.
+`components/ui/dot-lattice.tsx` draws a canvas grid of accent-coloured dots that move away from the
+pointer and spring back. `DotLatticeDark` is the closing CTA's background; `DotLatticeLight` sits
+behind the console, faded out between `fadeStart` and `fadeEnd` pixels from the top. It is
+`pointer-events: none`, so its section is `relative` and the content is lifted above it with
+`relative` — nothing else has to know it is there.
 
-Three things about it are worth knowing:
-
-- **Its positioning lives in `index.css`.** The component renders `.dot-field-container` and expects that
-  class to place it; the rule is in the `@layer components` block beside `.fade-up`. A component whose
-  layout comes from a stylesheet is unusual here, but the canvas is sized from its container's
-  `getBoundingClientRect()`, so the container has to be the positioned element the component is not.
-- **The dot colour is written out, not referenced.** A canvas `fillStyle` takes a colour rather than a
-  utility class, so `dot-field.tsx` holds the accent as one `DOT` constant and derives the three opacities
-  from it. It arrived as `#fdda24` — a different palette's yellow — and is now `yellow.DEFAULT`.
-- **It runs its `requestAnimationFrame` loop unconditionally.** Unlike the hero's fluid it does not pause
-  when it is scrolled out of view or when the tab is hidden, so from page load it redraws its grid — about
-  3,200 arcs a frame at the section's 1440x387 — for a band 4,500px down the page. It holds 60fps with the
-  section on screen, so this is waste rather than jank; an `IntersectionObserver` around `tick()` would
-  remove it.
+- **Its positioning lives in `index.css`.** The component renders `.dot-lattice` and expects that
+  class to place it, beside `.fade-up` in `@layer components`; the canvas is sized from that
+  container, so the container has to be the positioned element.
+- **The dot colour is written out, not referenced.** A canvas `fillStyle` takes a colour rather than
+  a utility class, so the accent is one `ACCENT_RGB` constant.
+- **It only animates while something moves.** It draws once, then runs its frame loop only while the
+  pointer is near or a dot is still settling, and not at all while it is off screen or the tab is
+  hidden. Under `prefers-reduced-motion` it draws the still grid and ignores the pointer.
 
 ## Routing
 

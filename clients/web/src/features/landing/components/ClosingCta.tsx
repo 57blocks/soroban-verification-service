@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { githubRepoUrl, sourceIsPublic } from "@/config/site";
 import { Button } from "@/components/ui/button";
 import { PillIcon } from "@/components/ui/pill-icon";
-import { DotFieldDark } from "@/components/ui/dot-field";
+import { DotLatticeDark } from "@/components/ui/dot-lattice";
 import { FadeUp } from "@/components/ui/fade-up";
 import { closingCta, heroCopy } from "../content";
 
@@ -11,7 +11,7 @@ export const ClosingCta = () => (
     id="verify"
     className="relative overflow-hidden bg-dark px-4 py-20 text-dark-bright md:px-20 md:py-[140px]"
   >
-    <DotFieldDark />
+    <DotLatticeDark />
 
     <div
       aria-hidden

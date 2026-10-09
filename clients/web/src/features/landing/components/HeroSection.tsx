@@ -1,49 +1,14 @@
-import { type ComponentType, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { PillIcon } from "@/components/ui/pill-icon";
 import { FadeUp } from "@/components/ui/fade-up";
-import { TextType } from "@/components/ui/text-type";
-import type { LiquidEtherProps } from "@/components/ui/liquid-ether";
+import { Typewriter } from "@/components/ui/typewriter";
+import { HeroFlow } from "@/components/ui/hero-flow";
 import { heroCopy } from "../content";
 import { RebuildPipeline } from "./RebuildPipeline";
 
-const heroFluidColors = ["#fffefb", "#fef8dc", "#fdf2c2"];
-
-const HeroFluid = () => {
-  const [LiquidEther, setLiquidEther] =
-    useState<ComponentType<LiquidEtherProps> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    import("@/components/ui/liquid-ether")
-      .then(({ LiquidEther: Loaded }) => {
-        if (!cancelled) setLiquidEther(() => Loaded);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!LiquidEther) return null;
-
-  return (
-    <LiquidEther
-      colors={heroFluidColors}
-      lightMode
-      resolution={0.5}
-      mouseForce={20}
-      cursorSize={100}
-      autoPointers={4}
-      autoSpeed={0.22}
-      autoIntensity={2.2}
-      takeoverDuration={0.25}
-      autoResumeDelay={200}
-      autoRampDuration={1.2}
-    />
-  );
-};
+const heroFlowColors: [string, string, string] = ["#fdf6dd", "#fbecb4", "#f7dc7a"];
 
 const renderTitle = (displayed: string) => {
   const start = heroCopy.title.indexOf(heroCopy.highlight);
@@ -69,6 +34,11 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const HeroBackground = () => {
+  const [animate] = useState(() => !prefersReducedMotion());
+  return animate ? <HeroFlow colors={heroFlowColors} /> : null;
+};
+
 const Headline = () => {
   const [animate] = useState(() => !prefersReducedMotion());
 
@@ -82,15 +52,14 @@ const Headline = () => {
               {renderTitle(heroCopy.title)}
               <span className="ml-1 inline-block">{headlineCursor}</span>
             </span>
-            <TextType
+            <Typewriter
               as="span"
               className="col-start-1 row-start-1"
               text={heroCopy.title}
-              loop={true}
-              typingSpeed={60}
-              initialDelay={800}
-              deletingSpeed={60}
-              cursorCharacter={headlineCursor}
+              typeMs={60}
+              eraseMs={60}
+              startDelayMs={800}
+              cursor={headlineCursor}
               cursorClassName="font-light text-ink-body"
               renderText={renderTitle}
             />
@@ -109,7 +78,7 @@ export const HeroSection = () => (
     className="relative overflow-hidden border-b border-line-hero bg-gradient-to-b from-surface to-surface-hero px-4 md:px-20"
   >
     <div className="absolute inset-0" aria-hidden="true">
-      <HeroFluid />
+      <HeroBackground />
     </div>
 
     <div className="relative mx-auto max-w-shell bg-[radial-gradient(720px_340px_at_50%_78%,theme(colors.yellow.DEFAULT/0.30),transparent_70%)] pb-20 pt-20 text-center md:pb-[110px] md:pt-24">
