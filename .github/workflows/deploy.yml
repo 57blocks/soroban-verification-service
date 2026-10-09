@@ -591,7 +591,15 @@ jobs:
       - name: Install dependencies for config-contract assertion
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch the deployment's contracts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: deploy-contracts
+          path: /tmp/deploy-contracts
+
       - name: Assert the deployed configuration matches the contract
+        env:
+          TARGET_ENV: ${{ inputs.environment || 'dev' }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/config-reports
@@ -629,7 +637,7 @@ jobs:
             echo "${LINE#*\[config-contract\] }" > "/tmp/config-reports/${SERVICE}.json"
           done
 
-          node eng-tools/assert-config-contract.mjs --env "${{ inputs.environment || 'dev' }}" /tmp/config-reports/*.json \
+          node eng-tools/assert-config-contract.mjs --contracts "/tmp/deploy-contracts/${TARGET_ENV}" /tmp/config-reports/*.json \
             | tee /tmp/config-assert.log
           {
             echo "### Deployed configuration contract"

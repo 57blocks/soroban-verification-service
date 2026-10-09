@@ -515,6 +515,24 @@ for (const [where, block] of declarationSites) {
   }
 }
 
+const declaredEnvironments = new Set(manifest.meta?.environments ?? []);
+
+for (const [where, block] of declarationSites) {
+  for (const [varName, entry] of entriesOf(block)) {
+    if (!entry || typeof entry !== "object") continue;
+    const named = [...Object.keys(entry.envs ?? {}), ...(entry.required_in ?? [])];
+    const undeclared = [...new Set(named.filter((env) => !declaredEnvironments.has(env)))];
+    if (undeclared.length) {
+      report(
+        "N deployment values",
+        `${where}: ${varName} records values or requirements for ${undeclared.join(", ")}, which ` +
+          `meta.environments does not declare — a deployment's values and requirements belong in its ` +
+          `own config/deploy/<env>/*.json, where assert-config-contract.mjs reads them`
+      );
+    }
+  }
+}
+
 {
   const path = join(ROOT, OUTPUT_PATH);
   const current = existsSync(path) ? readFileSync(path, "utf8") : null;

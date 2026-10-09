@@ -93,9 +93,11 @@ This is the field to pick alarms from.
 The `silent` class is why this contract exists. Leave the job-state-change queue URL unset and
 orchestrator-svc queues jobs, dispatches them, builds them successfully, and never completes one —
 with nothing failing anywhere. [`eng-tools/assert-config-contract.mjs`](../../eng-tools/assert-config-contract.mjs)
-checks a deployed service's own boot line against the manifest
-(the configuration-observability property `docs/invariants.md` rules 22–23 absorb), which proves presence; for a
-variable whose value is not recorded here, it cannot prove correctness.
+checks a deployed service's own boot line against the manifest and against these files
+(the configuration-observability property `docs/invariants.md` rules 22–23 absorb). A variable is
+required there when the manifest requires it or when this file marks it `required: true`, so mark
+what your deployment depends on. A value is checked against this file's `value` when the manifest
+declares the variable `observable: value`; otherwise only its presence is proved.
 
 ## `invariants`
 

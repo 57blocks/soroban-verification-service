@@ -19,7 +19,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: development
-        envs: { dev: production, staging: production }
         observable: value
         code: various (Nest + Prisma read it directly)
       PORT:
@@ -39,7 +38,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: us-east-1
-        envs: { dev: ap-southeast-2, staging: ap-southeast-2 }
         code: packages/config/src/index.ts::getStagingStorageConfig
         note: >-
           Unset silently defaults the staging-bucket client to us-east-1, which then fails on every
@@ -110,7 +108,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "*"
-        envs: { dev: "*", staging: "*" }
         code: services/query-svc/src/config/configuration.ts
         note: >-
           Same-origin ALB routing makes this belt-and-braces in dev. Read by query-svc only:
@@ -201,7 +198,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "false"
-        envs: { dev: "true", staging: "true" }
         observable: value
         code: packages/db/src/connection.ts::toConnectionString
         note: >-
@@ -348,7 +344,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "false"
-        envs: { dev: "true", staging: "true" }
         observable: value
         code: packages/db-query/src/index.ts (re-exports @scvs/db's toConnectionString)
       SCVS_DB_CONNECTION_TIMEOUT_MS:
@@ -416,7 +411,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: filesystem
-        envs: { dev: s3, staging: s3 }
         observable: value
         code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
@@ -457,30 +451,22 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: ""
-        envs: { dev: "", staging: "" }
         code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           **EMPTY in every environment.** The result tree is served at its own host's ROOT
           — `https://results.{env}.sv.example.com/reports/<sha>.json` — so no prefix appears in any
           published URL and none is written into any key. `/public` is gone from both.
 
-          **`required: no` since the value went empty, and that is not a weakening.** `required: yes`
-          survived the repath change that emptied `envs:` and became unsatisfiable: the config
-          contract reports presence as NON-EMPTY on purpose (`config-contract.ts`'s `isSet`, which
-          names this variable as its example), because `resultStorageConfigFromEnv` reads it through
-          `|| ""` and cannot tell unset from empty either. So `required: yes` plus `envs: { dev: "" }`
-          asked a correctly-configured orchestrator-svc to report a prefix it must not have, and
-          `assert-config-contract.mjs` failed every deploy with "is required … but is not set". What
-          protects the value now is the opposite assertion, in that same script: a recorded expected
-          value of `""` means a REPORTED prefix is the failure. That is the direction the risk runs —
-          an empty prefix is correct, a stray one 403s every published URL — and unlike the old
-          `required: yes` it is a check that can pass.
+          **`required: no`, and that is not a weakening.** The config contract reports presence as
+          NON-EMPTY on purpose (`config-contract.ts`'s `isSet`, which names this variable as its
+          example), because `resultStorageConfigFromEnv` reads it through `|| ""` and cannot tell
+          unset from empty either, so `required: yes` could never pass for a correctly empty prefix.
+          What protects the value is the opposite assertion: a deploy contract that records `""`
+          makes `assert-config-contract.mjs` fail on any REPORTED prefix. That is the direction the
+          risk runs — an empty prefix is correct, a stray one 403s every published URL.
 
-          Empty used to be the failure mode: this note said "an unset value writes to the root —
-          wrong, but silently successful". What changed is not the code, it is what the bucket
-          contains. SCVS_PUBLISHER_BUCKET is now a dedicated results bucket holding only the
-          published tree, so the root IS the right place and the CDN can be granted the whole bucket
-          honestly. Do not restore a prefix here without also giving the bucket a non-public tenant
+          SCVS_PUBLISHER_BUCKET is a dedicated results bucket holding only the published tree, so the
+          root IS the right place and the CDN can be granted the whole bucket honestly. Do not restore a prefix here without also giving the bucket a non-public tenant
           again — those two decisions are one decision.
 
           No code change was needed for the empty value, which is worth knowing before "fixing" it:
@@ -488,17 +474,13 @@ groups:
           empty prefix is dropped rather than producing `//`, and the DTO has always been
           `@IsOptional() @IsString()`.
 
-          **The rule this replaces — "dev and staging must not share a prefix" (2026-08-17,
-          staging on `public-staging`) — has lapsed, and only because its premise did.** The two
-          environments shared ONE bucket, so the prefix was the only isolation
-          there was: the published tree has root-level fixed keys (`policy.json` and
-          `verifier-manifest.json` are not hash-addressed), so each environment's publish overwrote
-          the other's, and `wasms/<hash>.json` collided for any wasm verified in both. The
-          counter-intuitive part is worth keeping in mind if anyone ever proposes sharing a bucket
-          again: while the prefix was shared, giving the two environments distinct
-          SCVS_VERIFIER_IDs made it WORSE, because the single verifier-manifest.json then flipped
-          identity with each publish. Buckets are per-environment now, so the prefix carries no
-          isolation duty and a shared constant is the simpler, checkable thing.
+          **Do not share a results bucket between environments and separate them by prefix.** The
+          published tree has root-level fixed keys (`policy.json` and `verifier-manifest.json` are
+          not hash-addressed), so each environment's publish overwrites the other's, and
+          `wasms/<hash>.json` collides for any wasm verified in both. Distinct SCVS_VERIFIER_IDs make
+          it worse, because the single verifier-manifest.json then flips identity with each publish.
+          With a bucket per environment the prefix carries no isolation duty, and a shared constant
+          is the simpler, checkable thing.
 
           **Never set this to `staging`.** That is not about environments at all: `staging/` is this
           system's sandbox handoff prefix — the glossary's "Staging bucket" entry and
@@ -510,9 +492,7 @@ groups:
 
           P6's three-way invariant is what this retires. It used to be: this value, the task role's
           write grant, and the CloudFront READ grant — any one out of step and the CDN 403s
-          everything, which happened over 2026-08-17..19. The first two still derive from
-          `envs/<env>`'s `served_prefix`; the third is each environment's own bucket policy now
-          rather than one hand-maintained list in `envs/dev/main.tf`. With the prefix empty and the
+          everything. With the prefix empty and the
           bucket dedicated, all three degenerate to the same statement and there is nothing left to
           keep in step.
 
@@ -526,7 +506,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: auto
-        envs: { dev: ap-southeast-2, staging: ap-southeast-2 }
         code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           Badly named but real: for ANY non-filesystem backend this is the S3 client's region, and
@@ -540,23 +519,14 @@ groups:
         tier: infrastructure
         inject: ecs-secrets
         default: http://localhost:5000/public
-        envs:
-          {
-            dev: "https://results.dev.sv.example.com",
-            staging: "https://results.staging.sv.example.com",
-          }
         code: packages/storage-layout/src/result-storage-env.ts::resultStorageConfigFromEnv
         note: >-
           Baked IMMUTABLY into every published artifact. A wrong value is not correctable by
           redeploying — it is already inside artifacts other verifiers may have aggregated.
 
-          The old dev root (`reports.stellar-verify.example.com/public`) no longer resolves, and
-          nothing published under it survives: the account rebuild destroyed the bucket and the
-          database that held those `artifact_url` values, so there is no historical URL left to keep
-          dereferenceable in dev or staging. That is precisely why this value moves to its final shape
-          NOW, before dev publishes anything again — an empty environment is the only moment when
-          changing it costs nothing. Every publish after this one bakes it in. The domain and the
-          prefix move in the SAME cutover for the same reason: two cutovers would mean two sunset
+          Choose its final shape before an environment publishes anything: an empty environment is
+          the only moment when changing it costs nothing, and every publish after that bakes it in.
+          Move the domain and the prefix in the same cutover — two cutovers would mean two sunset
           windows over the same artifacts.
 
           staging's value is the name it will have; staging has no applied infrastructure yet.
@@ -647,7 +617,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: local-verifier
-        envs: { dev: scvs-dev, staging: scvs-staging }
         code: packages/config/src/index.ts::getVerifierIdentity
         note: >-
           Unset publishes artifacts attributed to `local-verifier`. Those artifacts are already
@@ -661,7 +630,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: Local Soroban Verifier
-        envs: { dev: SCVS Dev Verifier, staging: SCVS Staging Verifier }
         code: packages/config/src/index.ts::getVerifierIdentity
         note: >-
           Display-only, but published: it is what a consumer shows for attribution.
@@ -673,11 +641,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: official-trusted-public-and-private-upload-v2
-        envs:
-          {
-            dev: official-trusted-public-and-private-upload-v2,
-            staging: official-trusted-public-and-private-upload-v2,
-          }
         code: packages/config/src/index.ts::getVerifierIdentity
         note: >-
           Must match the published policy.json, or artifacts cite a policy that says something else.
@@ -703,7 +666,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: official_trusted,upstream_pinned
-        envs: { dev: "official_trusted,upstream_pinned", staging: "official_trusted,upstream_pinned" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
         note: A wrong or stale value publishes a policy this verifier does not actually enforce.
       SCVS_POLICY_DIGEST_PINNED_ONLY:
@@ -714,7 +676,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "true"
-        envs: { dev: "true", staging: "true" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
       SCVS_POLICY_TAG_ONLY_ALLOWED:
         type: boolean
@@ -724,7 +685,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "false"
-        envs: { dev: "false", staging: "false" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
       SCVS_POLICY_ARBITRARY_IMAGES_ALLOWED:
         type: boolean
@@ -734,7 +694,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "false"
-        envs: { dev: "false", staging: "false" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
       SCVS_POLICY_REQUIRE_TARBALL_SHA256:
         type: boolean
@@ -744,7 +703,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "true"
-        envs: { dev: "true", staging: "true" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
       SCVS_POLICY_RETAIN_ARTIFACTS:
         type: boolean
@@ -754,7 +712,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: "true"
-        envs: { dev: "true", staging: "true" }
         code: packages/config/src/index.ts::getVerifierPolicyConfig
 
   stellar-cli:
@@ -768,7 +725,6 @@ groups:
         tier: knob
         inject: ecs-secrets
         default: stellar
-        envs: { dev: stellar, staging: stellar }
         code: services/*/src/config/configuration.ts
         note: The service image ships the binary; this only overrides its location.
       SCVS_ARTIFACT_DIR:
@@ -796,15 +752,9 @@ groups:
       SCVS_MAINNET_RPC_URL:
         type: url
         required: no
-        required_in: [dev, staging]
         fail: n/a
         source: literal
         tier: infrastructure
-        envs:
-          {
-            dev: "https://mainnet.sorobanrpc.com",
-            staging: "https://mainnet.sorobanrpc.com",
-          }
         code: services/{verification,orchestrator}-svc/src/config/configuration.ts
         note: >-
           Soroban RPC the `stellar` CLI is pointed at for mainnet chain lookups. The CLI's built-in
@@ -830,16 +780,12 @@ groups:
           needs none; this variable is `tier: infrastructure`, not `secret`, and must not be made to
           carry one.
 
-          dev AND staging both point at the public community endpoint mainnet.sorobanrpc.com
-          (verified healthy 2026-08-24). ★ **staging joined dev on 2026-08-27, and the change is a
-          rule, not a value.** It had been deliberately unset, on the reading that "staging does not
-          serve mainnet" — but nothing in the product makes mainnet a per-environment feature: the
-          network enum carries both everywhere, the console offers both, and every route accepts
-          both. So the omission did not scope a feature, it made staging fail a request dev serves,
-          in a way no code path expresses. **Environments differ in capacity, identity and data —
-          never in which features work.** A deployment that genuinely serves testnet only still
-          leaves this unset and still starts; that arm is unchanged. Any environment beyond these
-          two supplies its own node.
+          **Environments differ in capacity, identity and data — never in which features work.**
+          Nothing in the product makes mainnet a per-environment feature: the network enum carries
+          both everywhere, the console offers both, and every route accepts both. So leaving this
+          unset in one deployed environment does not scope a feature, it makes that environment fail
+          a request the others serve. A deployment that genuinely serves testnet only leaves it unset
+          and still starts.
 
 services:
   verification-svc:
@@ -857,7 +803,6 @@ services:
           source: literal,
           inject: ecs-secrets,
           default: 5000,
-          envs: { dev: 5000, staging: 5000 },
         }
       SERVICE_ENTRYPOINT:
         type: string
@@ -867,7 +812,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: verification-svc
-        envs: { dev: verification-svc, staging: verification-svc }
         dto_exempt: true
         code: docker/service.Dockerfile (the container CMD, not TypeScript)
         note: >-
@@ -893,8 +837,7 @@ services:
           Read lazily on the first upload, so a missing value fails POST /v1/uploads/source rather
           than boot. A healthy container proves nothing here — smoke-test an upload after deploy.
 
-          PER ENVIRONMENT since the account rebuild (2026-08-20); both environments used to name the
-          same `stellar-scratch`. This is the SCRATCH bucket — the sandbox handoff prefix
+          One per environment. This is the SCRATCH bucket — the sandbox handoff prefix
           `staging/{jobId}/…` and private uploads live here, not in SCVS_PUBLISHER_BUCKET, and no CDN
           fronts it.
       SCVS_JOB_STREAM_SAFETY_POLL_MS:
@@ -910,8 +853,6 @@ services:
       SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE:
         type: number
         default: 60
-        envs: { dev: 600, staging: 150 }
-        required_in: [dev, staging]
         note: >-
           A `@Throttle` override on `POST /v1/uploads/source` only, so it *replaces* the global
           SCVS_THROTTLE_LIMIT for that one route rather than stacking under it. At the defaults
@@ -923,9 +864,8 @@ services:
           documented exception to AGENTS.md's "never read process.env from business logic", and it
           means this value is fixed at import time: changing it needs a restart, not a config reload.
 
-          dev and staging raise it for load testing (2026-08-26), to 600 and 150 — the `60R x 0.5`
-          row of the derivation table in SCVS_THROTTLE_LIMIT's note, which is also where the cost of
-          the whole tuning is recorded. Do not move this one on its own.
+          One of the four limits sized together — see SCVS_THROTTLE_LIMIT's note. Do not move this
+          one on its own.
       SCVS_UPLOAD_CLEANUP_INTERVAL_MS: { type: number, default: 60000 }
       SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS:
         type: number
@@ -939,8 +879,6 @@ services:
       SCVS_THROTTLE_LIMIT:
         type: number
         default: 60
-        envs: { dev: 3000, staging: 750 }
-        required_in: [dev, staging]
         note: >-
           The in-process tier (`@nestjs/throttler`'s ThrottlerGuard, global in app.module.ts), in
           requests per fixed 60-second window per **process**. Behind an ALB with N tasks the
@@ -952,80 +890,27 @@ services:
           accepted job spends none of this budget; preflight and the two submission routes do share
           this one counter. So this tier must stay **above** the sum of the per-route abuse budgets,
           or it becomes the binding limit and the abuse guard — the tier that is actually per
-          submitter and actually shared across instances — never fires. dev at the old 30 against
-          its 60 submit quota was exactly that inversion.
+          submitter and actually shared across instances — never fires.
 
-          ★ It was the literal `30` inside `ThrottlerModule.forRoot` until 2026-08-26 — the only
-          rate limit in this service with no per-environment control. Made configurable that day,
-          and the default raised to 60 the same day, matching the upload door.
-
-          ★ **THE LOAD-TESTING OVERRIDES LIVE HERE (2026-08-26). All four move together.**
-
-          Both tuned environments are derived from one write-path baseline in requests per second
-          (the performance target is 20 req/s sustained, p99 < 5 s at 50
-          concurrent), so the numbers are recomputable rather than picked. For a baseline of R
-          req/s, sustained write rate is 60R per minute and:
+          ★ **Raising limits for load: all four move together.** Size them from one write-path
+          baseline of R requests per second, so the numbers are recomputable rather than picked. The
+          sustained write rate is 60R per minute, and:
 
             SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW  = 60R x 1.25   the sustained rate plus 25% burst
             SCVS_ABUSE_MAX_PER_WINDOW         = 60R x 0.5     preflight is a pre-submission probe,
                                                               not one call per submission
-            SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE = 60R x 0.5     the PERF cases stage uploads ahead of
-                                                              the measured burst, by design
+            SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE = 60R x 0.5     uploads are staged ahead of submission
             SCVS_THROTTLE_LIMIT               > their sum     so the abuse tiers stay the policy
 
-            baseline R          submit  preflight  upload  |   sum  <  throttle
-            dev      20 req/s     1500        600     600  |  2700  <     3000
-            staging   5 req/s      375        150     150  |   675  <      750
+          The two abuse tiers are per caller, keyed on the client address taken from the proxy chain,
+          so the load a deployment can receive is the per-caller budget times the number of distinct
+          callers — size the backing database for that, not for the table. `SCVS_THROTTLE_LIMIT` is
+          per process.
 
-          Any environment that is not dev or staging keeps every product default.
-
-          ★ **A later fix changed what these numbers mean, and the derivation above has not caught up.**
-          Until 2026-09-04 the two abuse tiers keyed on the ALB node's address rather than the
-          caller's, so `1500` behaved as a deployment total shared by everyone behind one node (and
-          as N x 1500 across N nodes, with N growing under load). It is now genuinely per caller,
-          which is what it always claimed to be — so the load a tuned environment can legitimately
-          receive is `1500 x (distinct callers)`, against dev's one or two 0.25 vCPU tasks and a
-          shared `db.t4g.micro` sized from the 20 req/s baseline above. The table's arithmetic still
-          holds per caller; what it no longer bounds is the deployment.
-          **This is a re-sizing decision, deliberately not made by the fix** — the four still move
-          together, and they are still settings to revert rather than a new baseline. The reasoning
-          is in
-          the client address is taken from the proxy chain, which is the trust boundary;
-          `SCVS_THROTTLE_LIMIT` is unaffected in kind, since it was always per process.
-
-          ★ **What this cost, and what closed it.** E2E-SEC-12 used to require the submission route
-          to answer 429 within a hardcoded 60 requests. At the old dev ceiling of 30 it was *this*
-          tier that tripped it — the 60 submit quota was never reached. Under the table above the
-          abuse quota is the binding tier in both environments and neither trips inside a 60-request
-          ramp, so SEC-12 failed by construction in dev and staging alike from 2026-08-26, and S15
-          had no environment covering it automatically. **Closed 2026-08-27**: SEC-12 now sizes both
-          legs from `SCVS_E2E_QUOTA_SUBMIT` the way SEC-11 already did, and bursts them concurrently
-          because a fixed window cannot be filled by a sequential ramp. CI exports that value from
-          `config/deploy/<env>/verification-svc.json` — this file's `required_in` marking on
-          `SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW` is what keeps the exported number true. **Raising a
-          quota therefore now raises what SEC-12 sends** (`quota + 20` per leg, one concurrent burst):
-          the four
-          overrides are still load-testing settings to revert, not a new baseline.
-
-          Revert all four overrides, in both environments, together when the performance work ends.
-
-          ★ **All four carry `required_in: [dev, staging]`, and that is a rule this file should apply
-          more widely than it does.** `required: no` is the right GLOBAL answer for every knob here —
-          the service supplies a working default and a bare deployment boots. But the moment an entry
-          names a value under `envs:`, it is asserting that a specific environment has that value,
-          and `assert-config-contract` checks only what `required`/`required_in`/`required_when` mark
-          — so an unmarked `envs:` entry is a claim nothing verifies. That is not hypothetical: on
-          2026-08-26 these four were found absent from BOTH live task definitions while this file had
-          claimed dev and staging set SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW=60 since it was written, and
-          the environments had been running the product default of 6. The 2026-08-21 composer
-          incident was the same shape, and `required_in` was invented for it.
-
-          **~25 other entries still declare `envs:` values with nothing enforcing them** (the
-          `verifier-policy` block, the `arweave` group, SCVS_PUBLISHER_PREFIX, SCVS_ENABLE_AGGREGATOR
-          and others — several `fail: silent`, which is the worst class to leave unchecked). Closing
-          them is a separate, deliberate pass: only the three services with `config_contract: true`
-          serve a report, so marking one on `web`, `builder`, `composer` or `db-migrate` would
-          declare a control that cannot run — worse than none.
+          A deployment that raises any of the four should mark all four `required: true` in its own
+          deploy contracts, so `assert-config-contract` fails a deploy that silently runs the product
+          defaults instead. The E2E quota suite sizes its bursts from the contract's
+          SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW, so raising that quota raises what the suite sends.
       SCVS_ABUSE_FINGERPRINT_KEY:
         type: string
         required: yes
@@ -1076,8 +961,6 @@ services:
       SCVS_ABUSE_MAX_PER_WINDOW:
         type: number
         default: 18
-        envs: { dev: 600, staging: 150 }
-        required_in: [dev, staging]
         note: >-
           Per-window budget for `POST /v1/preflight`. Was the single ceiling every guarded route
           shared; now one of two tiers, and the default dropped from 30 to 18 so that 18 + 6 + 6
@@ -1088,8 +971,6 @@ services:
       SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW:
         type: number
         default: 6
-        envs: { dev: 1500, staging: 375 }
-        required_in: [dev, staging]
         note: >-
           The stricter tier. Applied to `POST /v1/verifications` and `POST /v1/uploads/source` — one
           caller in one flow, so one number — but the counter is keyed per route, so each gets its
@@ -1106,18 +987,10 @@ services:
           benchmark hammers — so the effective submission ceiling is this number, whatever
           SCVS_THROTTLE_LIMIT says.
 
-          **dev and staging raise it for load testing (2026-08-26)**, to 1500 and 375 — the
-          `60R x 1.25` row of the derivation table in SCVS_THROTTLE_LIMIT's note, from write-path
-          baselines of 20 and 5 req/s. Read that note before moving any of the four; this one is
-          where the whole tuning's cost lands, because it is the tier that decides. Both values sit
-          far above what the E2E suite bursts from its single egress fingerprint (E2E-PERF-01
-          releases 20 concurrent submissions; E2E-SEC-11 sends quota+20 and is skipped entirely
-          unless SCVS_E2E_QUOTA_SUBMIT names the quota). E2E-SEC-12 reads the same
-          variable since 2026-08-27 and sends `quota + 20` per leg, so it now scales with whatever
-          this value is instead of failing against a hardcoded 60-request ramp. staging used to hold
-          60 for exactly that reason; it no longer does.
-
-          Any environment that is not dev or staging keeps 6.
+          One of the four limits sized together — see SCVS_THROTTLE_LIMIT's note — and the one whose
+          cost lands, because it is the tier that decides. The E2E quota suites (E2E-SEC-11,
+          E2E-SEC-12) read it as SCVS_E2E_QUOTA_SUBMIT and send `quota + 20` per leg, so they scale
+          with it.
       SCVS_STREAM_ABUSE_MAX_PER_WINDOW:
         type: number
         default: 12
@@ -1194,11 +1067,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: config/legal-documents.example.json
-        envs:
-          {
-            dev: config/legal-documents.json,
-            staging: config/legal-documents.json,
-          }
         code: services/verification-svc/src/modules/legal/legal.source.ts::loadLegalDocumentsSource
         note: >-
           Which `scvs-legal-documents-v1` bundle this deployment serves as its Terms of Service and
@@ -1249,7 +1117,6 @@ services:
           source: literal,
           inject: ecs-secrets,
           default: 5002,
-          envs: { dev: 5002, staging: 5002 },
           note: loopback health check only,
         }
       SERVICE_ENTRYPOINT:
@@ -1260,7 +1127,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: verification-svc
-        envs: { dev: orchestrator-svc, staging: orchestrator-svc }
         dto_exempt: true
         code: docker/service.Dockerfile (the container CMD, not TypeScript)
         note: >-
@@ -1295,7 +1161,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: 14400000
-        envs: { dev: "14400000", staging: "14400000" }
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           Same env var, same default, as verification-svc's entry of the same name — each service
@@ -1505,7 +1370,6 @@ services:
       SCVS_BATCH_JOB_DEFINITION_ARN_AMD64:
         type: string
         required: no
-        required_in: [dev, staging]
         fail: first-use
         source: terraform
         value_from_output: batch.builder_job_definition_amd64
@@ -1569,8 +1433,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: env_json
-        envs: { dev: presigned_url, staging: presigned_url }
-        required_in: [dev, staging]
         code: services/orchestrator-svc/src/config/configuration.ts
         note: >-
           ★ Transitional — and **no longer optional in a deployed environment**.
@@ -1590,7 +1452,6 @@ services:
       SCVS_COMPOSER_JOB_QUEUE_ARN:
         type: string
         required: no
-        required_in: [dev, staging]
         fail: first-use
         source: terraform
         value_from_output: batch.composer_job_queue_arn
@@ -1621,7 +1482,6 @@ services:
       SCVS_COMPOSER_JOB_DEFINITION_ARN:
         type: string
         required: no
-        required_in: [dev, staging]
         fail: first-use
         source: terraform
         value_from_output: batch.composer_job_definition
@@ -1647,7 +1507,6 @@ services:
       SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI:
         type: string
         required: no
-        required_in: [dev, staging]
         fail: first-use
         source: terraform
         value_from_output: ecr.composed_environments_uri
@@ -1735,7 +1594,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: disabled
-        envs: { dev: irys, staging: irys }
         observable: value
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
@@ -1768,7 +1626,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: devnet
-        envs: { dev: devnet, staging: devnet }
         observable: value
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
@@ -1816,11 +1673,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: "https://gateway.irys.xyz"
-        envs:
-          {
-            dev: "https://gateway.irys.xyz",
-            staging: "https://gateway.irys.xyz",
-          }
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
           The gateway an archived report's results_urls entry is built against
@@ -1836,7 +1688,6 @@ services:
       SCVS_WORKER_CONCURRENCY:
         type: number
         default: 1
-        envs: { dev: 1, staging: 1 }
         note: >-
           Clamped to 8. Slots rotate round-robin across ticks so 1 does not starve newer jobs, but
           only one job advances per tick — raise it when verifications routinely overlap.
@@ -1988,7 +1839,6 @@ services:
           source: literal,
           inject: ecs-secrets,
           default: 5001,
-          envs: { dev: 5001, staging: 5001 },
         }
       SERVICE_ENTRYPOINT:
         type: string
@@ -1998,7 +1848,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: verification-svc
-        envs: { dev: query-svc, staging: query-svc }
         dto_exempt: true
         code: docker/service.Dockerfile (the container CMD, not TypeScript)
         note: >-
@@ -2019,7 +1868,6 @@ services:
       SCVS_QUERY_THROTTLE_LIMIT:
         type: number
         default: 600
-        envs: { dev: 6000, staging: 6000 }
         code: services/query-svc/src/config/configuration.ts::configuration
         note: >-
           The global read budget (`@nestjs/throttler`'s guard, registered globally in app.module.ts),
@@ -2035,9 +1883,7 @@ services:
           submission routes are throttled more tightly than read routes, and E2E-SEC-12 measures
           that relation by bursting `/api/query/v1/wasms` against the submission ceiling. The probe
           sends QUOTA_SUBMIT + max(20, 5%) requests, so this value must exceed that or the case
-          fails on the query leg and reports it as a violation of S15. At the dev and staging
-          submission ceiling of 60 the probe is 80 requests; the 6000 set there leaves the
-          relation unambiguous under load testing.
+          fails on the query leg and reports it as a violation of S15.
 
           Health and `/internal/config-contract` carry `@SkipThrottle()` — a probe refused with 429
           is a probe that failed, and the quota would deregister a task for being polled. The OpenAPI
@@ -2052,7 +1898,6 @@ services:
       SCVS_QUERY_ADDRESS_THROTTLE_LIMIT:
         type: number
         default: 60
-        envs: { dev: 600, staging: 600 }
         code: services/query-svc/src/modules/results/results.controller.ts::queryByContract
         note: >-
           A `@Throttle` override on `GET /api/query/v1/contracts/:network/:contract_id` only, so it
@@ -2132,14 +1977,8 @@ services:
       STELLAR_RPC_URL_MAINNET:
         type: string
         required: false
-        required_in: [dev, staging]
         fail: first-use
         tier: infrastructure
-        envs:
-          {
-            dev: "https://mainnet.sorobanrpc.com",
-            staging: "https://mainnet.sorobanrpc.com",
-          }
         code: services/query-svc/src/config/configuration.ts::configuration
         note: >-
           Soroban RPC for mainnet address lookup. **No default: Stellar hosts no public mainnet
@@ -2147,14 +1986,11 @@ services:
           `GET /v1/query/mainnet/contracts/...` fails at the first request rather than at boot —
           deliberately, so a testnet-only deployment still starts.
 
-          dev AND staging both point at the public community endpoint mainnet.sorobanrpc.com
-          (verified healthy 2026-08-24) so the E2E suite's mainnet read-only cases (E2E-NET-01) can
-          resolve addresses in either. A public endpoint in plaintext is the exception this entry's
-          header comment allows. staging joined dev on 2026-08-27 — this variable and
-          SCVS_MAINNET_RPC_URL are one capability wearing two names (they take the same endpoint from
-          one Terraform input, `module.ecs.mainnet_rpc_url`), so they move together or query-svc
-          resolves mainnet addresses for verifications the verifier itself cannot run. See that
-          entry's note for the rule. Any environment beyond these two supplies its own node.
+          The E2E suite's mainnet read-only cases (E2E-NET-01) need it set. A public endpoint in
+          plaintext is the exception this entry's header comment allows. This variable and
+          SCVS_MAINNET_RPC_URL are one capability wearing two names, so they take the same endpoint
+          and move together, or query-svc resolves mainnet addresses for verifications the verifier
+          itself cannot run. See that entry's note for the rule.
       SCVS_QUERY_ALLOW_INSECURE_RESULT_ROOTS:
         type: boolean
         default: false
@@ -2207,7 +2043,6 @@ services:
         tier: knob
         inject: ecs-secrets
         default: ~
-        envs: { dev: "true", staging: "true" }
         code: docker/web-entrypoint.sh -> clients/web/src/config/features.ts::isAggregatorEnabled
         note: >-
           `"true"` makes `/query` reachable; unset or `"false"` leaves it a redirect. Substituted
@@ -2229,7 +2064,6 @@ services:
         tier: knob
         inject: docker-build-arg
         default: ""
-        envs: { dev: "", staging: "" }
         code: clients/web/src/lib/http.ts::getQueryApiBase
         note: >-
           Read only by the aggregator page, which is the one thing in the console that talks to
@@ -2245,7 +2079,6 @@ services:
         tier: knob
         inject: docker-build-arg
         default: ~
-        envs: {}
         code: clients/web/src/config/features.ts::isAggregatorEnabled
         note: >-
           **Local development only** — `pnpm run dev:web`, where there is no container and no
@@ -2261,7 +2094,6 @@ services:
         tier: knob
         inject: docker-build-arg
         default: ~
-        envs: { dev: "", staging: "" }
         code: clients/web/src/lib/http.ts::getApiBase
         note: >-
           Must be the EMPTY STRING, which the client treats as "same origin" — correct under the
@@ -2319,7 +2151,6 @@ services:
         tier: knob
         inject: batch-job-definition
         default: development
-        envs: { dev: production, staging: production }
         code: services/builder/src/entrypoint.ts
         note: >-
           Declared separately from the `base` group rather than inherited: the sandbox inherits no
@@ -2476,7 +2307,6 @@ services:
         source: literal
         inject: batch-job-definition
         default: development
-        envs: { dev: production, staging: production }
         code: services/composer/src/entrypoint.ts
         tier: knob
       SCVS_COMPOSER_PARAMS_JSON:
@@ -2562,8 +2392,7 @@ services:
           read from. That is how staging's table came to hold no usable row while the deploy pipeline
           stayed green.
 
-          `inject: ecs-run-task-override` is the only accurate answer, and it is why this entry
-          carries no `envs:`. This task has no secret of its own (`stores_of: target`): its task
+          `inject: ecs-run-task-override` is the only accurate answer. This task has no secret of its own (`stores_of: target`): its task
           definition references the target service's secrets, and only for the variables this block
           and `postgres` declare. So a value recorded here could reach nothing: the only channel into
           the task is the `run-task` `containerOverrides` the workflow composes, and the variable
@@ -2573,7 +2402,7 @@ services:
           artifact as `<env>/trusted-verifiers.json` — the same carrier, and the same ownership shape,
           as `<env>/<service>.json` — and `db-migrate.yml` plants it in the task and points this
           variable at where it planted it. That path is a pipeline-internal detail, identical in every
-          environment, which is what an `envs:` map here would have wrongly claimed to decide.
+          environment.
 
           The two spellings this entry held until 2026-09-21 — `config/trusted-verifiers.dev.json`
           and `config/trusted-verifiers.staging.json` — named files that are NOT in the image and

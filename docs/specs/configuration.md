@@ -44,7 +44,8 @@ Verified by: `eng-tools/check-taskdef-boundary.mjs`, `docs/invariants.md` rule 2
 
 A running service exposes its own configuration contract — which variables it received, at what
 observability level (`presence`, `value`, or `digest`) — and a deployment's report is checked
-against the manifest's expectation for that level. This is what proves a value actually reached
+against the manifest's expectation for that level, with the expected values and any extra
+requirements taken from that deployment's own `config/deploy/<env>/<service>.json`. This is what proves a value actually reached
 the process, as opposed to what a task definition merely declares.
 
 Verified by: `eng-tools/assert-config-contract.mjs`, `packages/config/src/env-contract.generated.ts`.
