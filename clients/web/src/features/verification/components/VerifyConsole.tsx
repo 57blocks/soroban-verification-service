@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { SiteFooter } from "@/components/site-footer";
-import { DotFieldLight } from "@/components/ui/dot-field";
+import { DotLatticeLight } from "@/components/ui/dot-lattice";
 import { SiteNav } from "@/components/site-nav";
 import { useVerificationConsole } from "../hooks/use-verification-console";
 import type { VerifyMode } from "../types";
@@ -73,7 +73,7 @@ export const VerifyConsole = ({
 
   return (
     <main className="relative min-h-screen bg-surface-alt font-sans leading-normal text-ink antialiased">
-      <DotFieldLight fadeStart={540} fadeEnd={760} />
+      <DotLatticeLight fadeStart={540} fadeEnd={760} />
       <div className="relative z-[1]">
         <SiteNav />
 
