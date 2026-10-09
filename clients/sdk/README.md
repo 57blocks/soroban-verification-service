@@ -227,9 +227,9 @@ const client = newClient({
 
 ## Support policy
 
-- **Semantic versioning.** A breaking change to the exported surface is a major. The package sits at
-  `0.x` until its first public release: while `0.x`, semver permits breaking changes in a minor, and
-  the changelog will name each one rather than leaning on that permission.
+- **Semantic versioning.** A breaking change to the exported surface is a major. While the package is
+  at `0.x`, semver permits breaking changes in a minor; the changelog names each one rather than
+  leaning on that permission.
 - **Runtimes.** Node **>= 20** (`crypto.subtle` and `AbortSignal.timeout` are the constraint), and any
   browser with WebCrypto in a secure context. An insecure browser context has no `crypto.subtle`: pass
   `options.hasher` to `fetchAndVerifyResultUrl` — `clients/web`'s `format.util.ts` shows the
@@ -310,20 +310,9 @@ makes the table above a guarantee rather than a convention.
 Pin an exact version in anything you ship. `@dev` and `@staging` move on every qualifying merge and are
 for trying a change before it is released, not for depending on.
 
-A version is **immutable** — npm never replaces one. A fix ships as a new version, which is why
-`0.1.0` is still in the registry with declarations a TypeScript consumer cannot resolve
-(the api-extractor fix
-landed after it). **Do not use `0.1.0`.**
+A version is **immutable** — npm never replaces one, so a fix ships as a new version. `0.0.0` only
+reserves the package name and contains no code; the first release is `0.1.0`.
 
 Consumers inside this monorepo (`clients/web`, `services/query-svc`) depend on `workspace:*` instead, and
 should keep doing so: they need the types from the same commit, and a pinned published version would be a
 second number to bump with a silent failure mode when nobody does.
-
-**The public npm release** also settles the package name and npm ownership — a business
-decision, not an engineering one.
-
-## One window that has closed
-
-The clean break to `newClient`'s shape was free **exactly once, before the first real publish**.
-`0.1.0` was published on 2026-09-03, so that window is **spent**: changing the shape now is a breaking
-change owed a major version, not a free correction. This matters to whoever finishes that work.
