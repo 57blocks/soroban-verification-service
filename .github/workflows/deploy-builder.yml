@@ -205,7 +205,7 @@ jobs:
               IMAGE="${IMAGE_FOR_ARCH[$ARCH]}"
               if [ -z "$FAMILY" ] || [ "$FAMILY" = "null" ]; then
                 echo "::error::$ENV's CI descriptor names no ${ARCH} builder job-definition family." \
-                     "Apply soroban-aws-infrastructure (batch_builder_job_definition_name_amd64 +" \
+                     "Apply your infrastructure (batch_builder_job_definition_name_amd64 +" \
                      "ci_descriptor schema_version 2) to $ENV before deploying the builder."
                 exit 1
               fi

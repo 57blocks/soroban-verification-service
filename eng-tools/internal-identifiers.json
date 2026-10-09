@@ -42,6 +42,21 @@
         "scvs-github-actions-"
       ]
     },
+    "internal-repository": {
+      "why": "The name of a private repository of ours tells a reader where the deployment's configuration lives, and is a link nobody outside can follow.",
+      "matches": "a hyphenated token whose SHA-256, lower-cased, is in `digests`, so this file names none of them",
+      "redacts-to": "nothing — rewrite it as \"your infrastructure\" or \"the operations repository\" by hand, so the export fails instead",
+      "digests": [
+        "166b7e3323fd3c0da40f214093a9ae4b067534fae479d57e6f1aa6324f138215",
+        "04603f38766e9083ce9c0e15cf2dfe1a9ff6b85798efac13458c4a518f91c104",
+        "3db6c1afe426f4c5e381750be0e17ac1fd3cad35382c1a39b0a927bf626fecc9"
+      ]
+    },
+    "secrets-manager-arn": {
+      "why": "A Secrets Manager ARN ends in the random six-character suffix AWS gives one secret in one account.",
+      "matches": "arn:aws:secretsmanager:<region>:<account>:secret:<name>-<six letters or digits>",
+      "redacts-to": "nothing — write the secret's name, or `<name>-<suffix>`, by hand, so the export fails instead"
+    },
     "internal-tracker": {
       "why": "A tracker URL or issue key cites a record an outside reader cannot open, and names our instance.",
       "matches": "any *.atlassian.net host, and `<KEY>-<number>` for a project key in `keys` below, in any case",
@@ -52,6 +67,9 @@
     }
   },
   "pending": {
+    ".github/workflows/db-migrate.yml": {
+      "internal-repository": 1
+    },
     "packages/db/prisma/migrations/20260818084712_drop_tables_moved_to_db_query/migration.sql": {
       "deployment-resource-name": 2
     }
