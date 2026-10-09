@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-/** Asserts deployed services' config-contract reports against `config/env-manifest.yaml`. */
-import { readFileSync } from "node:fs";
+/** Asserts deployed services' config-contract reports against `config/env-manifest.yaml` and the deployment's own contracts. */
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { loadManifest, observabilityOf, resolveManifest } from "./env-manifest.mjs";
 
 const args = process.argv.slice(2);
-const envIndex = args.indexOf("--env");
-const targetEnv = envIndex === -1 ? "dev" : args[envIndex + 1];
-const files = args.filter((a, i) => a !== "--env" && i !== envIndex + 1 && !a.startsWith("--"));
+const contractsIndex = args.indexOf("--contracts");
+const contractsDir = contractsIndex === -1 ? null : args[contractsIndex + 1];
+const files = args.filter((a, i) => !a.startsWith("--") && i !== contractsIndex + 1);
 
-if (!files.length) {
-  console.error("usage: assert-config-contract.mjs [--env dev] <report.json>...");
+if (!contractsDir || !files.length) {
+  console.error("usage: assert-config-contract.mjs --contracts <config/deploy/<env> dir> <report.json>...");
   process.exit(2);
 }
 
@@ -21,6 +22,19 @@ const checked = { presence: 0, value: 0, digest: 0 };
 const unverifiable = [];
 const undecidable = [];
 let quietlyPresenceOnly = 0;
+let targetEnv = null;
+
+function contractVariables(service) {
+  const path = join(contractsDir, `${service}.json`);
+  if (!existsSync(path)) return null;
+  const contract = JSON.parse(readFileSync(path, "utf8"));
+  targetEnv ??= contract.target_env;
+  return {
+    ...(contract.environment ?? {}),
+    ...(contract.secrets?.variables ?? {}),
+    ...(contract.build_args ?? {}),
+  };
+}
 
 function evaluateRequiredWhen(clause, report) {
   const match = /^\s*([A-Z0-9_]+)\s*(==|!=)\s*(.+?)\s*$/.exec(String(clause));
@@ -37,17 +51,13 @@ function evaluateRequiredWhen(clause, report) {
   return op === "==" ? actual === expected : actual !== expected;
 }
 
-function requirement(entry, report) {
+function requirement(entry, declared, report) {
   if (entry.required === true || entry.required === "yes") {
     return { required: true, why: `required (fail: ${entry.fail})` };
   }
 
-  const requiredIn = entry.required_in;
-  if (Array.isArray(requiredIn) && requiredIn.includes(targetEnv)) {
-    return {
-      required: true,
-      why: `required in ${targetEnv} per required_in: [${requiredIn.join(", ")}] (fail: ${entry.fail})`,
-    };
+  if (declared?.required === true) {
+    return { required: true, why: `required by the deploy contract (fail: ${entry.fail})` };
   }
 
   if (entry.required_when) {
@@ -92,8 +102,14 @@ for (const [service, report] of reports) {
     failures.push(`${service}: no such service in the manifest`);
     continue;
   }
+  const declaredVariables = contractVariables(service);
+  if (!declaredVariables) {
+    failures.push(`${service}: no deploy contract at ${join(contractsDir, `${service}.json`)}`);
+    continue;
+  }
 
   for (const [name, entry] of resolved.allowed) {
+    const declared = declaredVariables[name];
     const reported = report.variables?.[name];
 
     if (reported === undefined) {
@@ -104,7 +120,7 @@ for (const [service, report] of reports) {
       continue;
     }
 
-    const { required, why: requiredWhy } = requirement({ ...entry, name }, report);
+    const { required, why: requiredWhy } = requirement({ ...entry, name }, declared, report);
     if (required) {
       const isPresent = reported !== false;
       if (!isPresent) {
@@ -120,14 +136,14 @@ for (const [service, report] of reports) {
       checked.presence += 1;
     }
 
-    const expected = entry.envs?.[targetEnv];
+    const expected = declared?.value_is_authoritative === false ? undefined : declared?.value;
 
     if (expected === "") {
       if (reported === false) {
         checked.value += 1;
       } else {
         failures.push(
-          `${service}: ${name} must be EMPTY in ${targetEnv} — the manifest records "" — but the ` +
+          `${service}: ${name} must be EMPTY in ${targetEnv} — the deploy contract records "" — but the ` +
             `service reports ${reported === true ? "a non-empty value" : JSON.stringify(reported)}`
         );
       }
@@ -141,7 +157,7 @@ for (const [service, report] of reports) {
     ) {
       if (String(reported) !== String(expected)) {
         failures.push(
-          `${service}: ${name} is ${JSON.stringify(reported)} but the manifest records ` +
+          `${service}: ${name} is ${JSON.stringify(reported)} but the deploy contract records ` +
             `${JSON.stringify(String(expected))} for ${targetEnv}`
         );
       } else {
