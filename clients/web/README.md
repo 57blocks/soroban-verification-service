@@ -165,10 +165,11 @@ does not exist. The console states the verdict and leaves both digests in the ra
 
 ## The hero background
 
-`components/ui/hero-flow.tsx` is the landing hero's background: one fragment shader drawing a
-domain-warped noise field as pale ink, on a plain WebGL context with no library. The pointer, and
-four slow wandering sources while nobody is moving it, add a local swirl to the warp; the wanderers
-hand over to the pointer within a quarter of a second and come back two seconds after it stops.
+`components/ui/hero-flow.tsx` is the landing hero's background: a small incompressible fluid
+simulation on a plain WebGL2 context with no library, drawn as pale ink wherever the fluid is
+moving. The pointer stirs it as it moves, and four slow wandering sources stir it while nobody is
+moving it; the wanderers hand over to the pointer within a quarter of a second and come back two
+seconds after it stops.
 
 - **It does not mount under `prefers-reduced-motion: reduce`.** The hero's own static wash is the
   design; the flow is an enhancement on top of it, switched off rather than slowed down.
@@ -178,16 +179,20 @@ hand over to the pointer within a quarter of a second and come back two seconds 
 - **It writes premultiplied colour** — `gl_FragColor` is `color * alpha, alpha` and the context is
   created with `premultipliedAlpha: true`. Straight alpha over a white page darkens the backdrop
   instead of tinting it, and reads as grey smoke.
-- **It renders at half the device resolution** and is stretched by CSS; the field is soft enough
-  that the difference does not show, and it quarters the fragment work.
+- **It simulates on a grid of one cell per four CSS pixels and draws at half the device
+  resolution**, stretched by CSS; the ink is soft enough that the difference does not show.
+- **It needs a renderable half-float texture** (`EXT_color_buffer_float` or
+  `EXT_color_buffer_half_float`). Without one it draws nothing, and the hero's static wash stands
+  alone as it does under reduced motion.
 
 It pauses when the hero scrolls out of view or the tab is hidden, and it reads the pointer from a
 window listener with the canvas `pointer-events-none`, so the CTA and the nav keep their clicks.
 
 ## The dot lattice
 
-`components/ui/dot-lattice.tsx` draws a canvas grid of accent-coloured dots that move away from the
-pointer and spring back. `DotLatticeDark` is the closing CTA's background; `DotLatticeLight` sits
+`components/ui/dot-lattice.tsx` draws a canvas grid of accent-coloured dots that bulge away from the
+pointer and spring back: a little while it rests, and much further, for about a second, when it
+moves. `DotLatticeDark` is the closing CTA's background; `DotLatticeLight` sits
 behind the console, faded out between `fadeStart` and `fadeEnd` pixels from the top. It is
 `pointer-events: none`, so its section is `relative` and the content is lifted above it with
 `relative` — nothing else has to know it is there.

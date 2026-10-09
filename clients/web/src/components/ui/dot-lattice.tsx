@@ -6,18 +6,22 @@ interface Tone {
   spacing: number;
   radius: number;
   alpha: number;
-  glow: number;
   reach: number;
   push: number;
+  surge: number;
+  spread: number;
 }
 
-const DARK: Tone = { spacing: 14, radius: 1.1, alpha: 0.26, glow: 0.5, reach: 130, push: 16 };
-const LIGHT: Tone = { spacing: 16, radius: 1.2, alpha: 0.4, glow: 0.35, reach: 110, push: 12 };
+const DARK: Tone = { spacing: 13, radius: 2.2, alpha: 0.28, reach: 200, push: 18, surge: 55, spread: 300 };
+const LIGHT: Tone = { spacing: 13, radius: 2.6, alpha: 0.42, reach: 200, push: 18, surge: 55, spread: 300 };
 
-const ALPHA_LEVELS = 12;
+const ALPHA_LEVELS = 50;
 const SPRING = 0.08;
 const DAMPING = 0.82;
 const SETTLED = 0.05;
+const SPREAD_FLOOR = Math.exp(-3);
+const ENERGY_PER_PX = 1 / 140;
+const ENERGY_DECAY = 0.96;
 
 export interface DotLatticeProps {
   fadeStart?: number;
@@ -47,6 +51,7 @@ const DotLattice = ({ tone, fadeStart = 0, fadeEnd = 0 }: DotLatticeProps & { to
     let velX = new Float32Array(0);
     let velY = new Float32Array(0);
     let pointer: { x: number; y: number } | null = null;
+    let energy = 0;
     let visible = true;
     let frame = 0;
 
@@ -86,7 +91,8 @@ const DotLattice = ({ tone, fadeStart = 0, fadeEnd = 0 }: DotLatticeProps & { to
     };
 
     const step = () => {
-      let moving = false;
+      energy = pointer && energy * ENERGY_DECAY > 0.005 ? energy * ENERGY_DECAY : 0;
+      let moving = energy > 0;
       for (let i = 0; i < homeX.length; i++) {
         let targetX = 0;
         let targetY = 0;
@@ -94,10 +100,11 @@ const DotLattice = ({ tone, fadeStart = 0, fadeEnd = 0 }: DotLatticeProps & { to
           const dx = homeX[i] - pointer.x;
           const dy = homeY[i] - pointer.y;
           const distance = Math.hypot(dx, dy);
-          if (distance < tone.reach && distance > 0.001) {
-            const strength = (1 - distance / tone.reach) ** 2 * tone.push;
-            targetX = (dx / distance) * strength;
-            targetY = (dy / distance) * strength;
+          if (distance > 0.001) {
+            const rest = distance < tone.reach ? (1 - distance / tone.reach) ** 2 * tone.push : 0;
+            const surge = Math.max(0, Math.exp(-distance / tone.spread) - SPREAD_FLOOR) * tone.surge * energy;
+            targetX = (dx / distance) * (rest + surge);
+            targetY = (dy / distance) * (rest + surge);
           }
         }
         velX[i] = (velX[i] + (targetX - offX[i]) * SPRING) * DAMPING;
@@ -122,11 +129,7 @@ const DotLattice = ({ tone, fadeStart = 0, fadeEnd = 0 }: DotLatticeProps & { to
       for (let i = 0; i < homeX.length; i++) {
         const x = homeX[i] + offX[i];
         const y = homeY[i] + offY[i];
-        const nearness = pointer
-          ? Math.max(0, 1 - Math.hypot(homeX[i] - pointer.x, homeY[i] - pointer.y) / tone.reach)
-          : 0;
-        const alpha = Math.min(1, (tone.alpha + tone.glow * nearness) * fadeAt(homeY[i]));
-        const level = Math.round(alpha * ALPHA_LEVELS);
+        const level = Math.round(tone.alpha * fadeAt(homeY[i]) * ALPHA_LEVELS);
         if (level > 0) buckets[level].push(x, y);
       }
       buckets.forEach((points, level) => {
@@ -158,12 +161,14 @@ const DotLattice = ({ tone, fadeStart = 0, fadeEnd = 0 }: DotLatticeProps & { to
       const y = event.clientY - rect.top;
       const inside = x > -tone.reach && y > -tone.reach && x < width + tone.reach && y < height + tone.reach;
       if (!inside && !pointer) return;
+      if (inside && pointer) energy = Math.min(1, energy + Math.hypot(x - pointer.x, y - pointer.y) * ENERGY_PER_PX);
       pointer = inside ? { x, y } : null;
       wake();
     };
 
     const onPointerLeave = () => {
       pointer = null;
+      energy = 0;
       wake();
     };
 
