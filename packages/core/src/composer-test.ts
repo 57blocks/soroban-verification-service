@@ -71,7 +71,7 @@ test("CE1: ComposerJobParams has no field capable of carrying submission data", 
     assert.equal(
       forbidden in composerParams(),
       false,
-      `ComposerJobParams must never carry ${forbidden} — see ADR-017 §6 and this test's comment.`,
+      `ComposerJobParams must never carry ${forbidden} — see docs/specs/build-environments.md §5.`,
     );
   }
 });

@@ -3,8 +3,8 @@
 
 ## Summary
 
-<!-- What changed and why. Link the feature docs (docs/features/<feature>/) or the rule in
-     docs/invariants.md that authorizes this behaviour. If neither exists and this is more than a
+<!-- What changed and why. Link the rule in docs/invariants.md or the section of
+     docs/specs/ that authorizes this behaviour. If neither exists and this is more than a
      trivial fix, that is worth explaining here. -->
 
 ## Test plan

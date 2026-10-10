@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sv.blocksmith.co/schemas/stellar-trusted-verifiers-list-1.0.schema.json",
-  "$comment": "Contract Verification Aggregation SEP (draft) — an aggregator's Trusted Verifiers List, TRD 2.1 §5.5 / §5.7. The Registry API draft left verifier discovery undefined; this is where the SEP defines it. Closed for a producer; a consumer validates with additionalProperties relaxed (IMPLEMENTATION-SPEC CV6). No public_key: nothing is signed and this SEP defines no signature for 1.0, so a key field would have no producer and no consumer — see docs/features/report-artifact/decisions/verification-results-are-not-signed.md.",
+  "$comment": "Contract Verification Aggregation SEP (draft) — an aggregator's Trusted Verifiers List, TRD 2.1 §5.5 / §5.7. The Registry API draft left verifier discovery undefined; this is where the SEP defines it. Closed for a producer; a consumer validates with additionalProperties relaxed (IMPLEMENTATION-SPEC CV6). No public_key: nothing is signed and this SEP defines no signature for 1.0, so a key field would have no producer and no consumer.",
   "title": "Trusted Verifiers List (Aggregation SEP 1.0)",
   "description": "The body of GET /v1/verifiers on an aggregator, listing every verifier it aggregates — paused and disabled members included. Without this route, the promise that an aggregator never silently omits a verifier is one a consumer cannot check. The list is authored by the aggregating operator; a verifier describes itself and does not admit itself to anyone's list, which is why no verifier-registration API exists.",
   "type": "object",

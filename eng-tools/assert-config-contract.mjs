@@ -189,7 +189,7 @@ for (const [groupName, group] of Object.entries(manifest.groups ?? {})) {
     failures.push(
       `group ${groupName}: cannot verify its identical-across invariant — no report for ` +
         `${missing.join(", ")}. This is the single most likely misconfiguration in the deployment ` +
-        `(§6.4) and it has nothing else detecting it, so a missing report is a failure, not a skip`
+        `and nothing else detects it, so a missing report is a failure, not a skip`
     );
     continue;
   }
@@ -207,7 +207,7 @@ for (const [groupName, group] of Object.entries(manifest.groups ?? {})) {
       `group ${groupName}: DIGESTS DISAGREE — ` +
         [...digests].map(([s, d]) => `${s}=${d}`).join(", ") +
         `. The writer and the reader are configured differently, so reads will look somewhere ` +
-        `nothing was ever written. Nothing else in the system detects this (§6.4)`
+        `nothing was ever written. Nothing else in the system detects this`
     );
   } else {
     checked.digest += 1;

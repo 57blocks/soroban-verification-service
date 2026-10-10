@@ -1,7 +1,7 @@
 # Invariants
 
 Rules that must remain true after the code implementing them is rewritten. This document replaces
-the 21 ADRs that used to live in `docs/adr/` — an ADR's design reasoning, alternatives considered,
+the project's 21 ADRs — an ADR's design reasoning, alternatives considered,
 and migration history stop being true the moment the code they describe is rewritten; these rules
 do not.
 

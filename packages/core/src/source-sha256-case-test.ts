@@ -106,7 +106,7 @@ function main(): void {
   assert.equal(
     keyFromUppercase,
     keyFromLowercase,
-    "two spellings of one hash describe the same bytes and must share one rebuild — §E K1",
+    "two spellings of one hash describe the same bytes and must share one rebuild",
   );
 
   assert.notEqual(

@@ -85,7 +85,7 @@ if (!containers.length) {
 const declared = new Set([...environment.keys(), ...secretRefs.keys()]);
 
 const prohibitions = [
-  ["forbidden", contract.forbidden?.variables ?? [], "ADR-002 trust boundary"],
+  ["forbidden", contract.forbidden?.variables ?? [], "forbidden by its deploy contract"],
   ["per_invocation", contract.per_invocation?.variables ?? [], "injected at SubmitJob time"],
   ["not_in_deployment", contract.not_in_deployment?.variables ?? [], "valid locally, wrong deployed"],
 ];
@@ -113,7 +113,7 @@ if (contract.kind === "batch-job-definition" && SANDBOX_SERVICES.has(service)) {
       fail(
         "jobRoleArn",
         `TRUST BOUNDARY: ${service} is a Batch job definition and must hold no business credentials, ` +
-          `but ecsProperties.taskProperties[${i}] carries taskRoleArn=${task.taskRoleArn} (ADR-002)`
+          `but ecsProperties.taskProperties[${i}] carries taskRoleArn=${task.taskRoleArn} (rule 1 of docs/invariants.md)`
       );
     }
   }
@@ -122,7 +122,7 @@ if (contract.kind === "batch-job-definition" && SANDBOX_SERVICES.has(service)) {
       fail(
         "jobRoleArn",
         `TRUST BOUNDARY: ${service} is a Batch job definition and must hold no business credentials, ` +
-          `but ${where} carries jobRoleArn=${container.jobRoleArn} (ADR-002)`
+          `but ${where} carries jobRoleArn=${container.jobRoleArn} (rule 1 of docs/invariants.md)`
       );
     }
   }
@@ -131,7 +131,7 @@ if (contract.kind === "batch-job-definition" && SANDBOX_SERVICES.has(service)) {
       "batch-secrets",
       `TRUST BOUNDARY: ${service} is a Batch job definition and must not reference secrets ` +
         `(${[...secretRefs.keys()].join(", ")}) — reading one requires a grant its execution role ` +
-        `does not and must not have (ADR-002, ADR-025 decision 1)`
+        `does not and must not have (rules 1 and 23 of docs/invariants.md)`
     );
   }
 }
@@ -201,7 +201,7 @@ for (const [name, valueFrom] of secretRefs) {
   if (secretName.startsWith("ssm:")) {
     fail(
       "valueFrom",
-      `${name} reads ${secretName} from SSM Parameter Store — ADR-025 moved configuration to ` +
+      `${name} reads ${secretName} from SSM Parameter Store — configuration lives in ` +
         `Secrets Manager, and a lingering SSM reference means the render is mixing two schemes`
     );
     continue;
@@ -235,7 +235,7 @@ if (failures.length) {
   for (const f of failures) console.error(`  ✗ ${f}`);
   console.error(
     `\n${failures.length} boundary violation(s). Nothing is registered. This check is not a ` +
-      `formality to be relaxed — see ADR-002 and ADR-025 decision 5.`
+      `formality to be relaxed — see rules 1 and 23 of docs/invariants.md.`
   );
   process.exit(1);
 }

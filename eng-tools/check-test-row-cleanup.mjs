@@ -38,7 +38,7 @@ for (const dir of SERVICE_TEST_DIRS) {
       findings.push(
         `${path} opens a real Prisma connection (createPrismaClient/new PrismaClient) but has neither ` +
           `a CreatedRows import (@scvs/db/testing) nor an afterAll/afterEach with an id-scoped ` +
-          `deleteMany (\`in:\`) — see ADR-015`,
+          `deleteMany (\`in:\`) — see rule 21 of docs/invariants.md`,
       );
     } else if (!opensRealConnection && importsCreatedRows) {
       notes.push(`${path} imports CreatedRows but this script found no real Prisma connection in it`);

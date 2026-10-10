@@ -70,7 +70,7 @@ export class VerificationsController {
   @ApiExtraModels(...submitResponseVariants)
   @ApiOkResponse({ schema: submitIncompleteSchema(), description: "Manifest required — `incomplete`." })
   @ApiAcceptedResponse({ schema: submitAcceptedSchema(), description: "A job exists for this target — `queued`." })
-  @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_request, a rejected manifest, a rejected upload reference, or terms_acceptance_required / terms_version_outdated — both distinct from invalid_request (TRD §8.1)." })
+  @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_request, a rejected manifest, a rejected upload reference, or terms_acceptance_required / terms_version_outdated — both distinct from invalid_request." })
   @ApiNotFoundResponse({ type: ApiErrorResponse, description: "The target was not found on the named network." })
   @ApiResponse({ status: 502, type: ApiErrorResponse, description: "The chain could not be read to answer this submission." })
   @ApiServiceUnavailableResponse({ type: ApiErrorResponse, description: "draining" })

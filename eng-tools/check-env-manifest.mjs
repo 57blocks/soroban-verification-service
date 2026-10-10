@@ -472,7 +472,7 @@ for (const [where, block] of declarationSites) {
       report(
         "J tier",
         `${where}: ${varName} is tier: ${tier} but inject: ${entry.inject} — expected ` +
-          `${TIER_INJECT[tier].join(" or ")} (ADR-016)`
+          `${TIER_INJECT[tier].join(" or ")} (rule 22 of docs/invariants.md)`
       );
     }
   }
@@ -489,7 +489,7 @@ for (const [where, block] of declarationSites) {
       report(
         "M resolvable",
         `${where}: ${varName} is source: terraform but declares no value_from_output — CI cannot ` +
-          `resolve it from /scvs/<env>/ci/descriptor, so it would reach the process unset (ADR-025)`
+          `resolve it from /scvs/<env>/ci/descriptor, so it would reach the process unset`
       );
     }
   }
@@ -544,7 +544,7 @@ for (const [where, block] of declarationSites) {
       "I generated",
       `${OUTPUT_PATH} no longer matches ${MANIFEST} — run \`pnpm run generate:env-contract\` and ` +
         `commit the result. Editing the generated file by hand is not a shortcut: what may be ` +
-        `reported is a decision that belongs in the manifest (ADR-013)`
+        `reported is a decision that belongs in the manifest (docs/specs/configuration.md §4)`
     );
   }
 }
@@ -569,7 +569,8 @@ for (const [name, svc] of services) {
     report(
       "I generated",
       `TRUST BOUNDARY: builder declares config_contract: true — the sandbox must never serve a ` +
-        `configuration report (ADR-002); it has no HTTP listener and no configuration worth reporting`
+        `configuration report (rule 1 of docs/invariants.md); it has no HTTP listener and no ` +
+        `configuration worth reporting`
     );
   }
   if (!svc.env_dto) {

@@ -72,8 +72,8 @@ if (missing.length) {
     console.error(`  ✗ ${path}  — needed by ${consumers.join(", ")}`);
   }
   console.error(
-    `\nSee docs/design/ci-descriptor-v3-request.md. Until these exist, a deploy would leave those ` +
-      `variables unset, which no health check would catch.`
+    `\nYour infrastructure must publish these fields in /scvs/${targetEnv}/ci/descriptor. Until it ` +
+      `does, a deploy would leave those variables unset, which no health check would catch.`
   );
   process.exit(1);
 }

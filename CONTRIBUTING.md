@@ -61,7 +61,7 @@ CI (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
   `typecheck` as repo-wide coverage.
 - Turborepo caches by content, so a second run of an untouched package replays its log rather than
   rebuilding. If you suspect a stale result, `turbo run <task> --force`. `test` is uncached on
-  purpose — see docs/technology-stack.md.
+  purpose: its suites run against a real Postgres, so a replayed log would prove nothing.
 - Infrastructure is not defined in this repository — see
   [rule 8 of `docs/invariants.md`](docs/invariants.md). If your change alters what a
   deployment has to provide (a new environment variable, a new bucket prefix, a new IAM action), say

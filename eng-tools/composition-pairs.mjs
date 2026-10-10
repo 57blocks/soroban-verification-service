@@ -67,7 +67,7 @@ export const COMPOSITION_PAIRS = [
     expect: "either",
     dimensions: ["cli-release-shape"],
     why:
-      "Demand rank 3: 240 live contracts. 26.x is the version range the corpus scan §7 found on Docker " +
+      "Demand rank 3: 240 live contracts. 26.x is a version range published on Docker " +
       "Hub with no corresponding `stellar-cli-docker` release, so its release assets are the least " +
       "likely in the list to match the shape the resolver assumes.",
   },
@@ -106,7 +106,7 @@ export const COMPOSITION_PAIRS = [
     expect: "either",
     dimensions: ["rust-toolchain"],
     why:
-      "The corpus's class-B `rsver` floor (scan §6 lists 1.81.0 as the lowest stable). Pinned to a CLI " +
+      "The lowest stable `rsver` among class-B contracts on chain is 1.81.0. Pinned to a CLI " +
       "already proven above so a failure isolates to the Rust half. ANSWERED 2026-08-19: `wasm32v1-none` " +
       "arrived in Rust 1.84.0, so 1.81.0 does not have it and no shipped template can serve this pair. " +
       "The row now asserts the *shape of the refusal* rather than the outcome — it must end on " +
@@ -157,7 +157,7 @@ export const COMPOSITION_PAIRS = [
     expect: "either",
     dimensions: ["rejection"],
     why:
-      "Negative control (🔁 in `docs/qa/cases/README.md`'s vocabulary). `components.spec.ts` proves " +
+      "Negative control. `components.spec.ts` proves " +
       "`unreleased_cli` against a stubbed 404; this proves the same against GitHub's real answer, which " +
       "is what makes the other rows' green meaningful — a matrix that cannot go red for a version that " +
       "does not exist is not observing anything.",
@@ -193,8 +193,8 @@ export function assertChainFormClivers() {
   throw new Error(
     `composition-pairs.mjs: ${bare.length} row(s) carry a cliver with no '#<rev>': ` +
       `${bare.map((pair) => `${pair.id} (${pair.cliver})`).join(", ")}.\n` +
-      "A recorded cliver is `<version>#<rev>` (corpus scan §9 — the demand table's bare form is a " +
-      "normalisation). Without the rev, `smokeTestComposedImage` fails closed and the row reports " +
+      "A recorded cliver is `<version>#<rev>`; a bare version is only a normalisation. Without the " +
+      "rev, `smokeTestComposedImage` fails closed and the row reports " +
       "`smoke_test_disagreed` about a perfectly good image. Resolve the release commit with:\n" +
       "  curl -s https://api.github.com/repos/stellar/stellar-cli/git/ref/tags/v<version> | jq -r .object.sha",
   );

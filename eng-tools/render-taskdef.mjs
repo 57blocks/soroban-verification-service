@@ -54,7 +54,7 @@ const contract = (() => {
 })();
 
 if (contract.kind !== "ecs-service" && contract.kind !== "ecs-task") {
-  die(`${service} is kind: ${contract.kind} — this renders ECS task definitions only (ADR-025 keeps Batch on plaintext)`);
+  die(`${service} is kind: ${contract.kind} — this renders ECS task definitions only (a Batch job definition takes no configuration secret)`);
 }
 
 const descriptor =

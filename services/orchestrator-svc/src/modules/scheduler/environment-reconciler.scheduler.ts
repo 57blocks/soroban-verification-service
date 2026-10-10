@@ -130,7 +130,7 @@ export class EnvironmentReconcilerScheduler implements OnModuleInit, OnModuleDes
 
     this.logger.warn(
       "no Batch record and no receipt for a silent composition; resetting it to pending for a fresh " +
-        "attempt (safe by ADR-017 §4 — nothing is pushed until every checksum verifies)",
+        "attempt (safe: nothing is pushed until every checksum verifies)",
       fields
     );
     this.metrics.counter("environment_composition_total", 1, {

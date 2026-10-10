@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sv.blocksmith.co/schemas/stellar-verification-error-1.0.schema.json",
-  "$comment": "Contract Verification Results SEP (draft) — the error envelope, TRD 2.1 §8.1 / §5.7, IMPLEMENTATION-SPEC RC2 and RC6. THE ONE DOCUMENT HERE THAT IS NOT CLOSED FOR A PRODUCER, deliberately: the others carry claims a consumer parses, and closing them is what makes a version mean something. An error body carries one parsed field (`error`) and one human one (`message`); everything else is diagnostic, and forbidding it would delete operator-facing detail to buy a consistency no consumer asked for. See docs/features/submit-flow/decisions/the-error-envelope-is-the-one-open-document.md.",
+  "$comment": "Contract Verification Results SEP (draft) — the error envelope, TRD 2.1 §8.1 / §5.7, IMPLEMENTATION-SPEC RC2 and RC6. THE ONE DOCUMENT HERE THAT IS NOT CLOSED FOR A PRODUCER, deliberately: the others carry claims a consumer parses, and closing them is what makes a version mean something. An error body carries one parsed field (`error`) and one human one (`message`); everything else is diagnostic, and forbidding it would delete operator-facing detail to buy a consistency no consumer asked for.",
   "title": "Contract Verification Error (Results SEP 1.0)",
   "description": "The body of every non-2xx response on a verifier's or an aggregator's API. One shape across every route, so a client that has learned to read one failure has learned them all.",
   "type": "object",
