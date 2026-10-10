@@ -108,10 +108,19 @@ work for both sides than a polling loop tight enough to feel responsive.
 
 `GET .../v1/verifications/:job_id/log` (and `DELETE` on the same path)
 
-The submit response carries a one-time access token for this job's build log
-(`x-build-log-token` on the request). No token, or the wrong one, is 401 `build_log_token_required`.
-The token also **expires** — past that point every request is 410 `build_log_expired`, token or not.
-`DELETE` is idempotent: deleting a log that's already gone still returns 204.
+The submit response carries a one-time access token for this job's build log (`build_log_token`);
+send it back in the `X-Build-Log-Token` header. A `GET` is checked in this order:
+
+| Request | Answer |
+| --- | --- |
+| No token | 401 `build_log_token_required`, whether or not the job exists |
+| A wrong token, or a job that doesn't exist | 404 `not_found` — the two are deliberately indistinguishable |
+| The right token, after the log's access window has closed | 410 `build_log_expired` |
+| The right token, on a job that recorded no log | 404 `not_found`, with the job's `job_status` |
+
+So only the token holder ever learns that a log **expired**; anyone else gets the 404. `DELETE` takes
+the same token and answers 401 and 404 the same way. It closes the access window at once — a later
+`GET` is 410 — and it is idempotent: deleting a log that's already gone still returns 204.
 
 Keep the token somewhere your own tooling can retrieve it when you need to debug a failed build — it
 is not recoverable from the job status response, and once it expires there is no way to re-derive it.
@@ -124,8 +133,9 @@ the OpenAPI document's job, not this table's:
 | Code | Route | Meaning |
 | --- | --- | --- |
 | `invalid_job_id` | status, log | The path segment isn't a UUID at all |
-| `build_log_token_required` | log | Missing or wrong `x-build-log-token` |
-| `build_log_expired` | log | Token was valid once; the log's access window has closed |
+| `build_log_token_required` | log | No `X-Build-Log-Token` header was sent |
+| `not_found` | status, log | No such job — or, on the log route, a token that doesn't match it |
+| `build_log_expired` | log | The token matched, but the log's access window has closed |
 | `source_archive_too_large` | upload | Body exceeded the size limit |
 | `invalid_manifest` | submit | `manifest.schema` is missing/wrong, `source_sha256` isn't a 64-char hex string, or neither `source_uri` nor `upload_id` was given |
 | `source_archive_not_chain_recorded` | submit | The submitted archive's hash disagrees with a `source_sha256` this contract already records on chain |
