@@ -113,14 +113,17 @@ out by their timeouts.
 
 | Class | Disposition |
 | :---- | :---- |
-| Job rows, including every failed job | Retained for the verifier's operating lifetime; never published or archived |
+| Job rows that never wrote the published record (`published_updated_at` unset), every failed job included | Deleted once older than `SCVS_JOB_RETENTION_MS` (default 30 days), with their upload references, their build-log object, and their rebuild once no other job references it. A row still owing an archive, source-publish, or status-link write is kept until that clears. Never published or archived |
+| Job rows that wrote the published record | Retained for the verifier's operating lifetime |
 | `source_sha256` | Retained even when the source bytes are not |
 | Source submitted to a dry run | Never stored durably, whatever was declared |
 | Source with a public declaration | Stored durably, served on the public API, addressed by `source_sha256` |
 | Source without a public declaration | Deleted at job termination, on every terminal path |
 | Submitter identity | Never collected |
 
-Verified by: `services/orchestrator-svc/src/modules/source-resolution/source-resolution.service.ts`
+Verified by: `services/orchestrator-svc/test/job-retention.spec.ts`,
+`services/orchestrator-svc/test/job-retention-scheduler.spec.ts`,
+`services/orchestrator-svc/src/modules/source-resolution/source-resolution.service.ts`
 (`deleteObject` on the non-public path).
 
 Verification is independent of storage: a submission whose source is not stored still receives a real
