@@ -117,7 +117,7 @@ export function validateSubmittedManifest(
 /** Each `bldopt` entry is one complete flag, with its value in `=` form. */
 function firstBldoptShapeViolation(bldopt: string[]): string | undefined {
   const rule =
-    "SEP-58 §1 records one complete flag per entry, with its value in `=` form (status-object constraint SO5).";
+    "SEP-58 §1 records one complete flag per entry, with its value in `=` form, which is the shape the published status object requires.";
 
   for (let index = 0; index < bldopt.length; index += 1) {
     const entry = bldopt[index];
@@ -129,7 +129,7 @@ function firstBldoptShapeViolation(bldopt: string[]): string | undefined {
     }
 
     if (/^-[A-Za-z]/.test(entry)) {
-      return `manifest.bldopt entry ${JSON.stringify(entry)} is a short flag, which SO5 cannot represent: ${rule} Use the long form, e.g. \`--package=my-contract\` rather than \`-p my-contract\`.`;
+      return `manifest.bldopt entry ${JSON.stringify(entry)} is a short flag, which the status object cannot represent: ${rule} Use the long form, e.g. \`--package=my-contract\` rather than \`-p my-contract\`.`;
     }
 
     return `manifest.bldopt entry ${JSON.stringify(entry)} is not a complete flag: ${rule}`;

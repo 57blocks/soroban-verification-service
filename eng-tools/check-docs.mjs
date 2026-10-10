@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Static: checks every tracked `.md` for budgets, relative links, `Verified by:` targets and invariant refs. No network. */
+/** Static: checks every tracked `.md` for budgets, relative links, `Verified by:` targets and invariant refs, and every tracked file for a `docs/` path that does not exist. No network. */
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, normalize, relative } from "node:path";
@@ -47,6 +47,28 @@ for (const doc of docs) {
       fail(`${doc} links to "${target}", which resolves to ${resolved} — not a tracked file`);
     }
   }
+}
+
+const trackedDirs = new Set(
+  tracked.flatMap((f) => {
+    const parts = f.split("/").slice(0, -1);
+    return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+  }),
+);
+const inTree = (p) => trackedSet.has(p) || trackedDirs.has(p);
+const DOCS_PATH = /(?<![A-Za-z0-9_./@:-])((?:\.\.\/)*docs\/(?:[A-Za-z0-9_./-]*[A-Za-z0-9_/-])?)/g;
+// An applied migration is content-hashed, so a dead path in one cannot be edited away.
+for (const file of tracked.filter((f) => !/(^|\/)migrations\//.test(f))) {
+  if (!existsSync(join(ROOT, file))) continue;
+  const text = read(file);
+  if (text.includes("\0")) continue;
+  text.split("\n").forEach((line, i) => {
+    for (const [, ref] of line.matchAll(DOCS_PATH)) {
+      const path = ref.replace(/\/+$/, "");
+      if (inTree(path.replace(/^(\.\.\/)+/, "")) || inTree(normalize(join(dirname(file), path)))) continue;
+      fail(`${file}:${i + 1} names ${ref}, which is not a tracked file or directory`);
+    }
+  });
 }
 
 const VERIFIED_BY_START = /^\*?Verified by:\*?\s*(.*)$/;

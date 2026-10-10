@@ -102,8 +102,8 @@ export class ComposerDispatchService {
       throw new ConfigurationError(
         envName,
         `${envName} is required to compose a build environment for a cli-legacy target. ` +
-          "Set the composer fleet's configuration (ADR-017), or expect every cli-legacy verification " +
-          "to fail preparation.",
+          "Set the composer fleet's configuration (docs/infrastructure-requirements.md §2.6), or expect " +
+          "every cli-legacy verification to fail preparation.",
       );
     }
     return value;

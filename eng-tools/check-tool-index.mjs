@@ -35,7 +35,7 @@ const callableText = tracked
   .map(read)
   .join("\n");
 const documentText = tracked
-  .filter((f) => f.endsWith(".md") && !f.startsWith("docs/features/"))
+  .filter((f) => f.endsWith(".md"))
   .map(read)
   .join("\n");
 const toolText = new Map(toolFiles.map((f) => [f, read(join(TOOLS, f))]));
@@ -67,7 +67,7 @@ for (const file of toolFiles) {
     if (!scriptsByTool.has(file)) {
       fail(
         `${TOOLS}/${file} is a command (it has a shebang) and no package.json script names it — ` +
-          `give it one, or move it to docs/features/<feature>/eng-tools/`
+          `give it one, or remove it`
       );
     }
     continue;

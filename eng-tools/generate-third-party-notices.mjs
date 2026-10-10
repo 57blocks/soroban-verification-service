@@ -20,7 +20,7 @@ const COPYLEFT = /\b(GPL|AGPL|LGPL|MPL|EPL|CDDL|OSL|EUPL|SSPL)\b/i;
 const copyleft = Object.keys(byLicence).filter((l) => COPYLEFT.test(l));
 if (copyleft.length > 0) {
   console.error(`✗ copyleft licence(s) in the production graph: ${copyleft.join(", ")}`);
-  console.error("  ADR-023 chose Apache-2.0 on the basis that there are none. Decide before generating.");
+  console.error("  The project's Apache-2.0 licence rests on there being none. Decide before generating.");
   process.exit(1);
 }
 
@@ -49,7 +49,7 @@ writeFileSync(
     "not edit by hand. Development-only dependencies are excluded: they are not redistributed.",
     "",
     `${total} package(s) across ${licences.length} licence(s). None is copyleft, which is the condition`,
-    "ADR-023's choice of Apache-2.0 rests on.",
+    "the project's Apache-2.0 licence rests on.",
     "",
     "For the Apache-2.0 works below, this file is the NOTICE propagation §4(d) asks for. A package's",
     "own NOTICE, where it ships one, travels inside its published tarball in `node_modules`.",

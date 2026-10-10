@@ -138,13 +138,13 @@ try {
         `the registry served ${name}@${installedManifest.version}, not the ${version} this release published`,
       );
     } else if (!SEMVER.test(installedManifest.version)) {
-      findings.push(`${installedManifest.version} is not a semantic version, which §8.3 requires`);
+      findings.push(`${installedManifest.version} is not a semantic version`);
     }
 
     if (!OPEN_LICENCES.has(installedManifest.license)) {
       findings.push(
-        `the installed manifest declares \`${installedManifest.license ?? "no licence"}\` — §9.1 openness ` +
-          `needs Apache-2.0 or MIT, and ADR-023 settled which`,
+        `the installed manifest declares \`${installedManifest.license ?? "no licence"}\` — the SDK must ` +
+          `carry an open licence, and rule 26 of docs/invariants.md makes it Apache-2.0`,
       );
     }
 
@@ -252,8 +252,8 @@ assert.equal(computeAgreement(parsed.source_code_verifications), "disputed");
         const builtins = [...new Set(readFileSync(bundle, "utf8").match(/["']node:[a-z/]+["']/g) ?? [])];
         if (builtins.length) {
           findings.push(
-            `the installed package's browser bundle still imports ${builtins.join(", ")} — §8.3 promises a ` +
-              `browser, not a browser plus polyfills a consumer supplies`,
+            `the installed package's browser bundle still imports ${builtins.join(", ")} — the SDK promises ` +
+              `to run in a browser without polyfills a consumer supplies`,
           );
         }
       } catch (error) {

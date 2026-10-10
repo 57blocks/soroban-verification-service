@@ -248,7 +248,7 @@ async function pin(oracles) {
             message: `image declares RUST_VERSION=${declared} but the table claims ${oracle.rsver}`,
           });
           console.log(`  ✗ rust : image says ${declared}, table says ${oracle.rsver} — refusing to pin`);
-          console.log("    The tag has moved since corpus scan §7. Update oracles.ts, then re-run.");
+          console.log("    The tag has moved since the table was recorded. Update oracles.ts, then re-run.");
           continue;
         } else {
           console.log(`  rust   : ${declared} ✓ matches the table`);

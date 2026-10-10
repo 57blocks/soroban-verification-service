@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "Black-box end-to-end suite: enters through the public surfaces of a real deployment (docs/qa/e2e-test-plan.md §1.1), stubs no component this project owns.",
+  "description": "Black-box end-to-end suite: enters through the public surfaces of a real deployment and stubs no component this project owns.",
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",

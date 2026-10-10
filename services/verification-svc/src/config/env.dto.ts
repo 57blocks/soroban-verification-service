@@ -24,7 +24,7 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
 
 
 
-  @IsNotEmpty({ message: "SCVS_ABUSE_FINGERPRINT_KEY must be set — see docs/features/retention-and-pseudonymisation/design.md §5" })
+  @IsNotEmpty({ message: "SCVS_ABUSE_FINGERPRINT_KEY must be set — it is the HMAC key rate-limit fingerprints are computed under (config/env-manifest.yaml)" })
   SCVS_ABUSE_FINGERPRINT_KEY!: string;
 
   @IsOptional() @IsNumberString({}, { message: "SCVS_ABUSE_COUNTER_RETENTION_MS must be a number" })

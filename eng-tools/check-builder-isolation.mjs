@@ -93,8 +93,7 @@ for (const entry of entrypoints) {
     findings.push(
       `${label} reaches BOTH: it can start containers (${capability.length} site(s)) and it parses ` +
         `submitted input (${attacker.length} site(s), in ${files_.length} file(s): ${files_.join(", ")}). ` +
-        `CE1 requires source retrieval and extraction to happen in a step that does not hold the ` +
-        `capability`,
+        `source retrieval and extraction must happen in a step that does not hold the capability`,
     );
   }
 
@@ -104,7 +103,7 @@ for (const entry of entrypoints) {
   for (const rel of bothInOneFile) {
     findings.push(
       `${rel} holds the capability AND parses submitted input in the same file — the tightest form ` +
-        `of the CE1 violation`,
+        `of that violation`,
     );
   }
 }
@@ -114,12 +113,11 @@ for (const f of findings) console.log(inGha ? `::error::${f}` : `  ✗ ${f}`);
 
 console.log(
   findings.length
-    ? `\n${findings.length} CE1 finding(s) across ${entrypoints.length} entrypoint(s). Expected until ` +
-        `TRD §10 item 12's materialisation split lands — this output is that work's acceptance ` +
-        `criterion, not a regression.\n` +
+    ? `\n${findings.length} finding(s) across ${entrypoints.length} entrypoint(s): a step that can start ` +
+        `containers must never also retrieve or extract submitted source.\n` +
         `Passing this check is necessary but NOT sufficient: it reasons about reachability, not about ` +
-        `which container the code runs in. See this file's header.`
+        `which container the code runs in.`
     : `✓ no builder entrypoint reaches both container-execution capability and attacker-controlled ` +
-        `input (necessary, not sufficient — see this file's header)`,
+        `input (necessary, not sufficient: it reasons about reachability, not about which container runs it)`,
 );
 process.exit(findings.length ? 1 : 0);

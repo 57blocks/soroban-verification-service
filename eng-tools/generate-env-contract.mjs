@@ -50,7 +50,7 @@ export function render(manifest) {
     "//",
     "// `pnpm run check:env` fails when this file disagrees with the manifest, so editing it here is",
     "// not a shortcut — change the manifest and regenerate. What may be reported is a decision that",
-    "// belongs in the contract, not in code (ADR-013).",
+    "// belongs in the contract, not in code (docs/specs/configuration.md §4).",
     "",
     '/** What the diagnostic endpoint may reveal about a variable. */',
     'export type Observability = "presence" | "value";',

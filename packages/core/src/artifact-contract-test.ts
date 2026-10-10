@@ -144,7 +144,7 @@ test("the current version's snapshot describes the contract as it is now", () =>
       "change: bump BUILD_ARTIFACT_SCHEMA_VERSION (MINOR for a new optional field, MAJOR for anything " +
       "an older reader could reject, including widening an @IsIn) and run " +
       "`pnpm run generate:contract-snapshot`. Editing this file without bumping is the one thing " +
-      "review must refuse — see ADR-022.",
+      "review must refuse — see rules 24 and 25 of docs/invariants.md.",
   );
 });
 
@@ -186,8 +186,8 @@ test("no frozen version lost a shape, a property, or its tolerance of an absent 
   assert.deepEqual(
     breaks,
     [],
-    "the contract broke a version an orchestrator may still be running. ADR-022's rule 1 makes this " +
-      "permanent: only additive or relaxing changes are allowed. A genuinely breaking change needs a " +
+    "the contract broke a version an orchestrator may still be running. Rule 24 of docs/invariants.md " +
+      "makes this permanent: only additive or relaxing changes are allowed. A genuinely breaking change needs a " +
       "MAJOR bump plus a dual-write transition, and the old version's snapshot is deleted only once no " +
       "deployed orchestrator reads it.",
   );
