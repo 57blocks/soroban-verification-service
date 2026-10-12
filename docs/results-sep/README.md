@@ -37,6 +37,13 @@ only after that copy.
 | `stellar-verification-page` | [`schemas/stellar-verification-page-aggregated-1.0.schema.json`](schemas/stellar-verification-page-aggregated-1.0.schema.json) | Aggregation | `GET /v1/wasms` on an aggregator |
 | `stellar-trusted-verifiers-list` | [`schemas/stellar-trusted-verifiers-list-1.0.schema.json`](schemas/stellar-trusted-verifiers-list-1.0.schema.json) | Aggregation | `GET /v1/verifiers` on an aggregator |
 
+**A schema's `$id` names its format; it is not where the file is served.** Each `$id` is
+`https://sv.blocksmith.co/schemas/<file>`, and nothing is hosted there, so dereferencing one fails. A
+validator loads the files from this directory and registers each under its `$id` rather than fetching
+it. A third-party deployment keeps the `$id`s unchanged, because they identify the document format and
+not the deployer. They are rewritten only in the submission commit, see
+[Submission checklist](#submission-checklist).
+
 **Two files, one `schema` value, and that is deliberate.** The bulk-load envelope is shared and only
 `records` differs by role, so the aggregated page is a second file rather than a `oneOf` branch: the
 Results SEP must be implementable, and validatable, by a verifier that has never heard of
