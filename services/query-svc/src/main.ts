@@ -39,7 +39,7 @@ async function bootstrap(): Promise<NestExpressApplication> {
       storage: app.get(ThrottlerStorage),
       limit: configService.get("queryThrottleLimit", { infer: true }),
       ttlMs: 60_000,
-      prefixes: ["/api/query/v1/docs", "/api/query/v1/openapi.json"],
+      prefixes: ["/api/query/v1/docs", "/api/query/v1/docs-yaml", "/api/query/v1/openapi.json"],
     }),
   );
 
