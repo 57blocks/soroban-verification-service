@@ -1,5 +1,5 @@
 import { Controller, Get, Inject, Param, Res } from "@nestjs/common";
-import { SkipThrottle } from "@nestjs/throttler";
+import { Throttle } from "@nestjs/throttler";
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -8,8 +8,10 @@ import {
   ApiOperation,
   ApiParam,
   ApiResponse,
+  ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
 import { RegistryStatusObject } from "@scvs/core";
+import { ApiErrorResponse } from "@scvs/http";
 import type { Response } from "express";
 import {
   RegistryErrorResponse,
@@ -17,13 +19,14 @@ import {
   RegistryStorageUnavailableResponse,
 } from "./wasms.dto.js";
 import { WasmsService } from "./wasms.service.js";
+import { readThrottleLimit } from "../../config/configuration.js";
 
 @Controller()
 export class WasmsController {
   constructor(@Inject(WasmsService) private readonly wasms: WasmsService) {}
 
   @Get("api/verification/v1/wasms/:wasm_hash.json")
-  @SkipThrottle()
+  @Throttle({ default: { limit: readThrottleLimit(), ttl: 60_000 } })
   @ApiOperation({ operationId: "getWasmStatus" })
   @ApiParam({
     name: "wasm_hash",
@@ -48,6 +51,7 @@ export class WasmsController {
     type: RegistryNotFoundResponse,
     description: "No published verification and none in flight.",
   })
+  @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   @ApiResponse({
     status: 503,
     type: RegistryStorageUnavailableResponse,

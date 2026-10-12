@@ -125,7 +125,15 @@ thresholds than read routes. No accounts, no KYC — quotas are the substitute f
 a step toward it. A throttled request returns `rate_limited`, not an opaque body. There is no
 on-demand enqueue from a `GET`.
 
-Verified by: `test/integration/cases/sec/sec-surface-and-quota.spec.ts`
+The public read routes — the bulk-load stream and the per-hash status object — carry a per-caller
+read quota of their own, wide enough for an aggregator paging the stream, and never spend the write
+path's budget. The OpenAPI document and its Swagger UI are registered on the HTTP adapter, where no
+route guard runs, so middleware covers them on the same ceiling under a separate counter. Only health,
+job status and the progress stream are exempt: a submitter polling its own job is never refused.
+
+Verified by: `test/integration/cases/sec/sec-surface-and-quota.spec.ts`,
+`services/verification-svc/test/read-quota.spec.ts` (the public read routes carry a quota, the
+documentation surface, throttled outside the guard chain)
 
 ## There is no trusted-image admin surface
 

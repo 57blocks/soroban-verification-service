@@ -7,8 +7,10 @@ import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
 import { SwaggerModule } from "@nestjs/swagger";
+import { ThrottlerStorage } from "@nestjs/throttler";
 import cors from "cors";
 import helmet from "helmet";
+import { adapterRouteThrottle } from "@scvs/http";
 import { AppModule } from "./app.module.js";
 import { LegalService } from "./modules/legal/legal.service.js";
 import { buildOpenApiDocument } from "./openapi.js";
@@ -38,6 +40,17 @@ async function bootstrap(): Promise<NestExpressApplication> {
   app.enableCors({ origin: "*", methods: ["GET", "POST"] });
 
   const document = buildOpenApiDocument(app);
+
+  // Must be registered before SwaggerModule.setup, whose routes no Nest guard reaches.
+  app.use(
+    adapterRouteThrottle({
+      storage: app.get(ThrottlerStorage),
+      limit: app.get<AppConfigService>(ConfigService).get("readThrottleLimit", { infer: true }),
+      ttlMs: 60_000,
+      prefixes: ["/api/verification/v1/docs", "/api/verification/v1/openapi.json"],
+    }),
+  );
+
   SwaggerModule.setup("api/verification/v1/docs", app, document, {
     customSiteTitle: "Soroban Verification API",
     jsonDocumentUrl: "api/verification/v1/openapi.json",

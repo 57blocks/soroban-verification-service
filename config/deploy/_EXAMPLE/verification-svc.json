@@ -372,6 +372,15 @@
         "store": "config",
         "json_key": "SCVS_R2_REGION"
       },
+      "SCVS_READ_THROTTLE_LIMIT": {
+        "required": false,
+        "fail": "n/a",
+        "source": "literal",
+        "default": "600",
+        "note": "optional — the service supplies this default; set it only to override",
+        "store": "config",
+        "json_key": "SCVS_READ_THROTTLE_LIMIT"
+      },
       "SCVS_REQUEST_TIMEOUT_MS": {
         "required": false,
         "fail": "n/a",

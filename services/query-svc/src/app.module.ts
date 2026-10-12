@@ -5,8 +5,6 @@ import { DbModule } from "@scvs/db-query";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerModule } from "@nestjs/throttler";
 
-import { FixedWindowThrottlerStorage } from "./common/fixed-window-throttler.storage.js";
-import { RateLimitGuard } from "./common/rate-limit.guard.js";
 import { NotFoundModule } from "./common/not-found.module.js";
 import configuration, { type AppConfigService } from "./config/configuration.js";
 import { HealthModule } from "./modules/health/health.module.js";
@@ -15,7 +13,7 @@ import { AggregationModule } from "./modules/aggregation/aggregation.module.js";
 import { ResultsModule } from "./modules/results/results.module.js";
 import { VerifiersModule } from "./modules/verifiers/verifiers.module.js";
 import { QuerySvcEnvDto } from "./config/env.dto.js";
-import { LegacyHttpExceptionFilter } from "@scvs/http";
+import { FixedWindowThrottlerStorage, LegacyHttpExceptionFilter, RateLimitGuard } from "@scvs/http";
 
 @Module({
   imports: [

@@ -142,7 +142,7 @@ the OpenAPI document's job, not this table's:
 | `upload_not_found` | submit | `manifest.upload_id` was never uploaded, already expired, or already consumed |
 | `upload_expired` | submit | The upload existed but its 30-minute window closed |
 | `source_hash_mismatch` | submit | `manifest.source_sha256` doesn't match the hash computed at upload time |
-| `rate_limited` | preflight, submit | Abuse-guard quota hit |
+| `rate_limited` | any route but status, events and health | A per-caller quota was hit |
 | `invalid_network` | preflight, submit | Network isn't a recognised value |
 | `invalid_request` | preflight, submit | Neither a contract ID nor a Wasm hash was given |
 

@@ -70,6 +70,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "SCVS_R2_ACCOUNT_ID", observable: "presence", group: "result-storage", digest: false },
     { name: "SCVS_R2_ENDPOINT", observable: "presence", group: "result-storage", digest: false },
     { name: "SCVS_R2_REGION", observable: "presence", group: "result-storage", digest: false },
+    { name: "SCVS_READ_THROTTLE_LIMIT", observable: "presence", digest: false },
     { name: "SCVS_REQUEST_TIMEOUT_MS", observable: "presence", group: "base", digest: false },
     { name: "SCVS_RESULT_ROOT", observable: "presence", group: "result-storage", digest: false },
     { name: "SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS", observable: "presence", digest: false },

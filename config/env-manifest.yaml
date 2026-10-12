@@ -885,10 +885,10 @@ services:
           effective ceiling is N x this, unevenly split — it is a cheap first line, not the policy.
           The policy is the Postgres-backed AbuseGuard below, which is shared across instances.
 
-          ★ It counts every route **except the read-only ones marked `@SkipThrottle`** — health,
-          job status and build-log, the SSE stream, bulk-load, wasm status. Polling your own
-          accepted job spends none of this budget; preflight and the two submission routes do share
-          this one counter. So this tier must stay **above** the sum of the per-route abuse budgets,
+          ★ It counts every route **except the ones marked `@SkipThrottle`** — health, job status
+          and the SSE stream — and the public read routes, which carry SCVS_READ_THROTTLE_LIMIT
+          instead. Polling your own accepted job spends none of this budget; preflight and the two
+          submission routes do share this one counter. So this tier must stay **above** the sum of the per-route abuse budgets,
           or it becomes the binding limit and the abuse guard — the tier that is actually per
           submitter and actually shared across instances — never fires.
 
@@ -911,6 +911,27 @@ services:
           deploy contracts, so `assert-config-contract` fails a deploy that silently runs the product
           defaults instead. The E2E quota suite sizes its bursts from the contract's
           SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW, so raising that quota raises what the suite sends.
+      SCVS_READ_THROTTLE_LIMIT:
+        type: number
+        default: 600
+        code: services/verification-svc/src/config/configuration.ts::readThrottleLimit
+        note: >-
+          The read budget, in requests per fixed 60-second window per caller PER ROUTE per process,
+          on the public read routes: bulk-load (`GET /v1/wasms`, `/v1/wasms.json`) and wasm status
+          (`GET /v1/wasms/{wasm_hash}.json`). A `@Throttle` override, so it *replaces*
+          SCVS_THROTTLE_LIMIT on those routes rather than stacking under it, and a reader never
+          spends the write path's budget.
+
+          Wide on purpose: an aggregator paging this verifier's bulk-load stream and a client polling
+          a status object are the routes' intended callers. It bounds one caller's database scan
+          rate, not the deployment's.
+
+          The OpenAPI document and its Swagger UI are covered by express middleware on this same
+          ceiling, under their own counter: `SwaggerModule.setup()` registers on the HTTP adapter,
+          where no Nest guard runs.
+
+          ★ Read off `process.env` when the controllers are defined, like
+          SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE, so changing it needs a restart.
       SCVS_ABUSE_FINGERPRINT_KEY:
         type: string
         required: yes

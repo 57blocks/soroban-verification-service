@@ -12,6 +12,8 @@ process.env.SCVS_SUBMIT_ABUSE_MAX_PER_WINDOW = String(NO_QUOTA_IN_TESTS);
 
 process.env.SCVS_THROTTLE_LIMIT = String(NO_QUOTA_IN_TESTS);
 
+process.env.SCVS_READ_THROTTLE_LIMIT = String(NO_QUOTA_IN_TESTS);
+
 process.env.SCVS_ABUSE_FINGERPRINT_KEY ||= "test-fingerprint-key";
 
 process.env.SCVS_LEGAL_DOCUMENTS_SOURCE ||= "config/legal-documents.example.json";

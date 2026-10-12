@@ -12,6 +12,10 @@ function numberEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+export function readThrottleLimit(): number {
+  return numberEnv("SCVS_READ_THROTTLE_LIMIT", 600);
+}
+
 const configuration = () => ({
   drainGraceMs: numberEnv("SCVS_DRAIN_GRACE_MS", 15_000),
   port: numberEnv("PORT", 5000),
@@ -35,6 +39,7 @@ const configuration = () => ({
   serviceVersion: process.env.npm_package_version || "0.1.0",
   uploadRateLimitPerMinute: numberEnv("SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE", 60),
   throttleLimit: numberEnv("SCVS_THROTTLE_LIMIT", 60),
+  readThrottleLimit: readThrottleLimit(),
   uploadCleanupIntervalMs: numberEnv("SCVS_UPLOAD_CLEANUP_INTERVAL_MS", 60_000),
   abuseSweepIntervalMs: numberEnv("SCVS_ABUSE_SWEEP_INTERVAL_MS", 300_000),
   stagingSweepJobAgeCeilingMs: numberEnv("SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS", 14_400_000),

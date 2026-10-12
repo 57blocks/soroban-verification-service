@@ -1,6 +1,6 @@
 import { Injectable, type ExecutionContext } from "@nestjs/common";
 import { ThrottlerGuard, type ThrottlerLimitDetail } from "@nestjs/throttler";
-import { ApiError } from "@scvs/http";
+import { ApiError } from "./api-error.js";
 
 @Injectable()
 export class RateLimitGuard extends ThrottlerGuard {
