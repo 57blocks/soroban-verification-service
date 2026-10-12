@@ -67,10 +67,13 @@ deliberately excludes it, since an address-to-hash mapping is not stable across 
 upgrades). It is always resolved live against the ledger via `@stellar/stellar-sdk`'s RPC — never
 cached or published, because a stale pointer for an upgraded contract would attribute a verdict to
 code no longer deployed. A resolution failure (malformed address, unknown network) is a request
-error, not an aggregation over an unknown hash.
+error, not an aggregation over an unknown hash. A ledger that cannot be read is `502
+address_resolution_failed` with a fixed message: the upstream error names the configured RPC
+endpoint, which can carry a provider key, so it goes to the log and never to the caller.
 
 Verified by: `services/query-svc/src/modules/results/stellar-rpc.resolver.ts`,
-`services/query-svc/src/modules/results/address-resolver.ts`;
+`services/query-svc/src/modules/results/address-resolver.ts`,
+`services/query-svc/test/address-resolver.spec.ts` (an upstream failure reaching the caller);
 `test/integration/cases/qry/qry-address-and-openness.spec.ts` (malformed address rejected,
 well-formed-but-undeployed reported not-found, repeated reads create no address-keyed file).
 
@@ -105,7 +108,7 @@ router, so no route-level guard is consulted for them; they are covered by middl
 counter instead, under a budget of their own. Reading the document to exhaustion therefore costs a
 caller nothing of its ability to query.
 
-The counter itself is this service's own. `@nestjs/throttler`'s bundled in-memory storage keys its
+The counter itself is the workspace's own, shared with the Verification API. `@nestjs/throttler`'s bundled in-memory storage keys its
 decay timers by throttler name rather than by caller, so unblocking one caller cancels every
 caller's pending decrement and freezes their counts — a caller who cycles in and out of the blocked
 state ratchets everyone else's count up until they are refused inside their own budget.
@@ -120,11 +123,11 @@ ceiling a deployment configures is the ceiling it runs is a deploy-time property
 task definition is rendered from the contract — not something a client can measure through a
 balancer.
 
-Verified by: `services/query-svc/src/common/fixed-window-throttler.storage.ts` (FixedWindowThrottlerStorage),
-`services/query-svc/test/throttler-storage.spec.ts` (one caller's counter is its own),
-`services/query-svc/src/common/adapter-route-throttle.middleware.ts` (adapterRouteThrottle),
+Verified by: `packages/http/src/fixed-window-throttler.storage.ts` (FixedWindowThrottlerStorage),
+`packages/http/src/fixed-window-throttler.storage-test.ts` (does not inherit a neighbour's count),
+`packages/http/src/adapter-route-throttle.middleware.ts` (adapterRouteThrottle),
 `services/query-svc/test/quota-config.spec.ts` (the two tiers' ordering),
-`services/query-svc/src/common/rate-limit.guard.ts` (rate_limited),
+`packages/http/src/rate-limit.guard.ts` (rate_limited),
 `services/query-svc/src/app.module.ts` (ThrottlerModule),
 `services/query-svc/src/modules/results/results.controller.ts` (queryByContract),
 `services/query-svc/test/rate-limit.spec.ts` (the global read quota,

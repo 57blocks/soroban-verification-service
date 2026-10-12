@@ -1,6 +1,6 @@
 import type { ThrottlerStorage } from "@nestjs/throttler";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { errorBody } from "@scvs/http";
+import { errorBody } from "./api-error.js";
 
 const THROTTLER_NAME = "adapter-routes";
 

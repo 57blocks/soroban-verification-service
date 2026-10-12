@@ -14,6 +14,7 @@ import {
   DEPRECATED_JSON_ROUTE_DESCRIPTION,
   JSON_ROUTE_SUNSET_HTTP_DATE,
   isNetwork,
+  ScvsLogger,
   type Network,
 } from "@scvs/core";
 import { addressThrottleLimit } from "../../config/configuration.js";
@@ -25,6 +26,8 @@ import { ApiError, ApiErrorResponse } from "@scvs/http";
 
 @Controller()
 export class ResultsController {
+  private readonly logger = new ScvsLogger("results");
+
   constructor(
     @Inject(AggregationReadService) private readonly reader: AggregationReadService,
     @Inject(AggregationSyncService) private readonly sync: AggregationSyncService,
@@ -101,9 +104,11 @@ export class ResultsController {
       if (error instanceof MalformedContractIdError) {
         throw new ApiError(400, { error: "invalid_contract_id", message: error.message });
       }
+      // The upstream error names the configured RPC endpoint, which can carry a provider key.
+      this.logger.warn("address resolution failed", { network, error: error instanceof Error ? error : String(error) });
       throw new ApiError(502, {
         error: "address_resolution_failed",
-        message: error instanceof Error ? error.message : String(error),
+        message: "the ledger could not be read to resolve this address; retry shortly",
       });
     }
     if (resolved === undefined) {

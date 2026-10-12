@@ -123,9 +123,9 @@ things):
   sets it unconditionally from the row's key; and an entry with **no** `bulk_load_url` is not served
   at all — that function throws and the caller drops the row (static-only membership is foreclosed).
   The example had neither the ids nor a `bulk_load_url` on its `paused` member.
-- A `429` carrying `rate_limited` comes from the abuse guard, which is mounted on submission routes
-  this SEP does not define. On §§4–5 a `429` is the global throttler, reshaped to `request_failed`.
-  The file it stood in for — an error body with a diagnostic field beside the four — is now §5's
+- The `429` example carried a diagnostic field beside the four, which only the abuse guard emits, and
+  that guard is mounted on submission routes this SEP does not define. On §§4–5 a `429` comes from the
+  in-process throttler and carries `rate_limited` with the four fields alone. The file it stood in for — an error body with a diagnostic field beside the four — is now §5's
   `400 invalid_cursor`, which is a body this SEP's own route emits **and** carries `status_code`.
 - `unavailable_verifiers` names only members of the aggregator's own list, so the peer one example
   reported as unreachable had to be in the list example. It now is.

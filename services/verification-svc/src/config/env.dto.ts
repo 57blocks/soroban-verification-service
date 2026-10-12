@@ -1,5 +1,5 @@
 import { ResultStorageEnvDto } from "@scvs/config";
-import { IsNotEmpty, IsNumberString, IsOptional } from "class-validator";
+import { IsNotEmpty, IsNumberString, IsOptional, Matches } from "class-validator";
 
 export class VerificationSvcEnvDto extends ResultStorageEnvDto {
   // Optional: preflight, submit and the job-status routes must serve without a staging bucket.
@@ -11,6 +11,12 @@ export class VerificationSvcEnvDto extends ResultStorageEnvDto {
 
   @IsOptional() @IsNumberString({}, { message: "SCVS_THROTTLE_LIMIT must be a number" })
   SCVS_THROTTLE_LIMIT?: string;
+
+  @IsOptional()
+  @Matches(/^[1-9]\d*$/, {
+    message: "SCVS_READ_THROTTLE_LIMIT must be a positive whole number of requests per minute",
+  })
+  SCVS_READ_THROTTLE_LIMIT?: string;
 
   @IsOptional() @IsNumberString({}, { message: "SCVS_UPLOAD_CLEANUP_INTERVAL_MS must be a number" })
   SCVS_UPLOAD_CLEANUP_INTERVAL_MS?: string;

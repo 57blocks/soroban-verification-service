@@ -19,6 +19,7 @@
   "dependencies": {
     "@nestjs/common": "^12.1.2",
     "@nestjs/swagger": "^12.0.2",
+    "@nestjs/throttler": "^6.7.1",
     "@scvs/core": "workspace:*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",

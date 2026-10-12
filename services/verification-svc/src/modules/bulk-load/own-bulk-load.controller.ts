@@ -1,6 +1,12 @@
 import { Controller, Get, Header, Inject, Query } from "@nestjs/common";
-import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery } from "@nestjs/swagger";
-import { SkipThrottle } from "@nestjs/throttler";
+import {
+  ApiBadRequestResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTooManyRequestsResponse,
+} from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { JobsRepository } from "@scvs/db";
 import {
   DEPRECATED_JSON_ROUTE_DESCRIPTION,
@@ -12,7 +18,8 @@ import {
   parseBulkLimit,
   parseBulkOrder,
 } from "@scvs/core";
-import { ApiError } from "@scvs/http";
+import { ApiError, ApiErrorResponse } from "@scvs/http";
+import { readThrottleLimit } from "../../config/configuration.js";
 
 const bulkQueryDocs = [
   { name: "order", required: false, enum: ["asc", "desc"] },
@@ -25,13 +32,14 @@ export class OwnBulkLoadController {
   constructor(@Inject(JobsRepository) private readonly jobs: JobsRepository) {}
 
   @Get("api/verification/v1/wasms")
-  @SkipThrottle()
+  @Throttle({ default: { limit: readThrottleLimit(), ttl: 60_000 } })
   @ApiOperation({ operationId: "ownBulkLoad" })
   @ApiQuery(bulkQueryDocs[0])
   @ApiQuery(bulkQueryDocs[1])
   @ApiQuery(bulkQueryDocs[2])
   @ApiOkResponse({ type: OwnBulkLoadPage })
   @ApiBadRequestResponse({ description: "invalid_order | invalid_limit | invalid_cursor" })
+  @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   async bulkLoad(
     @Query("order") orderParam?: string,
     @Query("limit") limitParam?: string,
@@ -50,7 +58,7 @@ export class OwnBulkLoadController {
   }
 
   @Get("api/verification/v1/wasms.json")
-  @SkipThrottle()
+  @Throttle({ default: { limit: readThrottleLimit(), ttl: 60_000 } })
   @ApiOperation({ operationId: "ownBulkLoadJson", deprecated: true, description: DEPRECATED_JSON_ROUTE_DESCRIPTION })
   @Header("Deprecation", "true")
   @Header("Sunset", JSON_ROUTE_SUNSET_HTTP_DATE)
@@ -59,6 +67,7 @@ export class OwnBulkLoadController {
   @ApiQuery(bulkQueryDocs[2])
   @ApiOkResponse({ type: OwnBulkLoadPage })
   @ApiBadRequestResponse({ description: "invalid_order | invalid_limit | invalid_cursor" })
+  @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
   bulkLoadJson(
     @Query("order") orderParam?: string,
     @Query("limit") limitParam?: string,

@@ -4,7 +4,7 @@ import { DrainModule, createEnvValidator, envFilePaths } from "@scvs/config";
 import { DbModule } from "@scvs/db";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { AbuseGuardModule } from "./common/abuse-guard.module.js";
 
 import { NotFoundModule } from "./common/not-found.module.js";
@@ -20,7 +20,7 @@ import { UploadCleanupModule } from "./modules/upload-cleanup/upload-cleanup.mod
 import { VerificationsModule } from "./modules/verifications/verifications.module.js";
 import { WasmsModule } from "./modules/wasms/wasms.module.js";
 import { VerificationSvcEnvDto } from "./config/env.dto.js";
-import { LegacyHttpExceptionFilter } from "@scvs/http";
+import { FixedWindowThrottlerStorage, LegacyHttpExceptionFilter, RateLimitGuard } from "@scvs/http";
 
 @Module({
   imports: [
@@ -45,9 +45,10 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
       // Throttler 6.7's options type cannot resolve Nest 12's `@nestjs/common/interfaces`, which makes `imports` required.
       imports: [],
       inject: [ConfigService],
-      useFactory: (configService: AppConfigService) => [
-        { ttl: 60_000, limit: configService.get("throttleLimit", { infer: true }) },
-      ],
+      useFactory: (configService: AppConfigService) => ({
+        throttlers: [{ ttl: 60_000, limit: configService.get("throttleLimit", { infer: true }) }],
+        storage: new FixedWindowThrottlerStorage(),
+      }),
     }),
     ScheduleModule.forRoot(),
     HealthModule,
@@ -63,7 +64,7 @@ import { LegacyHttpExceptionFilter } from "@scvs/http";
     NotFoundModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_FILTER, useClass: LegacyHttpExceptionFilter },
   ],
 })
