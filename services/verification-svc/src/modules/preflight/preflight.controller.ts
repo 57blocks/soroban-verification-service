@@ -19,7 +19,7 @@ export class PreflightController {
   @ApiOperation({
     operationId: "preflightVerification",
     summary: "Check a contract before submitting it",
-    description: "Reads the deployed Wasm of a contract ID or Wasm hash and reports the build environment it records, whether this verifier accepts it, the build inputs it records and those still missing, and a suggested manifest. Read-only: it creates no job and starts no build.",
+    description: "Reads the deployed Wasm of a contract ID or Wasm hash and reports the build environment it records and whether this verifier accepts it, the build inputs it records and those still missing, and a suggested manifest. Whether a composed environment can actually be built is only found once a job runs. Read-only: it creates no job and starts no build.",
   })
   @ApiBody({ type: PreflightRequestDto })
   @ApiOkResponse({ type: PreflightResponse })

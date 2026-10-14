@@ -13,7 +13,7 @@ export class VerifiersController {
   @ApiOperation({
     operationId: "listVerifiers",
     summary: "List the trusted verifiers",
-    description: "Returns this aggregator's Trusted Verifiers List: every verifier it reads, paused and disabled ones included, each with its `status`.",
+    description: "Returns this aggregator's Trusted Verifiers List: every verifier on it, paused and disabled ones included, each with its `status`. Only `active` verifiers are read.",
   })
   @ApiOkResponse({ type: TrustedVerifiersList })
   list() {

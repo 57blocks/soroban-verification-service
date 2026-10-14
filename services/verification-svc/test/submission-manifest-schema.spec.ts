@@ -14,7 +14,7 @@ const SAMPLE: Record<string, unknown> = {
   upload_id: "0f8b9c2e-3d4a-4b5c-8d6e-7f8091a2b3c4",
   is_public: true,
   bldopt: ["--package=token"],
-  bldarg: ["--locked"],
+  bldarg: ["contract", "build"],
   bldimg: `docker.io/stellar/stellar-cli@sha256:${"b".repeat(64)}`,
 };
 

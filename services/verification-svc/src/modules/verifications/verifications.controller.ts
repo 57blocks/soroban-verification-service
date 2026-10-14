@@ -70,7 +70,7 @@ export class VerificationsController {
   @ApiOperation({
     operationId: "submitVerification",
     summary: "Submit a contract for verification",
-    description: "Creates a verification job for a deployed contract.\n\nSend a `manifest` naming the source — `source_uri`, or the `upload_id` of an upload — and its `source_sha256`. Without a manifest, the service builds one from the contract's on-chain SEP-58 metadata when it can.\n\nAnswers `202` with the queued job, or `200` with `incomplete` and the fields still missing. A new job's `202` carries `build_log_token`, the only way to read its build log later; a submission that matches a job already in flight gets that job back without one. With `dry_run: true` the job builds and compares but publishes nothing.",
+    description: "Creates a verification job for a deployed contract.\n\nSend a `manifest` naming the source — `source_uri`, or the `upload_id` of an upload — and its `source_sha256`. Without a manifest, the service builds one from the contract's on-chain SEP-58 metadata when it can.\n\nAnswers `202` with the queued job, or `200` with `incomplete` when it could not complete the manifest on its own: add the fields named in `missing_fields`, or send a full manifest. A new job's `202` carries `build_log_token`, the only way to read its build log later; a submission that matches a job already in flight gets that job back without one. With `dry_run: true` the job builds and compares but publishes nothing.",
   })
   @ApiBody({ type: SubmitRequestDto })
   @ApiExtraModels(...submitResponseVariants)
@@ -105,6 +105,7 @@ export class VerificationsController {
   })
   @ApiParam({ name: "job_id", format: "uuid" })
   @ApiOkResponse({ type: JobStatusResponse })
+  @ApiNotFoundResponse({ type: ApiErrorResponse, description: "not_found — no such job" })
   @ApiBadRequestResponse({ description: "invalid_job_id" })
   async getJob(
     @Param(
@@ -166,7 +167,7 @@ export class VerificationsController {
   @ApiOperation({
     operationId: "deleteBuildLog",
     summary: "Delete a job's build log",
-    description: "Ends the log's access window at once, so a later read is `410`. Takes the same token as reading it, and succeeds on a log that is already gone.",
+    description: "Ends the log's access window at once, so a later read of a recorded log is `410`. Takes the same token as reading it, and succeeds on a log that is already gone.",
   })
   @ApiHeader({
     name: "x-build-log-token",

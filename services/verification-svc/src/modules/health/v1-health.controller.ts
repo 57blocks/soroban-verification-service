@@ -16,7 +16,7 @@ export class V1HealthController {
   @ApiOperation({
     operationId: "getHealth",
     summary: "Check that the service is up",
-    description: "Answers `status: \"ok\"` and the running `version` while the process is up. It checks no dependency.",
+    description: "Answers `status: \"ok\"` and a `version` string while the process is up. It checks no dependency.",
   })
   @ApiOkResponse({ description: "ok" })
   getHealth(): { status: string; version: string } {

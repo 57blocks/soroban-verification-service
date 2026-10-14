@@ -57,23 +57,29 @@ export class SubmissionManifest {
   @ApiPropertyOptional({
     type: Boolean,
     default: false,
-    description: "Whether the verifier keeps the source and serves it with the result.",
+    description:
+      "Publish the source archive: `true` makes it public at this verifier's result root, linked from the result. Where the operator archives sources permanently, it cannot be withdrawn.",
   })
   is_public?: boolean;
 
   @ApiPropertyOptional({
     type: [String],
-    description: "Options for `stellar contract build`. Leave unset to use what the contract records.",
+    description:
+      "Options for the build, one complete flag per entry, such as `--package=token`. Unset means none: start from preflight's `suggested_manifest`.",
   })
   bldopt?: string[];
 
-  @ApiPropertyOptional({ type: [String], description: "Build arguments. Leave unset to use what the contract records." })
+  @ApiPropertyOptional({
+    type: [String],
+    description: "The Stellar CLI subcommand words, such as `[\"contract\", \"build\"]`. Unset means `contract build`.",
+  })
   bldarg?: string[];
 
   @ApiPropertyOptional({
     type: String,
     deprecated: true,
-    description: "Not used to choose the build environment, which comes from the deployed contract. Kept for older clients.",
+    description:
+      "Not used to choose the build environment, which comes from the deployed contract. Kept for older clients; a malformed value is still rejected.",
   })
   bldimg?: string;
 }

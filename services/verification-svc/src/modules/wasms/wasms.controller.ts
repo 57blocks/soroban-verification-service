@@ -32,7 +32,7 @@ export class WasmsController {
   @ApiOperation({
     operationId: "getWasmStatus",
     summary: "Get this verifier's result for a Wasm hash",
-    description: "Returns the status object this verifier published for the hash, byte for byte as it sits in the result root. Answers `202` with an `unverified` entry while a verification of the hash is queued or running, and `404` when nothing is published and nothing is in flight.",
+    description: "Returns the status object this verifier published for the hash, byte for byte as it sits in the result root. Answers `202` with an `unverified` entry while any verification of the hash is queued or running, a dry run included, even when a result is already published; and `404` when nothing is published and nothing is in flight.",
   })
   @ApiParam({
     name: "wasm_hash",
