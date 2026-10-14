@@ -53,6 +53,7 @@ export class ResultsController {
 
   @Get("api/query/v1/wasms/:wasm_hash")
   @ApiOperation({
+    operationId: "queryByHash",
     summary: "Get every verifier's result for a Wasm hash",
     description: "Returns one attributed entry per listed verifier that has a result for the hash, never merged into one verdict. `agreement` summarises the entries without deciding between them, and `unavailable_verifiers` names the verifiers whose latest read failed.",
   })
@@ -68,6 +69,7 @@ export class ResultsController {
 
   @Get("api/query/v1/contracts/:network/:contract_id")
   @ApiOperation({
+    operationId: "queryByContract",
     summary: "Get every verifier's result for a contract",
     description: "Resolves the contract's current Wasm hash on the ledger on every request, then answers as the by-hash route. It carries a tighter rate limit than the other routes, because each request reads the ledger: resolve once, then read by hash.",
   })

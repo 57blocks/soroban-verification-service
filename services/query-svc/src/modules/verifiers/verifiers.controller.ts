@@ -11,6 +11,7 @@ export class VerifiersController {
 
   @Get()
   @ApiOperation({
+    operationId: "listVerifiers",
     summary: "List the trusted verifiers",
     description: "Returns this aggregator's Trusted Verifiers List: every verifier it reads, paused and disabled ones included, each with its `status`.",
   })

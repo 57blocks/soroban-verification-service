@@ -38,6 +38,7 @@ export class BulkLoadController {
 
   @Get("api/query/v1/wasms")
   @ApiOperation({
+    operationId: "aggregatedBulkLoad",
     summary: "List aggregated results",
     description: "Pages through every Wasm hash any listed verifier has a result for: one record per hash carrying every verifier's entry, ordered by this aggregator's own update time. Pass back the previous page's `cursor` unchanged and upsert by `wasm_hash`. Until the first sync completes it answers `503 aggregation_unavailable`, not an empty page.",
   })
