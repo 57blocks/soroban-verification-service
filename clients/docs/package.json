@@ -1,0 +1,19 @@
+{
+  "name": "soroban-verify-docs",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "vitepress": "2.0.0-alpha.20"
+  }
+}

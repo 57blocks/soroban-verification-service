@@ -24,7 +24,7 @@ ENV SCVS_BUILD_COMMIT=${SCVS_BUILD_COMMIT} \
 
 # Through turbo, not `pnpm --filter`: only turbo's task graph runs the OpenAPI generation first.
 RUN pnpm run generate:api-client \
-    && pnpm exec turbo run build --filter=soroban-verify-web
+    && pnpm exec turbo run build --filter=soroban-verify-web --filter=soroban-verify-docs
 
 # turbo strips variables turbo.json does not declare, and a stripped stamp silently renders "dev".
 RUN stamp=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/web/dist/index.html); \
@@ -38,6 +38,7 @@ RUN stamp=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/w
 FROM nginx:1.30-alpine
 COPY docker/web-nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/clients/web/dist /usr/share/nginx/html
+COPY --from=build /app/clients/docs/dist /usr/share/nginx/html/docs
 
 COPY docker/web-entrypoint.sh /docker-entrypoint.d/40-scvs-runtime-config.sh
 # Both leave the document root: a restart re-renders the template; spa-routes.conf must not be served.

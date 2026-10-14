@@ -91,6 +91,19 @@ for (const path of [`/${nonce}`, "/admin/policy", "/docs-json", "/verify/submit"
   expect(await ask(path), { status: 404, type: "text/html" });
 }
 
+const docsHome = await ask("/docs/");
+if (
+  expect(docsHome, { status: 200, type: "text/html" }) &&
+  !docsHome.body.includes('<meta name="generator" content="VitePress')
+) {
+  fail(`${describe(docsHome)} is not the documentation site — the console's own pages answer text/html too`);
+}
+const docsBare = await ask("/docs");
+if (expect(docsBare, { status: 301 }) && docsBare.location !== "/docs/") {
+  fail(`${describe(docsBare)} redirects to "${docsBare.location}", expected the relative "/docs/"`);
+}
+expect(await ask(`/docs/${nonce}`), { status: 404, type: "text/html" });
+
 const posted = await ask(`/${nonce}`, "POST");
 if (reachable(posted) && posted.status === 405) {
   fail(`${describe(posted)} answers 405 — the default target is refusing the method instead of the path`);
@@ -149,6 +162,6 @@ console.log(
     ? `\n${findings.length} deviation(s) from docs/specs/configuration.md §5. Every position here is ` +
         `black-box, so a red run means a client sees this too.`
     : `✓ ${origin} answers docs/specs/configuration.md §5 at every position: each service its own namespace, /api/ closed with an ` +
-        `envelope, the console's routes served, everything else 404`
+        `envelope, the console's routes and /docs/ served, everything else 404`
 );
 process.exit(findings.length ? 1 : 0);

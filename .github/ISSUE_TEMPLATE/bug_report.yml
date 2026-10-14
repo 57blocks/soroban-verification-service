@@ -47,6 +47,7 @@ body:
         - composer
         - query-svc
         - clients/web
+        - clients/docs
         - clients/sdk
         - clients/api-client
         - packages/* (shared library)

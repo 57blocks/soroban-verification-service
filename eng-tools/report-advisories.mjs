@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 
 const ROOT = process.cwd();
 
-const SHIPPED = ["services/*", "clients/web", "clients/sdk"];
+const SHIPPED = ["services/*", "clients/web", "clients/docs", "clients/sdk"];
 
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
 const manifests = execFileSync("git", ["ls-files", "*package.json"], { encoding: "utf8" })

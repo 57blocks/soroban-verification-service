@@ -42,6 +42,7 @@ clients/              User/downstream-facing
   api-client/           @scvs/verify-api-client — the react-query submission client orval generates
                         from verification-svc's OpenAPI spec. Generated, gitignored
   web/                  Vite + React + TanStack Router submission and result console
+  docs/                 VitePress documentation site, served by the web image at /docs/
 docker/               builder/composer/service/web Dockerfiles, local dev Docker Compose (Postgres),
                       and docker-compose.full-stack.yml — all three layers on one host
 config/               Policy, trusted verifier list, env templates
@@ -329,6 +330,8 @@ environment.
 - `clients/web` — the `/verify` landing page, preflight, submit, job polling over SSE, the build log,
   the Wasm-comparison diagnostics, source access, direct job pages, browser-local recent jobs, and the
   flag-gated `/query` aggregator.
+- `clients/docs` — the public documentation site. VitePress builds it to static pages, and the web image
+  serves them at `/docs/`; `pnpm run dev:docs` serves it locally at `http://localhost:5180/docs/`.
 
 `test/integration/` is the black-box `@scvs/e2e-tests` suite — 119 cases, run against a real
 deployment through its public surfaces only, and a no-op unless `SCVS_E2E` is set (see

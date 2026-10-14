@@ -6,6 +6,9 @@ repository this tree was exported from.
 
 The code map is [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
+The documentation site the web image serves at `/docs/` is a separate tree,
+[`clients/docs/`](../clients/docs/): pages written for people using the service rather than working on it.
+
 ## Using the service
 
 | You want to | Read |

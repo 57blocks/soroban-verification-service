@@ -1,0 +1,41 @@
+:root {
+  --vp-c-brand-1: #101828;
+  --vp-c-brand-2: #344054;
+  --vp-c-brand-3: #101828;
+  --vp-c-brand-soft: rgba(245, 211, 90, 0.3);
+  --scvs-accent: #f5d35a;
+
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+
+  --vp-home-hero-name-color: #101828;
+
+  --vp-font-family-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+.dark {
+  --vp-c-brand-1: #f5d35a;
+  --vp-c-brand-2: #f5c134;
+  --vp-c-brand-3: #f5d35a;
+  --vp-c-brand-soft: rgba(245, 211, 90, 0.16);
+
+  --vp-button-brand-text: #101828;
+  --vp-button-brand-hover-text: #101828;
+  --vp-button-brand-active-text: #101828;
+
+  --vp-home-hero-name-color: #f5d35a;
+}
+
+/* The light brand colour is the text colour, so a link needs its underline to read as one. */
+.vp-doc a {
+  text-decoration: underline;
+  text-decoration-color: var(--scvs-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.vp-doc a:hover {
+  text-decoration-color: currentColor;
+}
