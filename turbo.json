@@ -36,6 +36,10 @@
       "dependsOn": ["^build", "generate"],
       "outputs": ["dist/**"]
     },
+    "soroban-verify-docs#build": {
+      "dependsOn": ["^build", "@scvs/verification-svc#generate:openapi", "@scvs/query-svc#generate:openapi"],
+      "outputs": ["dist/**"]
+    },
     "soroban-verify-web#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],

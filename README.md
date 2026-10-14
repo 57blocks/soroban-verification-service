@@ -331,7 +331,8 @@ environment.
   the Wasm-comparison diagnostics, source access, direct job pages, browser-local recent jobs, and the
   flag-gated `/query` aggregator.
 - `clients/docs` — the public documentation site. VitePress builds it to static pages, and the web image
-  serves them at `/docs/`; `pnpm run dev:docs` serves it locally at `http://localhost:5180/docs/`.
+  serves them at `/docs/`. Its API reference is generated from both services' `openapi.json`, so run
+  `pnpm run generate:openapi` before `pnpm run dev:docs`, which serves it at `http://localhost:5180/docs/`.
 
 `test/integration/` is the black-box `@scvs/e2e-tests` suite — 119 cases, run against a real
 deployment through its public surfaces only, and a no-op unless `SCVS_E2E` is set (see

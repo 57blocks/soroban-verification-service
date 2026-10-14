@@ -13,6 +13,9 @@ hero:
     - theme: alt
       text: How it works
       link: /introduction/how-it-works
+    - theme: alt
+      text: API reference
+      link: /api/
 
 features:
   - title: What a result means
