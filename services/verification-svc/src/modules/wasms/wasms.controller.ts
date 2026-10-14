@@ -8,6 +8,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiResponse,
+  ApiTags,
   ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
 import { RegistryStatusObject } from "@scvs/core";
@@ -21,13 +22,18 @@ import {
 import { WasmsService } from "./wasms.service.js";
 import { readThrottleLimit } from "../../config/configuration.js";
 
+@ApiTags("Results")
 @Controller()
 export class WasmsController {
   constructor(@Inject(WasmsService) private readonly wasms: WasmsService) {}
 
   @Get("api/verification/v1/wasms/:wasm_hash.json")
   @Throttle({ default: { limit: readThrottleLimit(), ttl: 60_000 } })
-  @ApiOperation({ operationId: "getWasmStatus" })
+  @ApiOperation({
+    operationId: "getWasmStatus",
+    summary: "Get this verifier's result for a Wasm hash",
+    description: "Returns the status object this verifier published for the hash, byte for byte as it sits in the result root. Answers `202` with an `unverified` entry while a verification of the hash is queued or running, and `404` when nothing is published and nothing is in flight.",
+  })
   @ApiParam({
     name: "wasm_hash",
     schema: { type: "string", pattern: "^[0-9a-fA-F]{64}$" },

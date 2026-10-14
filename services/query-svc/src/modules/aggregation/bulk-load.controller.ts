@@ -3,6 +3,7 @@ import {
   ApiBadRequestResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiTags,
   ApiQuery,
   ApiServiceUnavailableResponse,
 } from "@nestjs/swagger";
@@ -27,6 +28,7 @@ const bulkQueryDocs = [
   { name: "cursor", required: false, schema: { type: "string" }, description: "{timestamp}-{wasm_hash}" },
 ] as const;
 
+@ApiTags("Results")
 @Controller()
 export class BulkLoadController {
   constructor(
@@ -35,6 +37,10 @@ export class BulkLoadController {
   ) {}
 
   @Get("api/query/v1/wasms")
+  @ApiOperation({
+    summary: "List aggregated results",
+    description: "Pages through every Wasm hash any listed verifier has a result for: one record per hash carrying every verifier's entry, ordered by this aggregator's own update time. Pass back the previous page's `cursor` unchanged and upsert by `wasm_hash`. Until the first sync completes it answers `503 aggregation_unavailable`, not an empty page.",
+  })
   @ApiQuery(bulkQueryDocs[0]) @ApiQuery(bulkQueryDocs[1]) @ApiQuery(bulkQueryDocs[2])
   @ApiOkResponse({ type: AggregatedBulkLoadPage })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_order | invalid_limit | invalid_cursor" })
@@ -68,6 +74,7 @@ export class BulkLoadController {
   @Get("api/query/v1/wasms.json")
   @ApiOperation({
     operationId: "aggregatedBulkLoadJson",
+    summary: "List aggregated results (deprecated alias)",
     deprecated: true,
     description: DEPRECATED_JSON_ROUTE_DESCRIPTION,
   })

@@ -4,6 +4,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiTags,
   ApiParam,
   ApiServiceUnavailableResponse,
   ApiTooManyRequestsResponse,
@@ -24,6 +25,7 @@ import { AggregationSyncService } from "../aggregation/aggregation-sync.service.
 import { ADDRESS_RESOLVER, MalformedContractIdError, type AddressResolver } from "./address-resolver.js";
 import { ApiError, ApiErrorResponse } from "@scvs/http";
 
+@ApiTags("Results")
 @Controller()
 export class ResultsController {
   private readonly logger = new ScvsLogger("results");
@@ -36,7 +38,12 @@ export class ResultsController {
 
   /** Must be declared before the canonical route: Express's `:wasm_hash` also matches the dot. */
   @Get("api/query/v1/wasms/:wasm_hash.json")
-  @ApiOperation({ operationId: "queryByHashJson", deprecated: true, description: DEPRECATED_JSON_ROUTE_DESCRIPTION })
+  @ApiOperation({
+    operationId: "queryByHashJson",
+    deprecated: true,
+    summary: "Get every verifier's result for a Wasm hash (deprecated alias)",
+    description: DEPRECATED_JSON_ROUTE_DESCRIPTION,
+  })
   @Header("Deprecation", "true")
   @Header("Sunset", JSON_ROUTE_SUNSET_HTTP_DATE)
   @ApiOkResponse({ type: AggregatedWasmStatus })
@@ -45,6 +52,10 @@ export class ResultsController {
   }
 
   @Get("api/query/v1/wasms/:wasm_hash")
+  @ApiOperation({
+    summary: "Get every verifier's result for a Wasm hash",
+    description: "Returns one attributed entry per listed verifier that has a result for the hash, never merged into one verdict. `agreement` summarises the entries without deciding between them, and `unavailable_verifiers` names the verifiers whose latest read failed.",
+  })
   @ApiOkResponse({ type: AggregatedWasmStatus })
   @ApiServiceUnavailableResponse({
     type: ApiErrorResponse,
@@ -56,6 +67,10 @@ export class ResultsController {
   }
 
   @Get("api/query/v1/contracts/:network/:contract_id")
+  @ApiOperation({
+    summary: "Get every verifier's result for a contract",
+    description: "Resolves the contract's current Wasm hash on the ledger on every request, then answers as the by-hash route. It carries a tighter rate limit than the other routes, because each request reads the ledger: resolve once, then read by hash.",
+  })
   /** Decorator arguments are evaluated before any container exists, so the limit is read from `process.env`. */
   @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })

@@ -40,6 +40,44 @@ export class SubmitTargetDto {
   network_passphrase?: string;
 }
 
+/** The request's shape only: `validateSubmittedManifest` is what enforces it. */
+export class SubmissionManifest {
+  @ApiProperty({ enum: ["stellar-submitted-source-verification-manifest-v1"] })
+  schema!: string;
+
+  @ApiProperty({ type: String, pattern: "^[0-9a-fA-F]{64}$", description: "SHA-256 of the exact source archive bytes." })
+  source_sha256!: string;
+
+  @ApiPropertyOptional({ type: String, format: "uri", description: "Where the verifier fetches the archive. Give this or `upload_id`." })
+  source_uri?: string;
+
+  @ApiPropertyOptional({ type: String, format: "uuid", description: "The `upload_id` of an upload. Give this or `source_uri`." })
+  upload_id?: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    default: false,
+    description: "Whether the verifier keeps the source and serves it with the result.",
+  })
+  is_public?: boolean;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Options for `stellar contract build`. Leave unset to use what the contract records.",
+  })
+  bldopt?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: "Build arguments. Leave unset to use what the contract records." })
+  bldarg?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    deprecated: true,
+    description: "Not used to choose the build environment, which comes from the deployed contract. Kept for older clients.",
+  })
+  bldimg?: string;
+}
+
 export class SubmitRequestDto {
   /** `@IsDefined()` and `@IsObject()` are load-bearing. */
   @ApiProperty({ type: SubmitTargetDto })
@@ -49,7 +87,7 @@ export class SubmitRequestDto {
   @Type(() => SubmitTargetDto)
   target!: SubmitTargetDto;
 
-  @ApiPropertyOptional({ type: Object })
+  @ApiPropertyOptional({ type: SubmissionManifest })
   @IsOptional()
   manifest?: unknown;
 
