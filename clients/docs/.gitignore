@@ -1,1 +1,4 @@
 .vitepress/cache
+.vitepress/generated
+src/api/submission/
+src/api/query/
