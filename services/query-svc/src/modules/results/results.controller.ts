@@ -44,6 +44,7 @@ export class ResultsController {
     summary: "Get every verifier's result for a Wasm hash (deprecated alias)",
     description: DEPRECATED_JSON_ROUTE_DESCRIPTION,
   })
+  @ApiParam({ name: "wasm_hash", description: "SHA-256 of the Wasm, as 64 hexadecimal characters." })
   @Header("Deprecation", "true")
   @Header("Sunset", JSON_ROUTE_SUNSET_HTTP_DATE)
   @ApiOkResponse({ type: AggregatedWasmStatus })
@@ -57,6 +58,7 @@ export class ResultsController {
     summary: "Get every verifier's result for a Wasm hash",
     description: "Returns one attributed entry per listed verifier that has a result for the hash, never merged into one verdict. `agreement` summarises the entries without deciding between them, and `unavailable_verifiers` names the verifiers whose latest read failed.",
   })
+  @ApiParam({ name: "wasm_hash", description: "SHA-256 of the Wasm, as 64 hexadecimal characters." })
   @ApiOkResponse({ type: AggregatedWasmStatus })
   @ApiServiceUnavailableResponse({
     type: ApiErrorResponse,
@@ -76,6 +78,7 @@ export class ResultsController {
   /** Decorator arguments are evaluated before any container exists, so the limit is read from `process.env`. */
   @Throttle({ default: { limit: addressThrottleLimit(), ttl: 60_000 } })
   @ApiParam({ name: "network", enum: ["mainnet", "testnet"] })
+  @ApiParam({ name: "contract_id", description: "The contract's address, a `C…` strkey." })
   @ApiOkResponse({ type: AggregatedWasmStatus })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_network | invalid_contract_id" })
   @ApiNotFoundResponse({
