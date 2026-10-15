@@ -17,6 +17,14 @@ const introduction = {
   ],
 };
 
+const quickStart = {
+  text: "Quick start",
+  items: [
+    { text: "Submit a contract with curl", link: "/quick-start/submit-with-curl" },
+    { text: "Read a result with curl", link: "/quick-start/read-a-result" },
+  ],
+};
+
 const apiReference = [
   {
     text: "API reference",
@@ -56,10 +64,12 @@ export default defineConfig({
     siteTitle: "Soroban Verifier",
     nav: [
       { text: "Introduction", link: "/introduction/what-is-verification", activeMatch: "/introduction/" },
+      { text: "Quick start", link: "/quick-start/submit-with-curl", activeMatch: "/quick-start/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
     ],
     sidebar: {
-      "/introduction/": [introduction],
+      "/introduction/": [introduction, quickStart],
+      "/quick-start/": [introduction, quickStart],
       "/api/": apiReference,
     },
     outline: [2, 3],
