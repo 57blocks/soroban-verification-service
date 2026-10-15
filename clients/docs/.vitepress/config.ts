@@ -11,7 +11,7 @@ const repoFile = (name: string) => fileURLToPath(new URL(`../../../${name}`, imp
 const introduction = {
   text: "Introduction",
   items: [
-    { text: "What is contract verification?", link: "/introduction/what-is-verification" },
+    { text: "What is contract verification?", link: "/" },
     { text: "How it works", link: "/introduction/how-it-works" },
     { text: "Trust model", link: "/introduction/trust-model" },
     { text: "Supported contracts", link: "/introduction/supported-contracts" },
@@ -84,7 +84,7 @@ export default defineConfig({
     logoLink: { link: "/", target: "_self" },
     siteTitle: "Soroban Verifier",
     nav: [
-      { text: "Introduction", link: "/introduction/what-is-verification", activeMatch: "/introduction/" },
+      { text: "Introduction", link: "/", activeMatch: "^/($|introduction/)" },
       { text: "Quick start", link: "/quick-start/submit-with-curl", activeMatch: "/quick-start/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
@@ -99,11 +99,10 @@ export default defineConfig({
       },
     ],
     sidebar: {
-      "/introduction/": [introduction, quickStart],
-      "/quick-start/": [introduction, quickStart],
       "/api/": apiReference,
       "/legal/": legalAndResources,
       "/resources/": legalAndResources,
+      "/": [introduction, quickStart],
     },
     outline: [2, 3],
     search: { provider: "local" },
