@@ -4,6 +4,7 @@ import { defineAsyncComponent } from "vue";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-500.css";
 import "./custom.css";
+import ThisOrigin from "./ThisOrigin.vue";
 
 let openapi: Promise<typeof import("vitepress-openapi/client")> | undefined;
 const installed = new WeakSet<EnhanceAppContext["app"]>();
@@ -28,6 +29,7 @@ const loadOpenapi = async (ctx: EnhanceAppContext) => {
 export default {
   extends: DefaultTheme,
   enhanceApp(ctx) {
+    ctx.app.component("ThisOrigin", ThisOrigin);
     ctx.app.component(
       "ApiOperation",
       defineAsyncComponent(async () => (await loadOpenapi(ctx)).OAOperation),
