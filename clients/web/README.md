@@ -37,12 +37,16 @@ src/
                              dot-lattice (the canvas dot grid behind the closing
                              CTA and the console — see "The dot lattice" below),
                              typewriter (the hero headline)
-  components/              site-nav + site-footer (the console and legal pages),
+  components/              site-nav + site-footer (the console, lookup and legal pages),
+                             page-link (a nav entry: a router link for a console route,
+                             a plain anchor for /docs/),
                              legal-links (the two legal documents, linked from both footers
                              and from the submission control), not-found (what an unrouted
                              path renders), and the two shared visual devices —
                              mono-chip, sealed-box — see "Shared devices" below
   config/site.ts           links used by more than one feature (outbound, and the legal routes)
+  config/navigation.ts     the pages both navs offer: Verify, Lookup (only while the lookup's
+                             flag is on, since its route redirects away otherwise) and Docs
   hooks/use-legal-documents  the operator's legal bundle — shared, because the legal pages render it
                              and the console binds its version to a submission
   lib/legal.ts               LegalDocument / LegalSection / LegalBlock / LegalBundle
@@ -56,7 +60,7 @@ src/
       content/               one module per section, each owning that section's SectionHead
                              copy AND its items, re-exported through content/index.ts —
                              so a claim the page makes is edited in exactly one file
-      navigation.ts          nav + footer link tables
+      navigation.ts          the footer's link tables
       index.ts               public surface: the routes
     verification/          the verify console at /verify and /verify/jobs/$job_id
       components/            VerifyConsole (container) + one component per panel;
