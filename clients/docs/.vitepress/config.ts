@@ -1,10 +1,12 @@
-import { cpSync } from "node:fs";
+import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
 import { API_SPECS, apiSidebar } from "./api-specs.ts";
 
 const RESULT_SCHEMAS = fileURLToPath(new URL("../../../docs/results-sep/schemas", import.meta.url));
+const LICENCE_FILES = ["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES"];
+const repoFile = (name: string) => fileURLToPath(new URL(`../../../${name}`, import.meta.url));
 
 const introduction = {
   text: "Introduction",
@@ -24,6 +26,23 @@ const quickStart = {
     { text: "Read a result with curl", link: "/quick-start/read-a-result" },
   ],
 };
+
+const legalAndResources = [
+  {
+    text: "Legal",
+    items: [
+      { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
+      { text: "Open-source licenses", link: "/legal/open-source-licenses" },
+    ],
+  },
+  {
+    text: "Resources",
+    items: [
+      { text: "Changelog", link: "/resources/changelog" },
+      { text: "Support", link: "/resources/support" },
+    ],
+  },
+];
 
 const apiReference = [
   {
@@ -51,6 +70,8 @@ export default defineConfig({
   head: [["link", { rel: "icon", type: "image/svg+xml", href: "/docs/logo.svg" }]],
   buildEnd: ({ outDir }) => {
     cpSync(RESULT_SCHEMAS, join(outDir, "schemas"), { recursive: true });
+    mkdirSync(join(outDir, "licenses"), { recursive: true });
+    for (const name of LICENCE_FILES) cpSync(repoFile(name), join(outDir, "licenses", `${name}.txt`));
   },
   vite: {
     resolve: {
@@ -66,11 +87,23 @@ export default defineConfig({
       { text: "Introduction", link: "/introduction/what-is-verification", activeMatch: "/introduction/" },
       { text: "Quick start", link: "/quick-start/submit-with-curl", activeMatch: "/quick-start/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
+      {
+        text: "More",
+        activeMatch: "/(legal|resources)/",
+        items: [
+          { text: "Changelog", link: "/resources/changelog" },
+          { text: "Support", link: "/resources/support" },
+          { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
+          { text: "Open-source licenses", link: "/legal/open-source-licenses" },
+        ],
+      },
     ],
     sidebar: {
       "/introduction/": [introduction, quickStart],
       "/quick-start/": [introduction, quickStart],
       "/api/": apiReference,
+      "/legal/": legalAndResources,
+      "/resources/": legalAndResources,
     },
     outline: [2, 3],
     search: { provider: "local" },

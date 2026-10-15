@@ -4,6 +4,7 @@ import { defineAsyncComponent } from "vue";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-500.css";
 import "./custom.css";
+import LegalOperator from "./LegalOperator.vue";
 import ThisOrigin from "./ThisOrigin.vue";
 
 let openapi: Promise<typeof import("vitepress-openapi/client")> | undefined;
@@ -30,6 +31,7 @@ export default {
   extends: DefaultTheme,
   enhanceApp(ctx) {
     ctx.app.component("ThisOrigin", ThisOrigin);
+    ctx.app.component("LegalOperator", LegalOperator);
     ctx.app.component(
       "ApiOperation",
       defineAsyncComponent(async () => (await loadOpenapi(ctx)).OAOperation),
