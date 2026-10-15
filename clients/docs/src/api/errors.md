@@ -92,8 +92,8 @@ Some routes add their own fields, named below.
 
 | `status` | Meaning | Published result |
 | --- | --- | --- |
-| `queued` | Accepted, or being prepared: reading the chain and setting up the build environment | — |
-| `running` | Being built, compared or published | — |
+| `queued` | Accepted and not started yet, or waiting while its build environment is composed | — |
+| `running` | In progress. `progress.step` names the stage, such as `building` or `comparing` | — |
 | `verified` | The rebuilt Wasm matches the deployed one | `verified` |
 | `mismatch` | The rebuilt Wasm differs from the deployed one | `mismatched` |
 | `build_failed` | The build failed, timed out, or hit a fault on the verifier's side | None |
