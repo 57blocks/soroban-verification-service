@@ -68,13 +68,15 @@
     "e2e:summary": "node eng-tools/write-e2e-summary.mjs",
     "report:advisories": "node eng-tools/report-advisories.mjs"
   },
-  "devDependencies": {
+  "dependencies": {
     "@scvs/config": "workspace:*",
     "@scvs/core": "workspace:*",
     "@scvs/db": "workspace:*",
     "@scvs/db-query": "workspace:*",
     "@scvs/storage-layout": "workspace:*",
-    "tsx": "^4.23.15",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
     "turbo": "^2.11.6",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
