@@ -1,5 +1,5 @@
 import { Body, Controller, Inject, Post, Res, UseGuards, UsePipes, ValidationPipe } from "@nestjs/common";
-import { ApiBadRequestResponse, ApiBody, ApiOkResponse, ApiOperation, ApiTooManyRequestsResponse } from "@nestjs/swagger";
+import { ApiBadRequestResponse, ApiBody, ApiOkResponse, ApiOperation, ApiTags, ApiTooManyRequestsResponse } from "@nestjs/swagger";
 import { PreflightResponse } from "./preflight.dto.js";
 import type { Response } from "express";
 import { AbuseGuard } from "../../common/abuse.guard.js";
@@ -8,6 +8,7 @@ import { mapPreflightIssues, PreflightRequestDto } from "./preflight.dto.js";
 import { PreflightService } from "./preflight.service.js";
 import { ApiError, errorBody } from "@scvs/http";
 
+@ApiTags("Preflight")
 @Controller("api/verification/v1/preflight")
 @UseGuards(AbuseGuard)
 export class PreflightController {
@@ -15,7 +16,11 @@ export class PreflightController {
   constructor(@Inject(PreflightService) private readonly preflightService: PreflightService) {}
 
   @Post()
-  @ApiOperation({ operationId: "preflightVerification" })
+  @ApiOperation({
+    operationId: "preflightVerification",
+    summary: "Check a contract before submitting it",
+    description: "Reads the deployed Wasm of a contract ID or Wasm hash and reports the build environment it records and whether this verifier accepts it, the build inputs it records and those still missing, and a suggested manifest. Whether a composed environment can actually be built is only found once a job runs. Read-only: it creates no job and starts no build.",
+  })
   @ApiBody({ type: PreflightRequestDto })
   @ApiOkResponse({ type: PreflightResponse })
   @ApiBadRequestResponse({ description: "invalid_network | missing_target | invalid_request" })

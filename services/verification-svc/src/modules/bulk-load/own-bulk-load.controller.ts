@@ -4,6 +4,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
+  ApiTags,
   ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
@@ -27,13 +28,18 @@ const bulkQueryDocs = [
   { name: "cursor", required: false, schema: { type: "string" }, description: "{timestamp}-{wasm_hash}" },
 ] as const;
 
+@ApiTags("Results")
 @Controller()
 export class OwnBulkLoadController {
   constructor(@Inject(JobsRepository) private readonly jobs: JobsRepository) {}
 
   @Get("api/verification/v1/wasms")
   @Throttle({ default: { limit: readThrottleLimit(), ttl: 60_000 } })
-  @ApiOperation({ operationId: "ownBulkLoad" })
+  @ApiOperation({
+    operationId: "ownBulkLoad",
+    summary: "List this verifier's published results",
+    description: "Pages through every Wasm hash this verifier has published a result for, ordered by publication update time. Pass back the previous page's `cursor` unchanged. A record can reappear with a later update time, so upsert by `wasm_hash`.",
+  })
   @ApiQuery(bulkQueryDocs[0])
   @ApiQuery(bulkQueryDocs[1])
   @ApiQuery(bulkQueryDocs[2])
@@ -59,7 +65,12 @@ export class OwnBulkLoadController {
 
   @Get("api/verification/v1/wasms.json")
   @Throttle({ default: { limit: readThrottleLimit(), ttl: 60_000 } })
-  @ApiOperation({ operationId: "ownBulkLoadJson", deprecated: true, description: DEPRECATED_JSON_ROUTE_DESCRIPTION })
+  @ApiOperation({
+    operationId: "ownBulkLoadJson",
+    deprecated: true,
+    summary: "List this verifier's published results (deprecated alias)",
+    description: DEPRECATED_JSON_ROUTE_DESCRIPTION,
+  })
   @Header("Deprecation", "true")
   @Header("Sunset", JSON_ROUTE_SUNSET_HTTP_DATE)
   @ApiQuery(bulkQueryDocs[0])
