@@ -30,7 +30,7 @@ export const footerColumns: { title: string; items: ContentLink[] }[] = [
     title: "Resources",
     items: [
       { label: "SEP-58 reference", href: sep58SpecUrl, external: true },
-      { label: "Documentation", href: docsUrl, external: true },
+      { label: "Documentation", href: docsUrl },
       { label: "Security policy", href: securityPolicyUrl, external: true },
       { label: "GitHub", href: githubRepoUrl, external: true },
     ],

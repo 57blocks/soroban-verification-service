@@ -11,8 +11,11 @@ hero:
       text: What is contract verification?
       link: /introduction/what-is-verification
     - theme: alt
-      text: How it works
-      link: /introduction/how-it-works
+      text: Quick start
+      link: /quick-start/submit-with-curl
+    - theme: alt
+      text: API reference
+      link: /api/
 
 features:
   - title: What a result means

@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build",
+    "generate": "node .vitepress/generate.ts",
+    "dev": "node .vitepress/generate.ts && vitepress dev",
+    "build": "node .vitepress/generate.ts && vitepress build",
     "preview": "vitepress preview"
   },
   "dependencies": {
@@ -14,6 +15,8 @@
     "vue": "^3.5.43"
   },
   "devDependencies": {
-    "vitepress": "2.0.0-alpha.20"
+    "@scvs/core": "workspace:*",
+    "vitepress": "2.0.0-alpha.20",
+    "vitepress-openapi": "0.2.5"
   }
 }

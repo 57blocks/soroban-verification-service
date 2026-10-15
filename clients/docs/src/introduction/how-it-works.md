@@ -2,7 +2,7 @@
 
 A verification runs through four stages: **preflight**, **submit**, **rebuild**, then **compare and
 publish**. The web console walks you through all four. Preflight and submit are HTTP calls you can make
-yourself, and you can follow the rest over HTTP.
+yourself, and you can follow the rest over HTTP; see the [API reference](../api/index.md).
 
 ## 1. Preflight
 
@@ -76,7 +76,8 @@ is the one that outlives it.
 
 ## Following a job
 
-A job's progress is available as it happens, as a server-sent event stream, or by polling its status.
+A job's progress is available as it happens, as a [server-sent event stream](../api/events.md), or by
+polling its status.
 When a build ran, its log — redacted of credentials and local paths — is available to the submitter
 for every outcome, failures included. Reading it takes the build-log token returned at submission, and
 the log is kept for a limited period: seven days unless the verifier configures otherwise.

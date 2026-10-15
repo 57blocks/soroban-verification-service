@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { githubRepoUrl, sourceIsPublic } from "@/config/site";
+import { docsUrl, githubRepoUrl, sourceIsPublic } from "@/config/site";
 
 export const SiteNav = () => (
   <nav className="sticky top-0 z-50 border-b border-line bg-surface/[0.92] backdrop-blur-[10px]">
@@ -12,18 +12,26 @@ export const SiteNav = () => (
         <span>Soroban Verifier</span>
       </Link>
 
-      {sourceIsPublic && (
+      <div className="flex items-center gap-4">
         <a
-          href={githubRepoUrl}
-          target="_blank"
-          rel="noreferrer"
-          title="View source on GitHub"
-          aria-label="View source on GitHub"
-          className="inline-grid size-9 place-items-center rounded-md border border-line-strong bg-surface text-[0.8rem] font-bold text-ink transition-colors hover:border-ink hover:bg-surface-alt"
+          href={docsUrl}
+          className="text-[0.875rem] font-semibold text-ink-body transition-colors hover:text-ink"
         >
-          GH
+          Docs
         </a>
-      )}
+        {sourceIsPublic && (
+          <a
+            href={githubRepoUrl}
+            target="_blank"
+            rel="noreferrer"
+            title="View source on GitHub"
+            aria-label="View source on GitHub"
+            className="inline-grid size-9 place-items-center rounded-md border border-line-strong bg-surface text-[0.8rem] font-bold text-ink transition-colors hover:border-ink hover:bg-surface-alt"
+          >
+            GH
+          </a>
+        )}
+      </div>
     </div>
   </nav>
 );
