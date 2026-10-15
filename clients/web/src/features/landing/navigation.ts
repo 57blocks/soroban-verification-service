@@ -9,13 +9,6 @@ import {
 } from "@/config/site";
 import type { ContentLink } from "./content";
 
-export const sectionLinks = [
-  { href: "#how", label: "How it works" },
-  { href: "#result", label: "What you get" },
-  { href: "#trust", label: "Trust model" },
-  { href: "#security", label: "Security" },
-];
-
 export const footerColumns: { title: string; items: ContentLink[] }[] = [
   {
     title: "Product",

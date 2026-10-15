@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import {
   Outlet,
   RouterProvider,
@@ -49,45 +49,12 @@ describe("the landing nav", () => {
     await renderInRouter(<LandingNav />);
     expect(screen.queryByRole("link", { name: "Lookup" })).toBeNull();
   });
-});
 
-describe("the landing menu", () => {
-  const toggle = () => screen.getByRole("button", { name: /menu/i });
-
-  test("opens on its button and lists the pages with what each is for", async () => {
+  test("leads to pages, not to sections of the page it sits on", async () => {
     enableLookup(true);
-    await renderInRouter(<LandingNav />);
-    expect(toggle()).toHaveAttribute("aria-expanded", "false");
-
-    fireEvent.click(toggle());
-    expect(toggle()).toHaveAttribute("aria-expanded", "true");
-    const panel = document.getElementById(toggle().getAttribute("aria-controls") ?? "");
-    expect(panel).not.toBeNull();
-    expect(within(panel!).getByRole("link", { name: /Lookup/ })).toHaveAttribute("href", "/query");
-    expect(within(panel!).getByRole("link", { name: /Guides, quick starts/ })).toHaveAttribute("href", docsUrl);
-  });
-
-  test("closes on Escape and hands focus back to its button", async () => {
-    await renderInRouter(<LandingNav />);
-    fireEvent.click(toggle());
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(toggle()).toHaveAttribute("aria-expanded", "false");
-    expect(toggle()).toHaveFocus();
-  });
-
-  test("closes when one of its links is followed", async () => {
-    await renderInRouter(<LandingNav />);
-    fireEvent.click(toggle());
-    const panel = document.getElementById(toggle().getAttribute("aria-controls") ?? "")!;
-    fireEvent.click(within(panel).getByRole("link", { name: "Trust model" }));
-    expect(toggle()).toHaveAttribute("aria-expanded", "false");
-  });
-
-  test("closes on a press outside it", async () => {
-    await renderInRouter(<LandingNav />);
-    fireEvent.click(toggle());
-    fireEvent.pointerDown(document.body);
-    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    const { container } = await renderInRouter(<LandingNav />);
+    const hrefs = [...container.querySelectorAll("nav a[href]")].map((a) => a.getAttribute("href"));
+    expect(hrefs.filter((href) => href?.startsWith("#"))).toEqual([]);
   });
 });
 

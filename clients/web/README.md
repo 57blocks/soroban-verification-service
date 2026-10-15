@@ -60,7 +60,7 @@ src/
       content/               one module per section, each owning that section's SectionHead
                              copy AND its items, re-exported through content/index.ts —
                              so a claim the page makes is edited in exactly one file
-      navigation.ts          the landing page's section anchors + footer link tables
+      navigation.ts          the footer's link tables
       index.ts               public surface: the routes
     verification/          the verify console at /verify and /verify/jobs/$job_id
       components/            VerifyConsole (container) + one component per panel;

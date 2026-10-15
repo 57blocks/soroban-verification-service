@@ -3,9 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { PageLinkAnchor } from "@/components/page-link";
 import { pageLinks } from "@/config/navigation";
 import { heroCopy } from "../content";
-import { sectionLinks } from "../navigation";
 import { BrandLogo } from "./BrandLogo";
-import { LandingMenu } from "./LandingMenu";
 
 /** Equal transparent borders above and below keep the text on the CTA's centre line. */
 const underline =
@@ -16,37 +14,24 @@ export const LandingNav = () => (
     <div className="mx-auto flex max-w-shell items-center justify-between gap-4">
       <BrandLogo />
 
-      <div className="hidden gap-8 whitespace-nowrap text-[0.9rem] xl:flex">
-        {sectionLinks.map(({ href, label }) => (
-          <a key={href} href={href} className={`${underline} text-ink-body`}>
-            {label}
-          </a>
+      <div className="flex items-center gap-5 whitespace-nowrap sm:gap-6">
+        {pageLinks().map((link) => (
+          <PageLinkAnchor
+            key={link.label}
+            link={link}
+            className={`${underline} text-[0.875rem] font-semibold text-ink-body`}
+          >
+            {link.label}
+          </PageLinkAnchor>
         ))}
-      </div>
-
-      <div className="flex items-center gap-5">
-        <div className="hidden items-center gap-6 whitespace-nowrap lg:flex">
-          {pageLinks().map((link) => (
-            <PageLinkAnchor
-              key={link.label}
-              link={link}
-              className={`${underline} text-[0.875rem] font-semibold text-ink-body`}
-            >
-              {link.label}
-            </PageLinkAnchor>
-          ))}
-          <span aria-hidden="true" className="h-4 w-px bg-line-strong" />
-        </div>
-
+        <span aria-hidden="true" className="hidden h-4 w-px bg-line-strong sm:block" />
         <Link
           to="/verify"
-          className="hidden items-center gap-1.5 whitespace-nowrap text-[0.875rem] font-semibold text-ink transition-colors hover:text-ink-body sm:inline-flex"
+          className="hidden items-center gap-1.5 text-[0.875rem] font-semibold text-ink transition-colors hover:text-ink-body sm:inline-flex"
         >
           {heroCopy.cta}
           <ArrowRight className="size-4" />
         </Link>
-
-        <LandingMenu />
       </div>
     </div>
   </nav>
