@@ -69,7 +69,7 @@ that can exit non-zero is a `check:` wearing the wrong name — and writes its f
 | [`generate-deploy-env.mjs`](generate-deploy-env.mjs) | `generate:deploy-env` | `config/deploy/<env>/<service>.json`, the flat per-service deployment contract |
 | [`pin-differential-oracles.mjs`](pin-differential-oracles.mjs) | `generate:differential-oracles` | `services/builder/test/differential/oracles.ts`, resolved against the registry |
 | [`reset-local-db.mjs`](reset-local-db.mjs) | `db:reset:local` | nothing — it truncates the local development database, in foreign-key order |
-| [`generate-third-party-notices.mjs`](generate-third-party-notices.mjs) | `generate:third-party-notices` | `THIRD-PARTY-NOTICES`, from the production dependency graph — Apache-2.0 §4(d)'s propagation. Refuses to write one if a copyleft licence has entered the graph |
+| [`generate-third-party-notices.mjs`](generate-third-party-notices.mjs) | `generate:third-party-notices` | `THIRD-PARTY-NOTICES`, from the production dependency graph — Apache-2.0 §4(d)'s propagation. Refuses to write one if an unreviewed copyleft licence has entered the graph, or a reviewed one has left it |
 
 ## Deployment — `deploy:` (`docs/invariants.md` rule 23)
 
