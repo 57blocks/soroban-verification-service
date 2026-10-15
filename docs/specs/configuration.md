@@ -67,11 +67,16 @@ nginx, independent of the console's route tree, so a route rename cannot take a 
 health check down with it; each backend service also exposes its own
 `/api/<service>/v1/health`.
 
+The same image serves the documentation site, built from `clients/docs`, under `/docs/` and nowhere
+else: a page answers at its clean URL, `/docs` redirects to `/docs/` with a relative `Location`, and a
+missing page answers `404` with the site's own not-found page. A path that only begins with `docs`,
+such as `/docs-json`, is still the console's `404`.
+
 Verified by: `eng-tools/check-host-routing.mjs` (serves the real nginx configuration and generated
 route allowlist over a synthetic document root), `eng-tools/assert-host-routing.mjs` (probes a live
 deployed origin with no credentials), `docker/web-nginx.conf`, `docker/web.Dockerfile`,
 `docker/service.Dockerfile`, `docker/docker-compose.full-stack.yml`, `clients/web/spa-routes.ts`,
-`clients/web/test/route-surface.spec.tsx`.
+`clients/web/test/route-surface.spec.tsx`, `clients/docs/.vitepress/config.ts`.
 
 ## 6. The published result root is served at the host root, with no path prefix
 

@@ -110,6 +110,7 @@ pnpm run dev:verification-svc     # PORT default 5000
 pnpm run dev:orchestrator-svc     # PORT default 5002 (health-check only, see below)
 pnpm run dev:query-svc            # PORT default 5001
 pnpm run dev:web                  # Vite, port 5173 (clients/web)
+pnpm run dev:docs                 # VitePress, http://localhost:5180/docs/ (clients/docs)
 ```
 
 Tests are Jest (`ts-jest`, ESM) per-service, matching `test/**/*.spec.ts`:
@@ -195,6 +196,7 @@ services/             Independently deployable NestJS apps
                           cites)
 clients/
   web/                    Vite + React + TanStack Router submission/results console
+  docs/                   VitePress documentation site, served by the web image at /docs/
   sdk/                    TS query/aggregation SDK (types from packages/core + storage-layout)
   api-client/             orval-generated react-query client, from verification-svc's OpenAPI
 docker/                Dockerfiles (builder, service, web) + local dev Docker Compose (Postgres)

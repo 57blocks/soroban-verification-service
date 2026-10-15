@@ -17,6 +17,7 @@
     "dev:orchestrator-svc": "pnpm --filter @scvs/orchestrator-svc run dev",
     "dev:query-svc": "pnpm --filter @scvs/query-svc run dev",
     "dev:web": "pnpm --filter soroban-verify-web run dev -- --port 5173",
+    "dev:docs": "pnpm --filter soroban-verify-docs run dev -- --port 5180",
     "db:migrate": "pnpm --filter @scvs/db --filter @scvs/db-query run prisma:deploy",
     "db:migrate:new": "pnpm --filter @scvs/db exec prisma migrate dev --create-only",
     "db:migrate:status": "pnpm --filter @scvs/db --filter @scvs/db-query exec prisma migrate status",

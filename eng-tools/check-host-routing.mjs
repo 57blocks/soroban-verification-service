@@ -13,6 +13,8 @@ const IMAGE = readFileSync(join(repoRoot, "docker/web.Dockerfile"), "utf8").matc
 if (!IMAGE) throw new Error("docker/web.Dockerfile has no `FROM nginx:<tag>` line to test against");
 
 const SHELL_MARKER = "<title>scvs-host-routing-probe</title>";
+const DOCS_MARKER = "<title>scvs-host-routing-docs-probe</title>";
+const DOCS_404_MARKER = "<title>scvs-host-routing-docs-404-probe</title>";
 
 const EXPECTATIONS = [
   { path: "/", status: 200, type: "text/html", shell: true, why: "the landing page" },
@@ -54,6 +56,24 @@ const EXPECTATIONS = [
     why: "an exact route does not cover its sub-paths",
   },
   { path: "/assets/renamed.js", status: 404, why: "a hashed asset that moved must not answer 200" },
+  { path: "/docs/", status: 200, type: "text/html", docs: DOCS_MARKER, why: "the documentation site's home" },
+  { path: "/docs", status: 301, location: "/docs/", why: "relative, or a balancer terminating TLS turns it into http://" },
+  {
+    path: "/docs/introduction/how-it-works",
+    status: 200,
+    type: "text/html",
+    docs: DOCS_MARKER,
+    why: "a clean URL serves its .html file",
+  },
+  {
+    path: "/docs/introduction/missing",
+    status: 404,
+    type: "text/html",
+    docs: DOCS_404_MARKER,
+    why: "a missing page is the documentation site's own 404, not the console's",
+  },
+  { path: "/docs/assets/style-deadbeef.css", status: 200, type: "text/css", why: "a hashed documentation asset" },
+  { path: "/docsearch", status: 404, type: "text/html", shell: true, why: "only /docs/ belongs to the documentation site" },
   {
     path: "/api/verification/v1/health",
     status: 404,
@@ -93,6 +113,15 @@ mkdirSync(join(docroot, "assets"), { recursive: true });
 writeFileSync(join(docroot, "index.html"), `<!doctype html><html><head>${SHELL_MARKER}</head></html>\n`);
 writeFileSync(join(docroot, "logo.svg"), '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n');
 writeFileSync(join(docroot, "assets", "app-deadbeef.js"), "export const x = 1;\n");
+mkdirSync(join(docroot, "docs", "introduction"), { recursive: true });
+mkdirSync(join(docroot, "docs", "assets"), { recursive: true });
+writeFileSync(join(docroot, "docs", "index.html"), `<!doctype html><html><head>${DOCS_MARKER}</head></html>\n`);
+writeFileSync(
+  join(docroot, "docs", "introduction", "how-it-works.html"),
+  `<!doctype html><html><head>${DOCS_MARKER}</head></html>\n`
+);
+writeFileSync(join(docroot, "docs", "404.html"), `<!doctype html><html><head>${DOCS_404_MARKER}</head></html>\n`);
+writeFileSync(join(docroot, "docs", "assets", "style-deadbeef.css"), "body{}\n");
 const spaRoutes = join(workdir, "spa-routes.conf");
 writeFileSync(spaRoutes, renderSpaRoutesConf());
 
@@ -135,7 +164,7 @@ try {
     process.exit(1);
   }
 
-  for (const { path, status, type, shell, why } of EXPECTATIONS) {
+  for (const { path, status, type, shell, docs, location, why } of EXPECTATIONS) {
     const response = await fetch(`${origin}${path}`, { redirect: "manual" });
     const because = why ? ` (${why})` : "";
     if (response.status !== status) {
@@ -144,6 +173,15 @@ try {
     const contentType = response.headers.get("content-type") ?? "";
     if (type && !contentType.includes(type)) {
       fail(`${path} answers content-type "${contentType}", expected ${type}${because}`);
+    }
+    if (location !== undefined && response.headers.get("location") !== location) {
+      fail(`${path} redirects to "${response.headers.get("location")}", expected "${location}"${because}`);
+    }
+    if (docs) {
+      const body = await response.text();
+      if (!body.includes(docs)) {
+        fail(`${path} does not carry the expected documentation page${because}`);
+      }
     }
     if (shell) {
       const body = await response.text();
@@ -174,6 +212,22 @@ try {
   if (!assetCache.includes("immutable")) {
     fail(`/assets/ serves a hashed asset with cache-control "${assetCache}", expected immutable`);
   }
+  const docsPage = await fetch(`${origin}/docs/introduction/how-it-works`);
+  const docsCache = docsPage.headers.get("cache-control") ?? "";
+  if (!docsCache.includes("no-cache")) {
+    fail(`/docs/ serves a page with cache-control "${docsCache}", expected no-cache: it names hashed assets`);
+  }
+  if (!(docsPage.headers.get("x-robots-tag") ?? "").includes("noindex")) {
+    fail("/docs/ serves a page without the host's X-Robots-Tag");
+  }
+  const docsAsset = await fetch(`${origin}/docs/assets/style-deadbeef.css`);
+  const docsAssetCache = docsAsset.headers.get("cache-control") ?? "";
+  if (!docsAssetCache.includes("immutable")) {
+    fail(`/docs/assets/ serves a hashed asset with cache-control "${docsAssetCache}", expected immutable`);
+  }
+  if (!(docsAsset.headers.get("x-robots-tag") ?? "").includes("noindex")) {
+    fail("/docs/assets/ drops the host's X-Robots-Tag — add_header in a location replaces every inherited one");
+  }
 } finally {
   stop();
 }
@@ -186,6 +240,6 @@ console.log(
     ? `\n${findings.length} deviation(s) from what docs/specs/configuration.md §5 says the default target ` +
         `answers. The routes come from clients/web/src/app/route-paths.ts; the rest is docker/web-nginx.conf.`
     : `✓ ${EXPECTATIONS.length} position(s) answer as docs/specs/configuration.md §5 states: a console route serves ` +
-        `the entry document, a real file serves itself, everything else 404s`
+        `the entry document, a real file serves itself, /docs/ is the documentation site, everything else 404s`
 );
 process.exit(findings.length ? 1 : 0);
