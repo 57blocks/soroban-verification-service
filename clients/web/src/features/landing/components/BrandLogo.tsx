@@ -6,6 +6,6 @@ export const BrandLogo = () => (
     aria-label="Back to hero"
   >
     <img src="/logo.svg" alt="" className="block size-7 shrink-0" />
-    <span>{brandName}</span>
+    <span className="whitespace-nowrap">{brandName}</span>
   </a>
 );
