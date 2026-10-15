@@ -46,7 +46,7 @@ describe("a private repository is not linked from anywhere", () => {
 describe("withheld, not deleted", () => {
   test("the footer still declares the repository links it is not rendering", () => {
     const hrefs = footerColumns.flatMap((column) => column.items.map((item) => item.href));
-    expect(hrefs.filter((href) => href.startsWith(githubRepoUrl))).toHaveLength(4);
+    expect(hrefs.filter((href) => href.startsWith(githubRepoUrl))).toHaveLength(3);
   });
 
   test("the operator pointer is declared, and withheld with the rest", () => {

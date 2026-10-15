@@ -7,7 +7,7 @@ export const sdkReadmeUrl = `${githubRepoUrl}/tree/main/clients/sdk`;
 
 export const selfHostGuideUrl = `${githubRepoUrl}/blob/main/docs/self-hosted-deployment.md`;
 
-export const docsUrl = `${githubRepoUrl}/tree/main/docs`;
+export const docsUrl = "/docs/";
 
 export const securityPolicyUrl = `${githubRepoUrl}/blob/main/SECURITY.md`;
 

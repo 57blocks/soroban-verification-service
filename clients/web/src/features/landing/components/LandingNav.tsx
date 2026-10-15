@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
+import { docsUrl } from "@/config/site";
 import { heroCopy } from "../content";
 import { sectionLinks } from "../navigation";
 import { BrandLogo } from "./BrandLogo";
@@ -21,13 +22,21 @@ export const LandingNav = () => (
         ))}
       </div>
 
-      <Link
-        to="/verify"
-        className="inline-flex items-center gap-1.5 text-[0.875rem] font-semibold text-ink transition-colors hover:text-ink-body"
-      >
-        {heroCopy.cta}
-        <ArrowRight className="size-4" />
-      </Link>
+      <div className="flex items-center gap-6">
+        <a
+          href={docsUrl}
+          className="hidden text-[0.875rem] font-semibold text-ink-body transition-colors hover:text-ink sm:inline"
+        >
+          Docs
+        </a>
+        <Link
+          to="/verify"
+          className="inline-flex items-center gap-1.5 text-[0.875rem] font-semibold text-ink transition-colors hover:text-ink-body"
+        >
+          {heroCopy.cta}
+          <ArrowRight className="size-4" />
+        </Link>
+      </div>
     </div>
   </nav>
 );
