@@ -169,7 +169,7 @@ export const troubleshootingMessage = (
 ) => {
   const reason = typeof result?.reason === "string" ? result.reason : "";
   if (reason === "sandbox_unavailable") {
-    return "Docker is not available. Start Docker Desktop or Docker Engine, then retry verification.";
+    return "The verifier could not start its build sandbox, so your source was never rebuilt. Nothing in your submission needs changing — this is a problem on the verifier's side. Resubmit later, or tell the verifier's operator if it keeps happening.";
   }
   // Before the state checks: these report `build_failed`, whose own advice is wrong here.
   if (COMPOSITION_FAILURE_REASONS.has(reason)) {

@@ -73,16 +73,21 @@ Verified by: `test/integration/cases/sub/sub-18-dry-run.spec.ts`
 
 ## Source handling
 
-Three retrieval modes: fetched by the verifier from a public `source_uri` (stored durably, served at
-`GET /source/{source_sha256}`); uploaded with a public declaration (same); uploaded without one (not
-stored — only the hash is retained, bytes deleted at job termination on every path including
-failure).
+Three retrieval modes: fetched by the verifier from a public `source_uri` (stored durably and
+published to the result root at `sources/<source_sha256><ext>`, see
+[Published results](published-results.md)); uploaded with a public declaration (same); uploaded
+without one (not stored — only the hash is retained, bytes deleted at job termination on every path
+including failure).
 
 The upload route admits gzip (`.tar.gz`, `.tgz`, `.gz`) and zip archives, decided from file bytes,
 never from a client-supplied filename — and the console's picker applies that same rule, so a name
-a browser mangled on a second download (`archive.tar(2).gz`) is not refused before it is read. A zip is treated as a container and its inner archive is what gets
-hashed and served. For a contract that records a `source_sha256` on-chain, an archive that does not
-hash to it is rejected at submit, not silently rebuilt or substituted.
+a browser mangled on a second download (`archive.tar(2).gz`) is not refused before it is read.
+An archive whose only file is a single top-level member (directories and `__MACOSX`, `._*` and
+`.DS_Store` droppings aside) is treated as a container: that member must itself be an archive the
+verifier reads, and it is unwrapped, up to four levels deep. The innermost archive is what gets
+hashed (as `canonical_sha256`), built and published. Any other archive, including a zip of a
+source tree, is extracted directly. For a contract that records a `source_sha256` on-chain, an
+archive that does not hash to it is rejected at submit, not silently rebuilt or substituted.
 
 Source visibility (`public` / `private` / `unavailable`) is reported independently of the verdict. A
 verdict is never downgraded because source became unavailable later, and `private` is never
@@ -95,17 +100,32 @@ source" ambiguous.
 Verified by: `test/integration/cases/src/src-06-verified-source-link.spec.ts`,
 `test/integration/cases/src/src-12-adopted-public-resubmission.spec.ts`,
 `test/integration/cases/sep55/sep55-01-positive-observation.spec.ts`,
-`test/integration/cases/sep55/sep55-03-discriminator.spec.ts`
+`test/integration/cases/sep55/sep55-03-discriminator.spec.ts`,
+`services/builder/test/archive-extraction.spec.ts`,
+`services/builder/test/materialise-canonical-archive.spec.ts`,
+`packages/storage-layout/src/keys.ts`
 
 ## Upload safety
 
 Archives are checked for path traversal, symlinks, entry count, and uncompressed size before
-extraction. Source bytes are verified against `source_sha256` before any build begins — a mismatch
-is `source_unreachable`, never a build attempt.
+extraction. Source bytes are checked against `source_sha256` at each hand-off, and which code a
+mismatch carries depends on where it is caught:
+
+- An upload whose hash, computed when it was received, differs from `manifest.source_sha256` is
+  refused at submit with `400 source_hash_mismatch`; no job is created.
+- A `source_uri` whose fetched bytes do not hash to the declared `source_sha256` fails the job
+  before dispatch with reason `source_unreachable` (code `source_hash_mismatch`).
+- Inside the builder, a staged archive that does not hash to `source_sha256` is refused before the
+  build command runs, and a sandbox report whose source hash disagrees with the recorded one is
+  refused before anything is published. Both carry `source_sha256_mismatch`, classed `build`, so
+  the job ends `build_failed`.
 
 Verified by: `test/integration/cases/sec/sec-archives.spec.ts`,
 `services/verification-svc/test/upload-format-gate.spec.ts`,
-`services/verification-svc/test/submit-upload-check.spec.ts`
+`services/verification-svc/test/submit-upload-check.spec.ts`,
+`services/orchestrator-svc/test/source-ref-dispatch-policy.spec.ts`,
+`services/builder/test/fetch-source.spec.ts`,
+`packages/core/src/rebuild-error-code.ts`
 
 ## Build-option validation
 

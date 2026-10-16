@@ -886,11 +886,14 @@ services:
           The policy is the Postgres-backed AbuseGuard below, which is shared across instances.
 
           ★ It counts every route **except the ones marked `@SkipThrottle`** — health, job status
-          and the SSE stream — and the public read routes, which carry SCVS_READ_THROTTLE_LIMIT
-          instead. Polling your own accepted job spends none of this budget; preflight and the two
-          submission routes do share this one counter. So this tier must stay **above** the sum of the per-route abuse budgets,
-          or it becomes the binding limit and the abuse guard — the tier that is actually per
-          submitter and actually shared across instances — never fires.
+          and the SSE stream — the public read routes, which carry SCVS_READ_THROTTLE_LIMIT
+          instead, and `POST /v1/uploads/source`, which carries SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE.
+          Polling your own accepted job spends none of this budget. The throttler keys its counter
+          on the route's handler as well as the caller, so preflight and `POST /v1/verifications`
+          each have their own counter rather than sharing one. So this tier must stay **above** the
+          abuse budget of each route it counts, or it becomes the binding limit and the abuse guard
+          — the tier that is actually per submitter and actually shared across instances — never
+          fires.
 
           ★ **Raising limits for load: all four move together.** Size them from one write-path
           baseline of R requests per second, so the numbers are recomputable rather than picked. The
@@ -900,7 +903,7 @@ services:
             SCVS_ABUSE_MAX_PER_WINDOW         = 60R x 0.5     preflight is a pre-submission probe,
                                                               not one call per submission
             SCVS_UPLOAD_RATE_LIMIT_PER_MINUTE = 60R x 0.5     uploads are staged ahead of submission
-            SCVS_THROTTLE_LIMIT               > their sum     so the abuse tiers stay the policy
+            SCVS_THROTTLE_LIMIT               > each of the first two, so the abuse tiers stay the policy
 
           The two abuse tiers are per caller, keyed on the client address taken from the proxy chain,
           so the load a deployment can receive is the per-caller budget times the number of distinct
