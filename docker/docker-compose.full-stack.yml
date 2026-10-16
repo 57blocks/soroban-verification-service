@@ -47,7 +47,7 @@ services:
     restart: "no"
     environment:
       <<: *shared-env
-    command: ["sh", "-c", "pnpm --filter @scvs/db run prisma:deploy"]
+    command: ["sh", "-c", "cd packages/db && ./node_modules/.bin/prisma migrate deploy"]
     depends_on:
       postgres:
         condition: service_healthy
