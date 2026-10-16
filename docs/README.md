@@ -14,7 +14,7 @@ The documentation site the web image serves at `/docs/` is a separate tree,
 | You want to | Read |
 | --- | --- |
 | Call this from your own code | [`integrator-guide.md`](integrator-guide.md) — picks between the SDK, the submission API, the aggregator query API and the raw result tree, and hands you to the right one |
-| Submit a contract for verification | [`submission-api-guide.md`](submission-api-guide.md) |
+| Submit a contract for verification | The documentation site: [`quick-start/submit-with-curl.md`](../clients/docs/src/quick-start/submit-with-curl.md) and the contract developers' guides in [`developers/`](../clients/docs/src/developers/) |
 | Query results across verifiers | [`aggregator-query-api-guide.md`](aggregator-query-api-guide.md) |
 | Read a published result with no client at all | [`reading-the-result-tree.md`](reading-the-result-tree.md) |
 

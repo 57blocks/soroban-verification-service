@@ -28,6 +28,20 @@ const quickStart = {
   ],
 };
 
+const guides = [
+  {
+    text: "For contract developers",
+    items: [
+      { text: "Make your contract verifiable", link: "/developers/make-your-contract-verifiable" },
+      { text: "Prepare your source", link: "/developers/prepare-your-source" },
+      { text: "Use the console", link: "/developers/use-the-console" },
+      { text: "Understand a result", link: "/developers/understand-a-result" },
+      { text: "Troubleshoot a failed verification", link: "/developers/troubleshoot" },
+      { text: "Verify from CI", link: "/developers/verify-from-ci" },
+    ],
+  },
+];
+
 const legalAndResources = [
   {
     text: "Legal",
@@ -87,6 +101,7 @@ export default defineConfig({
     nav: [
       { text: "Introduction", link: "/", activeMatch: "^/($|introduction/)" },
       { text: "Quick start", link: "/quick-start/verify-in-the-console", activeMatch: "/quick-start/" },
+      { text: "Guides", link: "/developers/make-your-contract-verifiable", activeMatch: "/(developers|integrators)/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: "More",
@@ -100,6 +115,8 @@ export default defineConfig({
       },
     ],
     sidebar: {
+      "/developers/": guides,
+      "/integrators/": guides,
       "/api/": apiReference,
       "/legal/": legalAndResources,
       "/resources/": legalAndResources,

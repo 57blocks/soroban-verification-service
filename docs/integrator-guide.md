@@ -10,7 +10,7 @@
 | If you want to... | Use | Covered in |
 | --- | --- | --- |
 | Query results in TypeScript/JavaScript, with typed responses and error handling already done for you | `soroban-verification-client` | [`clients/sdk/README.md`](../clients/sdk/README.md) |
-| Submit a contract for verification, or check/stream a job's status | verification-svc's submission API | [`docs/submission-api-guide.md`](submission-api-guide.md) |
+| Submit a contract for verification, or check/stream a job's status | verification-svc's submission API | The documentation site's [quick start](../clients/docs/src/quick-start/submit-with-curl.md) and [developer guides](../clients/docs/src/developers/) |
 | Query an aggregator's results over plain HTTP, from another language or without the SDK | query-svc's aggregation API | [`docs/aggregator-query-api-guide.md`](aggregator-query-api-guide.md) |
 | Read a published result with no API at all — just static files | The raw result tree | [`docs/reading-the-result-tree.md`](reading-the-result-tree.md) |
 
@@ -23,13 +23,13 @@ TypeScript/JavaScript runtime.
 
 - **Submitting and reading are two different interfaces**, on two different services. `soroban-verification-client` is
   explicitly a *query* client — "not a submission client," per its own README. If you need to submit a
-  contract, that's [`docs/submission-api-guide.md`](submission-api-guide.md) regardless of whether you
+  contract, that's the [submission API](../clients/docs/src/quick-start/submit-with-curl.md) regardless of whether you
   also use the SDK to read the result afterward.
 - **The raw result tree is not a fallback for when the API is down** — it's the primitive the API
   itself reads from. Prefer it when you want zero dependency on any one verifier's or aggregator's
   service being up.
 - **What can be verified today**: two of three contract classes are in scope — `cli-58` (built with
-  `stellar contract build --verifiable`, full on-chain recipe) and `cli-legacy` (Stellar CLI build,
+  a full on-chain recipe; see [Make your contract verifiable](../clients/docs/src/developers/make-your-contract-verifiable.md)) and `cli-legacy` (Stellar CLI build,
   toolchain identity only, recipe submitted alongside source). Plain `cargo build` with no Stellar CLI
   record at all (`cli-none`) is out of scope for now.
 
@@ -38,7 +38,7 @@ TypeScript/JavaScript runtime.
 Tying the submission and read sides together, since that narrative doesn't live in either split-out
 document on its own:
 
-1. **Submit** via [`docs/submission-api-guide.md`](submission-api-guide.md) — `POST .../v1/verifications`
+1. **Submit** via the [submission API](../clients/docs/src/quick-start/submit-with-curl.md) — `POST .../v1/verifications`
    returns a job ID immediately.
 2. **Track it** — poll `GET .../v1/verifications/:job_id` or subscribe to its SSE event stream.
 3. **Once terminal, read the published result** from the verifier's Result Publishing surface — a
