@@ -1,7 +1,7 @@
 # How it works
 
 A verification runs through four stages: **preflight**, **submit**, **rebuild**, then **compare and
-publish**. The web console walks you through all four. Preflight and submit are HTTP calls you can make
+publish**. The [web console](../quick-start/verify-in-the-console.md) walks you through all four. Preflight and submit are HTTP calls you can make
 yourself, and you can follow the rest over HTTP; see the [API reference](../api/index.md).
 
 ## 1. Preflight

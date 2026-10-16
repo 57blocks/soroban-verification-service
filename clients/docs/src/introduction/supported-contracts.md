@@ -69,7 +69,7 @@ technical limit.
 
 ## Checking your contract
 
-The quickest check is preflight: enter the contract in the web console, and it tells you whether the
+The quickest check is preflight: enter the contract in the [web console](../quick-start/verify-in-the-console.md), and it tells you whether the
 contract can be verified and, if not, why, and prefills the inputs the contract records. You can also
 read the record yourself with the Stellar CLI:
 
