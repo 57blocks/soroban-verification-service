@@ -116,7 +116,11 @@ describe("troubleshootingMessage", () => {
     expect(troubleshootingMessage("build_failed", {})).toContain("manifest path");
   });
 
-  test("sandbox_unavailable keeps its own more specific advice", () => {
-    expect(troubleshootingMessage("build_failed", { reason: "sandbox_unavailable" })).toContain("Docker");
+  test("sandbox_unavailable reads as a verifier-side fault, not local Docker advice", () => {
+    const message = troubleshootingMessage("build_failed", { reason: "sandbox_unavailable" });
+    expect(message).toContain("problem on the verifier's side");
+    expect(message).toContain("Resubmit later");
+    expect(message).not.toContain("Docker");
+    expect(message).not.toContain("manifest path");
   });
 });

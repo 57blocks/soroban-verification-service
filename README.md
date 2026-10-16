@@ -203,10 +203,13 @@ The final rebuild runs with `--cap-drop ALL`, `--security-opt no-new-privileges`
 `--read-only`, a non-root `--user`, a read-only `/source` mount and a writable `/out` mount. Before
 it, the runner stages a temporary copy of the source and runs `cargo vendor --locked` in the same
 digest-pinned image, mounting source read-only and writing only to a dedicated `/vendor` mount.
-Dependency prefetch rejects URLs targeting private, local, or metadata hosts; add legitimate public
-hosts with `SCVS_PREFETCH_ALLOWED_HOSTS`. `stellar contract build` then runs with `--locked`,
-`CARGO_NET_OFFLINE=true`, tmpfs-backed `/tmp` and `/var/tmp`, a Cargo config pointing crates.io at
-the vendored directory, and no container network.
+Dependency prefetch rejects URLs targeting private, local, or metadata hosts, and rejects any host
+that is not on the prefetch allowlist. The default allowlist covers crates.io, GitHub, GitLab,
+Bitbucket and Codeberg; `SCVS_PREFETCH_ALLOWED_HOSTS` replaces it with a comma-separated list.
+`stellar contract build` then runs with `CARGO_NET_OFFLINE=true`, tmpfs-backed `/tmp` and
+`/var/tmp`, a Cargo config pointing crates.io at the vendored directory, and no container network.
+The build command never adds `--locked`; it passes `--locked` only when the recorded build options
+include it.
 
 On a terminal job the API publishes this verifier's static result root — by default
 `${SCVS_ARTIFACT_DIR}/public`. `SCVS_RESULT_ROOT` chooses the output directory and
