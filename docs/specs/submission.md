@@ -17,7 +17,8 @@ Every route below is under `/api/verification/v1`. Free, no accounts, no KYC, HT
 | `GET` | `/wasms` | Reads the published bulk-load stream: `jobs.published_updated_at` and the same documents `orchestrator-svc` publishes |
 | `GET` | `/wasms/{wasm_hash}.json` | Reads the published result root: the same bytes at `wasms/<hash>.json`, plus `202` while a verification for that hash is queued or running |
 
-Field-level request/response shapes: [`docs/submission-api-guide.md`](../submission-api-guide.md).
+Field-level request/response shapes: the OpenAPI document (`pnpm run generate:openapi`), rendered in the
+documentation site's [API reference](../../clients/docs/src/api/index.md).
 `GET /contracts/{network}/{contract_id}` is served under `query-svc`'s own `/api/query/v1/` prefix
 (`services/query-svc/src/modules/results/results.controller.ts`), a separate service from this one.
 

@@ -13,7 +13,7 @@ the whole tree — every row below is under a few KB.
 | Set up, build, run, test | [`README.md`](README.md#quick-start-from-zero), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Know what a `pnpm run <x>` script does, and who runs it | [`eng-tools/README.md`](eng-tools/README.md) |
 | Call this service from your own code | [`docs/integrator-guide.md`](docs/integrator-guide.md) |
-| Submit a contract for verification | [`docs/submission-api-guide.md`](docs/submission-api-guide.md) |
+| Submit a contract for verification | [`clients/docs/src/quick-start/submit-with-curl.md`](clients/docs/src/quick-start/submit-with-curl.md), [`clients/docs/src/developers/`](clients/docs/src/developers/) |
 | Query results across verifiers | [`docs/aggregator-query-api-guide.md`](docs/aggregator-query-api-guide.md) |
 | Read a published result with no client | [`docs/reading-the-result-tree.md`](docs/reading-the-result-tree.md) |
 | Stand up your own verifier | [`docs/self-hosted-deployment.md`](docs/self-hosted-deployment.md), [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) |

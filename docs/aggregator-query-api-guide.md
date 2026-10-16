@@ -2,7 +2,7 @@
 
 > **Audience**: a developer querying an aggregator's Public Query API (`query-svc`) directly over HTTP
 > — no SDK, no client library.
-> **Shape authority**: same rule as the [submission API guide](submission-api-guide.md) — this
+> **Shape authority**: this
 > document covers routes, flow, and the two fields most likely to be misread. For exact request/
 > response shapes, use `/api/query/v1/docs` (Swagger UI, already mounted) or the generated
 > `services/query-svc/openapi.json`.
