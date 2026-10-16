@@ -22,6 +22,7 @@ const introduction = {
 const quickStart = {
   text: "Quick start",
   items: [
+    { text: "Verify in the console", link: "/quick-start/verify-in-the-console" },
     { text: "Submit a contract with curl", link: "/quick-start/submit-with-curl" },
     { text: "Read a result with curl", link: "/quick-start/read-a-result" },
   ],
@@ -85,7 +86,7 @@ export default defineConfig({
     siteTitle: "Soroban Verifier",
     nav: [
       { text: "Introduction", link: "/", activeMatch: "^/($|introduction/)" },
-      { text: "Quick start", link: "/quick-start/submit-with-curl", activeMatch: "/quick-start/" },
+      { text: "Quick start", link: "/quick-start/verify-in-the-console", activeMatch: "/quick-start/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: "More",
