@@ -2,6 +2,7 @@ import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
+import { sourceIsPublic } from "../../web/src/config/site.ts";
 import { API_SPECS, apiSidebar } from "./api-specs.ts";
 
 const RESULT_SCHEMAS = fileURLToPath(new URL("../../../docs/results-sep/schemas", import.meta.url));
@@ -16,6 +17,16 @@ const introduction = {
     { text: "Trust model", link: "/introduction/trust-model" },
     { text: "Supported contracts", link: "/introduction/supported-contracts" },
     { text: "Glossary", link: "/introduction/glossary" },
+  ],
+};
+
+/** Running a verifier needs the source, so these pages are built only once it is public. */
+const showUnreleased = sourceIsPublic || Boolean(process.env.SCVS_DOCS_SHOW_UNRELEASED);
+
+const selfHosting = {
+  text: "Run your own verifier",
+  items: [
+    { text: "Configuration reference", link: "/self-hosting/configuration" },
   ],
 };
 
@@ -97,6 +108,7 @@ export default defineConfig({
   description:
     "How Soroban contract source verification works, how to submit a contract, and how to read verified results.",
   srcDir: "src",
+  srcExclude: showUnreleased ? [] : ["self-hosting/**", "specifications/**"],
   outDir: "dist",
   base: "/docs/",
   cleanUrls: true,
@@ -140,6 +152,7 @@ export default defineConfig({
       "/developers/": guides,
       "/integrators/": guides,
       "/api/": apiReference,
+      ...(showUnreleased ? { "/self-hosting/": [selfHosting] } : {}),
       "/legal/": legalAndResources,
       "/security/": legalAndResources,
       "/resources/": legalAndResources,

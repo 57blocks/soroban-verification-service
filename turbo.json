@@ -38,6 +38,18 @@
     },
     "soroban-verify-docs#build": {
       "dependsOn": ["^build", "@scvs/verification-svc#generate:openapi", "@scvs/query-svc#generate:openapi"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/CHANGELOG.md",
+        "$TURBO_ROOT$/LICENSE",
+        "$TURBO_ROOT$/NOTICE",
+        "$TURBO_ROOT$/THIRD-PARTY-NOTICES",
+        "$TURBO_ROOT$/clients/web/src/config/site.ts",
+        "$TURBO_ROOT$/config/env-manifest.yaml",
+        "$TURBO_ROOT$/docs/results-sep/**",
+        "$TURBO_ROOT$/eng-tools/env-manifest.mjs"
+      ],
+      "env": ["SCVS_DOCS_SHOW_UNRELEASED"],
       "outputs": ["dist/**"]
     },
     "soroban-verify-web#build": {
