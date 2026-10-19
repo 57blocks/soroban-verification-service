@@ -47,8 +47,6 @@ export const LandingFooter = () => {
           {operator.prefix}{" "}
           <a
             href={operator.href}
-            target="_blank"
-            rel="noreferrer"
             className="text-ink-body underline decoration-yellow decoration-2 underline-offset-2 transition-colors hover:text-ink"
           >
             {operator.label}

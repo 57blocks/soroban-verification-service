@@ -67,7 +67,7 @@ for exact mechanics — this list is not exhaustive):
   roles are scoped to ECR pull + CloudWatch Logs only — never S3, Secrets Manager, RDS, or any
   business-data permission. It also never imports `@scvs/db`. Artifact upload happens via a presigned
   S3 PUT URL handed to each job, not a standing grant. What an operator must provide is in
-  [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md).
+  [`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md).
 - **Network isolation, and one gap we are not going to imply away.** The Batch build subnet is a
   separate VPC subnet and security group from the resident services and the database, so the sandbox
   shares no network boundary with the API, the console, or Postgres.
@@ -80,7 +80,7 @@ for exact mechanics — this list is not exhaustive):
   credential. Reports that turn network adjacency into a capability are in scope and wanted.
 
   If you deploy this yourself, give the two fleets their own subnets and security groups — the
-  requirement is written down in [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md),
+  requirement is written down in [`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md),
   and unlike us you can meet it from the start.
 - **The build image is never chosen by the submitter.** It is derived from the deployed Wasm's own
   metadata, and a `bldimg` in a submitted manifest is compatibility-only for older clients — never

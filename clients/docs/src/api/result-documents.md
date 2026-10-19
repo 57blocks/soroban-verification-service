@@ -1,3 +1,7 @@
+<script setup>
+import { sourceIsPublic } from "../../../web/src/config/site.ts";
+</script>
+
 # Result documents
 
 Every document on the read side carries a `schema` and a `schema_version`, and each has a JSON Schema
@@ -87,6 +91,10 @@ for aggregation. Each schema's `$id` names its format; it is not a URL the file 
 validate, download the schema files below and register each under its `$id`. The files describe
 version 1.0 exactly: their objects and vocabularies are closed, so relax both as described in
 [Reading versions](#reading-versions), or a later minor version will fail validation.
+
+<p v-if="sourceIsPublic">Read both proposals in full:
+<a href="/docs/specifications/verification-results">Verification results</a> and
+<a href="/docs/specifications/aggregation">Aggregation</a>.</p>
 
 | Schema file | `schema` |
 | --- | --- |

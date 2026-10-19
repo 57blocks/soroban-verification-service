@@ -5,7 +5,7 @@ export const sourceIsPublic: boolean = false;
 
 export const sdkReadmeUrl = `${githubRepoUrl}/tree/main/clients/sdk`;
 
-export const selfHostGuideUrl = `${githubRepoUrl}/blob/main/docs/self-hosted-deployment.md`;
+export const selfHostGuideUrl = "/docs/self-hosting/overview";
 
 export const docsUrl = "/docs/";
 

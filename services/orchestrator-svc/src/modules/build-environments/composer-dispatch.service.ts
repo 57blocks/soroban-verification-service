@@ -102,7 +102,7 @@ export class ComposerDispatchService {
       throw new ConfigurationError(
         envName,
         `${envName} is required to compose a build environment for a cli-legacy target. ` +
-          "Set the composer fleet's configuration (docs/infrastructure-requirements.md §2.6), or expect " +
+          "Set the composer fleet's configuration (clients/docs/src/self-hosting/requirements.md), or expect " +
           "every cli-legacy verification to fail preparation.",
       );
     }

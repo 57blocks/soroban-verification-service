@@ -76,7 +76,7 @@ You need:
   `docker run` on your machine anymore.
 - A standard, stable Stellar CLI release (see step 2)
 - Your own AWS account, with a Batch job queue/job definition, an S3 bucket, and an SQS queue set up
-  for step 5 (see [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) for
+  for step 5 (see [`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md) for
   what `orchestrator-svc` expects), and credentials with access to all three. `orchestrator-svc` always
   dispatches builds to real AWS Batch, so this is required even for local dev; there is no
   local-only fallback mode.
@@ -186,7 +186,7 @@ It has no ALB and takes no inbound business traffic — port 5002 backs a contai
 **There is no local-only build path.** Both Batch queue ARNs, both job definition ARNs,
 `SCVS_JOB_STATE_CHANGE_QUEUE_URL`, `SCVS_STORAGE_BUCKET` and working AWS credentials are required
 even for local dev; `orchestrator-svc` fails fast at startup without the SQS queue. See
-[`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) for what each resource
+[`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md) for what each resource
 needs to be able to do, so you can provision your own equivalents.
 
 There are **two** Batch queues because each compute environment is single-architecture (arm:

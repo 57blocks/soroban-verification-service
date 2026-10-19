@@ -126,12 +126,13 @@ environment), `SECURITY.md`.
 ## 10. Deployment modes
 
 Three modes, each a subset of one layer set: **Verifier-only** (submission + publishing, needs a
-database), **Query-only** (aggregation alone, no database — its cache is derived and rebuildable
-from published result roots), and **Full stack** (all of it). A publish-only mode with no service
+database), **Query-only** (aggregation alone, with its own database — a cache derived from, and
+rebuildable from, published result roots), and **Full stack** (all of it). A publish-only mode with no service
 at all is not supported: preflight, submission, and job status are served routes that a static file
 cannot answer.
 
-Verified by: `docs/self-hosted-deployment.md`, `docs/infrastructure-requirements.md`.
+Verified by: `config/env-manifest.yaml` (`inherits: [base, query-postgres]`),
+`services/query-svc/src/modules/aggregation/aggregation-read.service.ts`.
 
 ## 11. A server that binds a port sets its own deadlines
 

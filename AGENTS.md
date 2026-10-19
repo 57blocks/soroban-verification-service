@@ -16,7 +16,7 @@ the whole tree — every row below is under a few KB.
 | Submit a contract for verification | [`clients/docs/src/quick-start/submit-with-curl.md`](clients/docs/src/quick-start/submit-with-curl.md), [`clients/docs/src/developers/`](clients/docs/src/developers/) |
 | Query results across verifiers | [`clients/docs/src/integrators/query-across-verifiers.md`](clients/docs/src/integrators/query-across-verifiers.md) |
 | Read a published result with no client | [`clients/docs/src/integrators/read-the-result-tree.md`](clients/docs/src/integrators/read-the-result-tree.md) |
-| Stand up your own verifier | [`docs/self-hosted-deployment.md`](docs/self-hosted-deployment.md), [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) |
+| Stand up your own verifier | [`clients/docs/src/self-hosting/`](clients/docs/src/self-hosting/) |
 | Know what review actually checks | [`CODE_REVIEW.md`](CODE_REVIEW.md) |
 | Report a vulnerability, or understand the trust model | [`SECURITY.md`](SECURITY.md) |
 | Know the wire format other software depends on | [`docs/results-sep/README.md`](docs/results-sep/README.md) |
