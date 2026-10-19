@@ -7,6 +7,9 @@ Using this verifier is governed by its operator's two legal documents:
 
 <LegalOperator />
 
+[Data and retention](./data-and-retention.md) describes what the software records and publishes, and for
+how long.
+
 ## How acceptance works
 
 - **The two documents are one unit.** They are published together under a single version, and
