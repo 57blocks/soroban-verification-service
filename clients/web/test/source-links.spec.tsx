@@ -10,7 +10,7 @@ import { SiteNav } from "@/components/site-nav";
 import { githubRepoUrl, sourceIsPublic } from "@/config/site";
 import { audienceCards } from "@/features/landing/content";
 import { landingRoutes } from "@/features/landing/routes";
-import { footerColumns, operatorPointer } from "@/features/landing/navigation";
+import { footerColumns, operatorPointer, visibleOperatorPointer } from "@/features/landing/navigation";
 import { renderInRouter } from "./render-in-router";
 
 const repoHrefs = (container: HTMLElement) =>
@@ -49,8 +49,9 @@ describe("withheld, not deleted", () => {
     expect(hrefs.filter((href) => href.startsWith(githubRepoUrl))).toHaveLength(3);
   });
 
-  test("the operator pointer is declared, and withheld with the rest", () => {
-    expect(operatorPointer.href.startsWith(githubRepoUrl)).toBe(true);
+  test("the operator pointer leads to the self-hosting guide, which is published with the source", () => {
+    expect(operatorPointer.href).toBe("/docs/self-hosting/overview");
+    expect(visibleOperatorPointer()).toBeUndefined();
   });
 
   test("the integrator card still declares its destination", () => {

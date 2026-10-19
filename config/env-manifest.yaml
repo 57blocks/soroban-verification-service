@@ -1051,8 +1051,8 @@ services:
           How many `/events` SSE connections may be open at once for the same job id, enforced
           in-process by JobsService's StreamConcurrencyLimiter. Per-instance: a multi-replica
           deployment's effective per-job ceiling is this number times the replica count unless the
-          load balancer/reverse proxy also caps per-client concurrent connections — see §2.1 of
-          docs/self-hosted-deployment.md.
+          load balancer/reverse proxy also caps per-client concurrent connections — see
+          clients/docs/src/self-hosting/requirements.md.
       SCVS_JOB_STREAM_MAX_CONNECTIONS_PER_IP:
         type: number
         default: 10

@@ -83,6 +83,5 @@ shape).
 ## What this document does not cover
 
 Infrastructure requirements for running a composer fleet (its own Batch queue, IAM, ECR repository)
-are a deployment contract, not an application-level rule — see
-[`docs/self-hosted-deployment.md`](../self-hosted-deployment.md) and
-[`docs/infrastructure-requirements.md`](../infrastructure-requirements.md).
+are a deployment contract, not an application-level rule — see the documentation site's
+[Requirements](../../clients/docs/src/self-hosting/requirements.md).

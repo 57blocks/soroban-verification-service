@@ -26,7 +26,12 @@ const showUnreleased = sourceIsPublic || Boolean(process.env.SCVS_DOCS_SHOW_UNRE
 const selfHosting = {
   text: "Run your own verifier",
   items: [
+    { text: "Overview", link: "/self-hosting/overview" },
+    { text: "Requirements", link: "/self-hosting/requirements" },
+    { text: "Install and run", link: "/self-hosting/install-and-run" },
     { text: "Configuration reference", link: "/self-hosting/configuration" },
+    { text: "Provide your legal documents", link: "/self-hosting/legal-documents" },
+    { text: "Join an aggregator", link: "/self-hosting/join-an-aggregator" },
   ],
 };
 

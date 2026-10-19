@@ -174,7 +174,7 @@ export class BuildEnvironmentIdentityService {
       throw new ConfigurationError(
         "SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI",
         "SCVS_COMPOSED_ENVIRONMENT_REPOSITORY_URI is required to dispatch a rebuild against a composed " +
-          "build environment (docs/infrastructure-requirements.md §2.6)."
+          "build environment (clients/docs/src/self-hosting/requirements.md)."
       );
     }
     return uri;
