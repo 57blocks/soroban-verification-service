@@ -2,7 +2,8 @@
 
 As built. See `Verified by:` on each claim.
 
-Route usage and examples: [`docs/aggregator-query-api-guide.md`](../aggregator-query-api-guide.md).
+Route usage and examples: the documentation site's
+[Query across verifiers](../../clients/docs/src/integrators/query-across-verifiers.md).
 Wire format: [`docs/results-sep/sep-contract-verification-aggregation.md`](../results-sep/sep-contract-verification-aggregation.md).
 This document states the behavioral promises neither of those covers.
 
