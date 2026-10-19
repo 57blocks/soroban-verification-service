@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type ApiName, publicOperations, slugOf } from "./api-specs.ts";
+import { configReferenceMarkdown } from "./config-reference.ts";
 import { failureCodesMarkdown } from "./failure-codes.ts";
 import { githubRepoUrl, sourceIsPublic } from "../../web/src/config/site.ts";
 
@@ -38,6 +39,7 @@ for (const api of ["submission", "query"] as ApiName[]) {
 
 mkdirSync(out("generated/"), { recursive: true });
 writeFileSync(out("generated/failure-codes.md"), `${failureCodesMarkdown()}\n`);
+writeFileSync(out("generated/configuration.md"), `${configReferenceMarkdown()}\n`);
 
 /** Repository paths a page of this site covers, as site-root links: an include does not rewrite relative ones. */
 const SITE_PAGES: Record<string, string> = {

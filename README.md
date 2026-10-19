@@ -336,6 +336,11 @@ environment.
 - `clients/docs` — the public documentation site. VitePress builds it to static pages, and the web image
   serves them at `/docs/`. Its API reference is generated from both services' `openapi.json`, so run
   `pnpm run generate:openapi` before `pnpm run dev:docs`, which serves it at `http://localhost:5180/docs/`.
+  Its configuration reference is generated from `config/env-manifest.yaml`, with a public description
+  of each variable in `clients/docs/.vitepress/config-summaries.ts`; the build fails while either is
+  missing a variable the other has. The pages on running a verifier are built only once
+  `sourceIsPublic` is set in `clients/web/src/config/site.ts`; set `SCVS_DOCS_SHOW_UNRELEASED=1` to build
+  or serve them before that.
 
 `test/integration/` is the black-box `@scvs/e2e-tests` suite — 119 cases, run against a real
 deployment through its public surfaces only, and a no-op unless `SCVS_E2E` is set (see
