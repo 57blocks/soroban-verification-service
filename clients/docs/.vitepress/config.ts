@@ -63,6 +63,7 @@ const legalAndResources = [
     text: "Legal",
     items: [
       { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
+      { text: "Data and retention", link: "/legal/data-and-retention" },
       { text: "Open-source licenses", link: "/legal/open-source-licenses" },
     ],
   },
@@ -130,6 +131,7 @@ export default defineConfig({
           { text: "Changelog", link: "/resources/changelog" },
           { text: "Support", link: "/resources/support" },
           { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
+          { text: "Data and retention", link: "/legal/data-and-retention" },
           { text: "Open-source licenses", link: "/legal/open-source-licenses" },
         ],
       },

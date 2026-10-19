@@ -77,7 +77,8 @@ local paths, and deleted after a retention period, seven days by default.
 ### Can a published result or source be removed?
 
 Not through the service: it has no way to withdraw a result or a source that was published. Reports are
-written to never change, and a copy archived to Arweave is permanent. If you need something removed, ask
+written to never change, and a copy archived to Arweave's main network is permanent. See
+[Data and retention](../legal/data-and-retention.md). If you need something removed, ask
 the verifier's operator; see [Support](./support.md).
 
 ### What happens to the jobs I submit?
