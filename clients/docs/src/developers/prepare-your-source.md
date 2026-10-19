@@ -72,8 +72,10 @@ agree is refused at submission with `source_hash_mismatch`.
 The archive's route to the verifier, and whether it is published, are separate choices. Publication is
 the `is_public` flag, or **Publish this source publicly** in the console, and it is off by default:
 
-- **Private.** The verifier uses the archive for the rebuild and does not keep it. An upload is deleted
-  once no job still needs it. The result publishes the archive's hash, and its URL if you gave one.
+- **Private.** The verifier uses the archive for the rebuild and does not publish it. An upload is
+  deleted once no job still needs it; a copy of a source fetched from a URL stays in the verifier's
+  working storage for as long as its operator keeps working files. The result publishes the archive's
+  hash, and its URL if you gave one.
   Anyone holding the same archive can still check it against the hash.
 - **Public.** The verifier also stores the archive in its result root, at `sources/<sha256>` with the
   archive's own extension, and lists it in the status object's `verified_source_code_uris`. Anyone can then download the

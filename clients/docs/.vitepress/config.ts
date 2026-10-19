@@ -53,6 +53,13 @@ const guides = [
 
 const legalAndResources = [
   {
+    text: "Security",
+    items: [
+      { text: "Security model", link: "/security/security-model" },
+      { text: "Report a vulnerability", link: "/security/report-a-vulnerability" },
+    ],
+  },
+  {
     text: "Legal",
     items: [
       { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
@@ -62,6 +69,7 @@ const legalAndResources = [
   {
     text: "Resources",
     items: [
+      { text: "FAQ", link: "/resources/faq" },
       { text: "Changelog", link: "/resources/changelog" },
       { text: "Support", link: "/resources/support" },
     ],
@@ -114,8 +122,11 @@ export default defineConfig({
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: "More",
-        activeMatch: "/(legal|resources)/",
+        activeMatch: "/(legal|resources|security)/",
         items: [
+          { text: "FAQ", link: "/resources/faq" },
+          { text: "Security model", link: "/security/security-model" },
+          { text: "Report a vulnerability", link: "/security/report-a-vulnerability" },
           { text: "Changelog", link: "/resources/changelog" },
           { text: "Support", link: "/resources/support" },
           { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
@@ -128,6 +139,7 @@ export default defineConfig({
       "/integrators/": guides,
       "/api/": apiReference,
       "/legal/": legalAndResources,
+      "/security/": legalAndResources,
       "/resources/": legalAndResources,
       "/": [introduction, quickStart],
     },
