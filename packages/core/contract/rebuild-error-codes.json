@@ -30,6 +30,7 @@
     "reported_artifact_was_pre_existing": "build",
     "sandbox_unavailable": "infrastructure",
     "source_archive_canonical_unavailable": "build",
+    "source_archive_conflicting_entries": "source",
     "source_archive_extract_failed": "source",
     "source_archive_layout_invalid": "source",
     "source_archive_nested_too_deep": "source",

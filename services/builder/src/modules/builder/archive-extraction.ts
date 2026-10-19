@@ -1,4 +1,6 @@
 import type { RebuildErrorCode } from "@scvs/core";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { sniffArchiveFormat, type ArchiveFormat } from "./archive-format.js";
@@ -275,6 +277,15 @@ export async function extractCanonicalArchive(
   const inspected = await inspectArchive({ reader, format, archivePath, timeout_ms, limits });
   if (!inspected.ok) return inspected;
 
+  const duplicates = await refuseConflictingDuplicates({
+    reader,
+    archivePath,
+    listing,
+    verbose: inspected.verbose,
+    timeout_ms,
+  });
+  if (!duplicates.ok) return duplicates;
+
   const extract = await runCommand(
     [reader, "-xf", archivePath, "-C", destRoot, "--strip-components", String(options.stripComponents)],
     { timeout_ms },
@@ -321,7 +332,7 @@ async function inspectArchive(args: {
   archivePath: string;
   timeout_ms: number;
   limits: ArchiveLimits;
-}): Promise<{ ok: true; bytes: number } | ExtractionFailure> {
+}): Promise<{ ok: true; bytes: number; verbose: string } | ExtractionFailure> {
   const { reader, format, archivePath, timeout_ms, limits } = args;
   // Pinned: a non-English LC_TIME makes BSD tar print a numeric month, which timestampIndex must not accept.
   const verbose = await runCommand([reader, "-tvf", archivePath], {
@@ -366,7 +377,157 @@ async function inspectArchive(args: {
       extract: verbose,
     };
   }
-  return { ok: true, bytes: size.bytes };
+  return { ok: true, bytes: size.bytes, verbose: verbose.stdout };
+}
+
+type ListedEntry = { path: string; directory: boolean; size: number };
+
+const MAX_NAMED_CONFLICTS = 5;
+
+async function refuseConflictingDuplicates(args: {
+  reader: string;
+  archivePath: string;
+  listing: string;
+  verbose: string;
+  timeout_ms: number;
+}): Promise<{ ok: true } | ExtractionFailure> {
+  const names = args.listing.split(/\r?\n/).filter(Boolean);
+  const lines = args.verbose.split(/\r?\n/).filter(Boolean);
+  if (names.length !== lines.length) {
+    return {
+      ok: false,
+      reason: "source_archive_unreadable",
+      detail: `The archive's name listing (${names.length} entries) and its detailed listing (${lines.length}) disagree.`,
+    };
+  }
+
+  const entries: ListedEntry[] = names.map((name, index) => {
+    const fields = lines[index].trim().split(/\s+/);
+    return {
+      path: name.split("/").filter((part) => part.length > 0 && part !== ".").join("/"),
+      directory: lines[index].trim().startsWith("d"),
+      size: Number(fields[timestampIndex(fields) - 1]),
+    };
+  });
+
+  const byPath = new Map<string, number[]>();
+  entries.forEach((entry, index) => {
+    const indices = byPath.get(entry.path);
+    if (indices) indices.push(index);
+    else byPath.set(entry.path, [index]);
+  });
+  const repeated = [...byPath.values()].filter(
+    (indices) => indices.length > 1 && !indices.every((index) => entries[index].directory),
+  );
+  if (repeated.length === 0) return { ok: true };
+
+  const conflicting = new Set<string>();
+  const toCompare = new Set<number>();
+  for (const indices of repeated) {
+    const copies = indices.map((index) => entries[index]);
+    if (copies.some((copy) => copy.directory) || new Set(copies.map((copy) => copy.size)).size > 1) {
+      conflicting.add(copies[0].path);
+    } else {
+      indices.forEach((index) => toCompare.add(index));
+    }
+  }
+
+  if (toCompare.size > 0) {
+    const fileIndices = entries.flatMap((entry, index) => (entry.directory ? [] : [index]));
+    const digests = await digestFileEntries({
+      command: [args.reader, "-xOf", args.archivePath],
+      sizes: fileIndices.map((index) => entries[index].size),
+      wanted: new Set(fileIndices.flatMap((index, position) => (toCompare.has(index) ? [position] : []))),
+      timeout_ms: args.timeout_ms,
+    });
+    if (!digests.ok) {
+      return {
+        ok: false,
+        reason: "source_archive_unreadable",
+        detail: `Could not read back the repeated entries in the source archive to compare them: ${digests.detail}`,
+      };
+    }
+    const digestOf = new Map(fileIndices.map((index, position) => [index, digests.digests.get(position)]));
+    for (const indices of repeated) {
+      if (new Set(indices.map((index) => digestOf.get(index))).size > 1) conflicting.add(entries[indices[0]].path);
+    }
+  }
+
+  if (conflicting.size === 0) return { ok: true };
+  const paths = [...conflicting].sort();
+  const named = paths.slice(0, MAX_NAMED_CONFLICTS).join(", ");
+  const more = paths.length > MAX_NAMED_CONFLICTS ? ` and ${paths.length - MAX_NAMED_CONFLICTS} more` : "";
+  return {
+    ok: false,
+    reason: "source_archive_conflicting_entries",
+    detail:
+      `The source archive stores the same path more than once with different contents (${named}${more}), ` +
+      "so which copy is the source depends on the tool that reads it. Repack the archive so each path is " +
+      "stored once. Identical repeated copies are accepted.",
+  };
+}
+
+async function digestFileEntries(args: {
+  command: string[];
+  sizes: number[];
+  wanted: Set<number>;
+  timeout_ms: number;
+}): Promise<{ ok: true; digests: Map<number, string> } | { ok: false; detail: string }> {
+  const { command, sizes, wanted, timeout_ms } = args;
+  const digests = new Map<number, string>();
+  let position = 0;
+  let remaining = 0;
+  let hash = createHash("sha256");
+  let overflow = false;
+  let timedOut = false;
+
+  const advance = () => {
+    while (position < sizes.length && remaining === 0) {
+      if (wanted.has(position)) digests.set(position, hash.digest("hex"));
+      position += 1;
+      hash = createHash("sha256");
+      remaining = sizes[position] ?? 0;
+    }
+  };
+  remaining = sizes[0] ?? 0;
+  if (sizes.length > 0 && remaining === 0) advance();
+
+  return new Promise((resolve) => {
+    const child = spawn(command[0]!, command.slice(1), { stdio: ["ignore", "pipe", "ignore"] });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeout_ms);
+    child.stdout.on("data", (chunk: Buffer) => {
+      let offset = 0;
+      while (offset < chunk.length) {
+        if (position >= sizes.length) {
+          overflow = true;
+          child.kill("SIGKILL");
+          return;
+        }
+        const take = Math.min(remaining, chunk.length - offset);
+        if (wanted.has(position)) hash.update(chunk.subarray(offset, offset + take));
+        remaining -= take;
+        offset += take;
+        advance();
+      }
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ ok: false, detail: error.message });
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      if (timedOut) return resolve({ ok: false, detail: `the reader did not finish within ${timeout_ms} ms` });
+      if (overflow || position < sizes.length) {
+        return resolve({ ok: false, detail: "the extracted bytes do not match the sizes the listing declares" });
+      }
+      if (signal) return resolve({ ok: false, detail: `the reader was stopped by ${signal}` });
+      if (code !== 0) return resolve({ ok: false, detail: `the reader exited with ${code}` });
+      resolve({ ok: true, digests });
+    });
+  });
 }
 
 function wrappedArchiveMember(stdout: string): string | undefined {

@@ -13,7 +13,7 @@ import {
   totalUncompressedBytes,
 } from "../src/modules/builder/archive-extraction.js";
 import { runCommand } from "@scvs/core/process";
-import { zipArchive } from "./malicious-corpus.js";
+import { ustarArchive as ustarMembers, zipArchive } from "./malicious-corpus.js";
 
 describe("extractSourceArchive", () => {
   it("strips the top-level directory and normalises modes", async () => {
@@ -625,6 +625,7 @@ describe("the archive is listed once, not twice", () => {
     expect(calls.filter((call) => call.endsWith(" -tf"))).toHaveLength(1);
     expect(calls.filter((call) => call.endsWith(" -tvf"))).toHaveLength(1);
     expect(calls.filter((call) => call.endsWith(" -xf"))).toHaveLength(1);
+    expect(calls.filter((call) => call.endsWith(" -xOf"))).toHaveLength(0);
   });
 
   it("reads one -tf per level for a peeled archive, and none twice", async () => {
@@ -638,6 +639,85 @@ describe("the archive is listed once, not twice", () => {
     });
 
     expect(calls.filter((call) => call.endsWith(" -tf"))).toHaveLength(2);
+  });
+});
+
+describe("repeated entries", () => {
+  const CARGO = { name: "pkg/Cargo.toml", body: '[package]\nname = "pkg"\n' };
+
+  async function extractBytes(name: string, bytes: Buffer) {
+    const root = await mkdtemp(join(tmpdir(), "scvs-repeated-"));
+    const archive = join(root, name);
+    await writeFile(archive, bytes);
+    const dest = await mkdtemp(join(tmpdir(), "scvs-repeated-dest-"));
+    return { dest, result: await extractSourceArchive({ archivePath: archive, destRoot: dest }) };
+  }
+
+  it("admits a zip that repeats every directory and file with identical copies", async () => {
+    const lib = { name: "pkg/src/lib.rs", body: "pub fn hello() {}\n" };
+    const { dest, result } = await extractBytes(
+      "recursed.zip",
+      zipArchive([
+        { name: "pkg/", mode: 0o040755 },
+        CARGO,
+        { name: "pkg/src/", mode: 0o040755 },
+        lib,
+        CARGO,
+        { name: "pkg/src/", mode: 0o040755 },
+        lib,
+        lib,
+      ]),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(await readFile(join(dest, "src", "lib.rs"), "utf8")).toBe(lib.body);
+  });
+
+  it("admits a tar that repeats a file with identical copies", async () => {
+    const lib = { name: "pkg/src/lib.rs", body: "pub fn hello() {}\n" };
+    const { result } = await extractBytes("repeated.tar", ustarMembers([CARGO, lib, lib]));
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses copies of different lengths and names the path", async () => {
+    const { result } = await extractBytes(
+      "lengths.zip",
+      zipArchive([CARGO, { name: "pkg/src/lib.rs", body: "a" }, { name: "pkg/src/lib.rs", body: "ab" }]),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("source_archive_conflicting_entries");
+      expect(result.detail).toContain("pkg/src/lib.rs");
+    }
+  });
+
+  it("refuses copies whose bytes differ only where they are not valid UTF-8", async () => {
+    const { result } = await extractBytes(
+      "binary.zip",
+      zipArchive([CARGO, { name: "pkg/blob.bin", body: "\xff\xfe" }, { name: "pkg/blob.bin", body: "\xfe\xff" }]),
+    );
+
+    expect(result.ok ? undefined : result.reason).toBe("source_archive_conflicting_entries");
+  });
+
+  it("refuses a path stored as both a file and a directory", async () => {
+    const { result } = await extractBytes(
+      "file-and-dir.tar",
+      ustarMembers([CARGO, { name: "pkg/src", body: "x" }, { name: "pkg/src/", type: "5" }]),
+    );
+
+    expect(result.ok ? undefined : result.reason).toBe("source_archive_conflicting_entries");
+  });
+
+  it("treats a ./-prefixed name as the same path as its bare spelling", async () => {
+    const { result } = await extractBytes(
+      "dot-prefix.tar",
+      ustarMembers([CARGO, { name: "pkg/a.rs", body: "one\n" }, { name: "./pkg/a.rs", body: "two\n" }]),
+    );
+
+    expect(result.ok ? undefined : result.reason).toBe("source_archive_conflicting_entries");
   });
 });
 

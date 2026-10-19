@@ -1188,6 +1188,7 @@ describe("ADR-008 pipeline, end to end", () => {
       { errorCode: "source_archive_too_large", expected: "source_unreachable" },
       { errorCode: "source_archive_nested_unsupported", expected: "source_unreachable" },
       { errorCode: "source_archive_nested_too_deep", expected: "source_unreachable" },
+      { errorCode: "source_archive_conflicting_entries", expected: "source_unreachable" },
       { errorCode: "git_clone_failed", expected: "source_unreachable" },
       { errorCode: "source_archive_reader_unavailable", expected: "internal_error" },
       { errorCode: "sandbox_unavailable", expected: "internal_error" },
