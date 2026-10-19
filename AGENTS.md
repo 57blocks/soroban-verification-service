@@ -12,10 +12,10 @@ the whole tree — every row below is under a few KB.
 | Find a rule that must not silently break | [`docs/invariants.md`](docs/invariants.md) |
 | Set up, build, run, test | [`README.md`](README.md#quick-start-from-zero), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Know what a `pnpm run <x>` script does, and who runs it | [`eng-tools/README.md`](eng-tools/README.md) |
-| Call this service from your own code | [`docs/integrator-guide.md`](docs/integrator-guide.md) |
+| Call this service from your own code | [`clients/docs/src/integrators/choose-an-interface.md`](clients/docs/src/integrators/choose-an-interface.md) |
 | Submit a contract for verification | [`clients/docs/src/quick-start/submit-with-curl.md`](clients/docs/src/quick-start/submit-with-curl.md), [`clients/docs/src/developers/`](clients/docs/src/developers/) |
-| Query results across verifiers | [`docs/aggregator-query-api-guide.md`](docs/aggregator-query-api-guide.md) |
-| Read a published result with no client | [`docs/reading-the-result-tree.md`](docs/reading-the-result-tree.md) |
+| Query results across verifiers | [`clients/docs/src/integrators/query-across-verifiers.md`](clients/docs/src/integrators/query-across-verifiers.md) |
+| Read a published result with no client | [`clients/docs/src/integrators/read-the-result-tree.md`](clients/docs/src/integrators/read-the-result-tree.md) |
 | Stand up your own verifier | [`docs/self-hosted-deployment.md`](docs/self-hosted-deployment.md), [`docs/infrastructure-requirements.md`](docs/infrastructure-requirements.md) |
 | Know what review actually checks | [`CODE_REVIEW.md`](CODE_REVIEW.md) |
 | Report a vulnerability, or understand the trust model | [`SECURITY.md`](SECURITY.md) |

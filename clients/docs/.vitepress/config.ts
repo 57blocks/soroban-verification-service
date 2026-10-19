@@ -40,6 +40,15 @@ const guides = [
       { text: "Verify from CI", link: "/developers/verify-from-ci" },
     ],
   },
+  {
+    text: "For integrators",
+    items: [
+      { text: "Choose an interface", link: "/integrators/choose-an-interface" },
+      { text: "Query across verifiers", link: "/integrators/query-across-verifiers" },
+      { text: "Interpret multi-verifier results", link: "/integrators/interpret-multi-verifier-results" },
+      { text: "Read the result tree directly", link: "/integrators/read-the-result-tree" },
+    ],
+  },
 ];
 
 const legalAndResources = [
