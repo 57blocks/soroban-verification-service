@@ -8,6 +8,7 @@ const VERIFIER_SIDE = "A fault on the verifier's side. Resubmit; if it persists,
 const READ_THE_LOG = "Read the build log for the cause.";
 
 export const FAILURE_ADVICE: Record<RebuildErrorCode, Entry> = {
+  source_archive_conflicting_entries: { meaning: "The archive stores the same path more than once with different contents, so which copy is the source depends on the tool that reads it.", action: "Repack the archive so each path is stored once. Repeated identical copies are accepted." },
   source_archive_extract_failed: { meaning: "The archive could not be listed or extracted.", action: "Send a valid gzip tarball or zip file." },
   source_archive_layout_invalid: { meaning: "Nothing was left in the archive once its layout was normalised.", action: "Check that the archive holds the source tree." },
   source_archive_nested_too_deep: { meaning: "Archives are nested more than four levels deep.", action: "Send the source archive itself, not an archive of archives." },

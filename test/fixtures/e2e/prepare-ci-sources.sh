@@ -156,7 +156,7 @@ package_source_tree_zip() {
   if [[ "$(basename "$zip_bin")" == "bsdtar" ]]; then
     (
       cd "$tree"
-      LC_ALL=C find source -print | LC_ALL=C sort | "$zip_bin" --format zip -cf "$output" -T -
+      LC_ALL=C find source -print | LC_ALL=C sort | "$zip_bin" --format zip --no-recursion -cf "$output" -T -
     )
   else
     (

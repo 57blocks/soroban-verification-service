@@ -312,6 +312,28 @@ export const MALICIOUS_ARCHIVES: readonly MaliciousArchive[] = [
     build: zip("size-bomb.zip", [{ name: "pkg/big.bin", body: "0".repeat(4 * 1024 * 1024) }]),
   },
   {
+    id: "conflicting-duplicate",
+    attack:
+      "The same path stored twice with different bytes of equal length. Extraction keeps the last " +
+      "copy while another reader may show the first, so the verified source would not be the one shown.",
+    reason: "source_archive_conflicting_entries",
+    build: raw("conflicting.tar", [
+      { name: "pkg/Cargo.toml", body: '[package]\nname = "pkg"\n' },
+      { name: "pkg/src/lib.rs", body: "pub fn shown() {}\n" },
+      { name: "pkg/src/lib.rs", body: "pub fn built() {}\n" },
+    ]),
+  },
+  {
+    id: "zip-conflicting-duplicate",
+    attack: "The same path stored twice in a zip with different bytes of equal length.",
+    reason: "source_archive_conflicting_entries",
+    build: zip("conflicting.zip", [
+      { name: "pkg/Cargo.toml", body: '[package]\nname = "pkg"\n' },
+      { name: "pkg/src/lib.rs", body: "pub fn shown() {}\n" },
+      { name: "pkg/src/lib.rs", body: "pub fn built() {}\n" },
+    ]),
+  },
+  {
     id: "symlink-built-by-tar",
     attack:
       "The same symlink attack expressed through the real `tar` create path, so the corpus is not " +

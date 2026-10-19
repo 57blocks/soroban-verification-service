@@ -4,6 +4,7 @@ export const rebuildErrorCodeClasses = ["source", "policy", "infrastructure", "b
 export type RebuildErrorCodeClass = (typeof rebuildErrorCodeClasses)[number];
 
 export const rebuildErrorCodeClass = {
+  source_archive_conflicting_entries: "source",
   source_archive_extract_failed: "source",
   source_archive_layout_invalid: "source",
   source_archive_nested_too_deep: "source",

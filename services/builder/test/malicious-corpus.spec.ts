@@ -32,6 +32,7 @@ describe("T5 — every adversarial archive fails closed, with its documented rea
     expect(reasons).toContain("source_archive_unsafe_link");
     expect(reasons).toContain("source_archive_too_many_entries");
     expect(reasons).toContain("source_archive_too_large_uncompressed");
+    expect(reasons).toContain("source_archive_conflicting_entries");
   });
 
   it("has no duplicate ids, since the id is what a failure names", () => {
