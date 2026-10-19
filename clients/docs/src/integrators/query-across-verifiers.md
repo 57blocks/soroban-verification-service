@@ -132,5 +132,6 @@ with `rate_limited` and a `Retry-After` header; being limited on one route does 
 An operator can set other limits, so read the `429` rather than hard-coding a rate.
 
 [Errors](../api/errors.md#query-api) lists every error. The API reference describes each route:
-[by contract](../api/query/query-by-contract.md), [by hash](../api/query/query-by-hash.md),
-[bulk load](../api/query/aggregated-bulk-load.md) and [verifiers](../api/query/list-verifiers.md).
+<a href="/docs/api/query/query-by-contract">by contract</a>, <a href="/docs/api/query/query-by-hash">by
+hash</a>, <a href="/docs/api/query/aggregated-bulk-load">bulk load</a> and
+<a href="/docs/api/query/list-verifiers">verifiers</a>.
