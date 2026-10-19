@@ -35,6 +35,14 @@ const selfHosting = {
   ],
 };
 
+const specifications = {
+  text: "Specifications",
+  items: [
+    { text: "Verification results", link: "/specifications/verification-results" },
+    { text: "Aggregation", link: "/specifications/aggregation" },
+  ],
+};
+
 const quickStart = {
   text: "Quick start",
   items: [
@@ -140,11 +148,17 @@ export default defineConfig({
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: "More",
-        activeMatch: "/(legal|resources|security)/",
+        activeMatch: "/(legal|resources|security|self-hosting|specifications)/",
         items: [
           { text: "FAQ", link: "/resources/faq" },
           { text: "Security model", link: "/security/security-model" },
           { text: "Report a vulnerability", link: "/security/report-a-vulnerability" },
+          ...(showUnreleased
+            ? [
+                { text: "Run your own verifier", link: "/self-hosting/overview" },
+                { text: "Specifications", link: "/specifications/verification-results" },
+              ]
+            : []),
           { text: "Changelog", link: "/resources/changelog" },
           { text: "Support", link: "/resources/support" },
           { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
@@ -157,7 +171,7 @@ export default defineConfig({
       "/developers/": guides,
       "/integrators/": guides,
       "/api/": apiReference,
-      ...(showUnreleased ? { "/self-hosting/": [selfHosting] } : {}),
+      ...(showUnreleased ? { "/self-hosting/": [selfHosting], "/specifications/": [specifications] } : {}),
       "/legal/": legalAndResources,
       "/security/": legalAndResources,
       "/resources/": legalAndResources,
