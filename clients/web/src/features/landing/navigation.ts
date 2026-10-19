@@ -32,7 +32,7 @@ export const footerColumns: { title: string; items: ContentLink[] }[] = [
 
 export const operatorPointer = {
   prefix: "Running your own verifier?",
-  label: "Self-hosted deployment guide",
+  label: "Self-hosting guide",
   href: selfHostGuideUrl,
 } as const;
 

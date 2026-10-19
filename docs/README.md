@@ -20,11 +20,9 @@ The documentation site the web image serves at `/docs/` is a separate tree,
 
 ## Running your own verifier
 
-| | |
-| --- | --- |
-| [`self-hosted-deployment.md`](self-hosted-deployment.md) | Standing it up |
-| [`infrastructure-requirements.md`](infrastructure-requirements.md) | What each service needs from your infrastructure, and where it is locked to a vendor. **Read §2.6 before you deploy the composer** — it and the builder must not share a network segment |
-| [`verifier-onboarding.md`](verifier-onboarding.md) | Becoming discoverable to aggregators |
+The documentation site's [self-hosting guides](../clients/docs/src/self-hosting/overview.md): requirements,
+installing and running, the configuration reference, legal documents, and joining an aggregator. The site
+publishes them once the source is public.
 
 ## The published contract
 

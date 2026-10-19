@@ -66,7 +66,7 @@ CI (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
   [rule 8 of `docs/invariants.md`](docs/invariants.md). If your change alters what a
   deployment has to provide (a new environment variable, a new bucket prefix, a new IAM action), say
   so in the PR description and update
-  [docs/infrastructure-requirements.md](docs/infrastructure-requirements.md) in the same PR — it is
+  [clients/docs/src/self-hosting/requirements.md](clients/docs/src/self-hosting/requirements.md) in the same PR — it is
   what a self-hoster provisions from, and nothing else tracks the drift.
 
 Run a single service's suite instead of the whole monorepo while iterating:

@@ -71,7 +71,7 @@ retry and error handling it wants.
     optional too.
   - `bulk_load_url` — **optional**. Only needed if you want to call `registry.bulkLoad()` against this
     verifier; a verifier that doesn't serve one is still fully usable for `byHash`/`statusObject`. See
-    [`../../docs/verifier-onboarding.md`](../../docs/verifier-onboarding.md) for what publishing one
+    [Join an aggregator](../docs/src/self-hosting/join-an-aggregator.md) for what publishing one
     means from the verifier's side.
   - `trust_tier` — optional: your own free-form label (e.g. `"local"`, `"primary"`, `"community"`).
     Nothing in this package interprets its value.
@@ -96,7 +96,7 @@ const theirs = await client.registry.statusObject(client.verifiers[0], "9f2c1a7b
 
 // One page of a verifier's own bulk-load stream. `bulk_load_url` is optional, so pick a member that
 // declares one rather than assuming the first does — `bulkLoad` throws on a member that doesn't. See
-// ../../docs/verifier-onboarding.md for what publishing one means for a verifier.
+// clients/docs/src/self-hosting/join-an-aggregator.md for what publishing one means for a verifier.
 const enumerable = client.verifiers.find((verifier) => verifier.bulk_load_url !== undefined);
 const page = enumerable ? await client.registry.bulkLoad(enumerable, { limit: 100 }) : undefined;
 ```
