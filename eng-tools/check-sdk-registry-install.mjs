@@ -13,7 +13,8 @@ const OPEN_LICENCES = new Set(["Apache-2.0", "MIT"]);
 
 const inGha = Boolean(process.env.GITHUB_ACTIONS);
 const repoRoot = resolve(import.meta.dirname, "..");
-const packageDir = resolve(process.argv[2] ?? join(repoRoot, "clients/sdk"));
+const positional = process.argv.slice(2).filter((arg, at, args) => !arg.startsWith("--") && !args[at - 1]?.startsWith("--"));
+const packageDir = resolve(positional[0] ?? join(repoRoot, "clients/sdk"));
 const findings = [];
 
 const secrets = [];
@@ -22,8 +23,22 @@ function redact(text) {
   return secrets.reduce((carry, secret) => carry.split(secret).join("***"), String(text));
 }
 
+function argOf(name, fallback) {
+  const at = process.argv.indexOf(`--${name}`);
+  return at === -1 ? fallback : Number(process.argv[at + 1]);
+}
+
+const ATTEMPTS = argOf("attempts", 1);
+const WAIT_MS = argOf("wait-ms", 10000);
+
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
 function run(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function notServedYet(error) {
+  return /E404|404 Not Found|ETARGET|No matching version/.test(`${error.stdout ?? ""}${error.stderr ?? ""}`);
 }
 
 function readJson(path) {
@@ -62,6 +77,7 @@ function configureRegistry(consumer, scope) {
 function diagnose(error) {
   const output = redact(`${error.stdout ?? ""}${error.stderr ?? ""}`);
   if (/E404|404 Not Found/.test(output)) return "the registry has no such version (E404)";
+  if (/ETARGET|No matching version/.test(output)) return "the registry serves no such version yet (ETARGET)";
   if (/E401|E403|401 Unauthorized|403 Forbidden/.test(output)) {
     return "the registry refused the request (E401/E403) — a public package should need no credential, so this is a failure and never a skip";
   }
@@ -96,15 +112,27 @@ try {
     );
   }
 
+  // A throwaway cache: `npm publish --dry-run` leaves the pre-publish packument in npm's own cache.
+  const cache = join(scratch, "npm-cache");
   let installOutput;
-  try {
-    installOutput = run(
-      "npm",
-      ["install", `${name}@${version}`, "--no-audit", "--no-fund", "--ignore-scripts", "--json"],
-      consumer,
-    );
-  } catch (error) {
-    findings.push(`${name}@${version} does not install from ${describeRegistry(registry)}: ${diagnose(error)}`);
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    try {
+      installOutput = run(
+        "npm",
+        ["install", `${name}@${version}`, "--no-audit", "--no-fund", "--ignore-scripts", "--json", "--prefer-online", "--cache", cache],
+        consumer,
+      );
+      if (attempt > 1) console.log(`── installed on attempt ${attempt} of ${ATTEMPTS}`);
+      break;
+    } catch (error) {
+      if (attempt < ATTEMPTS && notServedYet(error)) {
+        sleep(WAIT_MS);
+        continue;
+      }
+      const waited = attempt > 1 ? ` after ${attempt} attempts over ${((attempt - 1) * WAIT_MS) / 1000}s` : "";
+      findings.push(`${name}@${version} does not install from ${describeRegistry(registry)}${waited}: ${diagnose(error)}`);
+      break;
+    }
   }
 
   if (installOutput !== undefined) {
