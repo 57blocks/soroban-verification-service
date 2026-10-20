@@ -229,7 +229,7 @@ async function relativeRootOverHttp(): Promise<void> {
     updated_at: "2026-06-30T00:00:00.000Z",
     source_code_verifications: [
       {
-        verifier: { name: "HTTP Verifier", url: "https://x.example" },
+        verifier: { name: "HTTP Verifier" },
         status: "verified",
         processed_at: "2026-06-30T00:00:00.000Z",
         out_of_band: false,

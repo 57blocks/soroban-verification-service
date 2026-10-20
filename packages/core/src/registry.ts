@@ -281,6 +281,16 @@ export function normalizeVerifierUrl(url: string): string {
   }
 }
 
+/** A result root's own entry. The first entry stands in only when no entry names a `verifier.url`. */
+export function ownEntryOf<T extends PeerRegistryVerification>(entries: readonly T[], resultRoot: string): T | undefined {
+  const root = normalizeVerifierUrl(resultRoot);
+  const matched = entries.find(
+    (entry) => entry.verifier?.url !== undefined && normalizeVerifierUrl(entry.verifier.url) === root,
+  );
+  if (matched) return matched;
+  return entries.some((entry) => entry.verifier?.url !== undefined) ? undefined : entries[0];
+}
+
 export function reportSha256FromUrl(url: string): string | undefined {
   const match = /\/reports\/([0-9a-f]{64})\.json(?:[?#].*)?$/.exec(url);
   return match?.[1];
