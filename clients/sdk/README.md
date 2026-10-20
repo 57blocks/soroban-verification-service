@@ -273,11 +273,6 @@ are excluded from that bundle: [`tsup.config.ts`](tsup.config.ts).
 npm install soroban-verification-client
 ```
 
-> **Not published yet.** The first version goes out when this repository becomes public: a release is
-> published through npm's trusted publishing, which stamps provenance, and provenance can only be
-> verified against a source anyone can read. Until then every release run builds and checks the tarball
-> and stops before the registry. Build from source in the meantime — see [CONTRIBUTING.md](../../CONTRIBUTING.md).
-
 Published to the public npm registry, with build provenance: the registry records which workflow run
 in which repository produced each version, and `npm audit signatures` verifies it. Nothing to
 configure, no registry to point at, no credential.

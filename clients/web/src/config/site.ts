@@ -1,7 +1,7 @@
 export const githubRepoUrl =
   "https://github.com/57blocks/soroban-verification-service";
 
-export const sourceIsPublic: boolean = false;
+export const sourceIsPublic: boolean = true;
 
 export const sdkReadmeUrl = `${githubRepoUrl}/tree/main/clients/sdk`;
 
