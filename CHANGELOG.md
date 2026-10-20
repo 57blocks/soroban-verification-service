@@ -12,6 +12,15 @@ mints a release, and the `latest` dist-tag never holds a prerelease.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The direct client no longer relays an entry under another verifier's identity.** From each result
+  root, `registry.byHash` now relays only the entry whose `verifier.url` names that root, or the
+  first entry when none names a URL, as the hosted aggregator already did. Before, it relayed every
+  entry with the `verifier` the document claimed, so a listed verifier could publish results shown
+  under another verifier's result root. A document holding no entry of its own counts as no result,
+  not as an unavailable verifier.
+
 ## [0.1.0] - 2026-10-20
 
 The first public release. The project was developed privately before this point, and its history was

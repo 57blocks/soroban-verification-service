@@ -5,8 +5,7 @@
   "source_code_verifications": [
     {
       "verifier": {
-        "name": "Fixture Verifier B",
-        "url": "https://b.example"
+        "name": "Fixture Verifier B"
       },
       "status": "mismatched",
       "processed_at": "2026-06-30T00:00:00.000Z",
