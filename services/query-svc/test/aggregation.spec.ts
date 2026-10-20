@@ -239,6 +239,19 @@ describe("GET /api/query/v1/wasms/:wasm_hash", () => {
     }
   });
 
+  it("refuses a malformed hash with invalid_wasm_hash instead of answering no_data for it", async () => {
+    for (const hash of ["not-a-hash", "not-a-hash.json", "ABCD", "..%2Fverifiers", `${HASHES[2]}0`, `${HASHES[2].slice(1)}g`]) {
+      const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${hash}`);
+      expect([hash, res.status, res.body.error]).toEqual([hash, 400, "invalid_wasm_hash"]);
+    }
+  });
+
+  it("answers an uppercase hash under its lowercase form", async () => {
+    const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${HASHES[2].toUpperCase()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.wasm_hash).toBe(HASHES[2]);
+  });
+
   it("distinguishes 'nobody has a result' from 'we could not reach some'", async () => {
     const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${HASHES[2]}`);
     expect(res.status).toBe(200);

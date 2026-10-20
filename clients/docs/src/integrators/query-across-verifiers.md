@@ -31,8 +31,8 @@ limit than the others. To look up many contracts, resolve each address once and 
 curl -s "$ORIGIN/api/query/v1/wasms/$WASM_HASH" | jq .
 ```
 
-The same response, without the ledger call. The hash is not validated: a malformed one is simply a hash
-nobody has a result for, and answers `no_data`, so check it is 64 hexadecimal characters first.
+The same response, without the ledger call. The hash must be 64 hexadecimal characters, in either case;
+anything else answers `400` with `invalid_wasm_hash`.
 
 ## The response
 
