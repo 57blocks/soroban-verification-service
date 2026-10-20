@@ -49,7 +49,6 @@
         "$TURBO_ROOT$/docs/results-sep/**",
         "$TURBO_ROOT$/eng-tools/env-manifest.mjs"
       ],
-      "env": ["SCVS_DOCS_SHOW_UNRELEASED"],
       "outputs": ["dist/**"]
     },
     "soroban-verify-web#build": {

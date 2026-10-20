@@ -1,7 +1,3 @@
-<script setup>
-import { sdkReadmeUrl } from "../../../web/src/config/site.ts";
-</script>
-
 # Choose an interface
 
 You can read verification results three ways, and submit them one way. They differ in how much they
@@ -11,7 +7,7 @@ do for you and what they ask you to depend on.
 | --- | --- | --- |
 | Show what several verifiers say about a contract or a Wasm | The **Query API** of an aggregator: [Query across verifiers](./query-across-verifiers.md) | The aggregator being up |
 | Read one verifier's results with no service in between | The verifier's **result tree**, static files over HTTPS: [Read the result tree directly](./read-the-result-tree.md) | Only the files being reachable |
-| Read results from TypeScript or JavaScript | The `soroban-verification-client` SDK on npm, which reads both of the above | Whichever of the two it reads |
+| Read results from TypeScript or JavaScript | The `soroban-verification-client` SDK on npm, which reads both of the above: [Use the SDK](./use-the-sdk.md) | Whichever of the two it reads |
 | Submit a contract and follow its job | The **Submission API**: [Submit a contract with curl](../quick-start/submit-with-curl.md), [Verify from CI](../developers/verify-from-ci.md) | The verifier you submit to |
 
 ## Reading
@@ -26,8 +22,8 @@ API, or want to check results yourself rather than through someone else's summar
 aggregator itself reads.
 
 **The SDK** wraps both, and validates the documents it reads. It is a read-only client, installed with
-`npm install soroban-verification-client`. Its <a :href="sdkReadmeUrl">README</a> covers reading
-verifiers directly and through an aggregator.
+`npm install soroban-verification-client`. [Use the SDK](./use-the-sdk.md) covers reading verifiers
+directly and through an aggregator.
 
 ## Submitting
 

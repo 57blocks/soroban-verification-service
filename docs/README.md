@@ -21,8 +21,7 @@ The documentation site the web image serves at `/docs/` is a separate tree,
 ## Running your own verifier
 
 The documentation site's [self-hosting guides](../clients/docs/src/self-hosting/overview.md): requirements,
-installing and running, the configuration reference, legal documents, and joining an aggregator. The site
-publishes them once the source is public.
+installing and running, the configuration reference, legal documents, and joining an aggregator.
 
 ## The published contract
 

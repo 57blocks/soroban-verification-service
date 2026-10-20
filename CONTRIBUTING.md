@@ -143,6 +143,25 @@ If you're changing a shape shared with `services/builder` over the wire (`BatchJ
 move into `@scvs/aws`, because `services/builder` deliberately has no AWS dependency. See
 [rules 1 and 7 of `docs/invariants.md`](docs/invariants.md).
 
+## Releasing (maintainers)
+
+The git ref decides what `release.yml` publishes. A merge to `main` that touches the SDK, or a package it
+bundles, publishes a `dev` prerelease. A prerelease tag such as `vX.Y.Z-rc.N` publishes to `staging` and
+creates a GitHub prerelease, and a `vX.Y.Z` tag publishes to `latest` and creates the GitHub release; both
+attach the two OpenAPI specifications. Before tagging, move the `[Unreleased]` entries in `CHANGELOG.md`
+under the new version.
+
+A tag can also be cut without a terminal: run the `release` workflow from the Actions tab with `version`
+set to `v0.1.2` or `v0.1.2-rc.1`. The run tags `main`'s HEAD, or `commit` if you set it, which must be an
+ancestor of `main`. Run from `main` with `version` empty to publish a `dev` prerelease by hand.
+
+After each publish the workflow reads the dist-tags back, and fails unless the one it wrote points at the
+new version, or if `latest` holds a prerelease. After deploying the services, each deploy checks that the
+dist-tag serving its environment was built from the commit it runs, or from one with the same SDK sources.
+A mismatch fails the `staging` run, after the deploy has happened, and warns on `dev`; either way it
+prints the `release` dispatch that repairs it. A published version never changes, so a fix ships as a new
+version.
+
 ## Licensing your contribution
 
 **No CLA, and no DCO sign-off.** Contributions are accepted under

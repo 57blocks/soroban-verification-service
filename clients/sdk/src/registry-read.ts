@@ -7,6 +7,7 @@ import {
 import {
   PeerRegistryStatusObject,
   baseProjection,
+  ownEntryOf,
   registryStatusOrUnverified,
   SEP58_HEX_SHA256,
   type PeerRegistryVerification,
@@ -168,11 +169,15 @@ function relayed(
   document: { schema_version: string; source_code_verifications: readonly PeerRegistryVerification[] },
   resultRoot: string,
 ): AggregatedRegistryVerification[] {
-  return document.source_code_verifications.map((entry) => ({
-    ...entry,
-    verifier: entry.verifier.url !== undefined ? entry.verifier : { ...entry.verifier, url: resultRoot },
-    schema_version: document.schema_version,
-  })) as AggregatedRegistryVerification[];
+  const entry = ownEntryOf(document.source_code_verifications, resultRoot);
+  if (entry === undefined) return [];
+  return [
+    {
+      ...entry,
+      verifier: entry.verifier.url !== undefined ? entry.verifier : { ...entry.verifier, url: resultRoot },
+      schema_version: document.schema_version,
+    },
+  ] as AggregatedRegistryVerification[];
 }
 
 function unavailable(

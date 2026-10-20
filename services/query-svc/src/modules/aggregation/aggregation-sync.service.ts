@@ -3,11 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { AggregationRepository, TrustedVerifiersRepository } from "@scvs/db-query";
 import {
   ScvsLogger,
-  isSameVerifier,
+  ownEntryOf,
   toResultUrl,
   type AgreementSummary,
-  type PeerRegistryStatusObject,
-  type PeerRegistryVerification,
   type UnavailableVerifier,
 } from "@scvs/core";
 import {
@@ -102,7 +100,7 @@ export class AggregationSyncService {
     for (const wasmHash of page.hashes) {
       try {
         const document = await client.registry.statusObject(verifier, wasmHash);
-        const entry = ownEntryOf(document, verifier);
+        const entry = ownEntryOf(document.source_code_verifications, verifier.url);
         if (entry === undefined) {
           await this.aggregation.withdrawVerifierEntry({ verifierId: verifier.id, wasmHash, now });
           continue;
@@ -214,21 +212,6 @@ function recipeOf(entry: Record<string, unknown>): Record<string, unknown> {
     Object.entries(entry).filter(([field, value]) => !excluded.has(field) && value !== undefined),
   );
 }
-
-function ownEntryOf(
-  document: PeerRegistryStatusObject,
-  verifier: TrustedVerifier,
-): PeerRegistryVerification | undefined {
-  const entries = document.source_code_verifications;
-  const own = { name: verifier.display_name, url: trimSlash(verifier.url) };
-  const matched = entries.find(
-    (entry) => entry.verifier?.url !== undefined && isSameVerifier({ ...entry.verifier, url: trimSlash(entry.verifier.url) }, own),
-  );
-  if (matched) return matched;
-  return entries.some((entry) => entry.verifier?.url !== undefined) ? undefined : entries[0];
-}
-
-const trimSlash = (url: string): string => url.replace(/\/+$/, "");
 
 function peerString(entry: Record<string, unknown>, field: string): string | undefined {
   const value = entry[field];

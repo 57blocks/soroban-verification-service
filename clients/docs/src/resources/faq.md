@@ -1,7 +1,3 @@
-<script setup>
-import { sdkReadmeUrl } from "../../../web/src/config/site.ts";
-</script>
-
 # FAQ
 
 ## About verification
@@ -101,8 +97,8 @@ Query an aggregator, then apply your own rule about which verifiers you trust. S
 ### Is there an SDK?
 
 Yes, a read-only TypeScript SDK: `npm install soroban-verification-client`. It reads verifiers' result
-trees directly or an aggregator's Query API, and validates what it reads; see its
-<a :href="sdkReadmeUrl">README</a>. For other languages, the HTTP APIs and the result files are the
+trees directly or an aggregator's Query API, and validates what it reads; see
+[Use the SDK](../integrators/use-the-sdk.md). For other languages, the HTTP APIs and the result files are the
 interface.
 
 ### Can I check a result without trusting the verifier?
@@ -116,4 +112,4 @@ source is public, you can repeat the rebuild yourself; see
 ### Can I run my own verifier?
 
 Yes. The software is open source under the Apache License 2.0, and each deployment is its own verifier,
-publishing under its own identity. Guides for running one will be published here.
+publishing under its own identity. See [Run your own verifier](../self-hosting/overview.md).

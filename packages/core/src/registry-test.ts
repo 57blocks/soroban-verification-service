@@ -7,6 +7,7 @@ import {
   PeerRegistryStatusObject,
   baseProjection,
   isSameVerifier,
+  ownEntryOf,
   parseStrictRegistryStatusObject,
   registryStatusOrUnverified,
   reportSha256FromUrl,
@@ -312,6 +313,17 @@ function main(): void {
   assert.equal(isSameVerifier({ name: "A", url: "https://a" }, { name: "A", url: "https://b" }), false);
   assert.equal(isSameVerifier({ name: "A" }, { name: "A", url: "https://a" }), true, "name is the fallback when either side lacks a url");
   assert.equal(isSameVerifier({ name: "A" }, { name: "a" }), false, "case-sensitive");
+
+  {
+    const own = { verifier: { url: "HTTPS://Root.example/v/" }, status: "verified" };
+    const foreign = { verifier: { url: "https://other.example/" }, status: "mismatched" };
+    const unnamed = { verifier: { name: "Unnamed" }, status: "verified" };
+    const entries = (list: object[]) => list as PeerRegistryVerification[];
+    assert.equal(ownEntryOf(entries([foreign, own]), "https://root.example/v"), own, "matched on the normalised root");
+    assert.equal(ownEntryOf(entries([foreign]), "https://root.example/v"), undefined, "a foreign entry is never ours");
+    assert.equal(ownEntryOf(entries([unnamed, foreign]), "https://root.example/v"), undefined);
+    assert.equal(ownEntryOf(entries([unnamed, { ...unnamed }]), "https://root.example/v"), unnamed, "no url anywhere: the first entry");
+  }
 
   assert.equal(reportSha256FromUrl(`https://v.example/public/reports/${"a".repeat(64)}.json`), "a".repeat(64));
   assert.equal(reportSha256FromUrl(`https://v.example/public/reports/${"a".repeat(64)}.json?x=1`), "a".repeat(64));

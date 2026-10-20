@@ -246,6 +246,56 @@ async function unknownFieldsSurvive(): Promise<void> {
   );
 }
 
+async function entriesAreAttributedToTheRootTheyWereReadFrom(): Promise<void> {
+  const base = await fixture(READABLE_DRAFT);
+  const [entry] = base.source_code_verifications as Record<string, unknown>[];
+  const claiming = {
+    ...base,
+    source_code_verifications: [
+      { ...entry, status: "mismatched", verifier: { name: "Impersonated", url: "https://victim.test/" } },
+      { ...entry, verifier: { name: "Claimer", url: "HTTPS://Claimer.test" } },
+    ],
+  };
+  const foreignOnly = {
+    ...base,
+    source_code_verifications: [{ ...entry, verifier: { url: "https://victim.test/" } }],
+  };
+  const unattributed = {
+    ...base,
+    source_code_verifications: [entry, { ...entry, status: "mismatched" }],
+  };
+  const documents = new Map<string, unknown>([
+    ["claimer.test", claiming],
+    ["foreign-only.test", foreignOnly],
+    ["unattributed.test", unattributed],
+  ]);
+  const client = newClient({
+    tvl: tvl(
+      verifier("claimer", "claimer.test"),
+      verifier("victim", "victim.test"),
+      verifier("foreign-only", "foreign-only.test"),
+      verifier("unattributed", "unattributed.test"),
+    ),
+    fetch: (async (input: RequestInfo | URL) => {
+      const document = documents.get(new URL(String(input)).host);
+      return document === undefined
+        ? new Response("{}", { status: 404 })
+        : new Response(JSON.stringify(document), { status: 200 });
+    }) as typeof fetch,
+  });
+
+  const aggregate = await client.registry.byHash(HASH);
+
+  assert.deepEqual(aggregate.unavailable_verifiers, []);
+  assert.deepEqual(
+    aggregate.source_code_verifications.map((relayed) => [relayed.verifier.url, relayed.status]).sort(),
+    [
+      ["HTTPS://Claimer.test", "verified"],
+      ["https://unattributed.test/", "verified"],
+    ],
+  );
+}
+
 async function higherMinorIsReadable(): Promise<void> {
   const document: Record<string, unknown> = {
     ...(await fixture(READABLE_DRAFT)),
@@ -308,6 +358,7 @@ async function main(): Promise<void> {
   await targetMismatchIsRefused();
   await malformedHashNeverLeaves();
   await unknownFieldsSurvive();
+  await entriesAreAttributedToTheRootTheyWereReadFrom();
   await higherMinorIsReadable();
   await unknownMajorIsRefused();
   await clientSurface();
