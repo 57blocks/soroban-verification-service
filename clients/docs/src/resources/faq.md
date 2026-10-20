@@ -1,3 +1,7 @@
+<script setup>
+import { sdkReadmeUrl } from "../../../web/src/config/site.ts";
+</script>
+
 # FAQ
 
 ## About verification
@@ -96,8 +100,10 @@ Query an aggregator, then apply your own rule about which verifiers you trust. S
 
 ### Is there an SDK?
 
-A TypeScript SDK for reading results exists, and will be published to npm when the project's repository
-becomes public. Until then, the HTTP APIs and the result files serve every language.
+Yes, a read-only TypeScript SDK: `npm install soroban-verification-client`. It reads verifiers' result
+trees directly or an aggregator's Query API, and validates what it reads; see its
+<a :href="sdkReadmeUrl">README</a>. For other languages, the HTTP APIs and the result files are the
+interface.
 
 ### Can I check a result without trusting the verifier?
 
