@@ -63,7 +63,7 @@ jobs:
 
       - name: Mint a read token for the application repository
         id: source_token
-        uses: 57blocks/soroban-verification-service/.github/actions/source-token@100cfbbad7ab6e1f44613de131a8d2b9e78ecf0b
+        uses: 57blocks/soroban-verification-service/.github/actions/source-token@987eedf6794893c97bf4c85ad8c9dfc3ee0cf618
         with:
           app_id: ${{ secrets.SOURCE_APP_ID }}
           private_key: ${{ secrets.SOURCE_APP_PRIVATE_KEY }}
