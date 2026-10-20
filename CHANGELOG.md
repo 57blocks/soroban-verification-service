@@ -12,6 +12,17 @@ mints a release, and the `latest` dist-tag never holds a prerelease.
 
 ## [Unreleased]
 
+### Changed
+
+- **The query API refuses a malformed Wasm hash.** `GET /api/query/v1/wasms/{wasm_hash}` and its `.json`
+  alias answer `400` with `invalid_wasm_hash` for anything that is not 64 hexadecimal characters, rather
+  than `200` with `no_data` and the input echoed back as `wasm_hash`. Either case is still accepted.
+
+### Fixed
+
+- The published `package.json` no longer carries the repository's own `devDependencies` and `scripts`.
+- The SDK README's links resolve wherever it is rendered, not only on GitHub.
+
 ## [0.1.0] - 2026-10-20
 
 The first public release. The project was developed privately before this point, and its history was
