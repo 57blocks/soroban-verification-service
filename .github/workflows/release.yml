@@ -73,7 +73,7 @@ jobs:
     name: Build and publish release artifacts
     needs: channel
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CHANNEL: ${{ needs.channel.outputs.channel }}
       SDK_VERSION: ${{ needs.channel.outputs.version }}
@@ -199,10 +199,10 @@ jobs:
 
             # `pnpm publish` can exit 0 without publishing, so read the version back. The registry
             # processes an accepted version for a few minutes before it serves it.
-            for attempt in $(seq 1 30); do
+            for attempt in $(seq 1 90); do
               if published; then break; fi
-              if [ "${attempt}" = 30 ]; then
-                echo "::error::npm publish reported success but soroban-verification-client@${SDK_VERSION} is not on the registry after 5 minutes"
+              if [ "${attempt}" = 90 ]; then
+                echo "::error::npm publish reported success but soroban-verification-client@${SDK_VERSION} is not on the registry after 15 minutes"
                 exit 1
               fi
               sleep 10
@@ -212,10 +212,10 @@ jobs:
 
       - name: Verify the channel landed on its dist-tag
         if: env.PUBLISH_SDK == 'true'
-        run: node eng-tools/check-published-dist-tags.mjs --attempts 30 --wait-ms 10000
+        run: node eng-tools/check-published-dist-tags.mjs --attempts 90 --wait-ms 10000
 
       - name: Verify the published SDK installs and runs
         if: env.PUBLISH_SDK == 'true'
         env:
           SCVS_SDK_VERSION: ${{ needs.channel.outputs.version }}
-        run: pnpm --filter soroban-verification-client run check:registry-install
+        run: pnpm --filter soroban-verification-client run check:registry-install --attempts 18 --wait-ms 10000
