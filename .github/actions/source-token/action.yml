@@ -1,8 +1,10 @@
 name: Mint a read token for the application repository
 description: >-
-  Hands back a token that can read the application source. Given App credentials, it mints one scoped to
-  `repository`, which a private repository needs: a caller's own `GITHUB_TOKEN` is scoped to the caller.
-  Given none, it returns the caller's token unchanged, which can read a public repository such as this one.
+  Hands back a token that can read this project's source and its published images. Exists only while
+  that repository is private: a caller's own `GITHUB_TOKEN` is scoped to the caller, so a deployment
+  driven from the operations repository cannot check this one out or pull its packages. Given no App
+  credentials it returns the caller's token unchanged, which is the right answer once the repository
+  is public — so the flip is two deleted secrets, not a workflow change.
 
 inputs:
   app_id:
