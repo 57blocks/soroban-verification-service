@@ -89,13 +89,14 @@ function devVersion() {
   return `${next}-dev.${count}.g${short}`;
 }
 
-function proveOnMain(tag) {
-  comparedAgainst = requireOnMain({ sha, subject: tag, act: "release", main: argOf("main") });
+function proveOnMain(subject) {
+  comparedAgainst = requireOnMain({ sha, subject, act: "release", main: argOf("main") });
 }
 
 function resolve() {
   if (ref === "refs/heads/main") {
     const changed = sdkChanged();
+    if (changed) proveOnMain("the dev prerelease");
     return {
       channel: "dev",
       version: changed ? devVersion() : "",
