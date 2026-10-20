@@ -239,6 +239,19 @@ describe("GET /api/query/v1/wasms/:wasm_hash", () => {
     }
   });
 
+  it("refuses a malformed hash with invalid_wasm_hash instead of answering no_data for it", async () => {
+    for (const hash of ["not-a-hash", "not-a-hash.json", "ABCD", "..%2Fverifiers", `${HASHES[2]}0`, `${HASHES[2].slice(1)}g`]) {
+      const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${hash}`);
+      expect([hash, res.status, res.body.error]).toEqual([hash, 400, "invalid_wasm_hash"]);
+    }
+  });
+
+  it("answers an uppercase hash under its lowercase form", async () => {
+    const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${HASHES[2].toUpperCase()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.wasm_hash).toBe(HASHES[2]);
+  });
+
   it("distinguishes 'nobody has a result' from 'we could not reach some'", async () => {
     const res = await request(app.getHttpServer()).get(`/api/query/v1/wasms/${HASHES[2]}`);
     expect(res.status).toBe(200);
@@ -523,6 +536,35 @@ describe("the retained copy is what /api/query/v1 serves, so the sync must not n
   afterEach(async () => {
     globalThis.fetch = REAL_FETCH;
     await prisma.trustedVerifier.deleteMany({ where: { verifierId: { in: [VERIFIER_A, VERIFIER_B] } } });
+  });
+
+  it("skips a malformed hash in a peer's listing and still reads the rest of the page", async () => {
+    const [hash] = HASHES;
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requested.push(url);
+      if (url.startsWith(BULK_LOAD_URL)) {
+        return new Response(
+          JSON.stringify({
+            ...bulkLoadPage(hash),
+            records: [
+              { wasm_hash: "../verifier-manifest", updated_at: "2026-07-01T00:00:00.000Z" },
+              ...bulkLoadPage(hash).records,
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify(peerDocument(hash)), { status: 200 });
+    }) as typeof fetch;
+
+    await syncPeerOnce(hash);
+
+    expect(requested.filter((url) => !url.startsWith(BULK_LOAD_URL))).toEqual([`${PEER_ROOT}wasms/${hash}.json`]);
+    const stored = await aggregation.getCursor(VERIFIER_A);
+    expect(stored?.lastError).toBeUndefined();
+    expect(stored?.cursor).toBe(`${new Date("2026-07-01T00:00:00.000Z").getTime()}-${hash}`);
   });
 
   it("normalises a peer's bare-string results_urls rather than relaying them into the aggregate", async () => {

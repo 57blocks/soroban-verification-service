@@ -18,8 +18,9 @@ declared): `POSTGRES_HOST=localhost`, `POSTGRES_PORT=5433`, `POSTGRES_DB=scvs`,
 docker compose -f docker/docker-compose.full-stack.yml up
 ```
 
-All three layers of TRD §4.1 on one host, from committed configuration — the "Full stack" row of
-§4.6. `docker-compose.yml` stays what it was: **Postgres only, for local development**, which is a
+Every layer — verification, publishing and the Public Query API — on one host, from committed
+configuration: the **Full stack** mode of [deployment modes](../docs/specs/configuration.md#10-deployment-modes).
+`docker-compose.yml` stays what it was: **Postgres only, for local development**, which is a
 dependency and not a deployment.
 
 | | |

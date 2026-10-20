@@ -218,6 +218,15 @@ caseBlock(
       expectWasmStatus(response, NEVER_SEEN_WASM_HASH);
     });
 
+    it.each([["not-a-hash"], ["ABCD"], [`${NEVER_SEEN_WASM_HASH}0`]] as const)(
+      "query by hash rejects the malformed hash %s",
+      async (hash) => {
+        const spec = await querySpec();
+        const response = await http(`${env.queryUrl}/api/query/v1/wasms/${hash}`);
+        expectSafeError(spec, "/api/query/v1/wasms/{wasm_hash}", "get", response, 400, "invalid_wasm_hash", "query");
+      },
+    );
+
     it.each([
       ["invalid network", "futurenet", VALID_CONTRACT_ID, "invalid_network"],
       ["malformed contract id", "testnet", "not-a-contract", "invalid_contract_id"],

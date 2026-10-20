@@ -8,7 +8,12 @@ import {
   type AgreementSummary,
   type UnavailableVerifier,
 } from "@scvs/core";
-import { RegistryDocumentError, type SoveClient, type TrustedVerifier } from "soroban-verification-client";
+import {
+  InvalidWasmHashError,
+  RegistryDocumentError,
+  type SoveClient,
+  type TrustedVerifier,
+} from "soroban-verification-client";
 import { toTrustedVerifier } from "../../common/tvl.js";
 import { SoveClientFactory } from "../results/client-factory.service.js";
 import type { AppConfigService } from "../../config/configuration.js";
@@ -128,6 +133,7 @@ export class AggregationSyncService {
           now,
         });
       } catch (error) {
+        if (error instanceof InvalidWasmHashError) continue; // never a Wasm hash, so nothing to read or withdraw
         if (isNotFound(error)) {
           await this.aggregation.withdrawVerifierEntry({ verifierId: verifier.id, wasmHash, now });
           continue;

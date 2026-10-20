@@ -315,7 +315,7 @@ environment.
 - `services/verification-svc` — preflight/submit/job-status/upload endpoints, manifest validation,
   digest-pinned image policy, idempotency keys. Also serves this verifier's own published-results
   stream, `GET /api/verification/v1/wasms`.
-- `services/orchestrator-svc` — TRD §4.3's `queued -> preparing -> building -> comparing ->
+- `services/orchestrator-svc` — the `queued -> preparing -> building -> comparing ->
   publishing -> published` state machine (plus `publish_pending`, `evaluated` for a dry run, and
   `failed`), claiming every transition with a conditional write; resolves private uploads before
   handing off to the builder, which never touches the database. Also performs the Wasm hash
@@ -373,7 +373,7 @@ For real testnet verification, submit a testnet contract ID or Wasm hash with a 
   plain Rust image; defaults to `contract build` when absent
 - `bldopt` — the build options Stellar CLI embedded, e.g. `--locked`, `--manifest-path=...`,
   `--package=...`, `--optimize`
-- `is_public` — whether the source bytes may be published. Absent means `false` (TRD §6.1)
+- `is_public` — whether the source bytes may be published. Absent means `false`
 
 **Not `bldimg`.** The build environment is derived from the deployed Wasm, never from the submission:
 a `bldimg` in the chain-injected section makes the target cli-58 and is used as-is once

@@ -71,6 +71,7 @@ Some routes add their own fields, named below.
 | `error` | HTTP | Routes | Meaning |
 | --- | --- | --- | --- |
 | `aggregation_unavailable` | 503 | All result routes | The aggregator has not finished its first pass over its verifiers. Wait and retry; do not read it as "no results" |
+| `invalid_wasm_hash` | 400 | By hash | The hash is not 64 hexadecimal characters |
 | `invalid_network` | 400 | By contract | The network is not `mainnet` or `testnet` |
 | `invalid_contract_id` | 400 | By contract | The contract ID is not a valid contract address |
 | `contract_not_found` | 404 | By contract | No contract at that address, or it does not run a Wasm |

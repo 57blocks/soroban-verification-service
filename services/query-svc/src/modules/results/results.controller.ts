@@ -16,6 +16,7 @@ import {
   JSON_ROUTE_SUNSET_HTTP_DATE,
   isNetwork,
   ScvsLogger,
+  SEP58_HEX_SHA256,
   type Network,
 } from "@scvs/core";
 import { addressThrottleLimit } from "../../config/configuration.js";
@@ -48,6 +49,7 @@ export class ResultsController {
   @Header("Deprecation", "true")
   @Header("Sunset", JSON_ROUTE_SUNSET_HTTP_DATE)
   @ApiOkResponse({ type: AggregatedWasmStatus })
+  @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_wasm_hash" })
   queryByHashJson(@Param("wasm_hash") wasmHash: string): Promise<AggregatedWasmStatus> {
     return this.queryByHash(wasmHash);
   }
@@ -60,13 +62,18 @@ export class ResultsController {
   })
   @ApiParam({ name: "wasm_hash", description: "SHA-256 of the Wasm, as 64 hexadecimal characters." })
   @ApiOkResponse({ type: AggregatedWasmStatus })
+  @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_wasm_hash" })
   @ApiServiceUnavailableResponse({
     type: ApiErrorResponse,
     description: "aggregation_unavailable — the index is still building",
   })
   async queryByHash(@Param("wasm_hash") wasmHash: string): Promise<AggregatedWasmStatus> {
+    const normalized = wasmHash.toLowerCase();
+    if (!SEP58_HEX_SHA256.test(normalized)) {
+      throw new ApiError(400, { error: "invalid_wasm_hash", message: "wasm_hash must be 64 hexadecimal characters" });
+    }
     this.assertFirstPassComplete();
-    return this.reader.byHash(wasmHash.toLowerCase());
+    return this.reader.byHash(normalized);
   }
 
   @Get("api/query/v1/contracts/:network/:contract_id")

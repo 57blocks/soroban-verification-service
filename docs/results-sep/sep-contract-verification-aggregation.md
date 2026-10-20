@@ -366,9 +366,9 @@ its own and no closed vocabulary.
 The vocabulary is open here as it is there, and a server SHOULD document the
 codes it emits. An aggregator has occasion for codes a verifier does not — a
 reference implementation emits `aggregation_unavailable`, `invalid_cursor`,
-`invalid_limit`, `invalid_order`, and, on §5's route, `invalid_network`,
-`invalid_contract_id` and `contract_not_found` — and adding one is not a
-breaking change.
+`invalid_limit`, `invalid_order`, `invalid_wasm_hash`, and, on §5's route,
+`invalid_network`, `invalid_contract_id` and `contract_not_found` — and adding
+one is not a breaking change.
 
 One distinction is worth stating as a rule rather than leaving to taste: **an
 aggregator that cannot currently answer MUST NOT answer as though it had.** A

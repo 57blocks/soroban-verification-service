@@ -194,6 +194,7 @@ jobs:
               exit 1
             fi
           else
+            npm pkg delete devDependencies scripts
             npm publish --dry-run --tag "${DIST_TAG}"
             npm publish --tag "${DIST_TAG}" --provenance
 
@@ -218,4 +219,4 @@ jobs:
         if: env.PUBLISH_SDK == 'true'
         env:
           SCVS_SDK_VERSION: ${{ needs.channel.outputs.version }}
-        run: pnpm --filter soroban-verification-client run check:registry-install --attempts 18 --wait-ms 10000
+        run: node eng-tools/check-sdk-registry-install.mjs --attempts 18 --wait-ms 10000

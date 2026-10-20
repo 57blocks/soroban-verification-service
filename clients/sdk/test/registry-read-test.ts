@@ -8,6 +8,7 @@ import {
   validateStatusObject,
   displayStatusOf,
   RegistryDocumentError,
+  InvalidWasmHashError,
   type RegistryVerification,
   type PeerTrustedVerifiersList,
 } from "../src/index.js";
@@ -210,6 +211,27 @@ async function targetMismatchIsRefused(): Promise<void> {
   assert.match(aggregate.unavailable_verifiers[0]?.error ?? "", /does not match/i);
 }
 
+async function malformedHashNeverLeaves(): Promise<void> {
+  const requested: string[] = [];
+  const client = newClient({
+    tvl: tvl(verifier("a", "a.test")),
+    fetch: (async (input: string | URL | Request) => {
+      requested.push(String(input));
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch,
+  });
+  for (const hash of ["not-a-hash", "ABCD", "../verifiers", `${HASH}0`, `${HASH.slice(1)}g`]) {
+    await assert.rejects(client.registry.byHash(hash), InvalidWasmHashError, hash);
+    await assert.rejects(client.registry.statusObject(client.verifiers[0], hash), InvalidWasmHashError, hash);
+    assert.throws(() => statusObjectUrl(ORIGIN, hash), InvalidWasmHashError, hash);
+  }
+  assert.deepEqual(requested, []);
+
+  const upper = await client.registry.byHash(HASH.toUpperCase());
+  assert.equal(upper.wasm_hash, HASH);
+  assert.deepEqual(requested, [`https://a.test/wasms/${HASH}.json`]);
+}
+
 async function unknownFieldsSurvive(): Promise<void> {
   const document = await fixture(READABLE_DRAFT);
   (document.source_code_verifications as Record<string, unknown>[])[0].some_future_field = "kept";
@@ -334,6 +356,7 @@ async function main(): Promise<void> {
   await aggregationDegradesHonestly();
   await alwaysPresentAndEmptyIsValid();
   await targetMismatchIsRefused();
+  await malformedHashNeverLeaves();
   await unknownFieldsSurvive();
   await entriesAreAttributedToTheRootTheyWereReadFrom();
   await higherMinorIsReadable();
@@ -341,7 +364,7 @@ async function main(): Promise<void> {
   await clientSurface();
   console.log(
     "SDK registry-read tests passed (draft examples, CV6/CV7/CV9 modes, unknown-status coercion, " +
-      "wasms/<hash>.json key, honest degradation, CV8 forwarding, SO7 MAJOR branching)",
+      "wasms/<hash>.json key, honest degradation, malformed hash refused locally, CV8 forwarding, SO7 MAJOR branching)",
   );
 }
 

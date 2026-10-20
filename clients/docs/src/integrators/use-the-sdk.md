@@ -130,6 +130,7 @@ when no response arrived.
 
 | `code` | Means |
 | --- | --- |
+| `invalid_wasm_hash` | The Wasm hash is not 64 hexadecimal characters. The client refuses it before sending, with `status` `0`; the aggregator answers 400 with the same code |
 | `invalid_network`, `invalid_contract_id` | The network or the address is malformed (400) |
 | `contract_not_found` | Nothing at that address runs a Wasm (404) |
 | `address_resolution_failed` | The aggregator could not read the ledger (502). Retry |
@@ -142,7 +143,7 @@ when no response arrived.
 | `unknown` | From `queryApiFailureOf`, for an error that is not a `QueryApiError` |
 
 A hash the aggregator has no result for is not an error: the answer has no entries and `agreement` is
-`no_data`. Validate a Wasm hash, 64 lowercase hexadecimal characters, before you send it.
+`no_data`. A Wasm hash can be in either case; both clients send it lowercased.
 
 ## The direct client
 
@@ -177,7 +178,8 @@ resolve them. An invalid list throws `SchemaValidationError` when the client is 
 | `results.verifyUrl(link)` | Fetches a report or other result file and checks its hash; see below |
 
 A verifier with no result for the Wasm adds no entry. `paused` and `disabled` verifiers are skipped
-without appearing in `unavailable_verifiers`.
+without appearing in `unavailable_verifiers`. A Wasm hash that is not 64 hexadecimal characters makes
+`byHash` and `statusObject` reject with `InvalidWasmHashError` before any request is sent.
 
 `bulkLoad` returns `{ order, cursor, records }`, where each record is `{ wasm_hash, updated_at }`. Pass
 `cursor` back to get the next page. On the last page it is `null`, so keep the cursor that fetched the

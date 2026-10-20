@@ -147,6 +147,23 @@ async function pathTraversal(): Promise<void> {
   );
 }
 
+async function malformedHashNeverLeaves(): Promise<void> {
+  await withServer(
+    (_request, response) => json(response, 200, aggregate()),
+    async (origin, requested) => {
+      const client = newHostedClient({ baseUrl: origin });
+      for (const hash of ["not-a-hash", "ABCD", "../verifiers", `${WASM_HASH}0`]) {
+        const failure = await failureOf(() => client.registry.byHash(hash));
+        assert.deepEqual([hash, failure.status, failure.code], [hash, 0, "invalid_wasm_hash"]);
+      }
+      assert.deepEqual(requested, []);
+
+      await client.registry.byHash(` ${WASM_HASH.toUpperCase()} `);
+      assert.deepEqual(requested, [`${QUERY_API_V1}/wasms/${WASM_HASH}`]);
+    },
+  );
+}
+
 async function declaredFailures(): Promise<void> {
   await withServer(
     (request, response) => {
@@ -296,6 +313,7 @@ async function main(): Promise<void> {
   await routes();
   await hostedListSeedsClientSideMode();
   await pathTraversal();
+  await malformedHashNeverLeaves();
   await declaredFailures();
   await twoHundredIsNotAnAnswer();
   await schemaVersionTolerance();
@@ -303,7 +321,7 @@ async function main(): Promise<void> {
   await originStaysPinned();
   relativeBaseNeedsADocument();
   console.log(
-    "SDK hosted-mode tests passed (routes, hosted list seeds client-side mode, path traversal, declared " +
+    "SDK hosted-mode tests passed (routes, hosted list seeds client-side mode, path traversal, malformed hash, declared " +
       "failures, a 200 that is not an answer, schema_version tolerance, transport failures, origin pin, " +
       "relative base)",
   );
