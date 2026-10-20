@@ -28,4 +28,4 @@ how long.
 ## Running your own verifier
 
 The documents above belong to this verifier's operator. A verifier you run serves the documents you
-configure for it, under your own name.
+configure for it, under your own name; see [Provide your legal documents](../self-hosting/legal-documents.md).

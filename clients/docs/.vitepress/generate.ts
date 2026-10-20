@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type ApiName, publicOperations, slugOf } from "./api-specs.ts";
 import { configReferenceMarkdown } from "./config-reference.ts";
 import { failureCodesMarkdown } from "./failure-codes.ts";
-import { githubRepoUrl, sourceIsPublic } from "../../web/src/config/site.ts";
+import { githubRepoUrl } from "../../web/src/config/site.ts";
 
 const out = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
 
@@ -49,8 +49,8 @@ const SITE_PAGES: Record<string, string> = {
   "docs/results-sep/sep-contract-verification-aggregation.md": "/specifications/aggregation",
 };
 
-const repoLink = (path: string): string | undefined =>
-  SITE_PAGES[path] ?? (sourceIsPublic ? `${githubRepoUrl}/${path.endsWith("/") ? "tree" : "blob"}/main/${path}` : undefined);
+const repoLink = (path: string): string =>
+  SITE_PAGES[path] ?? `${githubRepoUrl}/${path.endsWith("/") ? "tree" : "blob"}/main/${path}`;
 
 /** A repository file's Markdown, with each link to another repository file pointed at the site or GitHub. */
 const withRepoLinks = (repoPath: string): string =>
@@ -60,7 +60,6 @@ const withRepoLinks = (repoPath: string): string =>
       if (/^([a-z][a-z0-9+.-]*:|#)/i.test(target)) return link;
       const [path, fragment] = target.split("#");
       const resolved = repoLink(posix.normalize(posix.join(posix.dirname(repoPath), path)));
-      if (!resolved) return text;
       return `[${text}](${resolved}${fragment && !resolved.includes("#") ? `#${fragment}` : ""})`;
     },
   );

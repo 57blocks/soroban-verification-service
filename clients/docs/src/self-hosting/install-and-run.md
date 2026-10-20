@@ -16,15 +16,15 @@ the configuration, the database, starting everything, and checking it works.
 | `sv-builder` | Builds, one image per architecture |
 | `sv-composer` | Environment composition, `arm64` |
 
-The project publishes these to the GitHub Container Registry for every commit to `main`, as
-`ghcr.io/57blocks/sv-<name>:<commit>`, and the builder as `sv-builder:<commit>-amd64` and `-arm64`.
-Use one commit's images together. The project's own deployment copies them into ECR and runs them from
-there, so its infrastructure does not depend on GHCR being reachable.
-
-To build them yourself, from a checkout of the
-<a :href="githubRepoUrl">repository</a>, use the Dockerfiles in `docker/`. The service image includes
-the Stellar CLI the services use for chain lookups: fetch and check it first with
+Build them from a checkout of the <a :href="githubRepoUrl">repository</a>, with the Dockerfiles in
+`docker/`, and use one commit's images together. The service image includes the Stellar CLI the
+services use for chain lookups: fetch and check it first with
 `SCVS_CI_CACHE=off scripts/ci/fetch-or-build-stellar-cli.sh`.
+
+The project builds the same images for every commit to `main` and pushes them to the GitHub Container
+Registry, as `ghcr.io/57blocks/sv-<name>:<commit>`, and the builder as `sv-builder:<commit>-amd64` and
+`-arm64`. Those packages may not be public; if a pull is refused, build the images yourself. The
+project's own deployment copies them into ECR and runs them from there.
 
 The repository's deployment workflows in `.github/workflows/` copy the images into ECR, register the job
 definitions, run the migrations and deploy, in the order below. They are written for the project's own
