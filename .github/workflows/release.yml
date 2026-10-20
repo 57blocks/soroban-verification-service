@@ -182,7 +182,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          published() { npm view "soroban-verification-client@${SDK_VERSION}" version >/dev/null 2>&1; }
+          READBACK_CACHE=$(mktemp -d)
+          published() { npm view "soroban-verification-client@${SDK_VERSION}" version --prefer-online --cache "${READBACK_CACHE}" >/dev/null 2>&1; }
 
           if published; then
             FROM=$(npm view "soroban-verification-client@${SDK_VERSION}" scvs.gitSha 2>/dev/null || true)
@@ -196,17 +197,22 @@ jobs:
             npm publish --dry-run --tag "${DIST_TAG}"
             npm publish --tag "${DIST_TAG}" --provenance
 
-            # `pnpm publish` can exit 0 without publishing, so read the version back.
-            if ! published; then
-              echo "::error::npm publish reported success but soroban-verification-client@${SDK_VERSION} is not on the registry"
-              exit 1
-            fi
+            # `pnpm publish` can exit 0 without publishing, so read the version back. The registry
+            # processes an accepted version for a few minutes before it serves it.
+            for attempt in $(seq 1 30); do
+              if published; then break; fi
+              if [ "${attempt}" = 30 ]; then
+                echo "::error::npm publish reported success but soroban-verification-client@${SDK_VERSION} is not on the registry after 5 minutes"
+                exit 1
+              fi
+              sleep 10
+            done
             echo "::notice::published soroban-verification-client@${SDK_VERSION} under dist-tag \`${DIST_TAG}\`"
           fi
 
       - name: Verify the channel landed on its dist-tag
         if: env.PUBLISH_SDK == 'true'
-        run: node eng-tools/check-published-dist-tags.mjs
+        run: node eng-tools/check-published-dist-tags.mjs --attempts 30 --wait-ms 10000
 
       - name: Verify the published SDK installs and runs
         if: env.PUBLISH_SDK == 'true'
