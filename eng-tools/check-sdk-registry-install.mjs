@@ -176,6 +176,12 @@ try {
       );
     }
 
+    for (const field of ["devDependencies", "scripts"]) {
+      if (installedManifest[field] !== undefined) {
+        findings.push(`the installed manifest carries \`${field}\`, which only make sense inside this repository`);
+      }
+    }
+
     const declarations = installedManifest.exports?.["."]?.types ?? installedManifest.types;
     if (!declarations) {
       findings.push("the installed manifest names no type declarations, so a TypeScript consumer has none");
