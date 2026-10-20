@@ -228,9 +228,9 @@ The known entries today:
 
 ## Routes: one file holds the drift
 
-The case files use TRD §8.1/§8.2 target paths and say so: *"Current implementation paths differ, and
+The case files use the route paths of the original design and say so: *"Current implementation paths differ, and
 these cases do not accommodate them."* [`support/routes.ts`](support/routes.ts) is where they are
-accommodated — cases call each route by its **TRD name**, and the single line resolving it to what
+accommodated — cases call each route by its **design name**, and the single line resolving it to what
 is actually served lives there, with the divergence documented next to it. When a route catches up,
 one line changes and no case is touched.
 

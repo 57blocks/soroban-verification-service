@@ -18,8 +18,7 @@ restarted at 1, so a citation must name which one.
 
 ## Schemas
 
-The JSON Schemas the two drafts carry; TRD 2.1 §5.7 names the documents, each carrying `schema` +
-`schema_version`. **Five document types in six files** — the bulk-load page is one `schema` value with
+The JSON Schemas the two drafts carry, each document carrying `schema` + `schema_version`. **Five document types in six files** — the bulk-load page is one `schema` value with
 one record shape per role, see below. There were six types until 2026-09-03, when the signature
 envelope was withdrawn with the signing scheme it belonged to (the decision record that argued
 reproducibility is the stronger property, under the report-artifact feature). They land here one work package at a time, and this
@@ -50,7 +49,7 @@ Results SEP must be implementable, and validatable, by a verifier that has never
 aggregation. Splitting them is the one schema change the split required — the page schema used to
 `$ref` the aggregate across files, which would have made the first SEP depend on the second.
 
-Three conventions every schema here follows (TRD §5.7):
+Three conventions every schema here follows:
 
 - **Closed for a producer, relaxed for a consumer.** `additionalProperties: false` throughout, so a
   document of a given `schema_version` carries exactly that version's fields; a consumer validates with

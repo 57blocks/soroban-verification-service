@@ -1,10 +1,10 @@
-# TypeScript SDK
+# soroban-verification-client
 
-Read and aggregate Soroban contract source-verification results across verifiers, in Node **and** in
-the browser, with **no hosted API required**. Where a hosted Public Query API *is* available, the same
-questions can be asked of it instead — the answer has the same shape, so nothing that reads one changes
-(TRD §8.3). It is a query client, not a submission client: writing to a verifier is done through a
-client generated from the published OpenAPI specification.
+The TypeScript SDK for reading and aggregating Soroban contract source-verification results across
+verifiers, in Node **and** in the browser, with **no hosted API required**. Where a hosted Public Query
+API *is* available, the same questions can be asked of it instead — the answer has the same shape, so
+nothing that reads one changes. It is a query client, not a submission client: writing to a verifier
+is done through a client generated from the published OpenAPI specification.
 
 ## Two ways to read: peer-direct or hosted
 
@@ -71,14 +71,14 @@ retry and error handling it wants.
     optional too.
   - `bulk_load_url` — **optional**. Only needed if you want to call `registry.bulkLoad()` against this
     verifier; a verifier that doesn't serve one is still fully usable for `byHash`/`statusObject`. See
-    [Join an aggregator](../docs/src/self-hosting/join-an-aggregator.md) for what publishing one
+    [Join an aggregator](https://github.com/57blocks/soroban-verification-service/blob/main/clients/docs/src/self-hosting/join-an-aggregator.md) for what publishing one
     means from the verifier's side.
   - `trust_tier` — optional: your own free-form label (e.g. `"local"`, `"primary"`, `"community"`).
     Nothing in this package interprets its value.
 - `updated_at` — required: an ISO 8601 timestamp for this document.
 
 A local-development example with a single self-hosted verifier is
-[`config/trusted-verifiers.local.json`](../../config/trusted-verifiers.local.json) at the repository
+[`config/trusted-verifiers.local.json`](https://github.com/57blocks/soroban-verification-service/blob/main/config/trusted-verifiers.local.json) at the repository
 root — the JSON above is that file's `verifiers` entry.
 
 ```ts
@@ -265,7 +265,7 @@ pnpm --filter soroban-verification-client run check:packaging    # publint + are
 | `test/browser-bundle-test.ts` | Asserts the bundle imports exactly its declared dependencies and kept its decorator metadata, then bundles the published output for `--platform=browser` and **executes** it against the fixtures — "runs in a browser", not "resolves in a browser" |
 
 Why the package is bundled rather than shipped as plain `tsc` output, and why the validation libraries
-are excluded from that bundle: [`tsup.config.ts`](tsup.config.ts).
+are excluded from that bundle: [`tsup.config.ts`](https://github.com/57blocks/soroban-verification-service/blob/main/clients/sdk/tsup.config.ts).
 
 ## Installing
 
@@ -299,8 +299,8 @@ commit its running image was built from against the commit behind that environme
 that repairs it. So a `staging` install matching what `staging` runs is a gate, not a habit.
 
 `latest` **never** holds a prerelease: the release workflow reads both dist-tags back after every publish
-and fails if it does, so a plain `npm install soroban-verification-client` cannot handoff a `dev` build. That check is what
-makes the table above a guarantee rather than a convention.
+and fails if it does, so a plain `npm install soroban-verification-client` can never install a `dev`
+build. That check is what makes the table above a guarantee rather than a convention.
 
 Pin an exact version in anything you ship. `@dev` and `@staging` move on every qualifying merge and are
 for trying a change before it is released, not for depending on.
