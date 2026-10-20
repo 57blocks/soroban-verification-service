@@ -1,5 +1,5 @@
 <script setup>
-import { githubRepoUrl, sourceIsPublic } from "../../../web/src/config/site.ts";
+import { githubRepoUrl } from "../../../web/src/config/site.ts";
 </script>
 
 # Support
@@ -15,16 +15,13 @@ only you can read it, with the token returned when you submitted.
 
 ## Security vulnerabilities
 
-Do not report a vulnerability in public. Email <a href="mailto:opensource@57blocks.com">opensource@57blocks.com</a>,
-<span v-if="sourceIsPublic">or use the repository's <a :href="`${githubRepoUrl}/security/advisories/new`">private
-vulnerability reporting</a>,</span> and expect an acknowledgement within 3 working days. See
+Do not report a vulnerability in public. Use the repository's
+<a :href="`${githubRepoUrl}/security/advisories/new`">private vulnerability reporting</a>, or email
+<a href="mailto:opensource@57blocks.com">opensource@57blocks.com</a>, and expect an acknowledgement within 3 working days. See
 [Report a vulnerability](../security/report-a-vulnerability.md) for what to include and what follows.
 
-<div v-if="sourceIsPublic">
+## Bugs in the software
 
-## Contributing
-
-The source is on GitHub, at <a :href="githubRepoUrl">{{ githubRepoUrl }}</a>. Read
-<a :href="`${githubRepoUrl}/blob/main/CONTRIBUTING.md`">CONTRIBUTING.md</a> before opening a pull request.
-
-</div>
+A bug in the software itself, rather than in one verifier's service, goes in a public
+<a :href="`${githubRepoUrl}/issues/new/choose`">GitHub issue</a>. To fix it yourself, see
+[Contribute](./contribute.md).

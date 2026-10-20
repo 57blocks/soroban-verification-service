@@ -41,4 +41,4 @@ Wasm hash with `unverified`; that is a progress state, not a verdict.
 | --- | --- | --- |
 | A contract developer | Prove that your deployed contract matches your source | [How it works](./introduction/how-it-works.md), then [Supported contracts](./introduction/supported-contracts.md) |
 | An integrator — a wallet, an explorer, an indexer | Show users whether a contract's source is verified, and by whom | [Trust model](./introduction/trust-model.md) |
-| A verifier operator | Run your own verifier and publish your own results | [Trust model](./introduction/trust-model.md) |
+| A verifier operator | Run your own verifier and publish your own results | [Trust model](./introduction/trust-model.md), then [Run your own verifier](./self-hosting/overview.md) |

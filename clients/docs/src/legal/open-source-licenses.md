@@ -1,7 +1,8 @@
 # Open-source licenses
 
-The software behind this service — the verifier, the aggregator, the console and this documentation —
-is open source, under the Apache License, Version 2.0.
+The software behind this service — the verifier, the aggregator, the console, the SDK and this
+documentation — is open source, under the Apache License, Version 2.0. Its source, and how to contribute
+to it, is described in [Contribute](../resources/contribute.md).
 
 | File | What it holds |
 | --- | --- |

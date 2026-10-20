@@ -2,7 +2,6 @@ import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
-import { sourceIsPublic } from "../../web/src/config/site.ts";
 import { API_SPECS, apiSidebar } from "./api-specs.ts";
 
 const RESULT_SCHEMAS = fileURLToPath(new URL("../../../docs/results-sep/schemas", import.meta.url));
@@ -19,9 +18,6 @@ const introduction = {
     { text: "Glossary", link: "/introduction/glossary" },
   ],
 };
-
-/** Running a verifier needs the source, so these pages are built only once it is public. */
-const showUnreleased = sourceIsPublic || Boolean(process.env.SCVS_DOCS_SHOW_UNRELEASED);
 
 const selfHosting = {
   text: "Run your own verifier",
@@ -49,6 +45,7 @@ const quickStart = {
     { text: "Verify in the console", link: "/quick-start/verify-in-the-console" },
     { text: "Submit a contract with curl", link: "/quick-start/submit-with-curl" },
     { text: "Read a result with curl", link: "/quick-start/read-a-result" },
+    { text: "Read a result with the SDK", link: "/quick-start/read-with-the-sdk" },
   ],
 };
 
@@ -68,6 +65,7 @@ const guides = [
     text: "For integrators",
     items: [
       { text: "Choose an interface", link: "/integrators/choose-an-interface" },
+      { text: "Use the SDK", link: "/integrators/use-the-sdk" },
       { text: "Query across verifiers", link: "/integrators/query-across-verifiers" },
       { text: "Interpret multi-verifier results", link: "/integrators/interpret-multi-verifier-results" },
       { text: "Read the result tree directly", link: "/integrators/read-the-result-tree" },
@@ -97,6 +95,7 @@ const legalAndResources = [
       { text: "FAQ", link: "/resources/faq" },
       { text: "Changelog", link: "/resources/changelog" },
       { text: "Support", link: "/resources/support" },
+      { text: "Contribute", link: "/resources/contribute" },
     ],
   },
 ];
@@ -121,7 +120,6 @@ export default defineConfig({
   description:
     "How Soroban contract source verification works, how to submit a contract, and how to read verified results.",
   srcDir: "src",
-  srcExclude: showUnreleased ? [] : ["self-hosting/**", "specifications/**"],
   outDir: "dist",
   base: "/docs/",
   cleanUrls: true,
@@ -153,14 +151,11 @@ export default defineConfig({
           { text: "FAQ", link: "/resources/faq" },
           { text: "Security model", link: "/security/security-model" },
           { text: "Report a vulnerability", link: "/security/report-a-vulnerability" },
-          ...(showUnreleased
-            ? [
-                { text: "Run your own verifier", link: "/self-hosting/overview" },
-                { text: "Specifications", link: "/specifications/verification-results" },
-              ]
-            : []),
+          { text: "Run your own verifier", link: "/self-hosting/overview" },
+          { text: "Specifications", link: "/specifications/verification-results" },
           { text: "Changelog", link: "/resources/changelog" },
           { text: "Support", link: "/resources/support" },
+          { text: "Contribute", link: "/resources/contribute" },
           { text: "Terms and privacy", link: "/legal/terms-and-privacy" },
           { text: "Data and retention", link: "/legal/data-and-retention" },
           { text: "Open-source licenses", link: "/legal/open-source-licenses" },
@@ -171,7 +166,8 @@ export default defineConfig({
       "/developers/": guides,
       "/integrators/": guides,
       "/api/": apiReference,
-      ...(showUnreleased ? { "/self-hosting/": [selfHosting], "/specifications/": [specifications] } : {}),
+      "/self-hosting/": [selfHosting],
+      "/specifications/": [specifications],
       "/legal/": legalAndResources,
       "/security/": legalAndResources,
       "/resources/": legalAndResources,
