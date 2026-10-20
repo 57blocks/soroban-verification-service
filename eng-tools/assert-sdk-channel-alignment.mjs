@@ -61,14 +61,12 @@ function view(spec, field) {
 
 let publishedVersion = flag("published-version", "");
 let publishedCommit = flag("published-commit", "");
-let packageExists = flag("package-exists", "") !== "false";
 if (publishedVersion) {
   rmSync(cache, { recursive: true, force: true });
 } else {
   try {
     publishedVersion = view(`${PKG}@${channel.dist_tag}`, "version");
     if (publishedVersion) publishedCommit = view(`${PKG}@${publishedVersion}`, "scvs.gitSha");
-    else if (flag("package-exists", "") === "") packageExists = view(PKG, "name") !== "";
   } finally {
     rmSync(cache, { recursive: true, force: true });
   }
@@ -80,11 +78,9 @@ const fixCommand =
     ? `gh workflow run release.yml -f commit=${deployed}`
     : `gh workflow run release.yml -f version=vX.Y.Z-rc.N -f commit=${deployed}`;
 
-function report(verdict, detail, override) {
+function report(verdict, detail) {
   const aligned = verdict === "aligned";
-  const raised = override ?? channel.severity;
-  const severity = aligned ? "notice" : raised;
-  const fix = verdict === "unpublished" && override === "warn" ? "" : fixCommand;
+  const severity = aligned ? "notice" : channel.severity;
   const headline = `${PKG}@${channel.dist_tag} · ${targetEnv} · ${verdict}`;
 
   console.log(`── env        ${targetEnv}`);
@@ -93,15 +89,15 @@ function report(verdict, detail, override) {
   console.log(`── deployed   ${short(deployed)}`);
   console.log(`── verdict    ${verdict} — ${detail}`);
 
-  if (fix) console.log(`── fix        ${fix}`);
+  console.log(`── fix        ${fixCommand}`);
 
-  if (inGha) console.log(`::${severity}::${headline} — ${detail}${fix ? `. Fix: ${fix}` : ""}`);
+  if (inGha) console.log(`::${severity}::${headline} — ${detail}. Fix: ${fixCommand}`);
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
       [
-        `### ${aligned ? "✅" : raised === "error" ? "❌" : "⚠️"} SDK channel \`${channel.dist_tag}\` vs ${targetEnv}`,
+        `### ${aligned ? "✅" : channel.severity === "error" ? "❌" : "⚠️"} SDK channel \`${channel.dist_tag}\` vs ${targetEnv}`,
         "",
         "| | |",
         "| --- | --- |",
@@ -110,20 +106,15 @@ function report(verdict, detail, override) {
         `| ${targetEnv} runs | \`${short(deployed)}\` |`,
         `| verdict | ${verdict} — ${detail} |`,
         "",
-        ...(fix ? ["```bash", fix, "```", ""] : []),
+        "```bash",
+        fixCommand,
+        "```",
+        "",
       ].join("\n"),
     );
   }
 
-  process.exit(aligned || raised === "warn" ? 0 : 1);
-}
-
-if (!publishedVersion && !packageExists) {
-  report(
-    "unpublished",
-    `${PKG} is not on the registry at all, so nothing serves ${targetEnv} yet. Expected until this repository is public`,
-    "warn",
-  );
+  process.exit(aligned || channel.severity === "warn" ? 0 : 1);
 }
 
 if (!publishedVersion) {

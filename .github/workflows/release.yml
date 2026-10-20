@@ -120,7 +120,7 @@ jobs:
       - name: Report a release that publishes no package
         if: needs.channel.outputs.publish_sdk == 'true' && env.PUBLISH_SDK != 'true'
         run: |
-          echo "::notice::soroban-verification-client@${SDK_VERSION} was built and checked but not published: this repository is still private, and a trusted publish stamps provenance that only a readable source can back. Publishing starts at the flip."
+          echo "::notice::soroban-verification-client@${SDK_VERSION} was built and checked but not published: this repository is not public, and a trusted publish stamps provenance that only a readable source can back."
 
       - name: Generate the OpenAPI specifications
         if: needs.channel.outputs.channel != 'dev'

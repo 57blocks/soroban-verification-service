@@ -27,9 +27,9 @@ on:
     secrets:
       SOURCE_APP_ID:
         description: >-
-          GitHub App that may read this repository, while it is still private. A caller's own token is
-          scoped to the caller, so without this the checkouts below cannot see this project's source.
-          Both are unnecessary — and should be deleted — once the repository is public.
+          GitHub App that may read `source_repository`. Needed only when that repository is private: a
+          caller's own token is scoped to the caller. This project's is public, so the checkouts below
+          can read it with the caller's token alone.
         required: false
       SOURCE_APP_PRIVATE_KEY:
         description: "That App's private key."
