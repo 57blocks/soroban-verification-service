@@ -276,7 +276,7 @@ jobs:
   # `uses:` cannot be an expression; check:workflow-pins keeps this sha current.
   migrate-database-verification-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@318ba6d886cc1e101d31c6aab967263f5679176b
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@95908d1204c43c2cb157509a21060a3b65e222dc
     permissions:
       id-token: write
       contents: read
@@ -296,7 +296,7 @@ jobs:
 
   migrate-database-query-svc:
     needs: stage-service-image
-    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@318ba6d886cc1e101d31c6aab967263f5679176b
+    uses: 57blocks/soroban-verification-service/.github/workflows/db-migrate.yml@95908d1204c43c2cb157509a21060a3b65e222dc
     permissions:
       id-token: write
       contents: read
