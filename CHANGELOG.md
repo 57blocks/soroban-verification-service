@@ -12,8 +12,10 @@ mints a release, and the `latest` dist-tag never holds a prerelease.
 
 ## [Unreleased]
 
-The first public release, to be published as `0.1.0`. The project was developed privately before this
-point, and its history was not carried across — see [`AUTHORS`](AUTHORS) for the people who wrote it.
+## [0.1.0] - 2026-10-20
+
+The first public release. The project was developed privately before this point, and its history was
+not carried across — see [`AUTHORS`](AUTHORS) for the people who wrote it.
 
 ### Added
 
@@ -29,3 +31,6 @@ point, and its history was not carried across — see [`AUTHORS`](AUTHORS) for t
 - **A submission and results console.**
 - **Composed build environments** for contracts whose recorded toolchain has no published official
   image, built from digest-pinned official components.
+
+[Unreleased]: https://github.com/57blocks/soroban-verification-service/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/57blocks/soroban-verification-service/releases/tag/v0.1.0
