@@ -83,8 +83,10 @@ const client = newClient({ tvl: await hosted.verifiers() });
 ```
 
 - **`source_code_verifications`** holds one entry per verifier with a result for the Wasm.
-  `verifier.url`, a verifier's result root, is its identity. The direct client keeps the `verifier` a
-  document states, and fills in the result root it read from only when the document leaves it out.
+  `verifier.url`, a verifier's result root, is its identity. Both clients take one entry from each
+  result root: the one whose `verifier.url` names that root, or the first entry, with the root filled
+  in, when no entry names a URL. An entry claiming another verifier's root is not shown, and a
+  document with no entry of its own counts as no result from that verifier.
 - **`status`** is `verified`, `mismatched` or `unverified`. A peer can publish a value outside that
   list; `displayStatusOf(entry)` maps anything else to `unverified`, which is how to show it.
 - **`agreement`** is `no_data`, `single`, `unanimous_verified`, `unanimous_mismatched`, `disputed` or
