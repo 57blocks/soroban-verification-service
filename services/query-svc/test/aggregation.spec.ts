@@ -538,6 +538,35 @@ describe("the retained copy is what /api/query/v1 serves, so the sync must not n
     await prisma.trustedVerifier.deleteMany({ where: { verifierId: { in: [VERIFIER_A, VERIFIER_B] } } });
   });
 
+  it("skips a malformed hash in a peer's listing and still reads the rest of the page", async () => {
+    const [hash] = HASHES;
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requested.push(url);
+      if (url.startsWith(BULK_LOAD_URL)) {
+        return new Response(
+          JSON.stringify({
+            ...bulkLoadPage(hash),
+            records: [
+              { wasm_hash: "../verifier-manifest", updated_at: "2026-07-01T00:00:00.000Z" },
+              ...bulkLoadPage(hash).records,
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify(peerDocument(hash)), { status: 200 });
+    }) as typeof fetch;
+
+    await syncPeerOnce(hash);
+
+    expect(requested.filter((url) => !url.startsWith(BULK_LOAD_URL))).toEqual([`${PEER_ROOT}wasms/${hash}.json`]);
+    const stored = await aggregation.getCursor(VERIFIER_A);
+    expect(stored?.lastError).toBeUndefined();
+    expect(stored?.cursor).toBe(`${new Date("2026-07-01T00:00:00.000Z").getTime()}-${hash}`);
+  });
+
   it("normalises a peer's bare-string results_urls rather than relaying them into the aggregate", async () => {
     const [hash] = HASHES;
     const reportSha = "d".repeat(64);

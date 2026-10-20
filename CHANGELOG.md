@@ -17,6 +17,10 @@ mints a release, and the `latest` dist-tag never holds a prerelease.
 - **The query API refuses a malformed Wasm hash.** `GET /api/query/v1/wasms/{wasm_hash}` and its `.json`
   alias answer `400` with `invalid_wasm_hash` for anything that is not 64 hexadecimal characters, rather
   than `200` with `no_data` and the input echoed back as `wasm_hash`. Either case is still accepted.
+- **Breaking: the SDK refuses a malformed Wasm hash before any request.** `newClient().registry.byHash`
+  and `.statusObject`, and `statusObjectUrl`, throw `InvalidWasmHashError`;
+  `newHostedClient().registry.byHash` throws `QueryApiError` with code `invalid_wasm_hash` and status `0`.
+  Both used to answer `no_data` for such a hash. A peer-direct aggregate now reports the hash lowercased.
 
 ### Fixed
 

@@ -109,6 +109,9 @@ wants a single answer applies its own rule to the list, because only it knows wh
 `reason` of `fetch_failed`, `invalid_response`, `timeout`, or `refused`. A query never rejects because
 one verifier failed.
 
+A Wasm hash must be 64 hexadecimal characters, in either case. Anything else is refused before any
+request is made: `byHash` and `statusObject` reject with `InvalidWasmHashError`.
+
 If the list carries relative references, pass `baseUrl` — the absolute base they resolve against.
 
 `client.discover()` resolves every listed verifier's manifest and policy documents in one call — useful
@@ -159,7 +162,8 @@ failing the response, and a body that is not an aggregate at all is refused rath
 Every method throws `QueryApiError` and nothing else. `error.failure` carries `{ status, code, message }`:
 `code` is the service's own where it declared one (`invalid_contract_id`, `contract_not_found`,
 `address_resolution_failed`, …) and otherwise this client's — `unreachable`, `timeout`, `refused`,
-`response_too_large`, `invalid_response`, `http_<status>`. `queryApiFailureOf(error)` gives a caller's
+`response_too_large`, `invalid_response`, `http_<status>`, and `invalid_wasm_hash` with status `0` for a
+hash refused before any request was sent. `queryApiFailureOf(error)` gives a caller's
 error path one shape to read.
 
 | The endpoint is yours, so the policy differs from the peer one above | |

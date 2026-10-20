@@ -8,6 +8,7 @@ import {
   PeerRegistryStatusObject,
   baseProjection,
   registryStatusOrUnverified,
+  SEP58_HEX_SHA256,
   type PeerRegistryVerification,
 } from "@scvs/core/registry";
 import type { ResolvedVerifier } from "@scvs/storage-layout/shapes";
@@ -44,9 +45,24 @@ export class RegistryDocumentError extends Error {
   }
 }
 
+/** Thrown before any request for a hash that is not 64 hexadecimal characters. */
+export class InvalidWasmHashError extends Error {
+  constructor(wasmHash: string) {
+    super(`${JSON.stringify(wasmHash)} is not a Wasm hash: expected 64 hexadecimal characters`);
+    this.name = "InvalidWasmHashError";
+  }
+}
+
+/** Lowercased, in either case on the way in; anything else throws `InvalidWasmHashError`. */
+export function normalizeWasmHash(wasmHash: string): string {
+  const normalized = wasmHash.trim().toLowerCase();
+  if (!SEP58_HEX_SHA256.test(normalized)) throw new InvalidWasmHashError(wasmHash);
+  return normalized;
+}
+
 /** The published key for one hash, resolved against a verifier's result root. */
 export function statusObjectUrl(resultRoot: string, wasmHash: string): string {
-  return new URL(wasmStatusKey(wasmHash.toLowerCase()), resultRootBase(resultRoot)).toString();
+  return new URL(wasmStatusKey(normalizeWasmHash(wasmHash)), resultRootBase(resultRoot)).toString();
 }
 
 function resultRootBase(resultRoot: string): string {
@@ -116,15 +132,16 @@ export type AggregateWasmStatusInput = {
 
 /** Aggregate across the TVL. */
 export async function aggregateWasmStatus(input: AggregateWasmStatusInput): Promise<AggregatedWasmStatus> {
+  const wasmHash = normalizeWasmHash(input.wasmHash);
   const active = input.verifiers.filter((verifier) => verifier.status === "active");
   const outcomes = await Promise.all(
     active.map(async (verifier) => {
       try {
-        const document = await readStatusObject(verifier.url, input.wasmHash, input.getJson, {
+        const document = await readStatusObject(verifier.url, wasmHash, input.getJson, {
           validation: input.validation,
         });
         // A peer does not get to answer for a hash nobody asked about.
-        if (document.wasm_hash.toLowerCase() !== input.wasmHash.toLowerCase()) {
+        if (document.wasm_hash.toLowerCase() !== wasmHash) {
           return unavailable(verifier, "invalid_response", "Document target does not match the query target.");
         }
         return { entries: relayed(document, verifier.url) };
@@ -139,7 +156,7 @@ export async function aggregateWasmStatus(input: AggregateWasmStatusInput): Prom
   );
 
   return aggregateEnvelope({
-    wasmHash: input.wasmHash,
+    wasmHash,
     entries: outcomes.flatMap((outcome) => ("entries" in outcome ? outcome.entries : [])),
     unavailableVerifiers: outcomes.flatMap((outcome) =>
       "unavailable" in outcome ? [outcome.unavailable] : [],

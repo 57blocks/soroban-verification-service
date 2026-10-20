@@ -16,6 +16,7 @@ import {
   type FetchPolicyInput,
 } from "./fetch-policy.js";
 import { definedOnly } from "./client.js";
+import { InvalidWasmHashError, normalizeWasmHash } from "./registry-read.js";
 
 /** The path prefix every route hangs off; the client adds it, not the deployment. */
 export const QUERY_API_V1 = "/api/query/v1";
@@ -135,8 +136,15 @@ export function newHostedClient(options: HostedClientOptions): HostedQueryClient
     },
     registry: {
       // Encoded so a subject cannot carry `../` out of the prefix.
-      byHash(wasmHash) {
-        return aggregate(`/wasms/${encodeURIComponent(wasmHash.trim().toLowerCase())}`);
+      async byHash(wasmHash) {
+        let normalized: string;
+        try {
+          normalized = normalizeWasmHash(wasmHash);
+        } catch (error) {
+          if (!(error instanceof InvalidWasmHashError)) throw error;
+          throw new QueryApiError({ status: 0, code: "invalid_wasm_hash", message: error.message });
+        }
+        return aggregate(`/wasms/${encodeURIComponent(normalized)}`);
       },
       byContract(network, contractId) {
         return aggregate(

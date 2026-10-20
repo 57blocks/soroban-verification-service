@@ -58,6 +58,7 @@ export {
   statusObjectUrl,
   validateStatusObject,
   RegistryDocumentError,
+  InvalidWasmHashError,
 } from "./registry-read.js";
 export type {
   AggregateWasmStatusInput,
