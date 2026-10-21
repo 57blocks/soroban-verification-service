@@ -10,7 +10,4 @@ module.exports = {
     "^.+\\.tsx?$": ["ts-jest", { useESM: true }],
   },
   testMatch: ["**/test/**/*.spec.ts"],
-  coverageProvider: "v8",
-  collectCoverageFrom: ["src/**/*.ts"],
-  coverageReporters: ["json", "json-summary", "lcov", "text-summary"],
 };

@@ -572,6 +572,9 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
+      c8:
+        specifier: ^12.0.0
+        version: 12.0.0
       jest:
         specifier: ^30.5.2
         version: 30.5.2(@types/node@22.20.5)
@@ -621,6 +624,9 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
+      c8:
+        specifier: ^12.0.0
+        version: 12.0.0
       jest:
         specifier: ^30.5.2
         version: 30.5.2(@types/node@22.20.5)
@@ -706,6 +712,9 @@ importers:
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
+      c8:
+        specifier: ^12.0.0
+        version: 12.0.0
       jest:
         specifier: ^30.5.2
         version: 30.5.2(@types/node@22.20.5)
@@ -803,6 +812,9 @@ importers:
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
+      c8:
+        specifier: ^12.0.0
+        version: 12.0.0
       jest:
         specifier: ^30.5.2
         version: 30.5.2(@types/node@22.20.5)
@@ -906,6 +918,9 @@ importers:
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
+      c8:
+        specifier: ^12.0.0
+        version: 12.0.0
       jest:
         specifier: ^30.5.2
         version: 30.5.2(@types/node@22.20.5)
