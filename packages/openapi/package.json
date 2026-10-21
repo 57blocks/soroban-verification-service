@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsx src/openapi-test.ts"
+    "test": "c8 tsx src/openapi-test.ts"
   },
   "dependencies": {
     "@nestjs/swagger": "^12.0.2",
@@ -27,6 +27,7 @@
   "devDependencies": {
     "@scvs/storage-layout": "workspace:*",
     "@types/node": "^22.20.5",
+    "c8": "^12.0.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }

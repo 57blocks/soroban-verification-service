@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.3",

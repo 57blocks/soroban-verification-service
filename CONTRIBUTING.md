@@ -62,6 +62,10 @@ CI (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
 - Turborepo caches by content, so a second run of an untouched package replays its log rather than
   rebuilding. If you suspect a stale result, `turbo run <task> --force`. `test` is uncached on
   purpose: its suites run against a real Postgres, so a replayed log would prove nothing.
+- Every package's `test` writes a V8 coverage report to its own `coverage/` (Jest and Vitest
+  natively, the `tsx` suites through `c8` and the root `.c8rc.json`). `pnpm run report:coverage`
+  merges them into `coverage/` at the root, and CI uploads that as the `test-coverage` artifact,
+  with the per-package table in the run's summary. Nothing gates on a percentage.
 - Infrastructure is not defined in this repository — see
   [rule 8 of `docs/invariants.md`](docs/invariants.md). If your change alters what a
   deployment has to provide (a new environment variable, a new bucket prefix, a new IAM action), say

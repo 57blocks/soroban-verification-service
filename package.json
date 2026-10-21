@@ -66,7 +66,8 @@
     "e2e:check-upgrade-fixtures": "node eng-tools/check-e2e-upgrade-inventory.mjs",
     "ops:reconcile-published-status-links": "node eng-tools/reconcile-published-status-links.mjs",
     "e2e:summary": "node eng-tools/write-e2e-summary.mjs",
-    "report:advisories": "node eng-tools/report-advisories.mjs"
+    "report:advisories": "node eng-tools/report-advisories.mjs",
+    "report:coverage": "node eng-tools/report-coverage.mjs"
   },
   "dependencies": {
     "@scvs/config": "workspace:*",
@@ -77,6 +78,9 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-reports": "^3.2.0",
     "turbo": "^2.11.9",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"

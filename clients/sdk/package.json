@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsup && tsc -p tsconfig.decl.json && api-extractor run --local -c api-extractor.json && node -e \"require('fs').rmSync('dist-types', { recursive: true, force: true })\"",
     "typecheck": "tsc --noEmit",
-    "test": "for f in test/*-test.ts; do tsx \"$f\" || exit 1; done",
+    "test": "c8 sh -c 'for f in test/*-test.ts; do tsx \"$f\" || exit 1; done'",
     "check:packaging": "publint --strict && attw --pack . --ignore-rules cjs-resolves-to-esm && node ../../eng-tools/check-sdk-pack-install.mjs",
     "check:registry-install": "node ../../eng-tools/check-sdk-registry-install.mjs"
   },
@@ -47,6 +47,7 @@
     "@scvs/core": "workspace:*",
     "@scvs/storage-layout": "workspace:*",
     "@types/node": "^22.20.5",
+    "c8": "^12.0.0",
     "esbuild": "^0.28.2",
     "publint": "^0.3.25",
     "tsup": "^9.0.0",

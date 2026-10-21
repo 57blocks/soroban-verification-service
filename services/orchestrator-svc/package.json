@@ -10,7 +10,7 @@
     "build": "tsc",
     "publish-once": "tsx src/modules/publish/rescan.ts",
     "archive-once": "tsx src/modules/publish/archive-once.ts",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --coverage"
   },
   "dependencies": {
     "@irys/upload": "^0.0.15",

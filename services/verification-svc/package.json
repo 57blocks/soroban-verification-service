@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "build": "tsc",
     "generate:openapi": "node --import tsx/esm src/generate-openapi.ts",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.3",

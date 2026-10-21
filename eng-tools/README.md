@@ -60,6 +60,7 @@ that can exit non-zero is a `check:` wearing the wrong name — and writes its f
 | file | command | run by | what it publishes |
 | :---- | :---- | :---- | :---- |
 | [`report-advisories.mjs`](report-advisories.mjs) | `report:advisories` | `ci.yml` | every `pnpm audit` advisory, split by whether its path leaves the workspace through a `dependencies` edge of something that ships. Reads the npm advisory database; no AWS |
+| [`report-coverage.mjs`](report-coverage.mjs) | `report:coverage` | `ci.yml`, after `Test` | every package's `coverage/coverage-final.json` merged into `coverage/` at the root — HTML, `lcov.info`, JSON and a per-package line/branch table — which `ci.yml` uploads as the `test-coverage` artifact. A package that wrote none is left out |
 
 ## Generators — `generate:`
 
