@@ -17,7 +17,7 @@
     "test": "c8 tsx src/openapi-test.ts"
   },
   "dependencies": {
-    "@nestjs/swagger": "^12.0.2",
+    "@nestjs/swagger": "^12.0.3",
     "@scvs/core": "workspace:*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
