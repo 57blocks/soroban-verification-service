@@ -81,7 +81,7 @@
     "istanbul-lib-coverage": "^3.2.2",
     "istanbul-lib-report": "^3.0.1",
     "istanbul-reports": "^3.2.0",
-    "turbo": "^2.11.9",
+    "turbo": "^2.11.10",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },
