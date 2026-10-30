@@ -1,6 +1,6 @@
 import type { RebuildErrorCode } from "@scvs/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { MaterializedSource } from "./fetch-source.js";
 
 export type SourceHandoff =
@@ -18,6 +18,11 @@ export const HANDOFF_SCHEMA = "scvs-source-handoff-v1" as const;
 
 export function handoffPath(root: string, jobId: string): string {
   return join(root, "scvs-handoff", jobId, "source.json");
+}
+
+export function handoffJobDir(root: string, jobId: string): string | undefined {
+  const dir = dirname(handoffPath(root, jobId));
+  return basename(dir) === jobId && dirname(dir) === join(root, "scvs-handoff") ? dir : undefined;
 }
 
 export async function writeHandoff(path: string, handoff: SourceHandoff): Promise<void> {

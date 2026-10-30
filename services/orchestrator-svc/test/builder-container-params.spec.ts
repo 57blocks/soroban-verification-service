@@ -63,7 +63,7 @@ const REGISTERED_TASK_PROPERTIES: RegisteredTaskProperties = {
     {
       volumes: [
         { name: "docker-sock", host: { sourcePath: "/var/run/docker.sock" } },
-        { name: "scvs-shared", host: { sourcePath: "/tmp" } },
+        { name: "scvs-shared", host: { sourcePath: "/var/tmp" } },
       ],
       containers: [
         {
@@ -77,10 +77,10 @@ const REGISTERED_TASK_PROPERTIES: RegisteredTaskProperties = {
           ],
           environment: [
             { name: "XDG_DATA_HOME", value: "/tmp" },
-            { name: "SCVS_HANDOFF_ROOT", value: "/tmp" },
+            { name: "SCVS_HANDOFF_ROOT", value: "/var/tmp" },
           ],
           mountPoints: [
-            { sourceVolume: "scvs-shared", containerPath: "/tmp", readOnly: false },
+            { sourceVolume: "scvs-shared", containerPath: "/var/tmp", readOnly: false },
           ],
         },
         {
@@ -95,11 +95,12 @@ const REGISTERED_TASK_PROPERTIES: RegisteredTaskProperties = {
           ],
           environment: [
             { name: "XDG_DATA_HOME", value: "/tmp" },
-            { name: "SCVS_HANDOFF_ROOT", value: "/tmp" },
+            { name: "SCVS_HANDOFF_ROOT", value: "/var/tmp" },
+            { name: "TMPDIR", value: "/var/tmp" },
           ],
           mountPoints: [
             { sourceVolume: "docker-sock", containerPath: "/var/run/docker.sock", readOnly: false },
-            { sourceVolume: "scvs-shared", containerPath: "/tmp", readOnly: false },
+            { sourceVolume: "scvs-shared", containerPath: "/var/tmp", readOnly: false },
           ],
         },
       ],

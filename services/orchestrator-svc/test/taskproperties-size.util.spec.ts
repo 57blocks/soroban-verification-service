@@ -18,7 +18,7 @@ const registered: RegisteredTaskProperties = {
           essential: false,
           environment: [
             { name: "XDG_DATA_HOME", value: "/tmp" },
-            { name: "SCVS_HANDOFF_ROOT", value: "/tmp" },
+            { name: "SCVS_HANDOFF_ROOT", value: "/var/tmp" },
           ],
         },
         {

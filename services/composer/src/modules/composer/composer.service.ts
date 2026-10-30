@@ -77,7 +77,7 @@ export class ComposerService {
       };
     }
 
-    const workdir = await mkdtemp(join(this.configService.get("artifactDir", { infer: true }) ?? tmpdir(), "compose-"));
+    const workdir = await mkdtemp(join(this.configService.get("artifactDir", { infer: true }) || tmpdir(), "compose-"));
     const contextDir = join(workdir, "context");
     await mkdir(contextDir, { recursive: true });
 

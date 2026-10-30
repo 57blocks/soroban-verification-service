@@ -103,11 +103,12 @@ export function summarizeDockerCommand(input: {
   return [...prefix, ...args].join(" ");
 }
 
-export async function stageSourceForOfflineBuild(sourceRoot: string, config?: RunCliRuntimeConfig): Promise<
+export async function stageSourceForOfflineBuild(sourceRoot: string, workDirs: string[], config?: RunCliRuntimeConfig): Promise<
   | { ok: true; source_root: string }
   | { ok: false; reason: RebuildErrorCode; detail: string; copy?: CommandResult }
 > {
   const stagedParent = await mkdtemp(join(tmpdir(), "scvs-offline-src-"));
+  workDirs.push(stagedParent);
   const stagedRoot = join(stagedParent, "source");
   await mkdir(stagedRoot, { recursive: true });
   const copy = await runCommand(["cp", "-R", `${sourceRoot}/.`, stagedRoot], {

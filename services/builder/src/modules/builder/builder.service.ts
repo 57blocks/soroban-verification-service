@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join, relative, sep } from "node:path";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -10,7 +11,7 @@ import {
   stderrOnlySink,
   type BuildRecipe,
 } from "@scvs/core";
-import { handoffPath, readHandoff } from "./handoff.js";
+import { handoffJobDir, handoffPath, readHandoff } from "./handoff.js";
 import { jobParamsInput, readJobParams } from "./job-params.js";
 import {
   runCli,
@@ -75,9 +76,20 @@ export class BuilderService {
   }
 
   private async runForJob(job: BatchJobParams): Promise<BuilderRunResult> {
+    const workDirs: string[] = [];
+    try {
+      return await this.rebuild(job, workDirs);
+    } finally {
+      await this.removeWorkDirs(workDirs);
+    }
+  }
+
+  private async rebuild(job: BatchJobParams, workDirs: string[]): Promise<BuilderRunResult> {
     this.logger.log("rebuild starting", { source_ref_type: job.source_ref.type });
 
     const path = handoffPath(this.handoffRoot(), job.job_id);
+    const jobDir = handoffJobDir(this.handoffRoot(), job.job_id);
+    if (jobDir) workDirs.push(jobDir);
     let handoff: Awaited<ReturnType<typeof readHandoff>>;
     try {
       handoff = await readHandoff(path);
@@ -104,12 +116,16 @@ export class BuilderService {
       });
     }
 
+    const sourceDir = materialisedSourceDir(this.handoffRoot(), handoff.source.workspace_path);
+    if (sourceDir) workDirs.push(sourceDir);
+
     const result = await runCli({
       mode: job.mode,
       target: job.target,
       build: buildRecipeFromJob(job),
       source: handoff.source,
       config: this.runCliConfig(),
+      workDirs,
     });
 
     return this.finish(job, result);
@@ -117,6 +133,17 @@ export class BuilderService {
 
   private handoffRoot(): string {
     return this.configService.get("handoffRoot", { infer: true }) || tmpdir();
+  }
+
+  private async removeWorkDirs(workDirs: string[]): Promise<void> {
+    for (const dir of workDirs) {
+      await rm(dir, { recursive: true, force: true }).catch((error: unknown) => {
+        this.logger.warn("could not remove a job work directory", {
+          work_dir: dir,
+          detail: describeError(error),
+        });
+      });
+    }
   }
 
   private runCliConfig(): RunCliRuntimeConfig {
@@ -268,6 +295,12 @@ export class BuilderService {
       },
     };
   }
+}
+
+function materialisedSourceDir(handoffRoot: string, workspacePath: string): string | undefined {
+  if (!workspacePath) return undefined;
+  const [top] = relative(handoffRoot, workspacePath).split(sep);
+  return top?.startsWith("scvs-src-") ? join(handoffRoot, top) : undefined;
 }
 
 function describeError(error: unknown): string {
