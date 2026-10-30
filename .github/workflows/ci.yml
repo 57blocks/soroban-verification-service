@@ -76,6 +76,9 @@ jobs:
       - name: Check the builder's capability split
         run: pnpm run check:builder-isolation
 
+      - name: Check every bind mount is host-visible at an identical, disk-backed path
+        run: pnpm run check:mount-paths
+
       - name: Check every core module is reachable
         run: pnpm run check:core-exports
 

@@ -23,6 +23,7 @@ export type RunCliInput = {
   source: MaterializedSource;
   expected_wasm_hash?: string;
   config?: RunCliRuntimeConfig;
+  workDirs: string[];
 };
 
 export type RunCliOutcome = "verified" | "comparison_mismatch" | "cli_failure" | "built";

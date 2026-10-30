@@ -1,5 +1,5 @@
 import type { RebuildErrorCode } from "@scvs/core";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Inject, Injectable } from "@nestjs/common";
@@ -157,6 +157,24 @@ export class MaterialiseService {
     if (info.isDirectory()) return { ok: true, source };
 
     const extractRoot = await mkdtemp(join(this.handoffRoot(), "scvs-src-"));
+    let handedOff = false;
+    try {
+      const prepared = await this.extractInto(extractRoot, source, job);
+      handedOff = prepared.ok;
+      return prepared;
+    } finally {
+      if (!handedOff) await rm(extractRoot, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private async extractInto(
+    extractRoot: string,
+    source: MaterializedSource,
+    job: MaterialiseJobParams,
+  ): Promise<
+    | { ok: true; source: MaterializedSource }
+    | { ok: false; reason: RebuildErrorCode; detail: string; status?: string }
+  > {
     const limits = this.archiveLimits();
     const config = {
       cliTimeoutMs: this.configService.get("tarTimeoutMs", { infer: true }) ?? TAR_TIMEOUT_DEFAULT_MS,

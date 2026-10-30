@@ -96,7 +96,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     });
   }
 
-  const stagedSource = await stageSourceForOfflineBuild(sourceRoot, input.config);
+  const stagedSource = await stageSourceForOfflineBuild(sourceRoot, input.workDirs, input.config);
   if (!stagedSource.ok) {
     return cliFailure(stagedSource.reason, "docker_build_image_rebuild", null, {
       runner: "docker_build_image_rebuild",
@@ -109,8 +109,10 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   const offlineManifestPath = resolveManifestPath(offlineSourceRoot, input.build.workspace_path);
 
   const outDir = await mkdtemp(join(tmpdir(), "scvs-build-"));
+  input.workDirs.push(outDir);
   // Separate from `outDir` so the only `.wasm` here is one the build tool put there.
   const artifactDir = await mkdtemp(join(tmpdir(), "scvs-artifact-"));
+  input.workDirs.push(artifactDir);
   await mkdir(join(outDir, "tmp"), { recursive: true });
   const vendorDir = join(outDir, "vendor");
   const cargoHomeDir = join(outDir, "cargo-home");

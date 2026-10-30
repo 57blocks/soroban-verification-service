@@ -214,14 +214,16 @@ jobs:
                 {\"type\": \"VCPU\", \"value\": \"2\"},
                 {\"type\": \"MEMORY\", \"value\": \"3800\"}
               ],
-              \"environment\": [],
+              \"environment\": [
+                {\"name\": \"TMPDIR\", \"value\": \"/var/tmp\"}
+              ],
               \"volumes\": [
                 {\"name\": \"docker-sock\", \"host\": {\"sourcePath\": \"/var/run/docker.sock\"}},
-                {\"name\": \"host-tmp\", \"host\": {\"sourcePath\": \"/tmp\"}}
+                {\"name\": \"host-tmp\", \"host\": {\"sourcePath\": \"/var/tmp\"}}
               ],
               \"mountPoints\": [
                 {\"sourceVolume\": \"docker-sock\", \"containerPath\": \"/var/run/docker.sock\", \"readOnly\": false},
-                {\"sourceVolume\": \"host-tmp\", \"containerPath\": \"/tmp\", \"readOnly\": false}
+                {\"sourceVolume\": \"host-tmp\", \"containerPath\": \"/var/tmp\", \"readOnly\": false}
               ]
             }"
 

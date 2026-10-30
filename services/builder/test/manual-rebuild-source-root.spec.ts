@@ -62,6 +62,7 @@ describe("build-mode rebuild source root", () => {
       build: { image: IMAGE, workspace_path: source.workspace_path, target: "wasm32v1-none", bldarg: [], bldopt: [] },
       source,
       config: { cliTimeoutMs: 5_000 },
+      workDirs: [],
     });
 
     expect(result.diagnostics?.reason).not.toBe("source_not_extracted");
@@ -78,6 +79,7 @@ describe("build-mode rebuild source root", () => {
       build: { image: IMAGE, workspace_path: ".", target: "wasm32v1-none", bldarg: [], bldopt: [] },
       source: { ...source, workspace_path: "" },
       config: { cliTimeoutMs: 5_000 },
+      workDirs: [],
     });
 
     expect(result.diagnostics?.reason).toBe("source_not_local_for_fallback");
@@ -92,6 +94,7 @@ describe("build-mode rebuild source root", () => {
       build: { image: IMAGE, workspace_path: ".", target: "wasm32v1-none", bldarg: [], bldopt: [] },
       source: { ...source, workspace_path: join(tmpdir(), `scvs-gone-${Date.now()}`) },
       config: { cliTimeoutMs: 5_000 },
+      workDirs: [],
     });
 
     expect(result.diagnostics?.reason).toBe("source_path_not_found");

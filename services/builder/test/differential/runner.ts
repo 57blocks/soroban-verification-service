@@ -120,6 +120,7 @@ async function runSandboxLeg(fixture: DifferentialFixture): Promise<string> {
       local_path: fixture.sourceDir,
       retained_after_verification: false,
     },
+    workDirs: [],
   });
   if (result.outcome !== "built" || !result.rebuilt_wasm_hash) {
     throw new Error(result.reason || JSON.stringify(result.diagnostics));
