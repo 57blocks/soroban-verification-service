@@ -21,9 +21,9 @@
     "test": "c8 sh -c 'for f in src/*-test.ts; do tsx \"$f\" || exit 1; done'"
   },
   "dependencies": {
-    "@nestjs/common": "^12.1.3",
-    "@nestjs/core": "^12.1.3",
-    "@nestjs/swagger": "^12.0.2",
+    "@nestjs/common": "^12.2.0",
+    "@nestjs/core": "^12.2.0",
+    "@nestjs/swagger": "^12.0.3",
     "@nestjs/throttler": "^6.7.1",
     "@scvs/core": "workspace:*",
     "class-transformer": "^0.5.1",
