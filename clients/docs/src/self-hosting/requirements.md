@@ -80,7 +80,10 @@ PostgreSQL, through Prisma.
 
 **Keep the build machines apart.** Run `builder` and `composer` on networks separate from the services
 and the databases, and separate from each other: `composer` holds the right to push images that later
-builds run, and a build runs untrusted code.
+builds run, and a build runs untrusted code. Give the two fleets **separate instance roles** too. Batch
+runs every job container in its host's network namespace, so each job can read its host's instance
+role. Scope each role to its own fleet's ECS clusters, the images it pulls and its own log streams,
+exactly as if the job held it, because the job does.
 
 ## Credentials
 
