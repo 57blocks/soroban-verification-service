@@ -63,25 +63,32 @@ Please include:
 So a report can focus on what's actually new, here's what's already enforced (see the referenced source
 for exact mechanics — this list is not exhaustive):
 
-- **Zero business credentials for the builder.** `services/builder`'s AWS Batch instance/execution IAM
-  roles are scoped to ECR pull + CloudWatch Logs only — never S3, Secrets Manager, RDS, or any
-  business-data permission. It also never imports `@scvs/db`. Artifact upload happens via a presigned
-  S3 PUT URL handed to each job, not a standing grant. What an operator must provide is in
+- **Zero business credentials for the builder.** `services/builder` has no job role. AWS Batch runs its
+  containers in the host's network namespace, so a builder job *can* read its host's instance role, and
+  that role is therefore scoped as if the job held it: the ECS agent's actions on the builder fleet's own
+  clusters, ECR pull from the builder and composed-environments repositories, and its own CloudWatch Logs
+  streams — never S3, Secrets Manager, SSM, RDS, or any business-data permission. In the reference
+  deployment a permissions boundary equal to that policy keeps anything attached to the role outside
+  Terraform from widening it. The builder also never imports `@scvs/db`. Artifact upload happens via a
+  presigned S3 PUT URL handed to each job, not a standing grant. What an operator must provide is in
   [`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md).
-- **Network isolation, and one gap we are not going to imply away.** The Batch build subnet is a
-  separate VPC subnet and security group from the resident services and the database, so the sandbox
-  shares no network boundary with the API, the console, or Postgres.
+- **Network and identity isolation of the build fleets.** The Batch build subnet is a separate VPC
+  subnet and security group from the resident services and the database, so the sandbox shares no
+  network boundary with the API, the console, or Postgres.
 
-  It is **not** separated from the composer fleet. `services/composer` holds the one write capability
-  in the system (`ecr:PutImage` on the composed-environments registry), and in the reference
-  deployment both fleets run in the builders' subnet behind the builders' security group. The target
-  architecture puts them in separate groups; that is a requirement we state and have not yet met, and
-  an escape from the sandbox therefore starts on the same network segment as a registry-push
-  credential. Reports that turn network adjacency into a capability are in scope and wanted.
+  It is also separated from the composer fleet. `services/composer` holds the one write capability in
+  the system (`ecr:PutImage` on the composed-environments registry), so in the reference deployment the
+  two fleets share no subnet, security group, network ACL or instance role. Each Batch subnet's network
+  ACL denies all traffic to and from the rest of the VPC, the builders' allowing only the services
+  subnet, independently of the security groups. Neither
+  fleet's instance role can register a host into the other fleet's ECS cluster. The composed-environments
+  repository is tag-immutable, and its repository policy denies push to every principal except the
+  composer's job role. Reports that turn anything a build can reach into a path to that push
+  capability are in scope and wanted.
 
-  If you deploy this yourself, give the two fleets their own subnets and security groups — the
-  requirement is written down in [`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md),
-  and unlike us you can meet it from the start.
+  If you deploy this yourself, give the two fleets their own subnets, security groups **and instance
+  roles**. The requirement is written down in
+  [`clients/docs/src/self-hosting/requirements.md`](clients/docs/src/self-hosting/requirements.md).
 - **The build image is never chosen by the submitter.** It is derived from the deployed Wasm's own
   metadata, and a `bldimg` in a submitted manifest is compatibility-only for older clients — never
   consulted (`resolveEnvironmentIdentity`, `services/orchestrator-svc`). Two classes reach the sandbox:
