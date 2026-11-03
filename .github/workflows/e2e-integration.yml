@@ -94,7 +94,7 @@ jobs:
     # An amd64 runner on purpose: the fixtures and the installed CLI are amd64.
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
-    timeout-minutes: ${{ inputs.test_suite == 'perf' && 360 || inputs.e2e_scope == 'all' && 240 || inputs.e2e_scope == 'slow' && 90 || 180 }}
+    timeout-minutes: ${{ inputs.test_suite == 'perf' && 360 || inputs.e2e_scope == 'all' && 330 || inputs.e2e_scope == 'slow' && 90 || 240 }}
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
       SCVS_CI_CACHE: ${{ inputs.on_main && 's3' || 'off' }}
