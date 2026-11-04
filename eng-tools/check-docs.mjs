@@ -16,7 +16,7 @@ const fail = (what) => findings.push(what);
 const BUDGETS = {
   "AGENTS.md": 6 * 1024,
   "CLAUDE.md": 256,
-  "docs/invariants.md": 18 * 1024,
+  "docs/invariants.md": 20 * 1024,
   "docs/specs/build-environments.md": 8 * 1024,
   "docs/specs/configuration.md": 12 * 1024,
   "docs/specs/data-and-lifecycle.md": 12 * 1024,

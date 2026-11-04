@@ -1,11 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import {
-  RETRY_ELIGIBILITY_WINDOW_MS,
-  retryableFailureReasons,
-  terminalJobStatuses,
-} from "@scvs/core";
 import { PRISMA_CLIENT } from "./db.tokens.js";
 import type { PrismaClient } from "./client.js";
+import { stillNeedsStagedSourceWhere } from "./staged-source-need.js";
 
 @Injectable()
 export class UploadJobReferencesRepository {
@@ -32,23 +28,8 @@ export class UploadJobReferencesRepository {
   ): Promise<boolean> {
     const jobIds = await this.findJobIdsForUpload(uploadId);
     if (jobIds.length === 0) return false;
-    const cutoff = new Date(now.getTime() - ceilingMs);
-    const retryWindowCutoff = new Date(now.getTime() - RETRY_ELIGIBILITY_WINDOW_MS);
     const count = await this.prisma.job.count({
-      where: {
-        id: { in: jobIds },
-        createdAt: { gt: cutoff },
-        OR: [
-          { status: { notIn: [...terminalJobStatuses] }, sourceRef: { path: ["visibility"], equals: "public" } },
-          { sourcePublishPendingSince: { not: null } },
-          {
-            status: "failed",
-            failureReason: { in: [...retryableFailureReasons] },
-            retryAttempts: { lt: maxRetryAttempts },
-            updatedAt: { gte: retryWindowCutoff },
-          },
-        ],
-      },
+      where: { id: { in: jobIds }, ...stillNeedsStagedSourceWhere(ceilingMs, now, maxRetryAttempts) },
     });
     return count > 0;
   }

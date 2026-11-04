@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { createS3Client, deleteObject, getObjectBytes, presignGetUrl, putObjectBytes } from "@scvs/aws";
+import {
+  createS3Client,
+  deleteObject,
+  getObjectBytesBounded,
+  objectExists,
+  presignGetUrl,
+  putObjectBytes,
+} from "@scvs/aws";
 import type { StagingStorageConfig } from "@scvs/config";
 import { UploadJobReferencesRepository, UploadsRepository } from "@scvs/db";
 import {
@@ -11,11 +18,11 @@ import {
 } from "@scvs/core";
 import { FetchPolicyError, ResponseTooLargeError, checkUrl, normalizePolicy } from "@scvs/core/fetch-policy";
 import { fetchedSourceKey } from "../../common/staging-keys.util.js";
-import { MAX_ARCHIVE_BYTES } from "./fetch-source-bytes.util.js";
+import { MAX_ARCHIVE_BYTES } from "./publish-source-bytes.util.js";
 import { fetchThroughDestinationPolicy } from "@scvs/core/policy-bound-fetch";
 import type { AppConfigService } from "../../config/configuration.js";
 
-// Must stay the same policy as fetch-source-bytes.util.ts's: one destination set, one policy.
+// The only policy under which a submitter-supplied URL is ever fetched; publication reads the staged copy.
 const DISPATCH_SOURCE_POLICY = normalizePolicy({
   allowedSchemes: ["https:"],
   blockPrivateRanges: true,
@@ -133,6 +140,40 @@ export class SourceResolutionService {
     }
   }
 
+  /**
+   * A public job that attaches to a rebuild already finished finds no fresh dispatch to stage its source,
+   * so the copy its publication will read is staged here, hash-checked like any dispatch fetch. Best
+   * effort: a job whose copy cannot be staged still gets its verdict, only no published source.
+   */
+  async ensureStagedRemoteSource(
+    sourceRef: SourceReferenceDto,
+    rebuildId: string,
+    mode: BuildMode,
+  ): Promise<"present" | "staged" | "unavailable"> {
+    if (sourceRef.type !== "source_uri" || sourceRef.visibility !== "public") return "present";
+    try {
+      const staging = this.configService.get("stagingStorage", { infer: true });
+      const s3 = createS3Client({ region: staging.region });
+      if (await this.stagedObjectExists(s3, staging.bucket, fetchedSourceKey(rebuildId, mode))) return "present";
+      const staged = await this.stageRemoteSource(sourceRef, rebuildId, mode);
+      if (staged.ok) return "staged";
+      this.logger.warn("could not re-stage a public source for a rebuild that had already finished", {
+        rebuild_id: rebuildId,
+        mode,
+        reason: staged.reason,
+        detail: staged.detail,
+      });
+      return "unavailable";
+    } catch (error) {
+      this.logger.warn("could not check or re-stage a public source for a finished rebuild", {
+        rebuild_id: rebuildId,
+        mode,
+        error: describeError(error),
+      });
+      return "unavailable";
+    }
+  }
+
   async resolvePrivateUploadSourceRef(
     sourceRef: SourceReferenceDto
   ): Promise<
@@ -182,6 +223,14 @@ export class SourceResolutionService {
     return putObjectBytes(s3, bucket, key, bytes, "application/octet-stream");
   }
 
+  protected stagedObjectExists(
+    s3: ReturnType<typeof createS3Client>,
+    bucket: string,
+    key: string,
+  ): Promise<boolean> {
+    return objectExists(s3, bucket, key);
+  }
+
   // Isolated as a method so tests can substitute it.
   protected presignUploadGet(
     s3: ReturnType<typeof createS3Client>,
@@ -203,15 +252,31 @@ export class SourceResolutionService {
     }
     const staging = this.configService.get("stagingStorage", { infer: true });
     const s3 = createS3Client({ region: staging.region });
-    const bytes = await getObjectBytes(s3, staging.bucket, upload.path);
-    if (!bytes) return undefined;
-    return { bytes, filename: upload.filename };
+    const object = await getObjectBytesBounded(s3, staging.bucket, upload.path, MAX_ARCHIVE_BYTES);
+    if (!object) return undefined;
+    if ("tooLarge" in object) {
+      throw new Error(`staged upload ${upload.path} is ${object.tooLarge} bytes, over the ${MAX_ARCHIVE_BYTES} byte ceiling`);
+    }
+    return { bytes: object.bytes, filename: upload.filename };
   }
 
-  async readStagingObjectBytes(key: string): Promise<Uint8Array | undefined> {
+  /** Bounded: a staging object the sandbox wrote is not trusted to be archive-sized. Throws when it is not. */
+  async readStagingObjectBytes(key: string, maxBytes = MAX_ARCHIVE_BYTES): Promise<Uint8Array | undefined> {
     const staging = this.configService.get("stagingStorage", { infer: true });
     const s3 = createS3Client({ region: staging.region });
-    return (await getObjectBytes(s3, staging.bucket, key)) ?? undefined;
+    const object = await getObjectBytesBounded(s3, staging.bucket, key, maxBytes);
+    if (!object) return undefined;
+    if ("tooLarge" in object) {
+      throw new Error(`staging object ${key} is ${object.tooLarge} bytes, over the ${maxBytes} byte ceiling`);
+    }
+    return object.bytes;
+  }
+
+  /** Idempotent: a key that is already gone is not an error. */
+  deleteStagingObject(key: string): Promise<void> {
+    const staging = this.configService.get("stagingStorage", { infer: true });
+    const s3 = createS3Client({ region: staging.region });
+    return this.deleteStagedObject(s3, staging.bucket, key);
   }
 
   async peekStagedUploadFilename(uploadId: string): Promise<string | undefined> {

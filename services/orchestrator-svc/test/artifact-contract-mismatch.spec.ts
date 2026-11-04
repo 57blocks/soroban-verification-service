@@ -27,6 +27,7 @@ jest.unstable_mockModule("@scvs/aws", () => ({
   getObjectBytes: async () => undefined,
   presignGetUrl: async () => "https://example.invalid/get",
   putObjectBytes: async () => undefined,
+  objectExists: async () => false,
 }));
 
 const { RebuildOutcomeService } = await import(

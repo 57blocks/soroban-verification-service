@@ -38,6 +38,8 @@ export type RebuildRecord = {
   canonicalSourceKey?: string;
   sourceCanonicalisation?: unknown;
   verifyFailureCode?: string;
+  /** Set once every staging copy of this rebuild's source is gone; absent while any may still exist. */
+  stagedSourceReleasedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -136,6 +138,8 @@ export class RebuildsRepository {
         status: "running" satisfies RebuildStatus,
         batchJobId: input.batchJobId,
         buildMode: input.buildMode,
+        // This attempt writes fresh staging copies, so whatever was released before no longer holds.
+        stagedSourceReleasedAt: null,
       },
     });
   }
@@ -192,9 +196,32 @@ export class RebuildsRepository {
         canonicalSourceSha256: null,
         canonicalSourceKey: null,
         sourceCanonicalisation: Prisma.DbNull,
+        stagedSourceReleasedAt: null,
       },
     });
     return count === 1;
+  }
+
+  /** Only a finished rebuild can be marked: a re-dispatch that raced the delete still owns fresh copies. */
+  async markStagedSourceReleased(rebuildId: string, at = new Date()): Promise<boolean> {
+    const { count } = await this.prisma.rebuild.updateMany({
+      where: { id: rebuildId, status: "done" satisfies RebuildStatus, stagedSourceReleasedAt: null },
+      data: { stagedSourceReleasedAt: at },
+    });
+    return count === 1;
+  }
+
+  async listStagedSourceReleaseCandidates(opts: { doneBefore: Date; limit: number }): Promise<RebuildRecord[]> {
+    const rows = await this.prisma.rebuild.findMany({
+      where: {
+        status: "done" satisfies RebuildStatus,
+        stagedSourceReleasedAt: null,
+        updatedAt: { lt: opts.doneBefore },
+      },
+      orderBy: { updatedAt: "asc" },
+      take: opts.limit,
+    });
+    return rows.map(rowToRebuild);
   }
 
   /** Only on `pending`: once claimed, the mode describes an attempt that really happened. */
@@ -274,6 +301,7 @@ function rowToRebuild(row: PrismaRebuild): RebuildRecord {
       ? { sourceCanonicalisation: row.sourceCanonicalisation }
       : {}),
     ...(row.verifyFailureCode ? { verifyFailureCode: row.verifyFailureCode } : {}),
+    ...(row.stagedSourceReleasedAt ? { stagedSourceReleasedAt: row.stagedSourceReleasedAt.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

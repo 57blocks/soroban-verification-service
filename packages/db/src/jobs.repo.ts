@@ -24,6 +24,7 @@ import { PRISMA_CLIENT } from "./db.tokens.js";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { JobModel as PrismaJob } from "../generated/prisma/models.js";
+import { stillNeedsStagedSourceWhere } from "./staged-source-need.js";
 
 export type StatusLinkBlockedReason = "invalid_document" | "unrepresentable" | "manual_hold";
 
@@ -230,6 +231,19 @@ export class JobsRepository {
       data: toUpdateData(updates),
     });
     await this.notifyJobUpdate(jobId);
+  }
+
+  /** Same predicate as the upload sweep's, keyed on the rebuild whose staging copies are about to go. */
+  async hasOutstandingStagedSourceNeed(
+    rebuildId: string,
+    ceilingMs: number,
+    now: Date,
+    maxRetryAttempts: number,
+  ): Promise<boolean> {
+    const count = await this.prisma.job.count({
+      where: { rebuildId, ...stillNeedsStagedSourceWhere(ceilingMs, now, maxRetryAttempts) },
+    });
+    return count > 0;
   }
 
   async listJobsAttachedToRebuild(rebuildId: string): Promise<JobRecord[]> {

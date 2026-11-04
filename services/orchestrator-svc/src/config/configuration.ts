@@ -131,6 +131,8 @@ const configuration = () => ({
   jobRetentionMs: numberEnv("SCVS_JOB_RETENTION_MS", 30 * 24 * 60 * 60_000),
   jobRetentionSweepIntervalMs: numberEnv("SCVS_JOB_RETENTION_SWEEP_INTERVAL_MS", 60 * 60_000),
   jobRetentionBatchSize: numberEnv("SCVS_JOB_RETENTION_BATCH_SIZE", 500),
+  stagedSourceSweepIntervalMs: numberEnv("SCVS_STAGED_SOURCE_SWEEP_INTERVAL_MS", 60 * 60_000),
+  stagedSourceSweepBatchSize: numberEnv("SCVS_STAGED_SOURCE_SWEEP_BATCH_SIZE", 200),
   stagingStorage: getStagingStorageConfig(),
   resultStorage: resultStorageConfigFromEnv(),
   verifierIdentity: getVerifierIdentity(),

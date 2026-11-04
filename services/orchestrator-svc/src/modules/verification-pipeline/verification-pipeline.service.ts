@@ -33,7 +33,11 @@ import {
   type WasmMetadata,
 } from "./chain-reader.service.js";
 import { BuildEnvironmentIdentityService } from "./build-environment-identity.service.js";
-import { SourceResolutionService } from "../source-resolution/index.js";
+import {
+  declareSourceFileName,
+  SourceResolutionService,
+  StagedSourceReleaseService,
+} from "../source-resolution/index.js";
 import { BatchDispatchService } from "./batch-dispatch.service.js";
 import { PublishService } from "../publish/index.js";
 import { MismatchDiagnosticsService } from "./mismatch-diagnostics.service.js";
@@ -61,6 +65,8 @@ export class VerificationPipelineService {
     private readonly chainReader: ChainReaderService,
     @Inject(SourceResolutionService)
     private readonly sourceResolution: SourceResolutionService,
+    @Inject(StagedSourceReleaseService)
+    private readonly stagedSourceRelease: StagedSourceReleaseService,
     @Inject(BatchDispatchService)
     private readonly batchDispatch: BatchDispatchService,
     @Inject(PublishService)
@@ -305,6 +311,29 @@ export class VerificationPipelineService {
         }
       }
       rebuild = (await this.rebuilds.getById(rebuild.rebuildId)) ?? rebuild;
+    }
+
+    if (
+      rebuild.status === "done" &&
+      !job.dryRun &&
+      job.sourceRef.type === "source_uri" &&
+      job.sourceRef.visibility === "public" &&
+      // A canonical archive cannot be re-staged without a build; publication falls back to "not published".
+      !rebuild.canonicalSourceKey &&
+      !(await this.publish.isSourcePublished(
+        await declareSourceFileName(job.sourceRef, this.sourceResolution)
+      ))
+    ) {
+      const restaged = await this.sourceResolution.ensureStagedRemoteSource(
+        job.sourceRef,
+        rebuild.rebuildId,
+        rebuild.buildMode ?? "verify"
+      );
+      if (restaged === "staged") {
+        this.logger.log("attached to a finished rebuild; re-staged its public source for publishing", {
+          rebuild_id: rebuild.rebuildId,
+        });
+      }
     }
 
     if (
@@ -632,7 +661,7 @@ export class VerificationPipelineService {
         path: "evaluated",
       });
       this.emitJobDuration(job, dryVerdict, "evaluated");
-      await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+      await this.stagedSourceRelease.releaseForTerminalJob({ ...job, rebuildId: rebuild.rebuildId });
       return;
     }
 
@@ -721,7 +750,7 @@ export class VerificationPipelineService {
     });
     this.emitJobDuration(job, prior.verdict, "adopted");
     await this.publish.completeArchiveObligationsForAdoptedJob(job, prior);
-    await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+    await this.stagedSourceRelease.releaseForTerminalJob({ ...job, rebuildId: rebuild.rebuildId });
     return true;
   }
 
@@ -816,6 +845,6 @@ export class VerificationPipelineService {
       });
       return;
     }
-    await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+    await this.stagedSourceRelease.releaseForTerminalJob(current);
   }
 }

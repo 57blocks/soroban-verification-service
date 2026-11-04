@@ -59,10 +59,14 @@ A build can print anything, including a fake report of what it built. The verifi
 - **A source URL is fetched by the verifier, not by the build**: over HTTPS only, never from a private or
   local address. Git URLs are not accepted, because Git's transports cannot be confined the same way.
 - **Private source is not published.** For an archive you do not declare public, the result publishes
-  its hash, and its URL if you gave one, but not the archive. An upload is deleted once no job still
-  needs it; a copy the verifier made of a source fetched from a URL stays in its working storage for as
-  long as the operator's storage settings keep it. See
+  its hash, and its URL if you gave one, but not the archive. The upload, and the working copy the
+  verifier made of a source fetched from a URL, are deleted when the job ends, on every outcome, once
+  no job still needs them; the operator's storage expiry is only a backstop. See
   [Public or private](../developers/prepare-your-source.md#public-or-private).
+- **A published source is the copy that was verified.** A source you declare public is written from
+  the copy the verifier staged before the build, after re-checking its SHA-256 against the name it is
+  published under. Nothing is fetched from your URL again at publication, so what the result links to
+  is what was built.
 - **The build log is private.** Compiler output can contain fragments of source, so the log is redacted
   of credentials and local paths, readable only with the token returned to the submitter, and deleted
   after a retention period, seven days by default.

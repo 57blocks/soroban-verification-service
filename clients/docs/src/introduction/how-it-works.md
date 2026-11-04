@@ -31,7 +31,8 @@ the verifier in one of two ways:
 
 Either way, the archive is pinned by its SHA-256 before anything runs. A request that is wrong on its
 face — a malformed hash, an unknown network — is rejected immediately, and no job is created. Working
-copies in the verifier's staging storage expire under that storage's own retention policy.
+copies in the verifier's staging storage are deleted when the job ends; the storage's own retention
+policy is a backstop, not the mechanism.
 
 You can also submit a **dry run**: the verifier builds and compares as usual, returns the result to
 you, and publishes nothing.

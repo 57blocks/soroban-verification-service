@@ -82,7 +82,7 @@ test("every unit in METRIC_UNITS is count or seconds, and the name is the key", 
   for (const [name, unit] of Object.entries(METRIC_UNITS)) {
     assert.ok(unit === "count" || unit === "seconds", `${name} has unit ${unit}`);
   }
-  assert.equal(Object.keys(METRIC_UNITS).length, 18);
+  assert.equal(Object.keys(METRIC_UNITS).length, 21);
 });
 
 test("a dimension cannot shadow `value` and silently redirect the filter", () => {

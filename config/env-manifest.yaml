@@ -1255,6 +1255,22 @@ services:
           Rows one retention tick may delete. Bounded because the tick also issues one S3 delete per
           job that has a build log, and an unbounded first sweep against a long-retained database
           would be a single very long transaction.
+      SCVS_STAGED_SOURCE_SWEEP_INTERVAL_MS:
+        type: number
+        default: 3600000
+        note: >-
+          `StagedSourceSweepScheduler`'s tick. A job's terminal path deletes the staging copies of its
+          source (the URL fetch and the unwrapped archive under `staging/<rebuild>/`) itself; this sweep
+          only retries what that path could not delete — a crash between the terminal write and the
+          delete, or an S3 error — so the promise "deleted when the job terminates" does not rest on
+          one best-effort call. Finished rebuilds whose copies are not yet released are the backlog
+          (`staged_source_release_backlog`).
+      SCVS_STAGED_SOURCE_SWEEP_BATCH_SIZE:
+        type: number
+        default: 200
+        note: >-
+          Rebuilds one sweep tick may release. Each costs one count query and four S3 deletes, and the
+          first sweep after this ships faces every finished rebuild ever recorded.
       SCVS_JOB_STATE_CHANGE_QUEUE_URL:
         type: url
         required: yes

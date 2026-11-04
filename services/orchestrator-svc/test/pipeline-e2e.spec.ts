@@ -24,6 +24,7 @@ import configuration, { type AppConfigService } from "../src/config/configuratio
 import { ChainReaderService } from "../src/modules/verification-pipeline/chain-reader.service.js";
 import { BatchDispatchService } from "../src/modules/verification-pipeline/batch-dispatch.service.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
+import { StagedSourceReleaseService } from "../src/modules/source-resolution/staged-source-release.service.js";
 import { MismatchDiagnosticsService } from "../src/modules/verification-pipeline/mismatch-diagnostics.service.js";
 import { VerificationPipelineService } from "../src/modules/verification-pipeline/verification-pipeline.service.js";
 import { PublishService } from "../src/modules/publish/publish.service.js";
@@ -222,6 +223,7 @@ function substituteOutboundRequests(service: SourceResolutionService): void {
     stageRemoteSource: (ref: unknown) => Promise<{ ok: true; sourceRef: unknown }>;
     presignUploadGet: () => Promise<string>;
     deleteStagedObject: () => Promise<void>;
+    stagedObjectExists: () => Promise<boolean>;
   };
   jest.spyOn(internals, "stageRemoteSource").mockImplementation(async (ref: unknown) => ({
     ok: true,
@@ -229,6 +231,7 @@ function substituteOutboundRequests(service: SourceResolutionService): void {
   }));
   jest.spyOn(internals, "presignUploadGet").mockResolvedValue("https://staging.test/staged-upload?sig=stub");
   jest.spyOn(internals, "deleteStagedObject").mockResolvedValue(undefined);
+  jest.spyOn(internals, "stagedObjectExists").mockResolvedValue(true);
   jest
     .spyOn(service, "readStagedUploadBytes")
     .mockRejectedValue(new Error("pipeline-e2e: readStagedUploadBytes() was called; see substituteOutboundRequests()."));
@@ -275,6 +278,7 @@ beforeAll(async () => {
     ],
     providers: [
       SourceResolutionService,
+      StagedSourceReleaseService,
       ArweaveArchiveService,
       PublishService,
       VerificationPipelineService,
@@ -833,6 +837,7 @@ describe("ADR-008 pipeline, end to end", () => {
     expect(evaluated.status).toBe("evaluated");
     expect(evaluated.verdict).toBe("verified");
     expect(evaluated.failureReason).toBeNull();
+    expect((await rebuilds.getById(rebuildId))!.stagedSourceReleasedAt).toBeDefined();
     expect(evaluated.result?.matched).toBe(true);
     expect(evaluated.result?.status_summary).toBe("verified");
     expect(evaluated.result?.artifact_sha256).toBeUndefined();

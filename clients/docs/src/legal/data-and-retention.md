@@ -89,7 +89,8 @@ Irys's development network, which does not keep data permanently; the operator c
 | Any other job, including failed jobs and dry runs, with the terms version it recorded | 30 days |
 | The build log, as you can read it | 7 days, or until you delete it with your token |
 | An uploaded archive | Until its job ends, at most 30 minutes if it is unused. Some uploads are kept longer while a job still needs them, for at most 4 hours |
-| The verifier's working copies for a build: a source fetched from a URL, an unwrapped archive, the rebuilt Wasm, and the build's record, which includes a copy of the build log | Not deleted by the software; as long as the operator's storage keeps them |
+| The verifier's working copies of your source: a source fetched from a URL, and an unwrapped archive | Until the job ends, on every outcome, once no job still needs them. A copy a failed deletion left behind is deleted by a later sweep |
+| The verifier's other working files for a build: the rebuilt Wasm, and the build's record, which includes a copy of the build log | Not deleted by the software; as long as the operator's storage keeps them |
 | Rate-limit counts in the database | About 15 minutes |
 | An aggregator's copies of other verifiers' results | Until the verifier's own entry goes, or the aggregator's operator disables that verifier. A paused verifier's copies are kept |
 

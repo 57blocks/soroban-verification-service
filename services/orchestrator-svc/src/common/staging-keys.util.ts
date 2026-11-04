@@ -1,4 +1,4 @@
-import type { BuildMode } from "@scvs/core";
+import { buildModes, type BuildMode } from "@scvs/core";
 
 // Dispatch presigns these keys and the outcome path reads them back: both must agree byte for byte.
 export function recipeArtifactKey(rebuildId: string, mode: BuildMode): string {
@@ -17,6 +17,11 @@ export function canonicalSourceKey(rebuildId: string, mode: BuildMode): string {
 // Not content-addressed: a key shared across rebuilds could be deleted while another job builds from it.
 export function fetchedSourceKey(rebuildId: string, mode: BuildMode): string {
   return `staging/${rebuildId}/${mode}/fetched-source`;
+}
+
+/** Every staging copy of a rebuild's source, under both modes: a release must not depend on which one ran. */
+export function stagedSourceKeys(rebuildId: string): string[] {
+  return buildModes.flatMap((mode) => [fetchedSourceKey(rebuildId, mode), canonicalSourceKey(rebuildId, mode)]);
 }
 
 export function paramsDocumentKey(rebuildId: string, mode: BuildMode, container: "materialise" | "runner"): string {

@@ -44,11 +44,12 @@ import {
 import { ArweaveArchiveService } from "./arweave-archive.service.js";
 import {
   declareSourceFileName,
-  fetchSourceBytesForPublishing,
+  readSourceBytesForPublishing,
   type CanonicalSource,
+  type StagedSourceLocator,
 } from "../source-resolution/index.js";
 import { toStatusLinkOutcome } from "./status-link-outcome.util.js";
-import { SourceResolutionService } from "../source-resolution/index.js";
+import { SourceResolutionService, StagedSourceReleaseService } from "../source-resolution/index.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { ConfigurationError } from "../../config/configuration-error.js";
 
@@ -64,6 +65,7 @@ export class PublishService {
     @Inject(RebuildsRepository) private readonly rebuilds: RebuildsRepository,
     @Inject(EnvironmentsRepository) private readonly environments: EnvironmentsRepository,
     @Inject(SourceResolutionService) private readonly sourceResolution: SourceResolutionService,
+    @Inject(StagedSourceReleaseService) private readonly stagedSourceRelease: StagedSourceReleaseService,
   ) {}
 
   async publishJobResult(jobId: string): Promise<void> {
@@ -103,7 +105,7 @@ export class PublishService {
         },
         progress: undefined,
       });
-      await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+      await this.stagedSourceRelease.releaseForTerminalJob(job);
       return;
     }
 
@@ -145,7 +147,7 @@ export class PublishService {
 
     const verifier = this.configService.get("verifierIdentity", { infer: true });
     const storage = this.buildResultStorage();
-    const { buildMode, mechanismReason, buildEnvironment, canonicalSource, chainSourceSha256 } =
+    const { rebuildId, buildMode, mechanismReason, buildEnvironment, canonicalSource, chainSourceSha256 } =
       await this.resolveBuildContext(job);
     const buildIsolation = toBuildIsolation(buildMode);
     const sourceFileName =
@@ -179,6 +181,7 @@ export class PublishService {
       storage,
       sourceFileName,
       jobId,
+      { rebuildId, buildMode },
       canonicalSource,
     );
     const verifiedSourceCodeUri: RegistrySourceCodeUri | undefined =
@@ -261,9 +264,9 @@ export class PublishService {
       }
     }
 
-    // Only after sources/ is durable: the staged upload may be the only copy of the source.
+    // Only after sources/ is durable: the staging copies may be the only copy of the source.
     if (sourceDurable) {
-      await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+      await this.stagedSourceRelease.releaseForTerminalJob(job);
     }
 
     this.arweaveArchive.scheduleArweaveBackfill({
@@ -299,6 +302,7 @@ export class PublishService {
     storage: ResultStorage,
     sourceFileName: string | undefined,
     jobId: string,
+    staged: StagedSourceLocator,
     canonicalSource?: CanonicalSource,
   ): Promise<boolean> {
     if (job.sourceRef.visibility !== "public") return true;
@@ -307,25 +311,45 @@ export class PublishService {
     const alreadyPublished = await storage.exists(sourceKeyFromFileName(sourceFileName));
     if (alreadyPublished) return true;
 
-    const fetched = await fetchSourceBytesForPublishing(
+    const source = await readSourceBytesForPublishing(
       job.sourceRef,
       this.sourceResolution,
+      staged,
       canonicalSource,
     );
-    if (!fetched) {
-      this.logger.warn("declared-public source could not be fetched for publishing; sources/ was not written", {
+    if (!source.ok) {
+      const fields = {
         job_id: jobId,
+        rebuild_id: staged.rebuildId,
         source_ref_type: job.sourceRef.type,
-        source_sha256: job.sourceRef.source_sha256,
         source_file_name: sourceFileName,
+        reason: source.reason,
+        detail: source.detail,
+        ...(source.expectedSha256 ? { expected_sha256: source.expectedSha256 } : {}),
+        ...(source.actualSha256 ? { actual_sha256: source.actualSha256 } : {}),
+      };
+      if (source.reason === "sha256_mismatch") {
+        this.logger.error("refusing to publish a source whose staged bytes do not hash to its declared sha256", fields);
+      } else {
+        this.logger.warn("declared-public source is not available for publishing; sources/ was not written", fields);
+      }
+      this.metrics.counter("source_publish_unavailable_total", 1, { reason: source.reason });
+      return false;
+    }
+    if (source.sha256 !== sourceSha256FromFileName(sourceFileName)) {
+      this.logger.error("refusing to publish a source under a name that does not carry its hash", {
+        job_id: jobId,
+        source_file_name: sourceFileName,
+        source_sha256: source.sha256,
       });
+      this.metrics.counter("source_publish_unavailable_total", 1, { reason: "name_hash_disagreement" });
       return false;
     }
 
     await publishSource(storage, {
-      sourceSha256: canonicalSource?.sha256 ?? job.sourceRef.source_sha256,
-      bytes: fetched.bytes,
-      extension: fetched.extension,
+      sourceSha256: source.sha256,
+      bytes: source.bytes,
+      extension: source.extension,
       contentType: "application/octet-stream",
     });
     return true;
@@ -375,7 +399,7 @@ export class PublishService {
       return;
     }
     const storage = this.buildResultStorage();
-    const { canonicalSource } = await this.resolveBuildContext(job);
+    const { rebuildId, buildMode, canonicalSource } = await this.resolveBuildContext(job);
     const sourceFileName = await declareSourceFileName(
       job.sourceRef,
       this.sourceResolution,
@@ -386,6 +410,7 @@ export class PublishService {
       storage,
       sourceFileName,
       job.jobId,
+      { rebuildId, buildMode },
       canonicalSource,
     );
 
@@ -404,7 +429,7 @@ export class PublishService {
         : { published: false },
     );
     if (durable) {
-      await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+      await this.stagedSourceRelease.releaseForTerminalJob(job);
       if (sourceFileName) {
         // Full recompute, not a lone append: only a pass that rebuilds every owed link may discharge the obligation.
         await this.arweaveArchive.retryPendingStatusLinks({ ...job, sourceFileName });
@@ -468,12 +493,17 @@ export class PublishService {
       });
   }
 
+  async isSourcePublished(sourceFileName: string): Promise<boolean> {
+    return this.buildResultStorage().exists(sourceKeyFromFileName(sourceFileName));
+  }
+
   // An instance method so tests can substitute it.
   private buildResultStorage(): ResultStorage {
     return createResultStorage(this.configService.get("resultStorage", { infer: true }));
   }
 
   private async resolveBuildContext(job: JobRecord): Promise<{
+    rebuildId: string;
     buildMode: BuildMode;
     mechanismReason: MechanismReason;
     buildEnvironment: PublishedBuildEnvironment;
@@ -487,6 +517,7 @@ export class PublishService {
     }
 
     return {
+      rebuildId: rebuild.rebuildId,
       buildMode: rebuild.buildMode ?? "verify",
       mechanismReason: rebuild.mechanismReason,
       buildEnvironment: await this.resolvePublishedBuildEnvironment(rebuild),
