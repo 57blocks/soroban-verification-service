@@ -31,6 +31,12 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsNumberString({}, { message: "SCVS_JOB_RETENTION_BATCH_SIZE must be a number" })
   SCVS_JOB_RETENTION_BATCH_SIZE?: string;
 
+  @IsOptional() @IsNumberString({}, { message: "SCVS_STAGED_SOURCE_SWEEP_INTERVAL_MS must be a number" })
+  SCVS_STAGED_SOURCE_SWEEP_INTERVAL_MS?: string;
+
+  @IsOptional() @IsNumberString({}, { message: "SCVS_STAGED_SOURCE_SWEEP_BATCH_SIZE must be a number" })
+  SCVS_STAGED_SOURCE_SWEEP_BATCH_SIZE?: string;
+
   @IsOptional()
   @IsIn(arweaveModes, {
     message: `SCVS_ARWEAVE_MODE must be one of: ${arweaveModes.join(", ")} (an unrecognised value silently disables archiving)`,

@@ -21,6 +21,7 @@ import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.service.js";
 import { ArchiveRecoveryScheduler } from "../src/modules/scheduler/archive-recovery.scheduler.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
+import { StagedSourceReleaseService } from "../src/modules/source-resolution/staged-source-release.service.js";
 
 const WASM_HASH = "3".repeat(64);
 const REBUILT_HASH = WASM_HASH;
@@ -61,7 +62,7 @@ beforeAll(async () => {
         useFactory: (configService: AppConfigService) => configService.get("postgres", { infer: true }),
       }),
     ],
-    providers: [ArweaveArchiveService, PublishService, ArchiveRecoveryScheduler, SourceResolutionService],
+    providers: [ArweaveArchiveService, PublishService, ArchiveRecoveryScheduler, SourceResolutionService, StagedSourceReleaseService],
   }).compile();
 
   jobs = moduleRef.get(JobsRepository);

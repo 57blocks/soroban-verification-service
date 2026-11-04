@@ -28,7 +28,7 @@ export const securityCapabilities: Capability[] = [
   {
     title: "Private bytes deleted",
     description:
-      "A non-public upload is removed when the job ends, on every failure path too.",
+      "Non-public source, uploaded or fetched from your URL, is removed when the job ends, on every failure path too.",
     sample: "deleted on every terminal path",
   },
 ];

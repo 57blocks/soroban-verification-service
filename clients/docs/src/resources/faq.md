@@ -66,8 +66,9 @@ No. A verifier never replaces its own `verified` result with a later mismatch.
 ### Do I have to publish my source?
 
 No. By default the verifier publishes only the archive's hash, plus its URL if you gave one. An uploaded
-archive is deleted once no job needs it. Publishing the source is a stronger claim, because anyone can
-then repeat the rebuild. See [Public or private](../developers/prepare-your-source.md#public-or-private).
+archive, or the copy fetched from your URL, is deleted when the job ends. Publishing the source is a
+stronger claim, because anyone can then repeat the rebuild. See
+[Public or private](../developers/prepare-your-source.md#public-or-private).
 
 ### Who can read my build log?
 

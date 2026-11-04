@@ -102,3 +102,15 @@ routes instead. See [rule 14](../invariants.md)'s staleness test for the general
 
 *Verified by:* `test/integration/cases/pub/pub-layout-and-bulk-load.spec.ts` (the "has no
 `by-contract`/`by-network` file" probes).
+
+## 8. A stored source is the copy that was staged for the build, re-hashed
+
+`sources/<source_sha256><ext>` is written only from a copy this verifier staged itself before the
+build — the upload, the URL fetch, or the unwrapped archive the trusted side hashed — after
+re-computing its SHA-256 and finding the hash its name carries. Publication fetches nothing from a
+submitter-supplied URL. A staged copy that is missing, or whose bytes hash to anything else, leaves
+the verdict published and the source unpublished; never a different archive under that name.
+
+*Verified by:* `services/orchestrator-svc/test/publish-from-staging.spec.ts`,
+`services/orchestrator-svc/test/publish-source-bytes.spec.ts`,
+`services/orchestrator-svc/src/modules/source-resolution/publish-source-bytes.util.ts`.

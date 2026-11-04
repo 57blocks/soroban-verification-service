@@ -240,6 +240,10 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
     "Time limit, in milliseconds, for the builder to download a job's source archive.",
   SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS:
     "How long, in milliseconds, an expired upload is still kept while a public job referencing it has not yet published its source. Read by verification-svc and orchestrator-svc; give both the same value.",
+  SCVS_STAGED_SOURCE_SWEEP_BATCH_SIZE:
+    "Most finished rebuilds one staged-source sweep run releases.",
+  SCVS_STAGED_SOURCE_SWEEP_INTERVAL_MS:
+    "How often, in milliseconds, the orchestrator retries deleting the working copies of a source that a job's own termination could not delete.",
   SCVS_STATUS_LINK_RECOVERY_INTERVAL_MS:
     "How often, in milliseconds, the orchestrator retries adding Arweave archive links to published Wasm status documents.",
   SCVS_STORAGE_BUCKET:

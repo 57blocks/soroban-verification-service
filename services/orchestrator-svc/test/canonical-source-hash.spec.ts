@@ -25,6 +25,7 @@ jest.unstable_mockModule("@scvs/aws", () => ({
   submitJob: async () => "batch-job-1",
   deleteObject: async () => undefined,
   getObjectBytes: async () => undefined,
+  objectExists: async () => false,
   presignGetUrl: async () => "https://example.invalid/get",
   putObjectBytes: async () => undefined,
 }));

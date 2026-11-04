@@ -117,14 +117,16 @@ out by their timeouts.
 | Job rows that wrote the published record | Retained for the verifier's operating lifetime |
 | `source_sha256` | Retained even when the source bytes are not |
 | Source submitted to a dry run | Never stored durably, whatever was declared |
-| Source with a public declaration | Stored durably, served on the public API, addressed by `source_sha256` |
-| Source without a public declaration | Deleted at job termination, on every terminal path |
+| Source with a public declaration | Stored durably, served on the public API, addressed by `source_sha256`; written from the copy staged before the build, re-hashed to that name (see [Published results](published-results.md)). The staging copies go once it is durable |
+| Source without a public declaration | Deleted at job termination, on every terminal path: the upload, and the copies the verifier staged under the rebuild (the URL fetch and the unwrapped archive, under both build modes), once no job attached to the same upload or rebuild still needs them. A deletion the terminal path could not make is retried by `StagedSourceSweepScheduler` until the rebuild is marked released |
 | Submitter identity | Never collected |
 
 Verified by: `services/orchestrator-svc/test/job-retention.spec.ts`,
 `services/orchestrator-svc/test/job-retention-scheduler.spec.ts`,
-`services/orchestrator-svc/src/modules/source-resolution/source-resolution.service.ts`
-(`deleteObject` on the non-public path).
+`services/orchestrator-svc/test/private-source-deletion-terminal-states.spec.ts`,
+`services/orchestrator-svc/test/staged-source-release.spec.ts`,
+`services/orchestrator-svc/test/staged-source-sweep-scheduler.spec.ts`,
+`services/orchestrator-svc/src/modules/source-resolution/staged-source-release.service.ts`.
 
 Verification is independent of storage: a submission whose source is not stored still receives a real
 verdict, published like any other. A verdict is never downgraded because source became unavailable

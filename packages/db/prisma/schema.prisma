@@ -34,6 +34,9 @@ model Rebuild {
 
   verifyFailureCode String? @map("verify_failure_code")
 
+  // Set once every staging copy of this rebuild's source is gone; cleared again when it is re-dispatched.
+  stagedSourceReleasedAt DateTime? @map("staged_source_released_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -22,6 +22,7 @@ import { ArweaveArchiveService } from "../src/modules/publish/arweave-archive.se
 import { PublishService } from "../src/modules/publish/publish.service.js";
 import { ArchiveRecoveryScheduler } from "../src/modules/scheduler/archive-recovery.scheduler.js";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
+import { StagedSourceReleaseService } from "../src/modules/source-resolution/staged-source-release.service.js";
 
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"e".repeat(64)}`;
 
@@ -56,7 +57,7 @@ async function buildModule(): Promise<TestingModule> {
         useFactory: (configService: AppConfigService) => configService.get("postgres", { infer: true }),
       }),
     ],
-    providers: [ArweaveArchiveService, PublishService, ArchiveRecoveryScheduler, SourceResolutionService],
+    providers: [ArweaveArchiveService, PublishService, ArchiveRecoveryScheduler, SourceResolutionService, StagedSourceReleaseService],
   }).compile();
 }
 
