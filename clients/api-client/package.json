@@ -18,7 +18,7 @@
     "test": "c8 sh -c 'for f in src/*-test.ts; do tsx \"$f\" || exit 1; done'"
   },
   "dependencies": {
-    "axios": "^1.20.0"
+    "axios": "^1.21.0"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5.104.0"
