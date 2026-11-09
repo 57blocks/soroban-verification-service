@@ -112,6 +112,11 @@ test.each(["docker compose", "compose file", "self-host", "run it locally", "loc
   },
 );
 
+test("no copy claims a verified source is all the code that runs", () => {
+  const overclaims = /\bcode that runs\b|\bproves? (?:the )?code\b|cannot be tampered/i;
+  expect(allCopy.filter((line) => overclaims.test(line))).toEqual([]);
+});
+
 test("no copy promises that stored source is permanent", () => {
   const overclaims = /source[^.]*\b(permanent|forever|immutable|never removed)\b/i;
   expect(allCopy.filter((line) => overclaims.test(line))).toEqual([]);

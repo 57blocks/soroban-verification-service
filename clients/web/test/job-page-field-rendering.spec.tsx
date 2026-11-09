@@ -319,3 +319,51 @@ describe("the diagnostics disclosure keeps the command and the JSON", () => {
     expect(text).not.toMatch(/\bSandbox\b/);
   });
 });
+
+describe("the rebuild card says whose source it is and who can review it", () => {
+  const standingFor = (options: { chainSourceSha256?: string | null; isPublic?: boolean | null; recipe?: ArtifactRecipeFacts }) =>
+    rebuildProvenance({
+      recipe: options.recipe ?? RECIPE,
+      sourceUri: SOURCE_URI,
+      sourceSha256: SOURCE_SHA,
+      chainSourceSha256: options.chainSourceSha256 ?? null,
+      isPublic: options.isPublic ?? null,
+    })?.standing.map((item) => item.label);
+
+  test("a source the contract records by hash is bound", () => {
+    expect(standingFor({ chainSourceSha256: SOURCE_SHA })).toContain("Source bound on chain");
+  });
+
+  test("a source hash the contract declares in its metadata also binds it", () => {
+    const declared = { ...RECIPE, metadataReplay: [`source_sha256=${SOURCE_SHA}`] };
+    expect(standingFor({ recipe: declared })).toContain("Source bound on chain");
+  });
+
+  test("a contract that records no source hash leaves the source unbound", () => {
+    expect(standingFor({})).toContain("Source not bound on chain");
+  });
+
+  test("public and private are both stated, and an unknown is left out", () => {
+    expect(standingFor({ isPublic: true })).toContain("Source public");
+    expect(standingFor({ isPublic: false })).toContain("Source not public");
+    expect(standingFor({ isPublic: null })).toEqual(["Source not bound on chain"]);
+  });
+
+  test("the card shows both", () => {
+    render(
+      <RebuildCard
+        inputs={rebuildProvenance({
+          recipe: RECIPE,
+          sourceUri: SOURCE_URI,
+          sourceSha256: SOURCE_SHA,
+          chainSourceSha256: SOURCE_SHA,
+          isPublic: false,
+        })}
+      />,
+    );
+
+    const standing = screen.getByTestId("source-standing");
+    expect(standing).toHaveTextContent("Source bound on chain.");
+    expect(standing).toHaveTextContent("Source not public.");
+  });
+});

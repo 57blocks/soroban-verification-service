@@ -665,6 +665,18 @@ already queued or running. An implementation that starts one on read turns an
 unauthenticated `GET` into a way to spend its build capacity, for any hash an
 attacker can name.
 
+**`verified` binds the deployed bytes to a whole source, not to the code a
+reader sees first.** A Rust build runs the source's build scripts, procedural
+macros and dependencies, and applies the recorded build options, including any
+environment variable they set. Any of these can make the Wasm differ from what
+the contract's own files suggest, and no rebuild can tell that from an honest
+build. A consumer that presents `verified` as "this code is what runs"
+overstates it. One that shows a result does better to say whether the source is
+retrievable through `verified_source_code_uris`, since only a retrievable source
+can be reviewed. Nothing in an entry says who submitted the source either: under
+§3.4 a newer `verified` replaces an older one, so unless the contract itself
+records `source_sha256`, the source an entry names can be anyone's.
+
 **Publishing source publishes source.** `verified_source_code_uris` serves a
 retrievable copy of what was submitted. A verifier accepting private
 submissions MUST NOT populate it for them; there is no field here that marks a

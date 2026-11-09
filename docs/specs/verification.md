@@ -87,9 +87,10 @@ Verified by: `services/builder/test/differential/reproducibility.spec.ts`,
 
 ## Artifact provenance
 
-**The attack this defends against:** a submitter plants a pre-built `.wasm` — a copy of the deployed
-contract's own bytes — via the source archive or a `build.rs` side effect, so a verifier that finds
-"the rebuilt artifact" by scanning a directory publishes a false `verified`.
+**The attack this defends against:** a submitter ships a pre-built `.wasm` — a copy of the deployed
+contract's own bytes — in the source archive, or makes the build print a report naming one, so a
+verifier that finds "the rebuilt artifact" by scanning a directory or reading printed output picks a
+file the build did not produce.
 
 The artifact is the sole `.wasm` file in a dedicated output mount carrying nothing else, and the
 build tool's own report must *confirm* the candidate rather than *select* it from an unconstrained
@@ -100,6 +101,12 @@ materialized source is snapshotted before the build and excluded.
 Verified by: `services/builder/src/modules/builder/artifact-selection.ts`
 (`selectArtifactFromOutput`), `services/builder/test/planted-artifact.spec.ts`,
 `test/integration/cases/sec/sec-planted-artifact.spec.ts`
+
+**What it does not defend against:** build-time code — a build script, a procedural macro, a
+dependency — deciding what the build writes. That code runs alongside the compiler, so what it makes
+the build produce is the build's output, and no selection rule can tell it from an honest one. A
+`verified` claims only that the complete source produces the deployed bytes — see
+[rule 44 of `docs/invariants.md`](../invariants.md).
 
 ## The trust boundary
 

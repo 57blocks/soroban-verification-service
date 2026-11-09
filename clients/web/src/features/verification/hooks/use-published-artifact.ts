@@ -7,6 +7,7 @@ type ArtifactDocument = {
   provenance?: { recipe_source?: unknown; build_isolation?: unknown };
   source?: {
     source_sha256?: unknown;
+    chain_source_sha256?: unknown;
     is_public?: unknown;
     source_file_name?: unknown;
     source_uri?: unknown;
@@ -88,6 +89,7 @@ export const usePublishedArtifact = (
         source: {
           isPublic: typeof document.source?.is_public === "boolean" ? document.source.is_public : null,
           sourceSha256: str(document.source?.source_sha256),
+          chainSourceSha256: str(document.source?.chain_source_sha256),
           fileName: str(document.source?.source_file_name),
           sourceUri: str(document.source?.source_uri),
         },

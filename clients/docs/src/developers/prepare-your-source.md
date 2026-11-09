@@ -80,8 +80,10 @@ the `is_public` flag, or **Publish this source publicly** in the console, and it
   archive's own extension, and lists it in the status object's `verified_source_code_uris`. Anyone can then download the
   exact source and repeat the rebuild without asking you for it.
 
-A private source is a complete verification. A public one is a stronger claim, because nobody has to
-take your word that the archive exists.
+A private source is a complete verification of the bytes. A public one is a stronger claim: nobody has
+to take your word that the archive exists, and anyone can review what it runs at build time, its build
+scripts and procedural macros included. A private source's build-time code can be reviewed only by
+whoever holds the archive; see [What a build decides](../security/security-model.md#what-a-build-decides).
 
 A submission made without a manifest, which the verifier completes from the contract's own metadata, is
 private.

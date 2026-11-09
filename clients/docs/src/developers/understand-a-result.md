@@ -19,6 +19,10 @@ A verdict says that **this verifier** rebuilt **this source** with **this recipe
 get, the deployed bytes. It is not a security review of the code, and it is not a conclusion other
 verifiers have to share; see [Trust model](../introduction/trust-model.md).
 
+The source includes its build scripts, procedural macros and dependencies. They run during the build
+and can add code the contract's own files do not show, so a `verified` source is the whole archive, not
+the part you read first; see [What a build decides](../security/security-model.md#what-a-build-decides).
+
 Any other final status (`build_failed`, `source_unavailable`, `policy_rejected`, `not_attempted`) means
 the job never reached a verdict. Nothing is published for it; see
 [Troubleshoot a failed verification](./troubleshoot.md).
@@ -47,7 +51,7 @@ The status object holds one entry from this verifier. Its main fields:
 | `status` | `verified` or `mismatched`. While a verification of the Wasm is queued or running, the API's copy answers `202` with an `unverified` entry instead; the file in the result root is unchanged |
 | `recipe_source` | Where the build recipe came from: `on_chain_metadata` when the contract recorded it and the rebuild used it unchanged, `submitted` when any of it came from the submission |
 | `image_trust_level` | How the build environment was chosen: `official_trusted` for an official Stellar CLI image the contract names, `upstream_pinned` for an environment the verifier composed from official components |
-| `bldimg`, `bldarg`, `bldopt` | The build image, arguments and options the rebuild ran |
+| `bldimg`, `bldarg`, `bldopt` | The build image, arguments and options the rebuild ran. An option can set an environment variable for the build (`--env`), which can change the bytes as much as the source can |
 | `source_sha256` | The hash of the source archive that was rebuilt |
 | `source_uri` | Where that archive was fetched from, when it came from a URL |
 | `rebuilt_hash` | The hash the rebuild produced. Present only on a `mismatched` entry |
@@ -55,8 +59,10 @@ The status object holds one entry from this verifier. Its main fields:
 | `results_urls` | The report, and any permanent copy of it, each with its SHA-256 |
 | `verified_source_code_uris` | Where the source itself can be downloaded. Present only when the source was declared public |
 
-`recipe_source: on_chain_metadata` with `image_trust_level: official_trusted` is the strongest result:
-everything that went into the rebuild was fixed on chain before you submitted anything.
+The strongest result has `recipe_source: on_chain_metadata`, `image_trust_level: official_trusted`, and a
+report whose `source.chain_source_sha256` is present: the recipe, the image and the source archive were
+all fixed on chain before anyone submitted anything. Without that hash, the recipe is fixed but the source
+is not, and anyone holding an archive that builds to the same bytes could have submitted it.
 
 ### When a Wasm is verified more than once
 
@@ -66,12 +72,18 @@ submission of the wrong source cannot undo it. Its report is still written to th
 source too if it was declared public, but the status object, which is what readers consult, keeps
 `verified`.
 
+A newer `verified` does replace an older one, even when it names a different source. Only a contract that
+records `source_sha256` rules that out, because no other archive can then be verified against it.
+
 ## The report
 
 The report records everything the verifier did, so you can check it, or repeat it:
 
-- **`source`**: the archive's hash, whether it was declared public, the URL it came from, and the
-  `source_sha256` the contract records on chain, when it records one.
+- **`source`**: the archive's hash, whether it was declared public (`is_public`), the URL it came from,
+  and `chain_source_sha256`, the `source_sha256` the contract records on chain, when it records one.
+  When `chain_source_sha256` is present, the author bound this archive to the contract before deploying
+  it, and no other source could have been verified. When it is absent, anyone could have submitted this
+  source. A public source can be downloaded and reviewed, build-time code included. A private one cannot.
 - **`build_recipe`**: the build image and options. For a composed environment, it lists every component
   with its source and checksum, so you can assemble the same environment yourself.
 - **`provenance`**: where the recipe came from, and `build_isolation: network_isolated` for a build that

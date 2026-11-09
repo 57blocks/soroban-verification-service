@@ -27,6 +27,13 @@ Wasm hash with `unverified`; that is a progress state, not a verdict.
 
 - **It is not an audit.** A `verified` result says the source and the bytes correspond. It says nothing
   about whether the code is correct, safe, or does what its authors intended.
+- **It is not a review of what the build ran.** Build scripts, procedural macros and dependencies run
+  during the build and help decide the bytes, so a verified source can produce code its contract files do
+  not show. See [What a build decides](./security/security-model.md#what-a-build-decides).
+- **A private source cannot be checked by anyone else.** When the source is not published, only whoever
+  holds it can review what it contains.
+- **It does not say who submitted the source.** Unless the contract records its source's SHA-256, anyone
+  can submit a source that builds to its bytes, and a newer `verified` replaces an older one.
 - **It is not a network-wide verdict.** Each result is one verifier's answer, published under that
   verifier's identity. Different verifiers can run different policies and reach different results; see
   [Trust model](./introduction/trust-model.md).

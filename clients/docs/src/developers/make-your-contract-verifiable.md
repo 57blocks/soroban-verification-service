@@ -2,7 +2,8 @@
 
 The easiest contract to verify is one whose deployed Wasm records its own build recipe. Then anyone can
 verify it with nothing but the source, and the result is the strongest kind:
-`recipe_source: on_chain_metadata` with `image_trust_level: official_trusted`.
+`recipe_source: on_chain_metadata` with `image_trust_level: official_trusted`, tied to your own source
+archive by its hash.
 
 The recipe has to be in the Wasm before you deploy it; a deployed Wasm never gains metadata later. This
 page shows how to build a Wasm that carries one. [Supported contracts](../introduction/supported-contracts.md)
@@ -23,6 +24,17 @@ Wasm's `contractmetav0` section, next to the `cliver` entry the Stellar CLI writ
 
 The verifier rebuilds with exactly these values. It reads them only from the metadata section that holds
 `cliver`, so write them with the same `stellar contract build` that writes `cliver`, as below.
+
+### Bind the contract to your source
+
+Record `source_sha256`. It is the one entry that ties the contract to your archive. With it, the verifier
+refuses any other archive for this Wasm at submission, so nobody can verify your contract against a
+source you did not write, and nobody can replace your `verified` result with one that names theirs.
+Without it, anyone who can produce a source that builds to your bytes can verify your contract with that
+source.
+
+Publishing the archive as well lets anyone review it, including the build scripts and procedural macros
+that ran when it was built; see [What a build decides](../security/security-model.md#what-a-build-decides).
 
 ## 1. Make the build reproducible
 

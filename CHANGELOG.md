@@ -14,6 +14,15 @@ mints a release, and the `latest` dist-tag never holds a prerelease.
 
 ### Changed
 
+- **What a `verified` result claims is stated where it is read.** The documentation, the results SEP's
+  Security Concerns and the console now say that a result covers the complete source, including the
+  build scripts, procedural macros and dependencies that run during the build and can shape the bytes,
+  and that no check on the output can rule that code out. They also say that only a public source can be
+  reviewed by others, and that unless the contract records its `source_sha256`, anyone can submit a
+  source that builds to its bytes and a newer `verified` replaces an older one.
+- **The console's rebuild card says whose source it is.** It states whether the contract binds the
+  source on chain by its hash, read from the report's `source.chain_source_sha256`, and whether the
+  source is public.
 - **The query API refuses a malformed Wasm hash.** `GET /api/query/v1/wasms/{wasm_hash}` and its `.json`
   alias answer `400` with `invalid_wasm_hash` for anything that is not 64 hexadecimal characters, rather
   than `200` with `no_data` and the input echoed back as `wasm_hash`. Either case is still accepted.

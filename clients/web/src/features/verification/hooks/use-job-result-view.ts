@@ -49,12 +49,15 @@ export const useJobResultView = ({
   const jobDiagnostics = getSandboxDiagnostics(jobResult);
   const publishedRecipe =
     publishedArtifact.phase === "published" ? publishedArtifact.recipe : undefined;
+  const publishedSource =
+    publishedArtifact.phase === "published" ? publishedArtifact.source : undefined;
   const rebuildInputs = publishedRecipe
     ? rebuildProvenance({
         recipe: publishedRecipe,
-        sourceUri: publishedArtifact.phase === "published" ? publishedArtifact.source.sourceUri : null,
-        sourceSha256:
-          publishedArtifact.phase === "published" ? publishedArtifact.source.sourceSha256 : null,
+        sourceUri: publishedSource?.sourceUri ?? null,
+        sourceSha256: publishedSource?.sourceSha256 ?? null,
+        chainSourceSha256: publishedSource?.chainSourceSha256 ?? null,
+        isPublic: publishedSource?.isPublic ?? null,
         diagnostics: jobDiagnostics,
       })
     : null;
