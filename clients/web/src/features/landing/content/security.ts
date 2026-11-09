@@ -4,7 +4,7 @@ export const securityHead: SectionCopy = {
   label: "Security · Privacy",
   title: "Built to run untrusted source safely.",
   description:
-    "Submitted Rust can execute code via build.rs, proc macros, and dependency scripts. The service is designed for that reality.",
+    "Submitted Rust can execute code via build.rs, proc macros, and dependency scripts. The sandbox keeps that code away from the service. What it builds is part of the verified result, so review it with the source.",
 };
 
 export const securityCapabilities: Capability[] = [

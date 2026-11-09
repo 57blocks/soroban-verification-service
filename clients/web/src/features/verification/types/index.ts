@@ -35,6 +35,7 @@ export type PublishedArtifactState =
 export type ArtifactSourceFacts = {
   isPublic: boolean | null;
   sourceSha256: string | null;
+  chainSourceSha256: string | null;
   fileName: string | null;
   sourceUri: string | null;
 };

@@ -108,7 +108,8 @@ export const responseCopy: Record<
   },
   verified: {
     title: "Verification passed",
-    description: "The rebuilt Wasm matched the target byte-for-byte.",
+    description:
+      "The rebuilt Wasm matched the target byte-for-byte. The source's build scripts and macros helped produce it, so review them with the code.",
     tone: "success",
   },
   mismatch: {

@@ -8,6 +8,14 @@ submitted contract sources, rebuilt by a `docker run` into a digest-pinned image
 checks, or anything that lets untrusted source code escalate beyond that boundary are the highest-priority
 class of report this project can receive.
 
+A submitted source deciding its own Wasm is not a vulnerability. Build scripts, procedural macros and
+dependencies run during the build and can make the Wasm anything, including bytes the contract's own
+files do not show, and no check on the output can tell that from an honest build. A `verified` result
+claims only that the complete source produces the deployed bytes
+([`docs/invariants.md` rule 44](docs/invariants.md)), and that code is part of the source the result
+names. A build that reaches past its own output — another job's build or result, the verifier's
+credentials, a published result — is in scope.
+
 There is one rebuild path. `stellar contract verify` was a second one until it was retired, after
 upstream closed the subcommand as won't-ship; nothing in this repository invokes it.
 

@@ -49,9 +49,20 @@ export const RebuildCard = ({ inputs }: RebuildCardProps) => {
         <h2 className="m-0 mb-1 text-[1.35rem] font-semibold">
           How this was rebuilt
         </h2>
-        <p className="m-0 mb-5 text-[0.85rem] leading-[1.5] text-ink/[0.66]">
+        <p className="m-0 mb-3 text-[0.85rem] leading-[1.5] text-ink/[0.66]">
           {inputs.origin}
         </p>
+        <ul
+          data-testid="source-standing"
+          className="m-0 mb-5 grid list-none gap-1 p-0 text-[0.85rem] leading-[1.5]"
+        >
+          {inputs.standing.map((item) => (
+            <li key={item.key}>
+              <span className="font-semibold">{item.label}.</span>{" "}
+              <span className="text-ink/[0.66]">{item.detail}</span>
+            </li>
+          ))}
+        </ul>
 
         <div className="grid gap-3 md:grid-cols-2">
           {inputs.fields.map((field) => (

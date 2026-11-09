@@ -9,8 +9,15 @@ export type ProvenanceField = {
   onChain?: boolean;
 };
 
+export type SourceStanding = {
+  key: "binding" | "visibility";
+  label: string;
+  detail: string;
+};
+
 export type RebuildInputs = {
   origin: string;
+  standing: SourceStanding[];
   fields: ProvenanceField[];
 };
 
@@ -44,7 +51,36 @@ type ProvenanceInput = {
   recipe: ArtifactRecipeFacts;
   sourceUri: string | null;
   sourceSha256: string | null;
+  chainSourceSha256?: string | null;
+  isPublic?: boolean | null;
   diagnostics?: Record<string, unknown> | undefined;
+};
+
+const BINDING: Record<"bound" | "unbound", SourceStanding> = {
+  bound: {
+    key: "binding",
+    label: "Source bound on chain",
+    detail: "The contract records this archive's SHA-256, so no other source can be verified against it.",
+  },
+  unbound: {
+    key: "binding",
+    label: "Source not bound on chain",
+    detail:
+      "The contract records no source hash. Anyone with a source that builds to these bytes could have submitted this one.",
+  },
+};
+
+const VISIBILITY: Record<"public" | "private", SourceStanding> = {
+  public: {
+    key: "visibility",
+    label: "Source public",
+    detail: "Anyone can download it and review what it runs at build time, build scripts and macros included.",
+  },
+  private: {
+    key: "visibility",
+    label: "Source not public",
+    detail: "Only whoever holds the archive can review what it runs at build time.",
+  },
 };
 
 // One list of the inputs a rebuild needs; a value also read from contractmetav0 is tagged onChain.
@@ -52,6 +88,8 @@ export const rebuildProvenance = ({
   recipe,
   sourceUri,
   sourceSha256,
+  chainSourceSha256 = null,
+  isPublic = null,
   diagnostics,
 }: ProvenanceInput): RebuildInputs | null => {
   const declared = parsePairs(recipe.metadataReplay);
@@ -108,8 +146,13 @@ export const rebuildProvenance = ({
   if (manifestPath) fields.push({ key: "manifest", label: "Manifest", value: manifestPath });
 
   if (!fields.length) return null;
+  const standing = [
+    BINDING[(chainSourceSha256 ?? metaValue("source_sha256")) ? "bound" : "unbound"],
+    ...(isPublic === null ? [] : [VISIBILITY[isPublic ? "public" : "private"]]),
+  ];
   return {
     origin: recipe.recipeSource ? RECIPE_ORIGINS[recipe.recipeSource] : "This report did not state where the recipe came from.",
+    standing,
     fields,
   };
 };

@@ -3,7 +3,8 @@
 A verifier's job is to run code it does not trust. A submitted contract's build scripts and procedural
 macros run during the build, and can do anything the build environment lets them. So the build is
 treated as hostile, and the system is arranged so that a hostile build cannot reach anything worth
-having, or make the verifier publish a result it did not earn.
+having, or change a result the verifier has published. What a hostile build does decide is the Wasm it
+produces; see [What a build decides](#what-a-build-decides).
 
 This page describes what the software enforces. Some protections, such as how the operator's network and
 machines are set up, are the operator's to provide; see [What the operator provides](#what-the-operator-provides).
@@ -50,6 +51,29 @@ A build can print anything, including a fake report of what it built. The verifi
 - The verifier fetches the deployed Wasm from the ledger itself, and computes both hashes outside the
   sandbox. The verdict is reached there, never inside the build.
 
+## What a build decides
+
+The checks above stop a build from lying about what it produced. They cannot stop it from deciding what
+it produces. Build scripts, procedural macros and the dependencies `Cargo.lock` pins run during the
+build, alongside the compiler, and can make the Wasm differ in any way from what the contract's own
+source files suggest. No check on the output can tell that from an honest build: both end with the bytes
+the source produced. Every service that verifies Rust contracts by rebuilding them shares this limit.
+
+So a `verified` result means that the **complete** source, with its build scripts, procedural macros and
+dependencies, built with the options the report records, produces the deployed bytes. It does not mean
+the contract's visible code is everything that went into them. Two things decide how far a result can be
+taken:
+
+- **Only a public source can be checked by others.** Anyone can download a public source and review what
+  it runs at build time. A private source can be reviewed only by whoever holds the archive.
+- **Only a source the contract binds is known to be the author's.** When the deployed Wasm records
+  `source_sha256`, no other archive can be verified against it. When it does not, anyone can submit a
+  source that builds to the deployed bytes, and a newer `verified` replaces an older one. See
+  [Bind the contract to your source](../developers/make-your-contract-verifiable.md#bind-the-contract-to-your-source).
+
+Before relying on what a verified contract appears to do, review its build scripts, its procedural macros,
+and the build options in its report, including any environment variable they set.
+
 ## Your source
 
 - **It is pinned before anything runs.** The archive is checked against its SHA-256, and against the
@@ -81,7 +105,8 @@ Do not put secrets in a source archive, public or private: the build runs whatev
   An archived copy on Arweave has the same hash.
 - **A verified result is not undone by a later mismatch.** Submitting the wrong source for a verified
   Wasm cannot replace that verifier's `verified`.
-- **A public source can be rebuilt by anyone**, so a result does not have to be taken on trust.
+- **A public source can be rebuilt by anyone**, so a result does not have to be taken on trust. A
+  rebuild repeats whatever the source does at build time, so review that code too.
 
 See [Trust model](../introduction/trust-model.md) for what a result does and does not claim.
 

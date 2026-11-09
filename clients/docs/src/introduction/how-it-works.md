@@ -56,7 +56,8 @@ each tested not to change the output bytes.
 
 The sandbox holds no database access and no credentials. Source code can run arbitrary code at build
 time, through build scripts and procedural macros, so the sandbox is built on the assumption that it
-will.
+will. The sandbox keeps that code away from the verifier. It does not stop that code from deciding what
+the build produces; see [What a build decides](../security/security-model.md#what-a-build-decides).
 
 A job whose recipe exactly matches an earlier rebuild reuses that rebuild's output. The comparison is
 always done again.

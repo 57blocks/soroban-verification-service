@@ -67,6 +67,20 @@ each other.
 This software publishes only the first two. It grants `official_trusted` to an image from the official
 `stellar/stellar-cli` repository, pinned by digest, and `upstream_pinned` to an environment it composed.
 
+## What a result cannot rule out
+
+A `verified` result ties the deployed bytes to one source archive, built with one recipe. It cannot rule
+out:
+
+- **Build-time code.** Build scripts, procedural macros and dependencies run during the build, and can make
+  the bytes differ from what the contract's own files suggest. A public source lets anyone review them. A
+  private one does not.
+- **A source from someone other than the author.** When the deployed Wasm records no `source_sha256`,
+  anyone can submit a source that builds to its bytes, and a newer `verified` replaces an older one. A
+  report carries `source.chain_source_sha256` when the contract binds its source this way.
+
+See [What a build decides](../security/security-model.md#what-a-build-decides).
+
 ## What you can check without trusting anyone
 
 - **Results are static files keyed by hash.** A verifier's result for a Wasm hash sits at a path anyone

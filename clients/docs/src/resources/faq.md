@@ -4,9 +4,17 @@
 
 ### Does "verified" mean a contract is safe?
 
-No. It means a verifier rebuilt the published source and got exactly the bytes deployed on chain, so the
-source you can read is the code that runs. Whether that code is correct, or safe to use, is a separate
-question that verification does not answer.
+No. It means a verifier rebuilt the submitted source and got exactly the bytes deployed on chain. Those
+bytes come from all of that source, including its build scripts, procedural macros and dependencies, which
+can add code the contract's own files do not show. Whether the code is correct, or safe to use, is a
+separate question that verification does not answer.
+
+### Can a source pass verification while hiding what it does?
+
+Yes, if its build scripts or procedural macros change what gets built. Verification cannot tell that from
+an honest build, because both produce the deployed bytes. The result names that exact source, so a public
+source can be reviewed for it and a private one cannot. See
+[What a build decides](../security/security-model.md#what-a-build-decides).
 
 ### Who decides whether a contract is verified?
 
@@ -32,7 +40,9 @@ No. Submitting and reading need no account and no key. Rate limits stand in for 
 ### Can I verify a contract I did not deploy?
 
 Yes. Anyone who has the exact source can submit any deployed contract. The result is about the source and
-the Wasm, not about who submitted them.
+the Wasm, not about who submitted them. A contract that records its `source_sha256` can be verified only
+with that archive; see
+[Bind the contract to your source](../developers/make-your-contract-verifiable.md#bind-the-contract-to-your-source).
 
 ### Why can't my contract be verified?
 
@@ -59,7 +69,9 @@ not the ones the contract was built with. See
 
 ### Can someone undo my verified result by submitting the wrong source?
 
-No. A verifier never replaces its own `verified` result with a later mismatch.
+No. A verifier never replaces its own `verified` result with a later mismatch. A different source that
+builds to the same bytes is another `verified`, and does replace yours, unless your contract records its
+`source_sha256`.
 
 ## Your source and your data
 
