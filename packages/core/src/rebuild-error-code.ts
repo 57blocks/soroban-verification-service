@@ -59,6 +59,7 @@ export const rebuildErrorCodeClass = {
   reported_artifact_hash_mismatch: "build",
   reported_artifact_missing: "build",
   reported_artifact_was_pre_existing: "build",
+  sandbox_mount_source_unsafe: "build",
   source_cargo_source_override_conflict: "build",
   source_not_local_for_fallback: "build",
   source_sha256_mismatch: "build",

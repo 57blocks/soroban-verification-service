@@ -60,6 +60,7 @@ export const FAILURE_ADVICE: Record<RebuildErrorCode, Entry> = {
   reported_artifact_hash_mismatch: { meaning: "The Wasm on disk does not match the build's report.", action: READ_THE_LOG },
   reported_artifact_missing: { meaning: "The Wasm the build reported is missing.", action: READ_THE_LOG },
   reported_artifact_was_pre_existing: { meaning: "The Wasm was already in the archive before the build ran.", action: "Archive the source without build outputs." },
+  sandbox_mount_source_unsafe: { meaning: "A directory the build container mounts was replaced or moved after an earlier stage ran, so the verifier refused to start the build.", action: "Remove anything in the source or its dependencies that rewrites the build's working directories." },
   source_cargo_source_override_conflict: { meaning: "The source carries its own `[source]` Cargo configuration.", action: "Remove the `[source.*]` override from `.cargo/config.toml`." },
   source_not_local_for_fallback: { meaning: "The source was not available to the build.", action: VERIFIER_SIDE },
   source_sha256_mismatch: { meaning: "The staged source does not match its recorded hash.", action: VERIFIER_SIDE },
