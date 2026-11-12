@@ -1,6 +1,6 @@
 import type { RebuildErrorCode } from "@scvs/core";
 
-import { mkdir, mkdtemp, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCommand } from "@scvs/core/process";
@@ -79,6 +79,8 @@ export function summarizeDockerCommand(input: {
   entrypoint?: string;
   sourceMount?: "/source" | "/source:ro";
   vendorMount?: "/vendor" | "/vendor:ro";
+  outMount?: string;
+  workDir?: string;
 }): string {
   const imageIndex = input.command.indexOf(input.image);
   const args = imageIndex >= 0 ? input.command.slice(imageIndex + 1) : [];
@@ -93,9 +95,9 @@ export function summarizeDockerCommand(input: {
     `<source>:${input.sourceMount || "/source:ro"}`,
     ...(input.vendorMount ? ["-v", `<vendor>:${input.vendorMount}`] : []),
     "-v",
-    "<out>:/out",
+    `<out>:${input.outMount ?? "/out"}`,
     "-w",
-    "/source",
+    input.workDir ?? "/source",
     ...(input.hasEnv ? ["-e", "<env>"] : []),
     ...(input.entrypoint ? ["--entrypoint", input.entrypoint] : []),
     input.image,
@@ -107,7 +109,7 @@ export async function stageSourceForOfflineBuild(sourceRoot: string, workDirs: s
   | { ok: true; source_root: string }
   | { ok: false; reason: RebuildErrorCode; detail: string; copy?: CommandResult }
 > {
-  const stagedParent = await mkdtemp(join(tmpdir(), "scvs-offline-src-"));
+  const stagedParent = await realpath(await mkdtemp(join(tmpdir(), "scvs-offline-src-")));
   workDirs.push(stagedParent);
   const stagedRoot = join(stagedParent, "source");
   await mkdir(stagedRoot, { recursive: true });
@@ -125,10 +127,11 @@ export async function stageSourceForOfflineBuild(sourceRoot: string, workDirs: s
   return { ok: true, source_root: stagedRoot };
 }
 
+export const PREFETCH_CARGO_HOME = "/out/cargo-home";
+
 export async function prefetchCargoDependencies(input: {
   input: RunCliInput;
   sourceRoot: string;
-  outDir: string;
   cargoHomeDir: string;
   containerManifestPath: string;
   resourceLimits: DockerResourceLimits;
@@ -140,8 +143,10 @@ export async function prefetchCargoDependencies(input: {
   | { ok: true; result: CommandResult; command: string[]; commandSummary: string }
   | { ok: false; result: CommandResult; command: string[]; commandSummary: string }
 > {
-  await mkdir(join(input.outDir, "cargo-home"), { recursive: true });
+  await mkdir(input.cargoHomeDir, { recursive: true });
   await mkdir(input.vendorDir, { recursive: true });
+  // Only the two output directories, never a parent: a writable parent lets the stage swap them for symlinks.
+  // `-w /` keeps cargo from loading the submitted `.cargo/config*`, which can name a credential-provider program.
   const command = [
     "docker",
     "run",
@@ -155,11 +160,11 @@ export async function prefetchCargoDependencies(input: {
     "-v",
     `${input.vendorDir}:/vendor`,
     "-v",
-    `${input.outDir}:/out`,
+    `${input.cargoHomeDir}:${PREFETCH_CARGO_HOME}`,
     "-w",
-    "/source",
+    "/",
     "-e",
-    "CARGO_HOME=/out/cargo-home",
+    `CARGO_HOME=${PREFETCH_CARGO_HOME}`,
     ...(input.rustupToolchain ? ["-e", `RUSTUP_TOOLCHAIN=${input.rustupToolchain}`] : []),
     input.input.build.image,
     "vendor",
@@ -178,6 +183,8 @@ export async function prefetchCargoDependencies(input: {
     entrypoint: "cargo",
     sourceMount: "/source:ro",
     vendorMount: "/vendor",
+    outMount: PREFETCH_CARGO_HOME,
+    workDir: "/",
   });
   const result = await runCommand(command, { timeout_ms: dependencyPrefetchTimeoutMs(input.input.config) });
   return result.exit_code === 0

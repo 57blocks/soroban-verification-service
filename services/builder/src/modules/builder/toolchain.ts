@@ -11,6 +11,10 @@ export const SOURCE_CARGO_CONFIG_FILES = [join(".cargo", "config.toml"), join(".
 
 export async function writeVendorCargoConfig(cargoHomeDir: string, vendorDir: string): Promise<string> {
   await mkdir(cargoHomeDir, { recursive: true });
+  // The prefetch stage could write here: drop what it left (cargo prefers `config`), then create without following a link.
+  for (const name of ["config", "config.toml"]) {
+    await rm(join(cargoHomeDir, name), { recursive: true, force: true });
+  }
   await writeFile(
     join(cargoHomeDir, "config.toml"),
     [
@@ -24,7 +28,7 @@ export async function writeVendorCargoConfig(cargoHomeDir: string, vendorDir: st
       "offline = true",
       "",
     ].join("\n"),
-    { mode: 0o600 },
+    { mode: 0o600, flag: "wx" },
   );
   return "/out/cargo-home/config.toml";
 }

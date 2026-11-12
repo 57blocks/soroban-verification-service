@@ -28,6 +28,7 @@
     "reported_artifact_hash_mismatch": "build",
     "reported_artifact_missing": "build",
     "reported_artifact_was_pre_existing": "build",
+    "sandbox_mount_source_unsafe": "build",
     "sandbox_unavailable": "infrastructure",
     "source_archive_canonical_unavailable": "build",
     "source_archive_conflicting_entries": "source",

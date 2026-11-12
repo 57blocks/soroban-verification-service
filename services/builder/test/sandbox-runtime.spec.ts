@@ -26,12 +26,19 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
     expect(user).not.toBe("0:0");
   });
 
-  it("keeps the writable mounts the stage exists to produce", async () => {
-    const { command, vendorDir, outDir } = await runPrefetch();
+  it("keeps the writable mounts the stage exists to produce, and never their parent", async () => {
+    const { command, vendorDir, cargoHomeDir, jobDir } = await runPrefetch();
 
     expect(command).toContain(`${vendorDir}:/vendor`);
-    expect(command).toContain(`${outDir}:/out`);
+    expect(command).toContain(`${cargoHomeDir}:/out/cargo-home`);
     expect(command.some((arg) => arg.endsWith(":/source:ro"))).toBe(true);
+    expect(command.some((arg) => arg.startsWith(`${jobDir}:`))).toBe(false);
+  });
+
+  it("runs outside /source, so cargo never loads the submitted .cargo/config", async () => {
+    const { command } = await runPrefetch();
+
+    expect(command[command.indexOf("-w") + 1]).toBe("/");
   });
 
   it("pins RUSTUP_TOOLCHAIN when one was resolved", async () => {
@@ -50,11 +57,13 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
 async function runPrefetch(rustupToolchain?: string): Promise<{
   command: string[];
   vendorDir: string;
-  outDir: string;
+  cargoHomeDir: string;
+  jobDir: string;
 }> {
-  const outDir = await mkdtemp(join(tmpdir(), "scvs-prefetch-out-"));
+  const jobDir = await mkdtemp(join(tmpdir(), "scvs-prefetch-job-"));
   const sourceRoot = await mkdtemp(join(tmpdir(), "scvs-prefetch-src-"));
-  const vendorDir = join(outDir, "vendor");
+  const vendorDir = join(jobDir, "vendor");
+  const cargoHomeDir = join(jobDir, "out", "cargo-home");
 
   const input = {
     mode: "build",
@@ -68,8 +77,7 @@ async function runPrefetch(rustupToolchain?: string): Promise<{
   const result = await prefetchCargoDependencies({
     input,
     sourceRoot,
-    outDir,
-    cargoHomeDir: join(outDir, "cargo-home"),
+    cargoHomeDir,
     containerManifestPath: "/source/Cargo.toml",
     resourceLimits: dockerResourceLimits(input.config),
     finalSandbox: dockerFinalSandboxOptions(input.config),
@@ -78,5 +86,5 @@ async function runPrefetch(rustupToolchain?: string): Promise<{
     ...(rustupToolchain ? { rustupToolchain } : {}),
   });
 
-  return { command: result.command, vendorDir, outDir };
+  return { command: result.command, vendorDir, cargoHomeDir, jobDir };
 }

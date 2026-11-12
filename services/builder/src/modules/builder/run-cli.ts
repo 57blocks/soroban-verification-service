@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ScvsLogger, resolveContainerManifestPath, stderrOnlySink } from "@scvs/core";
 import { runCommand, sha256File } from "@scvs/core/process";
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR, parseBuildArtifactReports, selectArtifactFromOutput, snapshotWasmPaths } from "./artifact-selection.js";
@@ -13,6 +13,7 @@ import { referenceAlignment } from "./reference-alignment.js";
 import { cliTimeoutMs, dockerFinalSandboxOptions, dockerResourceLimits } from "./run-cli.config.js";
 import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResult } from "./run-cli.types.js";
 import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, requireExtractedSourceRoot, stageSourceForOfflineBuild, summarizeDockerCommand } from "./sandbox-runtime.js";
+import { requireBindSources, type BindSourceCheck } from "./bind-source.js";
 import { detectSourceCargoSourceOverride, resolveTrustedToolchain, writeVendorCargoConfig } from "./toolchain.js";
 
 const logger = new ScvsLogger("run-cli", { sink: stderrOnlySink });
@@ -108,14 +109,26 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   const offlineSourceRoot = stagedSource.source_root;
   const offlineManifestPath = resolveManifestPath(offlineSourceRoot, input.build.workspace_path);
 
-  const outDir = await mkdtemp(join(tmpdir(), "scvs-build-"));
-  input.workDirs.push(outDir);
+  // Never mounted into a container, so no stage can replace `out` or `vendor` before a later stage binds them.
+  const jobDir = await realpath(await mkdtemp(join(tmpdir(), "scvs-build-")));
+  input.workDirs.push(jobDir);
   // Separate from `outDir` so the only `.wasm` here is one the build tool put there.
-  const artifactDir = await mkdtemp(join(tmpdir(), "scvs-artifact-"));
+  const artifactDir = await realpath(await mkdtemp(join(tmpdir(), "scvs-artifact-")));
   input.workDirs.push(artifactDir);
-  await mkdir(join(outDir, "tmp"), { recursive: true });
-  const vendorDir = join(outDir, "vendor");
+  const outDir = join(jobDir, "out");
+  const vendorDir = join(jobDir, "vendor");
   const cargoHomeDir = join(outDir, "cargo-home");
+  await mkdir(join(outDir, "tmp"), { recursive: true });
+  await mkdir(cargoHomeDir, { recursive: true });
+  await mkdir(vendorDir, { recursive: true });
+  const stagedSourceParent = dirname(offlineSourceRoot);
+  const unsafeMount = (check: Extract<BindSourceCheck, { ok: false }>, stage: "prefetch" | "build") =>
+    cliFailure("sandbox_mount_source_unsafe", "docker_build_image_rebuild", null, {
+      runner: "docker_build_image_rebuild",
+      build_image: input.build.image,
+      stage,
+      detail: `Refusing to start the ${stage} container: ${check.detail}`,
+    });
 
   const toolchain = await resolveTrustedToolchain(input.build.image, offlineSourceRoot, input.config);
   if (!toolchain.ok) {
@@ -164,10 +177,15 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
       }),
     );
   }
+  const prefetchMounts = await requireBindSources([
+    { path: offlineSourceRoot, root: stagedSourceParent },
+    { path: vendorDir, root: jobDir },
+    { path: cargoHomeDir, root: jobDir },
+  ]);
+  if (!prefetchMounts.ok) return unsafeMount(prefetchMounts, "prefetch");
   const prefetch = await prefetchCargoDependencies({
     input,
     sourceRoot: offlineSourceRoot,
-    outDir,
     cargoHomeDir,
     containerManifestPath: containerManifest.path,
     resourceLimits,
@@ -211,6 +229,15 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
       }),
     );
   }
+  // Before anything reads or writes these by pathname: the prefetch stage ran submitted dependency code.
+  const buildMounts = await requireBindSources([
+    { path: offlineSourceRoot, root: stagedSourceParent },
+    { path: vendorDir, root: jobDir },
+    { path: outDir, root: jobDir },
+    { path: cargoHomeDir, root: jobDir },
+    { path: artifactDir, root: artifactDir },
+  ]);
+  if (!buildMounts.ok) return unsafeMount(buildMounts, "build");
   const vendoredEgressPolicy = await evaluateVendoredEgressPolicy(vendorDir, egressPolicy.allowed_hosts);
   if (!vendoredEgressPolicy.ok) {
     return cliFailure(

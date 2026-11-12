@@ -45,13 +45,13 @@ describe("TB4 — the acquisition container shares nothing with any other job", 
   });
 
   it("mounts exactly the per-job bind mounts, and no shared cache or named volume", async () => {
-    const { command, sourceRoot, vendorDir, outDir } = await runPrefetch();
+    const { command, sourceRoot, vendorDir, cargoHomeDir } = await runPrefetch();
     const mounts = mountValues(command);
 
     expect(mounts).toEqual([
       `${sourceRoot}:/source:ro`,
       `${vendorDir}:/vendor`,
-      `${outDir}:/out`,
+      `${cargoHomeDir}:/out/cargo-home`,
     ]);
 
     expect(command.some((arg) => arg === "--mount" || arg === "--volume")).toBe(false);
@@ -86,10 +86,11 @@ describe("TB4 — the materialiser/runner handoff is namespaced per job", () => 
 });
 
 describe("TB4 — the build stage's per-job directories are derived from a fresh temp dir", () => {
-  it("creates the output directory per job, and derives vendor/cargo-home from it", () => {
+  it("creates the job directory per job, and derives out, vendor and cargo-home from it", () => {
     const runCli = readFileSync(join(SRC, "run-cli.ts"), "utf8");
     expect(runCli).toContain('mkdtemp(join(tmpdir(), "scvs-build-"))');
-    expect(runCli).toContain('join(outDir, "vendor")');
+    expect(runCli).toContain('join(jobDir, "out")');
+    expect(runCli).toContain('join(jobDir, "vendor")');
     expect(runCli).toContain('join(outDir, "cargo-home")');
   });
 
@@ -112,11 +113,12 @@ async function runPrefetch(): Promise<{
   command: string[];
   sourceRoot: string;
   vendorDir: string;
-  outDir: string;
+  cargoHomeDir: string;
 }> {
-  const outDir = await mkdtemp(join(tmpdir(), "scvs-fresh-out-"));
+  const jobDir = await mkdtemp(join(tmpdir(), "scvs-fresh-job-"));
   const sourceRoot = await mkdtemp(join(tmpdir(), "scvs-fresh-src-"));
-  const vendorDir = join(outDir, "vendor");
+  const vendorDir = join(jobDir, "vendor");
+  const cargoHomeDir = join(jobDir, "out", "cargo-home");
 
   const input = {
     mode: "build",
@@ -142,8 +144,7 @@ async function runPrefetch(): Promise<{
   const result = await prefetchCargoDependencies({
     input,
     sourceRoot,
-    outDir,
-    cargoHomeDir: join(outDir, "cargo-home"),
+    cargoHomeDir,
     containerManifestPath: "/source/Cargo.toml",
     resourceLimits: dockerResourceLimits(input.config),
     finalSandbox: dockerFinalSandboxOptions(input.config),
@@ -151,5 +152,5 @@ async function runPrefetch(): Promise<{
     egressPolicy: { ok: true, allowed_hosts: ["crates.io"] },
   });
 
-  return { command: result.command, sourceRoot, vendorDir, outDir };
+  return { command: result.command, sourceRoot, vendorDir, cargoHomeDir };
 }
