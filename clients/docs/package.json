@@ -17,6 +17,6 @@
   "devDependencies": {
     "@scvs/core": "workspace:*",
     "vitepress": "2.0.0-alpha.20",
-    "vitepress-openapi": "0.2.5"
+    "vitepress-openapi": "0.2.8"
   }
 }
