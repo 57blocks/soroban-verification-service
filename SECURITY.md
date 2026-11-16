@@ -121,9 +121,11 @@ for exact mechanics — this list is not exhaustive):
   source mount and a separate writable output mount, each a non-recursive `--mount` bind. Docker's
   default seccomp profile applies, since nothing passes `seccomp=unconfined`; no custom seccomp,
   AppArmor or SELinux profile is added. If that gap is exploitable given the above, it is worth reporting.
-- **Constrained dependency prefetch.** `cargo vendor` dependency prefetching (run before the final
-  no-network build) rejects URLs targeting private, local, or cloud-metadata hosts; only an explicit
-  allowlist (`SCVS_PREFETCH_ALLOWED_HOSTS`) of public dependency hosts is reachable.
+- **Constrained dependency prefetch.** Before `cargo vendor` runs (ahead of the final no-network
+  build), every `Cargo.toml` and `Cargo.lock` is parsed as TOML and each source it names is checked:
+  private, local and cloud-metadata hosts are refused, and only hosts on `SCVS_PREFETCH_ALLOWED_HOSTS`
+  pass. A file that cannot be read or parsed fails the job. This is a check on what the source asks
+  for; the prefetch container's network is not yet restricted to those hosts.
 - **Integrity checks on submitted source.** Both source shapes a submission can take — a private
   upload and a `source_uri` archive — are verified against the caller-provided SHA-256 before use, and
   re-hashed inside the sandbox against the bytes actually fetched. A `source_uri` job proves it holds

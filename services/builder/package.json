@@ -15,7 +15,8 @@
     "@scvs/core": "workspace:*",
     "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "smol-toml": "1.9.1"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.1.3",
