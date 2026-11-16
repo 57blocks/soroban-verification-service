@@ -1,4 +1,4 @@
-import { SEP58_BLDOPT_ENTRY, SOURCE_URI_PATTERN, extractManifestPath, refusedEnvAssignment, resolveContainerManifestPath } from "@scvs/core";
+import { SEP58_BLDOPT_ENTRY, SOURCE_URI_PATTERN, extractManifestPath, refusedEnvAssignment, repeatedBuildOption, resolveContainerManifestPath } from "@scvs/core";
 import type { SubmittedSourceManifest, VerificationTarget } from "@scvs/core";
 
 export type ManifestValidation =
@@ -57,6 +57,9 @@ export function validateSubmittedManifest(
     }
     const shape = firstBldoptShapeViolation(value.bldopt as string[]);
     if (shape) return invalid("invalid_manifest", shape);
+
+    const repeated = repeatedBuildOption(value.bldopt as string[]);
+    if (repeated) return invalid("invalid_manifest", `manifest.${repeated}`);
 
     for (const entry of value.bldopt as string[]) {
       const assignment = /^--env=(.*)$/s.exec(entry)?.[1];

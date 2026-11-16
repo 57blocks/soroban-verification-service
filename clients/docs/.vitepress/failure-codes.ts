@@ -35,6 +35,7 @@ export const FAILURE_ADVICE: Record<RebuildErrorCode, Entry> = {
   absolute_manifest_path_not_supported: { meaning: "`--manifest-path` in `bldopt` is an absolute path.", action: "Give the path relative to the root of the archive." },
   manifest_path_escapes_source: { meaning: "`--manifest-path` in `bldopt` points outside the source.", action: "Give a path inside the archive." },
   recorded_build_option_unsupported: { meaning: "The build image's Stellar CLI rejects one of the build options.", action: "Drop the option if the original build did not use it." },
+  recorded_build_option_repeated: { meaning: "The build options set one setting twice — two `--package`, `--manifest-path`, `--profile` or `--out-dir`, or the same `--env` name or `--meta` key — so their order would decide the build.", action: "Keep one value for each setting." },
   recorded_env_option_refused: { meaning: "A `--env` build option names a variable without giving it a value, or names one the verifier reserves.", action: "Write each `--env` as `NAME=VALUE`, and set no `SCVS_`, `AWS_`, `ECS_` or `DOCKER_` variable." },
 
   sandbox_unavailable: { meaning: "The build sandbox was not available.", action: "None needed: the verifier retries automatically." },

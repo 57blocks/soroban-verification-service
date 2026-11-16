@@ -55,12 +55,12 @@ assert.equal(
   "b4e66f58ff464d54c465b02e33ef500d23db65c4ac1065f420f4dbb49b1e8e6b",
 );
 
-assert.equal(
-  computeIdempotencyKey(source, image, { bldopt: ["--features", "x", "--release"] }),
-  computeIdempotencyKey(source, image, { bldopt: ["--release", "--features", "x"] }),
+assert.notEqual(
+  computeIdempotencyKey(source, image, { bldopt: ["--package=alpha", "--package=beta"] }),
+  computeIdempotencyKey(source, image, { bldopt: ["--package=beta", "--package=alpha"] }),
 );
 
-assert.equal(
+assert.notEqual(
   computeIdempotencyKey(source, image, { bldopt: ["\u{1F600}", "＀"] }),
   computeIdempotencyKey(source, image, { bldopt: ["＀", "\u{1F600}"] }),
 );
@@ -68,7 +68,7 @@ assert.notEqual(
   computeIdempotencyKey(source, image, { bldarg: ["\u{1F600}", "＀"] }),
   computeIdempotencyKey(source, image, { bldarg: ["＀", "\u{1F600}"] }),
 );
-assert.equal(
+assert.notEqual(
   computeIdempotencyKey(source, image, { bldarg: [], bldopt: ["\u{1F600}", "＀"] }),
   computeIdempotencyKey(source, image, { bldarg: [], bldopt: ["＀", "\u{1F600}"] }),
 );

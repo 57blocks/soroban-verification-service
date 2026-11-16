@@ -33,6 +33,7 @@ export const rebuildErrorCodeClass = {
   manifest_path_escapes_source: "policy",
   recorded_build_option_unsupported: "policy",
   recorded_env_option_refused: "policy",
+  recorded_build_option_repeated: "policy",
 
   sandbox_unavailable: "infrastructure",
   toolchain_probe_failed: "infrastructure",

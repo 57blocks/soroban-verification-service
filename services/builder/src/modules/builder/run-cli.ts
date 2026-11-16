@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { ScvsLogger, resolveContainerManifestPath, stderrOnlySink } from "@scvs/core";
+import { ScvsLogger, resolveContainerManifestPath, stderrOnlySink, repeatedBuildOption } from "@scvs/core";
 import { sha256File } from "@scvs/core/process";
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR, parseBuildArtifactReports, selectArtifactFromOutput, snapshotWasmPaths } from "./artifact-selection.js";
 import { CONTAINER_CLI_ENTRYPOINT, assembleBuildCommand, rejectedBuildArgument, resolveAddedEnvironment } from "./argument-policy.js";
@@ -30,6 +30,14 @@ export async function runCli(input: RunCliInput): Promise<RunCliResult> {
 }
 
 async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
+  const repeated = repeatedBuildOption(input.build.bldopt);
+  if (repeated) {
+    return cliFailure("recorded_build_option_repeated", "docker_build_image_rebuild", null, {
+      runner: "docker_build_image_rebuild",
+      build_image: input.build.image,
+      detail: repeated,
+    });
+  }
   const sourcePath = input.source.workspace_path;
   if (!sourcePath) {
     return cliFailure("source_not_local_for_fallback", "docker_build_image_rebuild", null, {

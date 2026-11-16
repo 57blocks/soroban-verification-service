@@ -85,6 +85,7 @@ type Staged = Record<string, Uint8Array>;
 async function createComparedJob(
   sourceRef: SourceReference,
   canonical?: { bytes: Uint8Array; sha256: string },
+  buildOptions: { job: object; rebuild: object } = { job: {}, rebuild: {} },
 ): Promise<{ job: JobRecord; rebuildId: string }> {
   const job = await jobs.createJob({
     dryRun: false,
@@ -92,7 +93,7 @@ async function createComparedJob(
     target: { network: "testnet", wasm_hash: WASM_HASH },
     verificationMode: "submitted",
     sourceRef,
-    buildOptions: {},
+    buildOptions: buildOptions.job,
     manifest: {
       schema: "stellar-submitted-source-verification-manifest-v1",
       target: { network: "testnet", wasm_hash: WASM_HASH },
@@ -105,7 +106,7 @@ async function createComparedJob(
     rebuildId: randomUUID(),
     idempotencyKey: randomUUID(),
     sourceRef,
-    buildOptions: {},
+    buildOptions: buildOptions.rebuild,
     imageDigest: IMAGE,
     buildMode: "verify",
     mechanismReason: "on_chain_recipe_in_trusted_image",
@@ -263,4 +264,19 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
     expect(await publishedSource(`${sha256(privateBytes)}.tar.gz`)).toBeUndefined();
     expect(fetchThroughDestinationPolicy).not.toHaveBeenCalled();
   });
+
+  it("publishes the recipe the rebuild ran, not the attaching job's copy of it", async () => {
+    const bytes = randomBytes(96);
+    const { job } = await createComparedJob({ ...publicUrlRef(bytes), visibility: "private" }, undefined, {
+      job: { bldarg: [], bldopt: ["--package=beta"] },
+      rebuild: { bldarg: [], bldopt: ["--package=alpha"] },
+    });
+
+    await publish.publishJobResult(job.jobId);
+
+    const status = JSON.parse(await readFile(join(resultRoot, "wasms", `${WASM_HASH}.json`), "utf8"));
+    const ours = status.source_code_verifications.at(-1);
+    expect(ours.bldopt).toEqual(["--package=alpha"]);
+  });
 });
+

@@ -15,6 +15,7 @@ export * from "./batch.js";
 export * from "./artifact-contract.js";
 export * from "./artifact-contract-snapshot.js";
 export * from "./manifest-path.js";
+export * from "./build-option-conflicts.js";
 export * from "./shell-words.js";
 export * from "./build-log-token.js";
 export * from "./sanitize-terminal.js";
