@@ -15,6 +15,7 @@ import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResu
 import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, requireExtractedSourceRoot, stageSourceForOfflineBuild, summarizeDockerCommand } from "./sandbox-runtime.js";
 import { requireBindSources, type BindSourceCheck } from "./bind-source.js";
 import { detectSourceCargoSourceOverride, resolveTrustedToolchain, writeVendorCargoConfig } from "./toolchain.js";
+import { dockerCliOptions } from "./docker-env.js";
 
 const logger = new ScvsLogger("run-cli", { sink: stderrOnlySink });
 
@@ -385,7 +386,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     });
   }
 
-  const build = await runCommand(buildCommand, { timeout_ms: cliTimeoutMs(input.config) });
+  const build = await runCommand(buildCommand, { ...dockerCliOptions(), timeout_ms: cliTimeoutMs(input.config) });
   const rejectedArgument = rejectedBuildArgument({
     stderr: `${build.stdout}\n${build.stderr}`,
     argv: buildCommand,

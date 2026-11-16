@@ -6,6 +6,7 @@ import { runCommand } from "@scvs/core/process";
 import type { CommandResult } from "@scvs/core/process";
 import { dependencyPrefetchTimeoutMs } from "./run-cli.config.js";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
+import { dockerCliOptions } from "./docker-env.js";
 
 export const SOURCE_CARGO_CONFIG_FILES = [join(".cargo", "config.toml"), join(".cargo", "config")];
 
@@ -60,7 +61,7 @@ export async function probeActiveToolchain(
 ): Promise<{ toolchain?: string; result: CommandResult }> {
   const result = await runCommand(
     ["docker", "run", "--rm", "--entrypoint", "rustup", image, "show", "active-toolchain"],
-    { timeout_ms: dependencyPrefetchTimeoutMs(config) },
+    { ...dockerCliOptions(), timeout_ms: dependencyPrefetchTimeoutMs(config) },
   );
   if (result.exit_code !== 0) return { result };
   const toolchain = result.stdout.trim().split(/\s+/)[0];

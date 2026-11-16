@@ -18,24 +18,27 @@ const WASM_SHA256 = createHash("sha256").update(WASM).digest("hex");
 const PER_JOB_PREFIXES = ["scvs-build-", "scvs-artifact-", "scvs-src-", "scvs-offline-src-"];
 
 const FAKE_DOCKER = `#!/usr/bin/env node
-const { appendFileSync, writeFileSync } = require("node:fs");
+const { appendFileSync, existsSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
 const args = process.argv.slice(2);
 if (args[0] === "ps") process.exit(0);
 args.forEach((arg, index) => {
-  if (args[index - 1] === "-v") appendFileSync(process.env.FAKE_DOCKER_MOUNTS, arg.split(":")[0] + "\\n");
+  if (args[index - 1] === "-v") appendFileSync(join(__dirname, "mounts.log"), arg.split(":")[0] + "\\n");
 });
 const entrypoint = args[args.indexOf("--entrypoint") + 1];
 if (args.includes("--entrypoint") && entrypoint === "rustup") { console.log("stable"); process.exit(0); }
 if (args.includes("--entrypoint") && entrypoint === "cargo") process.exit(0);
-if (process.env.FAKE_DOCKER_FAIL_BUILD) process.exit(1);
+if (existsSync(join(__dirname, "fail-build"))) process.exit(1);
 const mount = args.find((arg) => arg.endsWith(":/artifact"));
 writeFileSync(mount.slice(0, -":/artifact".length) + "/c.wasm", Buffer.from(${JSON.stringify([...WASM])}));
 console.log("Wasm File: /artifact/c.wasm");
 console.log("Wasm Hash: ${WASM_SHA256}");
 `;
 
+let fakeBin: string;
+
 async function boundHostPaths(): Promise<string[]> {
-  const log = await readFile(process.env.FAKE_DOCKER_MOUNTS!, "utf8").catch(() => "");
+  const log = await readFile(join(fakeBin, "mounts.log"), "utf8").catch(() => "");
   return [...new Set(log.split("\n").filter(Boolean))];
 }
 
@@ -60,7 +63,6 @@ function stubFetch(): { urls: string[]; restore: () => void } {
 describe("per-job work directories", () => {
   const saved = { ...process.env };
   let root: string;
-  let fakeBin: string;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "scvs-work-dirs-"));
@@ -68,7 +70,6 @@ describe("per-job work directories", () => {
     await writeFile(join(fakeBin, "docker"), FAKE_DOCKER);
     await chmod(join(fakeBin, "docker"), 0o755);
     process.env.PATH = `${fakeBin}:${saved.PATH}`;
-    process.env.FAKE_DOCKER_MOUNTS = join(fakeBin, "mounts.log");
   });
 
   afterEach(async () => {
@@ -160,7 +161,7 @@ describe("per-job work directories", () => {
   });
 
   it("the runner leaves nothing of the job behind when the build fails", async () => {
-    process.env.FAKE_DOCKER_FAIL_BUILD = "1";
+    await writeFile(join(fakeBin, "fail-build"), "");
 
     const { classification } = await runBuilder();
 

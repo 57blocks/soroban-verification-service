@@ -36,12 +36,14 @@ export async function runCommand(
     /** Never logged or mirrored. */
     stdin?: string;
     record?: boolean;
+    /** false: the child sees `env` and nothing of this process's own environment. */
+    inheritEnv?: boolean;
   } = {}
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
     const child = spawn(command[0]!, command.slice(1), {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env: options.inheritEnv === false ? { ...options.env } : { ...process.env, ...options.env },
       stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
 

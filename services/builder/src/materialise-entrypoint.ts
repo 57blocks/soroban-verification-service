@@ -2,6 +2,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ScvsLogger, stderrOnlySink } from "@scvs/core";
+import { forgetJobParamsEnvironment } from "./config/configuration.js";
 import { MaterialiseAppModule } from "./materialise-app.module.js";
 import { MaterialiseService } from "./modules/materialise/materialise.service.js";
 
@@ -10,6 +11,7 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(MaterialiseAppModule, {
     logger: process.env.NODE_ENV === "test" ? false : logger,
   });
+  forgetJobParamsEnvironment();
   try {
     process.exitCode = await app.get(MaterialiseService).run();
   } finally {

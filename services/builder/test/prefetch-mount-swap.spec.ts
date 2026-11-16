@@ -15,6 +15,7 @@ const FAKE_DOCKER = `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
+const fake = JSON.parse(fs.readFileSync(path.join(__dirname, "fake.json"), "utf8"));
 if (args[0] === "ps") process.exit(0);
 const entrypoint = args.includes("--entrypoint") ? args[args.indexOf("--entrypoint") + 1] : undefined;
 if (entrypoint === "rustup") { console.log("stable"); process.exit(0); }
@@ -24,7 +25,7 @@ const mounts = args.flatMap((arg, i) => {
   return [{ source, target, readOnly: mode === "ro" }];
 });
 const stage = entrypoint === "cargo" ? "prefetch" : args.includes("none") ? "build" : "other";
-const log = (entry) => fs.appendFileSync(process.env.FAKE_DOCKER_LOG, JSON.stringify(entry) + "\\n");
+const log = (entry) => fs.appendFileSync(fake.log, JSON.stringify(entry) + "\\n");
 const resolved = (source) => { try { return fs.realpathSync(source); } catch { return null; } };
 log({ stage, mounts: mounts.map((m) => ({ ...m, resolved: resolved(m.source) })) });
 
@@ -34,19 +35,19 @@ if (stage === "prefetch") {
     // A writable mount that holds the vendor directory lets the stage swap it for a symlink.
     if (path.dirname(vendor) === m.source) {
       fs.renameSync(vendor, vendor + ".orig");
-      fs.symlinkSync(process.env.FAKE_HOST_SECRET_DIR, vendor);
+      fs.symlinkSync(fake.secretDir, vendor);
     }
     // Plant a link where the runner later writes the vendored-sources config.
     const cargoHome = m.target === "/out/cargo-home" ? m.source : m.target === "/out" ? path.join(m.source, "cargo-home") : null;
     if (cargoHome) {
       fs.mkdirSync(cargoHome, { recursive: true });
-      fs.symlinkSync(process.env.FAKE_VICTIM_FILE, path.join(cargoHome, "config.toml"));
+      fs.symlinkSync(fake.victimFile, path.join(cargoHome, "config.toml"));
     }
   }
-  if (process.env.FAKE_SWAP_VENDOR_FROM_OUTSIDE && !fs.lstatSync(vendor).isSymbolicLink()) {
+  if (fake.swapFromOutside && !fs.lstatSync(vendor).isSymbolicLink()) {
     // Reach the stage should never have: the vendor directory's own parent.
     fs.renameSync(vendor, vendor + ".orig");
-    fs.symlinkSync(process.env.FAKE_HOST_SECRET_DIR, vendor);
+    fs.symlinkSync(fake.secretDir, vendor);
   }
   process.exit(0);
 }
@@ -90,10 +91,16 @@ describe("prefetch cannot redirect a later bind mount to a host path", () => {
     workDirs = [];
 
     process.env.PATH = `${fakeBin}:${saved.PATH}`;
-    process.env.FAKE_DOCKER_LOG = join(fakeBin, "runs.log");
-    process.env.FAKE_HOST_SECRET_DIR = secretDir;
-    process.env.FAKE_VICTIM_FILE = victimFile;
+    await configureFake({});
   });
+
+  // A file, not the environment: the docker CLI is started with none of the runner's variables.
+  async function configureFake(options: { swapFromOutside?: boolean }) {
+    await writeFile(
+      join(fakeBin, "fake.json"),
+      JSON.stringify({ log: join(fakeBin, "runs.log"), secretDir, victimFile, ...options }),
+    );
+  }
 
   afterEach(async () => {
     process.env = { ...saved };
@@ -114,7 +121,7 @@ describe("prefetch cannot redirect a later bind mount to a host path", () => {
   }
 
   async function runs(): Promise<LoggedRun[]> {
-    const log = await readFile(process.env.FAKE_DOCKER_LOG!, "utf8").catch(() => "");
+    const log = await readFile(join(fakeBin, "runs.log"), "utf8").catch(() => "");
     return log.split("\n").filter(Boolean).map((line) => JSON.parse(line) as LoggedRun);
   }
 
@@ -139,7 +146,7 @@ describe("prefetch cannot redirect a later bind mount to a host path", () => {
   });
 
   it("fails closed, and never starts the build, when the vendor directory is swapped for a symlink", async () => {
-    process.env.FAKE_SWAP_VENDOR_FROM_OUTSIDE = "1";
+    await configureFake({ swapFromOutside: true });
 
     const result = await rebuild();
     const logged = await runs();

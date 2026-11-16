@@ -2,6 +2,8 @@ import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR } from "./artifact-selection.
 import { runCommand, type CommandResult } from "@scvs/core/process";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
 import { dockerCheckTimeoutMs } from "./run-cli.config.js";
+import { refusedEnvAssignment } from "@scvs/core";
+import { dockerCliOptions } from "./docker-env.js";
 
 export type AddedArgument = {
   flag: string;
@@ -124,9 +126,13 @@ export type ResolveAddedEnvironmentInput = {
 
 export type ResolveAddedEnvironmentResult =
   | { ok: true; env: string[]; skipped: { flag: string; reason: string }[] }
-  | { ok: false; reason: "offline_mode_conflicts_with_deviation"; detail: string };
+  | { ok: false; reason: "offline_mode_conflicts_with_deviation" | "recorded_env_option_refused"; detail: string };
 
 export function resolveAddedEnvironment(input: ResolveAddedEnvironmentInput): ResolveAddedEnvironmentResult {
+  for (const entry of input.recordedEnv) {
+    const refusal = refusedEnvAssignment(entry);
+    if (refusal) return { ok: false, reason: "recorded_env_option_refused", detail: refusal };
+  }
   const skipped: { flag: string; reason: string }[] = [];
   const env: string[] = [];
   const recordedNames = new Set(input.recordedEnv.map(envName));
@@ -259,7 +265,7 @@ export async function probeBuildFlagSupport(
 ): Promise<{ supported: boolean; result: CommandResult }> {
   const result = await runCommand(
     ["docker", "run", "--rm", image, ...subcommand],
-    { timeout_ms: dockerCheckTimeoutMs(config) },
+    { ...dockerCliOptions(), timeout_ms: dockerCheckTimeoutMs(config) },
   );
   const output = `${result.stdout}\n${result.stderr}`;
   return { supported: result.exit_code === 0 && output.includes(flag), result };

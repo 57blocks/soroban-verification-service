@@ -32,6 +32,12 @@ const configuration = () => ({
 
 export default configuration;
 
+/** Once the config has read them: a process the runner starts must never find the params' presigned URLs. */
+export function forgetJobParamsEnvironment(): void {
+  delete process.env.SCVS_JOB_PARAMS_JSON;
+  delete process.env.SCVS_JOB_PARAMS_URL;
+}
+
 export type AppConfig = ReturnType<typeof configuration>;
 
 export type AppConfigService = ConfigService<AppConfig, true>;

@@ -2,6 +2,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ScvsLogger, stderrOnlySink } from "@scvs/core";
+import { forgetJobParamsEnvironment } from "./config/configuration.js";
 import { AppModule } from "./app.module.js";
 import { BuilderService } from "./modules/builder/builder.service.js";
 
@@ -13,6 +14,7 @@ async function main(): Promise<void> {
         : new ScvsLogger("builder-bootstrap", { sink: stderrOnlySink }),
   });
 
+  forgetJobParamsEnvironment();
   try {
     const builderService = app.get(BuilderService);
     const result = await builderService.run();

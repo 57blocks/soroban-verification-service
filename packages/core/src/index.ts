@@ -9,6 +9,7 @@ export * from "./deprecated-json-routes.js";
 export * from "./error-envelope.js";
 export * from "./digest.js";
 export * from "./registry.js";
+export * from "./env-assignment.js";
 export * from "./image-policy.js";
 export * from "./batch.js";
 export * from "./artifact-contract.js";
