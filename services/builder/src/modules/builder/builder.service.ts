@@ -79,7 +79,7 @@ export class BuilderService {
 
   private async runForJob(job: BatchJobParams): Promise<BuilderRunResult> {
     const workDirs: string[] = [];
-    const sandboxWrites: SandboxWrites = { dirs: [] };
+    const sandboxWrites: SandboxWrites = { dirs: [], workspaces: [] };
     try {
       return await this.rebuild(job, workDirs, sandboxWrites);
     } finally {

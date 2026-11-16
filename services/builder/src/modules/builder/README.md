@@ -16,6 +16,7 @@ entire previous public surface, and no caller or test needed editing.
 | `build-options.ts` | **differential-harness** | `bldopt`/`bldarg` parsing and replay, manifest paths. metadata-replay is adjacent |
 | `argument-policy.ts` | **differential-harness** | BE11 register for verifier-added build arguments and container env levers |
 | `sandbox-runtime.ts` | **sandbox-hardening** | Container invocation, source staging, dependency prefetch |
+| `sandbox-workspace.ts` | **sandbox-hardening** | The directories a rebuild binds into its containers, made by the docker gateway when one is configured (`../docker-gateway/`) |
 | `egress-policy.ts` | **sandbox-hardening** | Stage-1 prefetch egress policy |
 | `toolchain.ts` | **sandbox-hardening** | Toolchain pinning, vendored-offline cargo config |
 | `redact.ts` | **sandbox-hardening** | Log redaction (S18) |

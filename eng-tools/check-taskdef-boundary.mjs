@@ -126,6 +126,32 @@ if (contract.kind === "batch-job-definition" && SANDBOX_SERVICES.has(service)) {
       );
     }
   }
+  // Whoever holds the host's docker socket is root on the host, so only the docker gateway may (A9).
+  const isSocket = (path) => typeof path === "string" && /\/(docker|containerd)\.sock$/.test(path);
+  const shapes = [
+    ...(rendered.ecsProperties?.taskProperties ?? []).map((task, i) => ({
+      volumes: task?.volumes ?? [],
+      containers: (task?.containers ?? []).map((c, j) => [c, `ecsProperties.taskProperties[${i}].containers[${j}]`]),
+    })),
+    ...(rendered.containerProperties
+      ? [{ volumes: rendered.containerProperties.volumes ?? [], containers: [[rendered.containerProperties, "containerProperties"]] }]
+      : []),
+  ];
+  for (const { volumes, containers: listed } of shapes) {
+    const sockets = new Set(volumes.filter((volume) => isSocket(volume?.host?.sourcePath)).map((volume) => volume.name));
+    for (const [container, where] of listed) {
+      if (container?.privileged) fail("privileged", `TRUST BOUNDARY: ${where} is privileged`);
+      const holds = (container?.mountPoints ?? []).some((mount) => sockets.has(mount?.sourceVolume));
+      const isGateway = container?.name === "docker-gateway" && JSON.stringify(container.command) === '["docker-gateway"]';
+      if (holds && !isGateway) {
+        fail(
+          "docker-socket",
+          `TRUST BOUNDARY: ${where} (${container?.name ?? "unnamed"}) mounts the host's docker socket; only the ` +
+            `docker-gateway container, running the gateway, may hold it`
+        );
+      }
+    }
+  }
   if (secretRefs.size) {
     fail(
       "batch-secrets",

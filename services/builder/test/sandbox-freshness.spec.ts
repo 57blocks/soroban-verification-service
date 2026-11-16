@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { handoffPath } from "../src/modules/builder/handoff.js";
 import { dockerFinalSandboxOptions, dockerResourceLimits } from "../src/modules/builder/run-cli.config.js";
 import { prefetchCargoDependencies } from "../src/modules/builder/sandbox-runtime.js";
+import { createSandboxWorkspace } from "../src/modules/builder/sandbox-workspace.js";
 import type { RunCliInput } from "../src/modules/builder/run-cli.types.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -94,12 +95,21 @@ describe("TB4 — the materialiser/runner handoff is namespaced per job", () => 
 });
 
 describe("TB4 — the build stage's per-job directories are derived from a fresh temp dir", () => {
-  it("creates the job directory per job, and derives out, vendor and cargo-home from it", () => {
-    const runCli = readFileSync(join(SRC, "run-cli.ts"), "utf8");
-    expect(runCli).toContain('mkdtemp(join(tmpdir(), "scvs-build-"))');
-    expect(runCli).toContain('join(jobDir, "out")');
-    expect(runCli).toContain('join(jobDir, "vendor")');
-    expect(runCli).toContain('join(outDir, "cargo-home")');
+  it("gives each rebuild a fresh workspace whose stage directories are direct children of a 0700 root", async () => {
+    const workDirs: string[] = [];
+    const first = await createSandboxWorkspace({ workDirs });
+    const second = await createSandboxWorkspace({ workDirs });
+    try {
+      expect(first.root).not.toBe(second.root);
+      for (const workspace of [first, second]) {
+        expect((await stat(workspace.root)).mode & 0o777).toBe(0o700);
+        expect(Object.keys(workspace.leaves).sort()).toEqual(["artifact", "cargoHome", "out", "source", "vendor"]);
+        for (const leaf of Object.values(workspace.leaves)) expect(dirname(leaf)).toBe(workspace.root);
+      }
+      expect(readFileSync(join(SRC, "run-cli.ts"), "utf8")).toContain("createSandboxWorkspace(input)");
+    } finally {
+      for (const dir of workDirs) await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("names no shared cache mount in either docker command assembly", () => {

@@ -1,7 +1,7 @@
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR } from "./artifact-selection.js";
 import { runCommand, type CommandResult } from "@scvs/core/process";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
-import { dockerCheckTimeoutMs } from "./run-cli.config.js";
+import { dockerCheckTimeoutMs, probeSandboxArgs } from "./run-cli.config.js";
 import { refusedEnvAssignment } from "@scvs/core";
 import { dockerCliOptions } from "./docker-env.js";
 
@@ -264,7 +264,7 @@ export async function probeBuildFlagSupport(
   config?: RunCliRuntimeConfig,
 ): Promise<{ supported: boolean; result: CommandResult }> {
   const result = await runCommand(
-    ["docker", "run", "--rm", image, ...subcommand],
+    ["docker", "run", "--rm", ...probeSandboxArgs(config), image, ...subcommand],
     { ...dockerCliOptions(), timeout_ms: dockerCheckTimeoutMs(config) },
   );
   const output = `${result.stdout}\n${result.stderr}`;

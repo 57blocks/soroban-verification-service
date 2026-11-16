@@ -101,6 +101,11 @@ export function dockerFinalSandboxOptions(
   };
 }
 
+/** The image probes run the build image too, so they take the sandbox's shape, with no network and no mount. */
+export function probeSandboxArgs(config?: RunCliRuntimeConfig): string[] {
+  return [...dockerResourceLimits(config).args, ...dockerFinalSandboxOptions(config).args, "--network", "none"];
+}
+
 export function prefetchAllowedHosts(config?: RunCliRuntimeConfig): string[] {
   if (config?.prefetchAllowedHosts?.length) {
     return config.prefetchAllowedHosts;

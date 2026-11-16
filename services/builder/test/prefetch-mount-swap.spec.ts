@@ -16,7 +16,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 const fake = JSON.parse(fs.readFileSync(path.join(__dirname, "fake.json"), "utf8"));
-if (args[0] === "ps") process.exit(0);
+if (args[0] === "version") process.exit(0);
 const entrypoint = args.includes("--entrypoint") ? args[args.indexOf("--entrypoint") + 1] : undefined;
 if (entrypoint === "rustup") { console.log("stable"); process.exit(0); }
 const mounts = args.flatMap((arg, i) => {
@@ -162,8 +162,8 @@ describe("prefetch cannot redirect a later bind mount to a host path", () => {
     await rebuild();
 
     expect(await readFile(victimFile, "utf8")).toBe(VICTIM_CONTENTS);
-    const jobDir = workDirs.find((dir) => /scvs-build-/.test(dir))!;
-    const written = await lstat(join(jobDir, "out", "cargo-home", "config.toml"));
+    const workspace = workDirs.find((dir) => /scvs-sandbox-/.test(dir))!;
+    const written = await lstat(join(workspace, "cargo-home", "config.toml"));
     expect(written.isSymbolicLink()).toBe(false);
     expect(written.isFile()).toBe(true);
   });

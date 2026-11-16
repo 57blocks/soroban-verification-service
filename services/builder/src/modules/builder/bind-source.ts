@@ -3,8 +3,9 @@ import { isAbsolute, join, relative, sep } from "node:path";
 
 export type BindSourceCheck = { ok: true } | { ok: false; path: string; detail: string };
 
-// The host daemon follows symlinks in a `-v` source, so each component below `root` must still be ours.
-// `root` must never have been writable by a container, and nothing untrusted may be running at the call.
+// The host daemon follows symlinks in a bind source, so each component below `root` must still be ours.
+// `root` must never have been writable by a container, and nothing untrusted may be running at the call; a
+// root the docker gateway made is root's, which no container or runner can be.
 export async function requireBindSource(path: string, root: string): Promise<BindSourceCheck> {
   const below = relative(root, path);
   if (below === ".." || below.startsWith(`..${sep}`) || isAbsolute(below)) {
@@ -19,7 +20,7 @@ export async function requireBindSource(path: string, root: string): Promise<Bin
     if (!info) return { ok: false, path, detail: `${current} no longer exists.` };
     if (info.isSymbolicLink()) return { ok: false, path, detail: `${current} was replaced by a symbolic link.` };
     if (!info.isDirectory()) return { ok: false, path, detail: `${current} is no longer a directory.` };
-    if (uid !== undefined && info.uid !== uid) {
+    if (uid !== undefined && info.uid !== uid && !(current === root && info.uid === 0)) {
       return { ok: false, path, detail: `${current} is owned by uid ${info.uid}, not by the runner.` };
     }
   }

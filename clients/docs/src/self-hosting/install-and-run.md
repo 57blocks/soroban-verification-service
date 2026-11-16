@@ -68,7 +68,8 @@ Run the migrations before each deployment, from the `sv-service` image:
 ## 4. Start the services
 
 1. **Register the job definitions** for `composer` and for `builder`, one per architecture, with the
-   images from step 1. The builder's definition has two containers and mounts the host's Docker socket;
+   images from step 1. The builder's definition has three containers, and only its `docker-gateway`
+   container mounts the host's Docker socket;
    the repository's builder deployment workflow is the reference for its shape.
 2. **Start** `verification-svc`, `orchestrator-svc` and `web`, and for an aggregator `query-svc`.
 

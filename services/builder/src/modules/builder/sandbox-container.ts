@@ -4,6 +4,7 @@ import { dockerCliOptions } from "./docker-env.js";
 import { SANDBOX_USER } from "./run-cli.config.js";
 import { bindMount } from "./bind-source.js";
 import type { SandboxWrites } from "./run-cli.types.js";
+import { releaseGatewayWorkspaces } from "./sandbox-workspace.js";
 
 const REMOVE_TIMEOUT_MS = 60_000;
 
@@ -35,8 +36,8 @@ export async function runSandboxContainer(
 
 /** The sandbox's files belong to its uid, not the runner's, so a container running as that uid empties each directory. */
 export async function removeSandboxWrites(writes: SandboxWrites, timeout_ms = REMOVE_TIMEOUT_MS): Promise<string[]> {
-  if (!writes.image) return [];
-  const failed: string[] = [];
+  const failed = writes.workspaces?.length ? await releaseGatewayWorkspaces(writes.workspaces) : [];
+  if (!writes.image) return failed;
   for (const dir of writes.dirs) {
     const result = await runCommand(
       [

@@ -42,8 +42,9 @@ socket; Fargate cannot run them.
   **SQS queue** that only `orchestrator-svc` reads. The orchestrator does not start without the queue.
   Without the rule, it learns that a build finished only when it next asks Batch, minutes later.
 
-The builder's job definition has two containers, one that prepares the source and one that runs the
-build, sharing a working directory. The repository's builder deployment workflow registers it, and is
+The builder's job definition has three containers: one that prepares the source, one that runs the
+build, and a gateway that is the build's only way to the host's Docker daemon. They share a working
+directory. The repository's builder deployment workflow registers it, and is
 the reference for its shape.
 
 ## Storage

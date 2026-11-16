@@ -2258,6 +2258,18 @@ services:
           an empty directory and the build fails with `could not find Cargo.toml in /source` (CE3, and
           the CE1 split is the most likely thing to reintroduce it).
       SCVS_DOCKER_HOST: { type: string, default: ~ }
+      SCVS_DOCKER_GATEWAY:
+        {
+          type: path,
+          default: ~,
+          note: the docker gateway's socket; when set, the runner reaches the host's daemon only through it,
+        }
+      SCVS_DOCKER_GATEWAY_IMAGE:
+        {
+          type: string,
+          default: ~,
+          note: the docker gateway's own image, which it runs to empty a sandbox workspace,
+        }
       SCVS_DOCKER_CHECK_TIMEOUT_MS: { type: number, default: 10000 }
       SCVS_PREFETCH_ALLOWED_HOSTS:
         {

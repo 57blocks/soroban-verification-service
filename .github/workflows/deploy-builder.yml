@@ -167,6 +167,8 @@ jobs:
         env:
           BUILDER_VCPU: "1"
           BUILDER_MEMORY_MIB: "1700"
+          # The docker gateway only relays the runner's few daemon calls.
+          GATEWAY_MEMORY_MIB: "256"
         run: |
           set -euo pipefail
           REGISTRY="${{ steps.ecr-login.outputs.registry }}"
@@ -213,6 +215,7 @@ jobs:
                   \"taskProperties\": [{
                     \"volumes\": [
                       {\"name\": \"docker-sock\", \"host\": {\"sourcePath\": \"/var/run/docker.sock\"}},
+                      {\"name\": \"docker-gateway\"},
                       {\"name\": \"scvs-shared\", \"host\": {\"sourcePath\": \"/var/tmp\"}}
                     ],
                     \"containers\": [
@@ -237,17 +240,40 @@ jobs:
                         \"image\": \"${IMAGE}\",
                         \"command\": [\"node\", \"services/builder/dist/entrypoint.js\"],
                         \"essential\": true,
-                        \"dependsOn\": [{\"containerName\": \"materialise\", \"condition\": \"SUCCESS\"}],
+                        \"dependsOn\": [
+                          {\"containerName\": \"materialise\", \"condition\": \"SUCCESS\"},
+                          {\"containerName\": \"docker-gateway\", \"condition\": \"START\"}
+                        ],
                         \"resourceRequirements\": [
                           {\"type\": \"VCPU\", \"value\": \"${BUILDER_VCPU}\"},
                           {\"type\": \"MEMORY\", \"value\": \"${BUILDER_MEMORY_MIB}\"}
                         ],
                         \"environment\": [
                           {\"name\": \"SCVS_HANDOFF_ROOT\", \"value\": \"/var/tmp\"},
-                          {\"name\": \"TMPDIR\", \"value\": \"/var/tmp\"}
+                          {\"name\": \"TMPDIR\", \"value\": \"/var/tmp\"},
+                          {\"name\": \"SCVS_DOCKER_GATEWAY\", \"value\": \"/run/scvs-docker-gateway/docker.sock\"}
+                        ],
+                        \"mountPoints\": [
+                          {\"sourceVolume\": \"docker-gateway\", \"containerPath\": \"/run/scvs-docker-gateway\", \"readOnly\": false},
+                          {\"sourceVolume\": \"scvs-shared\", \"containerPath\": \"/var/tmp\", \"readOnly\": false}
+                        ]
+                      },
+                      {
+                        \"name\": \"docker-gateway\",
+                        \"image\": \"${IMAGE}\",
+                        \"command\": [\"docker-gateway\"],
+                        \"essential\": false,
+                        \"resourceRequirements\": [
+                          {\"type\": \"MEMORY\", \"value\": \"${GATEWAY_MEMORY_MIB}\"}
+                        ],
+                        \"environment\": [
+                          {\"name\": \"TMPDIR\", \"value\": \"/var/tmp\"},
+                          {\"name\": \"SCVS_DOCKER_GATEWAY\", \"value\": \"/run/scvs-docker-gateway/docker.sock\"},
+                          {\"name\": \"SCVS_DOCKER_GATEWAY_IMAGE\", \"value\": \"${IMAGE}\"}
                         ],
                         \"mountPoints\": [
                           {\"sourceVolume\": \"docker-sock\", \"containerPath\": \"/var/run/docker.sock\", \"readOnly\": false},
+                          {\"sourceVolume\": \"docker-gateway\", \"containerPath\": \"/run/scvs-docker-gateway\", \"readOnly\": false},
                           {\"sourceVolume\": \"scvs-shared\", \"containerPath\": \"/var/tmp\", \"readOnly\": false}
                         ]
                       }
