@@ -107,6 +107,15 @@ export function validateSubmittedManifest(
     return invalid("invalid_manifest", "manifest.is_public must be a boolean when provided.");
   }
 
+  const credentials = value.is_public === true && typeof value.source_uri === "string" ? uriCredentials(value.source_uri) : undefined;
+  if (credentials) {
+    return invalid(
+      "invalid_manifest",
+      `manifest.source_uri carries ${credentials}, and a public submission publishes its source_uri. ` +
+        "Remove it, or submit with is_public: false.",
+    );
+  }
+
   return {
     ok: true,
     manifest: {
@@ -145,6 +154,33 @@ function firstBldoptShapeViolation(bldopt: string[]): string | undefined {
   }
 
   return undefined;
+}
+
+const CREDENTIAL_QUERY_KEYS = new Set([
+  "x-amz-signature",
+  "x-amz-credential",
+  "x-amz-security-token",
+  "x-goog-signature",
+  "x-goog-credential",
+  "sig",
+  "signature",
+  "token",
+  "access_token",
+  "api_key",
+  "apikey",
+]);
+
+/** What in a URL would let a reader of the published result fetch with someone else's access. */
+function uriCredentials(uri: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return undefined;
+  }
+  if (url.username || url.password) return "a user name or password";
+  const key = [...url.searchParams.keys()].find((name) => CREDENTIAL_QUERY_KEYS.has(name.toLowerCase()));
+  return key ? `a credential in its query string (${key})` : undefined;
 }
 
 function invalid(error: string, detail: string): ManifestValidation {

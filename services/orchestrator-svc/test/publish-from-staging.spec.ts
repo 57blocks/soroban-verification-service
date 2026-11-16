@@ -278,5 +278,18 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
     const ours = status.source_code_verifications.at(-1);
     expect(ours.bldopt).toEqual(["--package=alpha"]);
   });
-});
 
+  it("keeps a private submission's source_uri out of the status object", async () => {
+    const bytes = randomBytes(96);
+    const { job } = await createComparedJob({
+      ...publicUrlRef(bytes),
+      visibility: "private",
+      source_uri: "https://private.example/source.tar.gz?X-Amz-Signature=secret",
+    });
+
+    await publish.publishJobResult(job.jobId);
+
+    const status = await readFile(join(resultRoot, "wasms", `${WASM_HASH}.json`), "utf8");
+    expect(status).not.toContain("private.example");
+  });
+});
