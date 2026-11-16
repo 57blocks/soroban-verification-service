@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.5",
-    "vue": "^3.5.43"
+    "vue": "^3.5.45"
   },
   "devDependencies": {
     "@scvs/core": "workspace:*",
