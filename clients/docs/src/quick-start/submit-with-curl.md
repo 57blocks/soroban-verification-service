@@ -52,14 +52,19 @@ SOURCE=$(jq -n --arg uri "$SOURCE_URI" \
 **As an upload.** Send the file first. The upload expires after 30 minutes, so submit before then.
 
 ```sh
-SOURCE=$(curl -s -X POST "$ORIGIN/api/verification/v1/uploads/source" \
+UPLOAD=$(curl -s -X POST "$ORIGIN/api/verification/v1/uploads/source" \
   -H 'Content-Type: application/octet-stream' \
-  --data-binary @my-contract.tar.gz \
-  | jq '{upload_id, source_sha256}')
+  --data-binary @my-contract.tar.gz)
+SOURCE=$(jq '{upload_id, source_sha256}' <<<"$UPLOAD")
+UPLOAD_SECRET=$(jq -r .upload_secret <<<"$UPLOAD")
 ```
 
-Unless you declare the source public, the verifier publishes only the archive's hash, and its URL if you
-gave one, and deletes a private upload once no job needs it. To publish the archive itself with the result:
+The response's `upload_secret` is returned only once, and the submission must send it beside the
+manifest. Keep it as private as the archive: anyone holding both the `upload_id` and the secret can
+submit your upload.
+
+Unless you declare the source public, the verifier publishes only the archive's hash, never the URL,
+and deletes a private upload once no job needs it. To publish the archive itself with the result:
 
 ```sh
 SOURCE=$(jq '. + {is_public: true}' <<<"$SOURCE")
@@ -73,12 +78,12 @@ BLDOPT=$(jq -c '.available_fields.bldopt // "" | split(" ") | map(select(. != ""
 
 BODY=$(jq -n \
   --arg network "$NETWORK" --arg contract "$CONTRACT_ID" --arg terms "$TERMS_VERSION" \
-  --argjson source "$SOURCE" --argjson bldopt "$BLDOPT" \
+  --arg secret "${UPLOAD_SECRET:-}" --argjson source "$SOURCE" --argjson bldopt "$BLDOPT" \
   '{
     target: {network: $network, contract_id: $contract},
     manifest: ({schema: "stellar-submitted-source-verification-manifest-v1", bldopt: $bldopt} + $source),
     accepted_terms_version: $terms
-  }')
+  } + if $secret == "" then {} else {upload_secret: $secret} end')
 
 SUBMITTED=$(curl -s -X POST "$ORIGIN/api/verification/v1/verifications" \
   -H 'Content-Type: application/json' -d "$BODY")

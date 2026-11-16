@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { evaluateBuildImage, hashBuildLogToken, imagePolicyErrorCode, mintBuildLogToken } from "@scvs/core";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -234,15 +234,20 @@ export class SubmitService {
     }
 
     if (validation.manifest.upload_id) {
-      const uploadCheck = await this.checkUpload(validation.manifest.upload_id, validation.manifest.source_sha256);
+      const uploadCheck = await this.checkUpload(
+        validation.manifest.upload_id,
+        validation.manifest.source_sha256,
+        body.upload_secret,
+        declaredVisibility(validation.manifest),
+      );
       if (!uploadCheck.ok) {
         this.logger.warn("manifest rejected", {
           ...targetFields(target),
           reason: uploadCheck.error,
         });
         return {
-          statusCode: 400,
-          body: errorBody(400, {
+          statusCode: uploadCheck.statusCode,
+          body: errorBody(uploadCheck.statusCode, {
             error: uploadCheck.error,
             detail: uploadCheck.detail,
             message: uploadCheck.detail,
@@ -332,14 +337,18 @@ export class SubmitService {
     return compareSourceAgainstChain(chainSourceSha256, submittedSha256);
   }
 
+  /** Holding an `upload_id` is not enough: the submitter also proves it received the upload's response. */
   private async checkUpload(
     uploadId: string,
-    claimedSha256: string
-  ): Promise<{ ok: true } | { ok: false; error: string; detail: string }> {
+    claimedSha256: string,
+    uploadSecret: string | undefined,
+    visibility: "public" | "private",
+  ): Promise<{ ok: true } | { ok: false; statusCode: number; error: string; detail: string }> {
     const upload = await this.uploads.getUpload(uploadId);
     if (!upload || !upload.received) {
       return {
         ok: false,
+        statusCode: 400,
         error: "upload_not_found",
         detail: `upload_id ${uploadId} does not reference a received upload. It may have expired or already been used.`,
       };
@@ -347,15 +356,41 @@ export class SubmitService {
     if (new Date(upload.expiresAt).getTime() <= Date.now()) {
       return {
         ok: false,
+        statusCode: 400,
         error: "upload_expired",
         detail: `upload_id ${uploadId} has expired. Upload the source archive again.`,
+      };
+    }
+    if (!upload.secretSha256 || !uploadSecret || !sameDigest(upload.secretSha256, sha256Hex(uploadSecret))) {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: "upload_secret_invalid",
+        detail: "A submission naming an upload_id must send the upload_secret that upload returned.",
+      };
+    }
+    if (upload.visibilityLocked && upload.visibility !== visibility) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: "upload_visibility_conflict",
+        detail: `This upload was already submitted as ${upload.visibility}; upload the archive again to submit it as ${visibility}.`,
       };
     }
     if (upload.sourceSha256 && upload.sourceSha256 !== claimedSha256) {
       return {
         ok: false,
+        statusCode: 400,
         error: "source_hash_mismatch",
         detail: "manifest.source_sha256 does not match the hash computed when the archive was uploaded.",
+      };
+    }
+    if (!(await this.uploads.lockUploadVisibility(uploadId, visibility))) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: "upload_visibility_conflict",
+        detail: `This upload was already submitted with the other visibility; upload the archive again to submit it as ${visibility}.`,
       };
     }
     return { ok: true };
@@ -385,10 +420,6 @@ export class SubmitService {
           source_sha256: manifest.source_sha256,
         };
 
-    if (manifest.upload_id) {
-      await this.uploads.setUploadVisibility(manifest.upload_id, visibility);
-    }
-
     const jobId = randomUUID();
     const buildLogToken = mintBuildLogToken();
     await this.jobs.createJob({
@@ -414,7 +445,7 @@ export class SubmitService {
       } catch (error) {
         this.logger.error("failed to record upload-job reference; sweep protection for this job's staging is degraded", {
           job_id: jobId,
-          upload_id: manifest.upload_id,
+          upload_id_sha256: sha256Hex(manifest.upload_id).slice(0, 8),
           error: error instanceof Error ? error : String(error),
         });
       }
@@ -450,4 +481,12 @@ export class SubmitService {
       mainnetRpcUrl: this.configService.get("mainnetRpcUrl", { infer: true }),
     };
   }
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function sameDigest(a: string, b: string): boolean {
+  return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }

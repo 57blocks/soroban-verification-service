@@ -116,6 +116,7 @@ export type VerifyFormValues = {
 
 export type SourceUploadResponse = {
   upload_id?: string;
+  upload_secret?: string;
   source_sha256?: string;
   filename?: string;
   size_bytes?: number;

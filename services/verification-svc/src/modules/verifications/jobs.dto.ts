@@ -59,6 +59,12 @@ export class BuildLogUnavailableResponse {
 
 export class UploadSourceResponse {
   @ApiProperty({ type: String }) @IsString() upload_id!: string;
+  @ApiProperty({
+    type: String,
+    description: "Returned once. A submission naming this `upload_id` sends it as `upload_secret`; keep it as private as the archive.",
+  })
+  @IsString()
+  upload_secret!: string;
   @ApiProperty({ type: String }) @IsString() expires_at!: string;
   @ApiProperty({ type: Number }) @IsNumber() max_size_bytes!: number;
   @ApiProperty({ type: String }) @IsString() filename!: string;

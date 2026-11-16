@@ -47,6 +47,8 @@ Some routes add their own fields, named below.
 | `unsupported` | 400 | Submit without a manifest | The contract names a build image this verifier does not accept; `detail` says why |
 | `upload_not_found` | 400 | Submit | `upload_id` names no upload, or the upload expired and has been removed. Upload again |
 | `upload_expired` | 400 | Submit | The upload's 30 minutes ran out and it has not been removed yet. Upload again |
+| `upload_secret_invalid` | 403 | Submit | `manifest.upload_id` came without the `upload_secret` that upload returned, or with another one |
+| `upload_visibility_conflict` | 409 | Submit | An earlier submission already used this upload with the other `is_public`. Upload the archive again |
 | `source_hash_mismatch` | 400 | Submit | `source_sha256` differs from the hash computed when the archive was uploaded |
 | `source_archive_not_chain_recorded` | 400 | Submit | The contract records a `source_sha256` on chain, and the manifest's differs |
 | `invalid_upload` | 400 | Upload | The body is empty |

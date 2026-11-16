@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { basename } from "node:path";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -48,6 +48,7 @@ export class UploadsService {
     }
 
     const uploadId = uuidv4();
+    const uploadSecret = randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const sourceSha256 = createHash("sha256").update(body).digest("hex");
     const filename =
@@ -58,13 +59,19 @@ export class UploadsService {
     const s3 = createS3Client({ region: staging.region });
     await putObjectBytes(s3, staging.bucket, stagingKey, body, UPLOAD_ARCHIVE_CONTENT_TYPE[format]);
 
-    await this.uploads.createUpload({ id: uploadId, expiresAt });
+    await this.uploads.createUpload({
+      id: uploadId,
+      expiresAt,
+      secretSha256: createHash("sha256").update(uploadSecret).digest("hex"),
+    });
     await this.uploads.markUploadReceived(uploadId, { path: stagingKey, filename, sizeBytes: body.length, sourceSha256 });
 
     return {
       statusCode: 201,
       body: {
         upload_id: uploadId,
+        // The only time it is ever emitted: a submission naming this upload must present it.
+        upload_secret: uploadSecret,
         expires_at: expiresAt,
         max_size_bytes: this.configService.get("maxSourceArchiveBytes", { infer: true }),
         filename,

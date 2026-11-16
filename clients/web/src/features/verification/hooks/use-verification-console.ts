@@ -229,6 +229,8 @@ export const useVerificationConsole = ({
         data: {
           target,
           manifest,
+          // Proves this browser received the upload; sent beside the manifest, never inside it.
+          ...(manifest?.upload_id && uploadedSource?.upload_secret ? { upload_secret: uploadedSource.upload_secret } : {}),
           // Only the version this browser was shown, never anything the user typed.
           ...(terms.gate.version ? { accepted_terms_version: terms.gate.version } : {}),
         } as unknown as SubmitRequestDto,

@@ -102,6 +102,14 @@ export class SubmitRequestDto {
   @IsBoolean()
   dry_run?: boolean;
 
+  @ApiPropertyOptional({
+    type: String,
+    description: "The `upload_secret` the upload returned. Required when `manifest.upload_id` is set; never part of the manifest.",
+  })
+  @IsOptional()
+  @IsString()
+  upload_secret?: string;
+
   /** Enforced in `SubmitService`: a DTO rejection would read as `invalid_request`, not a terms code. */
   @ApiPropertyOptional({ type: String })
   @IsOptional()

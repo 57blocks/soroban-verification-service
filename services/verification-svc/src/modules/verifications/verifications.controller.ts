@@ -37,6 +37,8 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiConflictResponse,
 } from "@nestjs/swagger";
 import { BuildLogUnavailableResponse, JobStatusResponse, UploadSourceResponse } from "./jobs.dto.js";
 import { submitAcceptedSchema, submitIncompleteSchema, submitResponseVariants } from "./submit.dto.js";
@@ -77,7 +79,9 @@ export class VerificationsController {
   @ApiOkResponse({ schema: submitIncompleteSchema(), description: "Manifest required — `incomplete`." })
   @ApiAcceptedResponse({ schema: submitAcceptedSchema(), description: "A job exists for this target — `queued`." })
   @ApiBadRequestResponse({ type: ApiErrorResponse, description: "invalid_request, a rejected manifest, a rejected upload reference, or terms_acceptance_required / terms_version_outdated — both distinct from invalid_request." })
+  @ApiForbiddenResponse({ type: ApiErrorResponse, description: "upload_secret_invalid — `manifest.upload_id` came without the `upload_secret` its upload returned." })
   @ApiNotFoundResponse({ type: ApiErrorResponse, description: "The target was not found on the named network." })
+  @ApiConflictResponse({ type: ApiErrorResponse, description: "upload_visibility_conflict — the upload was already submitted with the other `is_public`." })
   @ApiResponse({ status: 502, type: ApiErrorResponse, description: "The chain could not be read to answer this submission." })
   @ApiServiceUnavailableResponse({ type: ApiErrorResponse, description: "draining" })
   @ApiTooManyRequestsResponse({ type: ApiErrorResponse, description: "rate_limited" })
@@ -230,7 +234,7 @@ export class VerificationsController {
   @ApiOperation({
     operationId: "uploadSource",
     summary: "Upload a source archive",
-    description: "Accepts the raw bytes of a gzip tarball or a zip file and returns an `upload_id` and the archive's `source_sha256`, both for a submission's manifest. The format is read from the bytes, not from the filename. An upload expires 30 minutes after it is received; its `expires_at` says when.",
+    description: "Accepts the raw bytes of a gzip tarball or a zip file and returns an `upload_id` and the archive's `source_sha256`, both for a submission's manifest, and an `upload_secret` the submission must send alongside it. The secret is returned only here. The format is read from the bytes, not from the filename. An upload expires 30 minutes after it is received; its `expires_at` says when.",
   })
   @ApiConsumes("application/gzip")
   @ApiHeader({ name: "x-filename", required: false, description: "Original filename of the uploaded archive." })
