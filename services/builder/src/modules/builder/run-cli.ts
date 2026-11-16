@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ScvsLogger, resolveContainerManifestPath, stderrOnlySink } from "@scvs/core";
-import { runCommand, sha256File } from "@scvs/core/process";
+import { sha256File } from "@scvs/core/process";
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR, parseBuildArtifactReports, selectArtifactFromOutput, snapshotWasmPaths } from "./artifact-selection.js";
 import { CONTAINER_CLI_ENTRYPOINT, assembleBuildCommand, rejectedBuildArgument, resolveAddedEnvironment } from "./argument-policy.js";
 import { dockerEnvOptions, leadingBuildArgs, replayableBuildOptions, resolveManifestPath } from "./build-options.js";
@@ -15,7 +15,7 @@ import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResu
 import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, requireExtractedSourceRoot, stageSourceForOfflineBuild, summarizeDockerCommand } from "./sandbox-runtime.js";
 import { requireBindSources, type BindSourceCheck } from "./bind-source.js";
 import { detectSourceCargoSourceOverride, resolveTrustedToolchain, writeVendorCargoConfig } from "./toolchain.js";
-import { dockerCliOptions } from "./docker-env.js";
+import { runSandboxContainer } from "./sandbox-container.js";
 
 const logger = new ScvsLogger("run-cli", { sink: stderrOnlySink });
 
@@ -195,6 +195,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     egressPolicy,
     // Unconditional: this stage takes only trusted config, and a recorded `bldopt --env` is submitted input.
     rustupToolchain: toolchain.toolchain,
+    cidFile: join(jobDir, "prefetch.cid"),
   });
   if (!prefetch.ok) {
     return cliFailure(
@@ -386,7 +387,10 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     });
   }
 
-  const build = await runCommand(buildCommand, { ...dockerCliOptions(), timeout_ms: cliTimeoutMs(input.config) });
+  const build = await runSandboxContainer(buildCommand, {
+    cidFile: join(jobDir, "build.cid"),
+    timeout_ms: cliTimeoutMs(input.config),
+  });
   const rejectedArgument = rejectedBuildArgument({
     stderr: `${build.stdout}\n${build.stderr}`,
     argv: buildCommand,

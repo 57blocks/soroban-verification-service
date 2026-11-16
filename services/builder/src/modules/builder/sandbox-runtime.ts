@@ -8,6 +8,7 @@ import type { CommandResult } from "@scvs/core/process";
 import { cliTimeoutMs, dependencyPrefetchTimeoutMs, dockerCheckTimeoutMs } from "./run-cli.config.js";
 import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPolicyOk, RunCliInput, RunCliRuntimeConfig } from "./run-cli.types.js";
 import { dockerCliOptions } from "./docker-env.js";
+import { runSandboxContainer } from "./sandbox-container.js";
 
 export async function checkDockerAvailable(config?: RunCliRuntimeConfig): Promise<
   | { ok: true; result: CommandResult }
@@ -142,6 +143,8 @@ export async function prefetchCargoDependencies(input: {
   vendorDir: string;
   egressPolicy: PrefetchEgressPolicyOk;
   rustupToolchain?: string;
+  /** Inside the job directory, which no container mounts. */
+  cidFile: string;
 }): Promise<
   | { ok: true; result: CommandResult; command: string[]; commandSummary: string }
   | { ok: false; result: CommandResult; command: string[]; commandSummary: string }
@@ -189,8 +192,8 @@ export async function prefetchCargoDependencies(input: {
     outMount: PREFETCH_CARGO_HOME,
     workDir: "/",
   });
-  const result = await runCommand(command, {
-    ...dockerCliOptions(),
+  const result = await runSandboxContainer(command, {
+    cidFile: input.cidFile,
     timeout_ms: dependencyPrefetchTimeoutMs(input.input.config),
   });
   return result.exit_code === 0
