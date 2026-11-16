@@ -1,6 +1,8 @@
 import { readFile, rm } from "node:fs/promises";
 import { runCommand, type CommandResult } from "@scvs/core/process";
 import { dockerCliOptions } from "./docker-env.js";
+import { SANDBOX_USER } from "./run-cli.config.js";
+import type { SandboxWrites } from "./run-cli.types.js";
 
 const REMOVE_TIMEOUT_MS = 60_000;
 
@@ -28,4 +30,21 @@ export async function runSandboxContainer(
     mirrorOutput: false,
   });
   return { ...result, containerRemoved: removed.exit_code === 0 };
+}
+
+/** The sandbox's files belong to its uid, not the runner's, so a container running as that uid empties each directory. */
+export async function removeSandboxWrites(writes: SandboxWrites, timeout_ms = REMOVE_TIMEOUT_MS): Promise<string[]> {
+  if (!writes.image) return [];
+  const failed: string[] = [];
+  for (const dir of writes.dirs) {
+    const result = await runCommand(
+      [
+        "docker", "run", "--rm", "--network", "none", "--user", writes.user ?? SANDBOX_USER,
+        "--entrypoint", "find", "-v", `${dir}:/w`, writes.image, "/w", "-mindepth", "1", "-delete",
+      ],
+      { ...dockerCliOptions(), timeout_ms, mirrorOutput: false, record: false },
+    );
+    if (result.exit_code !== 0) failed.push(dir);
+  }
+  return failed;
 }

@@ -62,3 +62,39 @@ describe("a sandbox stage's container never outlives the stage", () => {
     expect((await calls())[0].slice(0, 3)).toEqual(["run", "--cidfile", join(fakeBin, "b.cid")]);
   });
 });
+
+describe("the sandbox's own files are removed by the sandbox's own uid", () => {
+  const saved = { ...process.env };
+  let fakeBin: string;
+
+  beforeEach(async () => {
+    fakeBin = await mkdtemp(join(tmpdir(), "scvs-cleanup-docker-"));
+    await writeFile(join(fakeBin, "docker"), FAKE_DOCKER);
+    await chmod(join(fakeBin, "docker"), 0o755);
+    process.env.PATH = `${fakeBin}:${saved.PATH}`;
+  });
+
+  afterEach(async () => {
+    process.env = { ...saved };
+    await rm(fakeBin, { recursive: true, force: true });
+  });
+
+  it("empties each directory in a network-less container running as the sandbox user", async () => {
+    const { removeSandboxWrites } = await import("../src/modules/builder/sandbox-container.js");
+
+    const left = await removeSandboxWrites({ image: "img@sha256:x", user: "65532:65532", dirs: ["/job/out", "/job/vendor"] });
+
+    expect(left).toEqual([]);
+    const log = (await readFile(join(fakeBin, "calls.log"), "utf8")).split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    expect(log).toEqual([
+      ["run", "--rm", "--network", "none", "--user", "65532:65532", "--entrypoint", "find", "-v", "/job/out:/w", "img@sha256:x", "/w", "-mindepth", "1", "-delete"],
+      ["run", "--rm", "--network", "none", "--user", "65532:65532", "--entrypoint", "find", "-v", "/job/vendor:/w", "img@sha256:x", "/w", "-mindepth", "1", "-delete"],
+    ]);
+  });
+
+  it("does nothing when no sandbox ran", async () => {
+    const { removeSandboxWrites } = await import("../src/modules/builder/sandbox-container.js");
+
+    expect(await removeSandboxWrites({ dirs: [] })).toEqual([]);
+  });
+});

@@ -27,7 +27,7 @@ args.forEach((arg, index) => {
 });
 const entrypoint = args[args.indexOf("--entrypoint") + 1];
 if (args.includes("--entrypoint") && entrypoint === "rustup") { console.log("stable"); process.exit(0); }
-if (args.includes("--entrypoint") && entrypoint === "cargo") process.exit(0);
+if (args.includes("--entrypoint") && (entrypoint === "cargo" || entrypoint === "find")) process.exit(0);
 if (existsSync(join(__dirname, "fail-build"))) process.exit(1);
 const mount = args.find((arg) => arg.endsWith(":/artifact"));
 writeFileSync(mount.slice(0, -":/artifact".length) + "/c.wasm", Buffer.from(${JSON.stringify([...WASM])}));

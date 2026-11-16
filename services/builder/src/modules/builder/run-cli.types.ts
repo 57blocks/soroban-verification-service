@@ -24,7 +24,11 @@ export type RunCliInput = {
   expected_wasm_hash?: string;
   config?: RunCliRuntimeConfig;
   workDirs: string[];
+  sandboxWrites?: SandboxWrites;
 };
+
+/** Directories a sandbox wrote as its own user, which only that user can empty again. */
+export type SandboxWrites = { image?: string; user?: string; dirs: string[] };
 
 export type RunCliOutcome = "verified" | "comparison_mismatch" | "cli_failure" | "built";
 

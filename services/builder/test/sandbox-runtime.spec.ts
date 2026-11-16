@@ -22,8 +22,8 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
     expect(command.filter((arg) => arg === "--tmpfs")).toHaveLength(2);
 
     const user = command[command.indexOf("--user") + 1];
-    expect(user).toBe(`${process.getuid?.()}:${process.getgid?.()}`);
-    expect(user).not.toBe("0:0");
+    expect(user).toBe("65532:65532");
+    expect(user).not.toBe(`${process.getuid?.()}:${process.getgid?.()}`);
   });
 
   it("keeps the writable mounts the stage exists to produce, and never their parent", async () => {
