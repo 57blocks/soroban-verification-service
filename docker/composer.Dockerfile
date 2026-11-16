@@ -1,4 +1,4 @@
-FROM node:24-slim AS build
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS build
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
@@ -19,7 +19,7 @@ COPY services/composer ./services/composer
 
 RUN pnpm --filter @scvs/composer... run build
 
-FROM node:24-slim AS runtime-deps
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime-deps
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
@@ -34,7 +34,7 @@ RUN corepack enable \
     && pnpm config set minimum-release-age 0 \
     && pnpm install --prod --frozen-lockfile --ignore-scripts --filter @scvs/composer...
 
-FROM node:24-slim
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends docker.io awscli tar ca-certificates gosu \

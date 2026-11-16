@@ -1,4 +1,4 @@
-FROM node:24-slim AS build
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS build
 WORKDIR /app
 
 COPY . .
@@ -35,7 +35,7 @@ RUN stamp=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/w
       exit 1; \
     fi
 
-FROM nginx:1.30-alpine
+FROM nginx:1.30-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
 COPY docker/web-nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/clients/web/dist /usr/share/nginx/html
 COPY --from=build /app/clients/docs/dist /usr/share/nginx/html/docs
