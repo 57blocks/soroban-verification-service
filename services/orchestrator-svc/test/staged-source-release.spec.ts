@@ -14,6 +14,7 @@ import {
 import { CreatedRows } from "@scvs/db/testing";
 import { SourceResolutionService } from "../src/modules/source-resolution/source-resolution.service.js";
 import { StagedSourceReleaseService } from "../src/modules/source-resolution/staged-source-release.service.js";
+import { jobSourceKey } from "../src/common/staging-keys.util.js";
 
 const CEILING_MS = 4 * 60 * 60 * 1000;
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`;
@@ -111,12 +112,12 @@ const expectedKeys = (rebuildId: string) => [
 describe("StagedSourceReleaseService.releaseRebuildSources", () => {
   it("deletes the fetched and canonical copies under both build modes once the last job is done, and records it", async () => {
     const rebuild = await seedRebuild();
-    await seedJob(rebuild.rebuildId, { visibility: "private", status: "published" });
+    const job = await seedJob(rebuild.rebuildId, { visibility: "private", status: "published" });
     const { release, deleted } = harness();
 
     expect(await release.releaseRebuildSources(rebuild.rebuildId, "job_terminal")).toBe("released");
 
-    expect(deleted.sort()).toEqual(expectedKeys(rebuild.rebuildId).sort());
+    expect(deleted.sort()).toEqual([...expectedKeys(rebuild.rebuildId), jobSourceKey(job.jobId)].sort());
     expect((await rebuilds.getById(rebuild.rebuildId))!.stagedSourceReleasedAt).toBeDefined();
   });
 
@@ -128,7 +129,7 @@ describe("StagedSourceReleaseService.releaseRebuildSources", () => {
     await release.releaseRebuildSources(rebuild.rebuildId, "job_terminal");
     expect(await release.releaseRebuildSources(rebuild.rebuildId, "sweep")).toBe("already_released");
 
-    expect(deleted).toHaveLength(4);
+    expect(deleted).toHaveLength(5);
   });
 
   it("touches nothing while the rebuild itself is not finished", async () => {
@@ -173,7 +174,7 @@ describe("StagedSourceReleaseService.releaseRebuildSources", () => {
 
     await prisma.job.update({ where: { id: job.jobId }, data: { retryAttempts: DEFAULT_MAX_JOB_RETRY_ATTEMPTS } });
     expect(await release.releaseRebuildSources(rebuild.rebuildId, "sweep")).toBe("released");
-    expect(deleted).toHaveLength(4);
+    expect(deleted).toHaveLength(5);
   });
 
   it("does not let an in-flight public job older than the age ceiling hold the copies forever", async () => {
@@ -194,14 +195,14 @@ describe("StagedSourceReleaseService.releaseRebuildSources", () => {
 });
 
 describe("StagedSourceReleaseService.releaseForTerminalJob", () => {
-  it("releases the job's upload and its rebuild's copies in one call", async () => {
+  it("releases the job's upload, its own copy and its rebuild's copies in one call", async () => {
     const rebuild = await seedRebuild();
     const job = await seedJob(rebuild.rebuildId, { visibility: "private", status: "published" });
     const { release, deleted } = harness();
 
     await release.releaseForTerminalJob(job);
 
-    expect(deleted).toHaveLength(4);
+    expect(new Set(deleted)).toEqual(new Set([...expectedKeys(rebuild.rebuildId), jobSourceKey(job.jobId)]));
     expect((await rebuilds.getById(rebuild.rebuildId))!.stagedSourceReleasedAt).toBeDefined();
   });
 
@@ -217,16 +218,41 @@ describe("StagedSourceReleaseService.releaseForTerminalJob", () => {
     expect((await rebuilds.getById(rebuild.rebuildId))!.stagedSourceReleasedAt).toBeUndefined();
   });
 
-  it("does nothing beyond the upload for a job that never attached to a rebuild", async () => {
+  it("deletes only the job's own copy for a job that never attached to a rebuild", async () => {
     const { release, deleted } = harness();
+    const jobId = randomUUID();
 
     await release.releaseForTerminalJob({
-      jobId: randomUUID(),
+      jobId,
       rebuildId: undefined,
       sourceRef: { type: "source_uri", visibility: "private", source_uri: "https://example.com/a.tar.gz", source_sha256: freshSha() },
     });
 
-    expect(deleted).toEqual([]);
+    expect(deleted).toEqual([jobSourceKey(jobId)]);
+  });
+});
+
+describe("StagedSourceReleaseService.sweepJobSources", () => {
+  function sweepHarness(keys: string[]) {
+    const h = harness();
+    const sourceResolution = (h.release as unknown as { sourceResolution: SourceResolutionService }).sourceResolution;
+    jest.spyOn(sourceResolution, "listStagingKeys").mockResolvedValue(keys);
+    return h;
+  }
+
+  it("deletes the copies of finished jobs and of jobs that no longer exist, never one a job can still read", async () => {
+    const rebuild = await seedRebuild();
+    const finished = await seedJob(rebuild.rebuildId, { visibility: "private", status: "published" });
+    const inFlight = await seedJob(rebuild.rebuildId, { visibility: "private", status: "queued" });
+    const owesPublish = await seedJob(rebuild.rebuildId, { visibility: "public", status: "published", sourcePublishPending: true });
+    const gone = randomUUID();
+    const { release, deleted } = sweepHarness(
+      [finished, inFlight, owesPublish].map((job) => jobSourceKey(job.jobId)).concat(jobSourceKey(gone), "staging/jobs/not-a-job/source"),
+    );
+
+    expect(await release.sweepJobSources(100)).toBe(2);
+
+    expect(deleted.sort()).toEqual([jobSourceKey(finished.jobId), jobSourceKey(gone)].sort());
   });
 });
 

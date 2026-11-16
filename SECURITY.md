@@ -125,7 +125,8 @@ for exact mechanics — this list is not exhaustive):
   allowlist (`SCVS_PREFETCH_ALLOWED_HOSTS`) of public dependency hosts is reachable.
 - **Integrity checks on submitted source.** Both source shapes a submission can take — a private
   upload and a `source_uri` archive — are verified against the caller-provided SHA-256 before use, and
-  re-hashed inside the sandbox against the bytes actually fetched.
+  re-hashed inside the sandbox against the bytes actually fetched. A `source_uri` job proves it holds
+  those bytes by fetching its own URL before it may share a rebuild another submission started.
 - **Abuse controls on the public API.** `services/verification-svc` combines an in-process rate limiter
   (`@nestjs/throttler`) with a DB-backed `AbuseGuard` for stronger enforcement, and gives its public read
   routes and API documentation a per-caller quota of their own. `services/query-svc`

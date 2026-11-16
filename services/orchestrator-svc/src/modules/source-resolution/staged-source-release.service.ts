@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ScvsLogger, ScvsMetrics } from "@scvs/core";
 import { JobsRepository, RebuildsRepository, type JobRecord } from "@scvs/db";
-import { stagedSourceKeys } from "../../common/staging-keys.util.js";
+import { JOB_SOURCE_PREFIX, jobIdOfSourceKey, jobSourceKey, stagedSourceKeys } from "../../common/staging-keys.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { SourceResolutionService } from "./source-resolution.service.js";
 
@@ -23,6 +23,7 @@ export class StagedSourceReleaseService {
   /** Every terminal path ends here. A delete that fails is only logged: the sweep retries it. */
   async releaseForTerminalJob(job: Pick<JobRecord, "jobId" | "sourceRef" | "rebuildId">): Promise<void> {
     await this.sourceResolution.deleteStagedUpload(job.sourceRef);
+    await this.releaseJobSource(job, "job_terminal");
     if (!job.rebuildId) return;
     try {
       await this.releaseRebuildSources(job.rebuildId, "job_terminal");
@@ -58,9 +59,50 @@ export class StagedSourceReleaseService {
     for (const key of stagedSourceKeys(rebuildId)) {
       await this.sourceResolution.deleteStagingObject(key);
     }
+    for (const job of await this.jobs.listJobsAttachedToRebuild(rebuildId)) {
+      if (job.sourceRef.type === "source_uri") await this.sourceResolution.deleteStagingObject(jobSourceKey(job.jobId));
+    }
     await this.rebuilds.markStagedSourceReleased(rebuildId);
     this.metrics.counter("staged_source_released_total", 1, { trigger });
     this.logger.log("released a rebuild's staged source copies", { rebuild_id: rebuildId, trigger });
     return "released";
+  }
+
+  /** Job copies the terminal path could not delete, including those of jobs that never attached to a rebuild. */
+  async sweepJobSources(limit: number, now = new Date()): Promise<number> {
+    const held = (await this.sourceResolution.listStagingKeys(JOB_SOURCE_PREFIX))
+      .map((key) => ({ key, jobId: jobIdOfSourceKey(key) }))
+      .filter((entry): entry is { key: string; jobId: string } => entry.jobId !== undefined)
+      .slice(0, limit);
+    const needed = new Set(
+      await this.jobs.listJobIdsStillNeedingOwnSource(
+        held.map((entry) => entry.jobId),
+        this.configService.get("stagingSweepJobAgeCeilingMs", { infer: true }),
+        now,
+        this.configService.get("maxJobRetryAttempts", { infer: true }),
+      ),
+    );
+    let released = 0;
+    for (const { key, jobId } of held) {
+      if (needed.has(jobId)) continue;
+      await this.sourceResolution.deleteStagingObject(key);
+      released += 1;
+    }
+    if (released > 0) this.metrics.counter("job_source_released_total", released, { trigger: "sweep" });
+    return released;
+  }
+
+  /** A job's own source copy, once the job can no longer publish from it. A delete that fails is only logged. */
+  private async releaseJobSource(job: Pick<JobRecord, "jobId" | "sourceRef">, trigger: "job_terminal"): Promise<void> {
+    if (job.sourceRef.type !== "source_uri") return;
+    try {
+      await this.sourceResolution.deleteStagingObject(jobSourceKey(job.jobId));
+    } catch (error) {
+      this.logger.warn("failed to release a job's own source copy at job termination", {
+        job_id: job.jobId,
+        trigger,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }

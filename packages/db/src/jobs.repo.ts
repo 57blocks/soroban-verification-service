@@ -10,6 +10,7 @@ import {
   parseSourceReference,
   retryableFailureReasons,
   SubmittedSourceManifest,
+  terminalJobStatuses,
   VerificationResultSummary,
   VerificationTarget,
   type BuildMode,
@@ -244,6 +245,27 @@ export class JobsRepository {
       where: { rebuildId, ...stillNeedsStagedSourceWhere(ceilingMs, now, maxRetryAttempts) },
     });
     return count > 0;
+  }
+
+  /** The jobs among `jobIds` that may still read their own source copy: unfinished, or owed a publish or a retry. */
+  async listJobIdsStillNeedingOwnSource(
+    jobIds: string[],
+    ceilingMs: number,
+    now: Date,
+    maxRetryAttempts: number,
+  ): Promise<string[]> {
+    if (jobIds.length === 0) return [];
+    const rows = await this.prisma.job.findMany({
+      where: {
+        id: { in: jobIds },
+        OR: [
+          { status: { notIn: [...terminalJobStatuses] } },
+          stillNeedsStagedSourceWhere(ceilingMs, now, maxRetryAttempts),
+        ],
+      },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
   }
 
   async listJobsAttachedToRebuild(rebuildId: string): Promise<JobRecord[]> {

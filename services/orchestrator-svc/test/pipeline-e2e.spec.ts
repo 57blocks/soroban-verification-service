@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import { isRetryableFailure } from "@scvs/core";
+import { UpstreamNotDeliveredError } from "@scvs/core/fetch-policy";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -355,6 +356,7 @@ async function createJob(options: {
   sourceSha256: string;
   dryRun?: boolean;
   network?: "testnet" | "mainnet";
+  sourceUri?: string;
 }): Promise<JobRecord> {
   const jobId = createdRows.job(randomUUID());
   await jobs.createJob({
@@ -369,7 +371,7 @@ async function createJob(options: {
     sourceRef: {
       type: "source_uri",
       visibility: "public",
-      source_uri: SUBMITTED_SOURCE_URI,
+      source_uri: options.sourceUri ?? SUBMITTED_SOURCE_URI,
       source_sha256: options.sourceSha256,
     },
     buildOptions: { bldopt: [], bldarg: [] },
@@ -468,6 +470,42 @@ describe("ADR-008 pipeline, end to end", () => {
     expect(finalA.sourcePublishPendingSince).toBeDefined();
     expect(finalA.sourceFileName).toBeUndefined();
     expect(finalA.sourcePublishAttempts).toBe(1);
+  });
+
+  it("does not let a job that cannot fetch its own source share a rebuild another job is building", async () => {
+    const sourceSha256 = randomBytes(32).toString("hex");
+    const contract = contractId();
+    chain.deployed.set(contract, REBUILT_HASH);
+
+    const owner = await createJob({ contractId: contract, sourceSha256 });
+    await pipeline.run(owner);
+    const building = await reload(owner.jobId);
+    expect(building.rebuildId).toBeDefined();
+
+    const internals = sourceResolution as unknown as {
+      stagedObjectExists: () => Promise<boolean>;
+      fetchUnderPolicy: (uri: string) => Promise<{ bytes: Uint8Array; finalUrl: string }>;
+    };
+    jest.spyOn(internals, "stagedObjectExists").mockResolvedValueOnce(false);
+    jest.spyOn(sourceResolution, "readStagingObjectBytes").mockResolvedValueOnce(undefined);
+    const fetchOwnUrl = jest
+      .spyOn(internals, "fetchUnderPolicy")
+      .mockRejectedValueOnce(new UpstreamNotDeliveredError("Status 404 from https://attacker.invalid"));
+
+    const claimant = await createJob({
+      contractId: contract,
+      sourceSha256,
+      sourceUri: "https://attacker.invalid/never-served.tar.gz",
+    });
+    await pipeline.run(claimant);
+
+    const refused = await reload(claimant.jobId);
+    expect(fetchOwnUrl).toHaveBeenCalledTimes(1);
+    expect(refused.status).toBe("failed");
+    expect(refused.failureReason).toBe("source_unreachable");
+    expect(refused.error).toBe("source_uri_not_materialized");
+    expect(refused.rebuildId ?? undefined).toBeUndefined();
+    expect((await reload(owner.jobId)).rebuildId).toBe(building.rebuildId);
   });
 
   it("scopes rebuild identity and published recipe by chain-derived metadata_replay", async () => {

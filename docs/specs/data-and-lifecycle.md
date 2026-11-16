@@ -118,7 +118,7 @@ out by their timeouts.
 | `source_sha256` | Retained even when the source bytes are not |
 | Source submitted to a dry run | Never stored durably, whatever was declared |
 | Source with a public declaration | Stored durably, served on the public API, addressed by `source_sha256`; written from the copy staged before the build, re-hashed to that name (see [Published results](published-results.md)). The staging copies go once it is durable |
-| Source without a public declaration | Deleted at job termination, on every terminal path: the upload, and the copies the verifier staged under the rebuild (the URL fetch and the unwrapped archive, under both build modes), once no job attached to the same upload or rebuild still needs them. A deletion the terminal path could not make is retried by `StagedSourceSweepScheduler` until the rebuild is marked released |
+| Source without a public declaration | Deleted at job termination, on every terminal path: the upload, the job's own fetched copy, and the copies the verifier staged under the rebuild (the URL fetch and the unwrapped archive, under both build modes), once no job attached to the same upload or rebuild still needs them. A deletion the terminal path could not make is retried by `StagedSourceSweepScheduler`, which also clears the own copy of a job that never attached to a rebuild |
 | Submitter identity | Never collected |
 
 Verified by: `services/orchestrator-svc/test/job-retention.spec.ts`,

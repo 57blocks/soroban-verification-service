@@ -154,7 +154,7 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
   it("writes sources/<sha256><ext> from the copy staged before the build", async () => {
     const bytes = randomBytes(96);
     const { job, rebuildId } = await createComparedJob(publicUrlRef(bytes));
-    stageObjects({ [`staging/${rebuildId}/verify/fetched-source`]: bytes });
+    stageObjects({ [`staging/jobs/${job.jobId}/source`]: bytes });
 
     await publish.publishJobResult(job.jobId);
 
@@ -164,6 +164,7 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
     expect(reloaded.sourcePublishPendingSince).toBeUndefined();
     expect(await publishedSource(reloaded.sourceFileName!)).toEqual(bytes);
     expect(fetchThroughDestinationPolicy).not.toHaveBeenCalled();
+    expect(deletedKeys).toContain(`staging/jobs/${job.jobId}/source`);
     expect(deletedKeys).toContain(`staging/${rebuildId}/verify/fetched-source`);
     expect((await rebuilds.getById(rebuildId))!.stagedSourceReleasedAt).toBeDefined();
   });
@@ -171,7 +172,7 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
   it("refuses to publish when the staged bytes do not hash to the declared sha256, and keeps the copy for a human to look at", async () => {
     const declared = randomBytes(96);
     const { job, rebuildId } = await createComparedJob(publicUrlRef(declared));
-    stageObjects({ [`staging/${rebuildId}/verify/fetched-source`]: randomBytes(96) });
+    stageObjects({ [`staging/jobs/${job.jobId}/source`]: randomBytes(96) });
 
     await publish.publishJobResult(job.jobId);
 
@@ -235,14 +236,31 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
     expect(reloaded.sourceFileName).toBeUndefined();
     expect(read).not.toHaveBeenCalled();
     expect(await publishedSource(`${sha256(bytes)}.tar.gz`)).toBeUndefined();
-    expect(deletedKeys.sort()).toEqual(
-      [
+    expect(new Set(deletedKeys)).toEqual(
+      new Set([
+        `staging/jobs/${job.jobId}/source`,
         `staging/${rebuildId}/verify/fetched-source`,
         `staging/${rebuildId}/verify/canonical-source`,
         `staging/${rebuildId}/build/fetched-source`,
         `staging/${rebuildId}/build/canonical-source`,
-      ].sort(),
+      ]),
     );
     expect((await rebuilds.getById(rebuildId))!.stagedSourceReleasedAt).toBeDefined();
+  });
+
+  it("a public job that shares another submitter's rebuild publishes nothing it did not fetch itself", async () => {
+    const privateBytes = randomBytes(96);
+    const { job, rebuildId } = await createComparedJob({
+      ...publicUrlRef(privateBytes),
+      source_uri: "https://attacker.invalid/never-served.tar.gz",
+    });
+    stageObjects({ [`staging/${rebuildId}/verify/fetched-source`]: privateBytes });
+
+    await publish.publishJobResult(job.jobId);
+
+    const reloaded = (await jobs.getJobById(job.jobId))!;
+    expect(reloaded.sourceFileName).toBeUndefined();
+    expect(await publishedSource(`${sha256(privateBytes)}.tar.gz`)).toBeUndefined();
+    expect(fetchThroughDestinationPolicy).not.toHaveBeenCalled();
   });
 });

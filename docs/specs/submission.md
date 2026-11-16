@@ -114,8 +114,10 @@ mismatch carries depends on where it is caught:
 
 - An upload whose hash, computed when it was received, differs from `manifest.source_sha256` is
   refused at submit with `400 source_hash_mismatch`; no job is created.
-- A `source_uri` whose fetched bytes do not hash to the declared `source_sha256` fails the job
-  before dispatch with reason `source_unreachable` (code `source_hash_mismatch`).
+- Every `source_uri` job fetches its own URL before it may attach to a rebuild, including a job
+  whose `source_sha256` matches a rebuild already running or finished; bytes that do not hash to the
+  declared `source_sha256` fail the job with reason `source_unreachable` (code
+  `source_hash_mismatch`), and a URL that serves nothing fails it with `source_uri_not_materialized`.
 - Inside the builder, a staged archive that does not hash to `source_sha256` is refused before the
   build command runs, and a sandbox report whose source hash disagrees with the recorded one is
   refused before anything is published. Both carry `source_sha256_mismatch`, classed `build`, so

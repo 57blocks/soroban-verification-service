@@ -53,12 +53,24 @@ export class StagedSourceSweepScheduler implements OnModuleInit, OnModuleDestroy
         }
       }
       if (released > 0) this.logger.log("staged source sweep released rebuilds", { released });
+      await this.sweepJobSources();
       return released;
     } catch (error) {
       this.logger.error("staged source sweep failed", {
         error: error instanceof Error ? error : String(error),
       });
       return 0;
+    }
+  }
+
+  private async sweepJobSources(): Promise<void> {
+    try {
+      const released = await this.release.sweepJobSources(this.configService.get("stagedSourceSweepBatchSize", { infer: true }));
+      if (released > 0) this.logger.log("staged source sweep released job source copies", { released });
+    } catch (error) {
+      this.logger.error("staged source sweep: job source copies left for the next tick", {
+        error: error instanceof Error ? error : String(error),
+      });
     }
   }
 }
