@@ -599,15 +599,29 @@ export class VerificationPipelineService {
       freshDeployedHash,
       recordedHash,
     });
+    // The source binding and recipe were read from the Wasm at prepare; a verdict for another Wasm would skip both checks.
     if (verdict.drifted) {
-      this.logger.warn(
-        "deployed hash moved while the rebuild ran; publishing the byte-level verdict but not the " +
-          "by-contract pointer",
-        {
-          recorded_wasm_hash: recordedHash,
-          fresh_deployed_hash: freshDeployedHash,
-        }
+      await this.failJob(
+        job,
+        "policy_rejected",
+        "target_changed_during_build",
+        `The contract's Wasm changed from ${recordedHash} to ${freshDeployedHash} while the rebuild ran, so ` +
+          "nothing was published. Submit again to verify the Wasm it runs now."
       );
+      return;
+    }
+
+    const pinnedSource = chainLookup.metadata.sep58.source_sha256?.toLowerCase();
+    const declaredSource = job.sourceRef.source_sha256?.toLowerCase();
+    if (pinnedSource && pinnedSource !== declaredSource) {
+      await this.failJob(
+        job,
+        "policy_rejected",
+        "source_archive_not_chain_recorded",
+        `Wasm ${freshDeployedHash} records source_sha256=${pinnedSource}, not the ${declaredSource ?? "(none)"} ` +
+          "this job built from, so nothing was published."
+      );
+      return;
     }
     this.logger.log("verdict resolved", {
       rebuild_id: rebuild.rebuildId,
