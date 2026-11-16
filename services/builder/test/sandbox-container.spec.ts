@@ -87,8 +87,8 @@ describe("the sandbox's own files are removed by the sandbox's own uid", () => {
     expect(left).toEqual([]);
     const log = (await readFile(join(fakeBin, "calls.log"), "utf8")).split("\n").filter(Boolean).map((l) => JSON.parse(l));
     expect(log).toEqual([
-      ["run", "--rm", "--network", "none", "--user", "65532:65532", "--entrypoint", "find", "-v", "/job/out:/w", "img@sha256:x", "/w", "-mindepth", "1", "-delete"],
-      ["run", "--rm", "--network", "none", "--user", "65532:65532", "--entrypoint", "find", "-v", "/job/vendor:/w", "img@sha256:x", "/w", "-mindepth", "1", "-delete"],
+      ["run", "--rm", "--network", "none", "--user", "65532:65532", "--entrypoint", "find", "--mount", "type=bind,source=/job/out,target=/w,bind-recursive=disabled", "img@sha256:x", "/w", "-mindepth", "1", "-delete"],
+      ["run", "--rm", "--network", "none", "--user", "65532:65532", "--entrypoint", "find", "--mount", "type=bind,source=/job/vendor,target=/w,bind-recursive=disabled", "img@sha256:x", "/w", "-mindepth", "1", "-delete"],
     ]);
   });
 

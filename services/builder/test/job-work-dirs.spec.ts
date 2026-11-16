@@ -23,14 +23,14 @@ const { join } = require("node:path");
 const args = process.argv.slice(2);
 if (args[0] === "ps") process.exit(0);
 args.forEach((arg, index) => {
-  if (args[index - 1] === "-v") appendFileSync(join(__dirname, "mounts.log"), arg.split(":")[0] + "\\n");
+  if (args[index - 1] === "--mount") appendFileSync(join(__dirname, "mounts.log"), /source=([^,]+)/.exec(arg)[1] + "\\n");
 });
 const entrypoint = args[args.indexOf("--entrypoint") + 1];
 if (args.includes("--entrypoint") && entrypoint === "rustup") { console.log("stable"); process.exit(0); }
 if (args.includes("--entrypoint") && (entrypoint === "cargo" || entrypoint === "find")) process.exit(0);
 if (existsSync(join(__dirname, "fail-build"))) process.exit(1);
-const mount = args.find((arg) => arg.endsWith(":/artifact"));
-writeFileSync(mount.slice(0, -":/artifact".length) + "/c.wasm", Buffer.from(${JSON.stringify([...WASM])}));
+const mount = args.find((arg) => arg.includes("target=/artifact"));
+writeFileSync(/source=([^,]+)/.exec(mount)[1] + "/c.wasm", Buffer.from(${JSON.stringify([...WASM])}));
 console.log("Wasm File: /artifact/c.wasm");
 console.log("Wasm Hash: ${WASM_SHA256}");
 `;

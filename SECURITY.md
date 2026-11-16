@@ -118,8 +118,9 @@ for exact mechanics — this list is not exhaustive):
 - **Sandboxed rebuilds.** The `docker run` rebuild — the only rebuild path — uses `--cap-drop ALL`,
   `--security-opt no-new-privileges`, `--network none`, `--read-only`, a non-root `--user` (65532, never the runner's own uid), `nosuid`
   `nodev` `noexec` tmpfs for `/tmp` and `/var/tmp`, and CPU / memory / PID limits, with a read-only
-  source mount and a separate writable output mount. No seccomp or AppArmor profile is applied; if
-  that gap is exploitable given the above, it is worth reporting.
+  source mount and a separate writable output mount, each a non-recursive `--mount` bind. Docker's
+  default seccomp profile applies, since nothing passes `seccomp=unconfined`; no custom seccomp,
+  AppArmor or SELinux profile is added. If that gap is exploitable given the above, it is worth reporting.
 - **Constrained dependency prefetch.** `cargo vendor` dependency prefetching (run before the final
   no-network build) rejects URLs targeting private, local, or cloud-metadata hosts; only an explicit
   allowlist (`SCVS_PREFETCH_ALLOWED_HOSTS`) of public dependency hosts is reachable.

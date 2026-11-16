@@ -20,9 +20,9 @@ if (args[0] === "ps") process.exit(0);
 const entrypoint = args.includes("--entrypoint") ? args[args.indexOf("--entrypoint") + 1] : undefined;
 if (entrypoint === "rustup") { console.log("stable"); process.exit(0); }
 const mounts = args.flatMap((arg, i) => {
-  if (args[i - 1] !== "-v") return [];
-  const [source, target, mode] = arg.split(":");
-  return [{ source, target, readOnly: mode === "ro" }];
+  if (args[i - 1] !== "--mount") return [];
+  const kv = Object.fromEntries(arg.split(",").map((part) => [part.split("=")[0], part.split("=").slice(1).join("=") || true]));
+  return [{ source: kv.source, target: kv.target, readOnly: kv.readonly === true }];
 });
 const stage = entrypoint === "cargo" ? "prefetch" : args.includes("none") ? "build" : "other";
 const log = (entry) => fs.appendFileSync(fake.log, JSON.stringify(entry) + "\\n");
