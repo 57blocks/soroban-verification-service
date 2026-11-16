@@ -83,8 +83,11 @@ PostgreSQL, through Prisma.
 and the databases, and separate from each other: `composer` holds the right to push images that later
 builds run, and a build runs untrusted code. Give the two fleets **separate instance roles** too. Batch
 runs every job container in its host's network namespace, so each job can read its host's instance
-role. Scope each role to its own fleet's ECS clusters, the images it pulls and its own log streams,
-exactly as if the job held it, because the job does.
+role unless the host stops it. On the builder hosts, drop traffic to the instance metadata service from
+the job's containers (uid 1000) and from containers on a Docker bridge; the builder's docker gateway runs
+as root and still fetches the ECR token a build image pull needs. Scope each role to its own fleet's ECS
+clusters, the images it pulls and its own log streams, as if the job held it: whatever becomes root on a
+host can still read it.
 
 ## Credentials
 

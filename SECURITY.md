@@ -72,8 +72,11 @@ So a report can focus on what's actually new, here's what's already enforced (se
 for exact mechanics — this list is not exhaustive):
 
 - **Zero business credentials for the builder.** `services/builder` has no job role. AWS Batch runs its
-  containers in the host's network namespace, so a builder job *can* read its host's instance role, and
-  that role is therefore scoped as if the job held it: the ECS agent's actions on the builder fleet's own
+  containers in the host's network namespace, so the builder hosts drop traffic to the instance metadata
+  service from the job's own containers (uid 1000) and from any container on a Docker bridge. The one
+  process in the job that reaches the host's instance role is the docker gateway, which runs as root and
+  uses it only to authenticate a build image pull from ECR. Anything that becomes root on a host can still
+  read that role, so it is scoped as if a job held it: the ECS agent's actions on the builder fleet's own
   clusters, ECR pull from the builder and composed-environments repositories, and its own CloudWatch Logs
   streams — never S3, Secrets Manager, SSM, RDS, or any business-data permission. In the reference
   deployment a permissions boundary equal to that policy keeps anything attached to the role outside
@@ -124,8 +127,8 @@ for exact mechanics — this list is not exhaustive):
 - **No docker socket in the runner.** The runner reaches the host's Docker daemon only through a gateway
   container in the same job, over a socket no other job can reach. The gateway forwards only what a
   sandbox stage needs: creating a container in the shape above, attaching to, waiting on, starting,
-  killing and removing containers it created, pulling an image by digest, and logging in to ECR. It
-  refuses everything else, including `exec`, listing containers, host namespaces, devices, privileged
+  killing and removing containers it created, and pulling an image by digest, which it authenticates
+  itself when the image is in ECR. It refuses everything else, including `exec`, listing containers, host namespaces, devices, privileged
   mode, and any bind that is not one of the job's workspace directories. Those directories sit under a
   root-owned directory, so the runner cannot swap one for a link before a stage binds it. The daemon still
   runs as root, so a container escape through the kernel reaches the host.

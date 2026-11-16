@@ -13,7 +13,6 @@ export type ContainerOp = "attach" | "start" | "wait" | "kill" | "remove" | "ins
 export type Route =
   | { ok: true; kind: "ping" }
   | { ok: true; kind: "version" }
-  | { ok: true; kind: "auth" }
   | { ok: true; kind: "pull" }
   | { ok: true; kind: "create" }
   | { ok: true; kind: "container"; id: string; op: ContainerOp }
@@ -25,7 +24,7 @@ const CONTAINER_ID = /^[0-9a-f]{64}$/;
 const WORKSPACE_ID = /^[A-Za-z0-9]{6,32}$/;
 const DIGEST_PINNED_IMAGE = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
 const DIGEST_TAG = /^sha256:[0-9a-f]{64}$/;
-const ECR_REGISTRY = /^(?:https:\/\/)?[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\/?$/;
+const ECR_REGISTRY = /^[0-9]{12}\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com$/;
 
 const deny = (reason: string): Denial => ({ ok: false, reason });
 
@@ -41,7 +40,6 @@ export function routeRequest(method: string, url: string): Route | Denial {
 
   if (path === "/_ping" && (method === "GET" || method === "HEAD")) return { ok: true, kind: "ping" };
   if (path === "/version" && method === "GET") return { ok: true, kind: "version" };
-  if (path === "/auth" && method === "POST") return { ok: true, kind: "auth" };
   if (path === "/images/create" && method === "POST") return { ok: true, kind: "pull" };
   if (path === "/containers/create" && method === "POST") return { ok: true, kind: "create" };
 
@@ -76,21 +74,25 @@ function containerOp(method: string, rest: string[]): ContainerOp | undefined {
   return undefined;
 }
 
-export function checkPull(url: string): { ok: true } | Denial {
+/** A pull by digest. `ecrRegistry` names the ECR registry it is from, whose token the gateway supplies. */
+export function checkPull(url: string): { ok: true; ecrRegistry?: { host: string; region: string } } | Denial {
   const query = new URL(url, "http://gateway").searchParams;
   for (const key of ["fromSrc", "repo", "message", "changes"]) {
     if (query.has(key)) return deny(`an image pull may not set ${key}`);
   }
   const from = query.get("fromImage") ?? "";
   const tag = query.get("tag") ?? "";
-  if (tag ? DIGEST_TAG.test(tag) && !from.includes("@") : DIGEST_PINNED_IMAGE.test(from)) return { ok: true };
-  return deny(`only images pinned by sha256 digest may be pulled, not ${from}${tag ? `:${tag}` : ""}`);
+  if (!(tag ? DIGEST_TAG.test(tag) && !from.includes("@") : DIGEST_PINNED_IMAGE.test(from))) {
+    return deny(`only images pinned by sha256 digest may be pulled, not ${from}${tag ? `:${tag}` : ""}`);
+  }
+  const host = from.split("/")[0] ?? "";
+  const region = ECR_REGISTRY.exec(host)?.[1];
+  return region ? { ok: true, ecrRegistry: { host, region } } : { ok: true };
 }
 
-export function checkAuth(body: unknown): { ok: true } | Denial {
-  const server = isRecord(body) ? body.serveraddress : undefined;
-  if (typeof server === "string" && ECR_REGISTRY.test(server)) return { ok: true };
-  return deny("the builder logs in only to an ECR registry");
+/** The `X-Registry-Auth` the daemon reads: URL-safe base64 of the JSON, padding kept as Go's decoder expects. */
+export function encodeRegistryAuth(auth: { username: string; password: string; serveraddress: string }): string {
+  return Buffer.from(JSON.stringify(auth)).toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 export type CreateContext = {

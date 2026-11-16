@@ -1,7 +1,7 @@
 import { createServer, request, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import type { LogFields } from "@scvs/core";
-import { checkAuth, checkCreate, checkPull, routeRequest, type Denial } from "./policy.js";
+import { checkCreate, checkPull, routeRequest, type Denial } from "./policy.js";
 import type { WorkspaceStore } from "./workspaces.js";
 
 export type GatewayLog = (event: string, fields: LogFields) => void;
@@ -13,6 +13,11 @@ export type DockerGatewayOptions = {
   sandboxUser: string;
   log: GatewayLog;
   maxBodyBytes?: number;
+  /**
+   * The `X-Registry-Auth` for a pull from an ECR registry. The gateway fetches it with the host's instance role,
+   * which the job's own containers cannot reach, so the runner holds no AWS credential at all.
+   */
+  ecrAuth?: (registry: { host: string; region: string }) => Promise<string>;
 };
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -83,14 +88,19 @@ export class DockerGateway {
       case "ping":
       case "version":
         return this.forward(req, res, body);
-      case "auth": {
-        const check = checkAuth(parseJson(body));
-        if (!check.ok) throw refused(403, check);
-        return this.forward(req, res, body);
-      }
       case "pull": {
         const check = checkPull(req.url ?? "");
         if (!check.ok) throw refused(403, check);
+        if (!check.ecrRegistry) return this.forward(req, res, body);
+        if (!this.options.ecrAuth) throw new RequestRefused(403, `this gateway holds no token for ${check.ecrRegistry.host}`);
+        let auth: string;
+        try {
+          auth = await this.options.ecrAuth(check.ecrRegistry);
+        } catch (error) {
+          throw new RequestRefused(502, `could not obtain a token for ${check.ecrRegistry.host}: ${errorMessage(error)}`);
+        }
+        // Whatever the runner sent is replaced: the pull is authenticated by the gateway, never by the job.
+        req.headers["x-registry-auth"] = auth;
         return this.forward(req, res, body);
       }
       case "create": {

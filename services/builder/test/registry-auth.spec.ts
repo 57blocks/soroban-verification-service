@@ -51,6 +51,19 @@ describe("authenticateForImage", () => {
     }
   });
 
+  it("leaves an ECR pull to the docker gateway, holding no AWS credential itself", async () => {
+    const saved = process.env.SCVS_DOCKER_GATEWAY;
+    process.env.SCVS_DOCKER_GATEWAY = "/run/scvs-docker-gateway/docker.sock";
+    try {
+      const { calls, runner } = recordingRunner([]);
+      await expect(authenticateForImage(ECR_IMAGE, undefined, runner)).resolves.toEqual({ ok: true, skipped: true });
+      expect(calls).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env.SCVS_DOCKER_GATEWAY;
+      else process.env.SCVS_DOCKER_GATEWAY = saved;
+    }
+  });
+
   it("logs in to the image's own registry, in its own region", async () => {
     const { calls, runner } = recordingRunner([{ stdout: `${TOKEN}\n` }, {}]);
 

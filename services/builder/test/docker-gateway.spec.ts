@@ -15,6 +15,7 @@ const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
 class FakeDaemon {
   readonly calls: string[] = [];
   readonly removed: string[] = [];
+  readonly registryAuth: (string | undefined)[] = [];
   private readonly exits = new Map<string, () => void>();
   private server?: Server;
 
@@ -27,6 +28,10 @@ class FakeDaemon {
         const id = path.split("/")[2] ?? "";
         if (path === "/_ping") return void res.writeHead(200).end("OK");
         if (path === "/version") return json(res, 200, { Version: "25.0.5", ApiVersion: "1.44" });
+        if (path === "/images/create") {
+          this.registryAuth.push(req.headers["x-registry-auth"] as string | undefined);
+          return json(res, 200, { status: "Downloaded newer image" });
+        }
         if (path === "/containers/create") return json(res, 201, { Id: randomBytes(32).toString("hex"), Warnings: [] });
         if (path.endsWith("/wait")) {
           res.writeHead(200, { "content-type": "application/json" });
@@ -95,18 +100,27 @@ describe("docker gateway in front of a daemon", () => {
   let gateway: DockerGateway;
   let socket: string;
   let logged: { event: string; fields: Record<string, unknown> }[];
+  let ecrRequests: { host: string; region: string }[];
+  let ecrFails: boolean;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "scvs-gw-"));
     daemon = new FakeDaemon();
     await daemon.listen(join(dir, "d.sock"));
     logged = [];
+    ecrRequests = [];
+    ecrFails = false;
     gateway = new DockerGateway({
       upstreamSocket: join(dir, "d.sock"),
       workspaces: new WorkspaceStore({ parent: dir, empty: emptyInProcess }),
       sandboxUser: "65532:65532",
       log: (event, fields) => logged.push({ event, fields }),
       maxBodyBytes: 64 * 1024,
+      ecrAuth: async (registry) => {
+        ecrRequests.push(registry);
+        if (ecrFails) throw new Error("no instance role");
+        return "gateway-token";
+      },
     });
     socket = join(dir, "g.sock");
     await gateway.listen(socket);
@@ -183,6 +197,27 @@ describe("docker gateway in front of a daemon", () => {
     expect(daemon.calls).toEqual([]);
   });
 
+  it("authenticates an ECR pull itself, replacing whatever the runner sent", async () => {
+    const ecr = "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com";
+    const response = await pull(socket, `${ecr}%2Fsv-dev-composed-environments`, "runner-token");
+
+    expect(response).toBe(200);
+    expect(ecrRequests).toEqual([{ host: ecr, region: "ap-southeast-2" }]);
+    expect(daemon.registryAuth).toEqual(["gateway-token"]);
+  });
+
+  it("asks for no token for a pull from anywhere else", async () => {
+    expect(await pull(socket, "docker.io%2Fstellar%2Fstellar-cli")).toBe(200);
+    expect(ecrRequests).toEqual([]);
+    expect(daemon.registryAuth).toEqual([undefined]);
+  });
+
+  it("refuses an ECR pull it cannot get a token for, before the daemon sees it", async () => {
+    ecrFails = true;
+    expect(await pull(socket, "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com%2Fx")).toBe(502);
+    expect(daemon.calls).toEqual([]);
+  });
+
   it("refuses an oversized request body", async () => {
     const response = await socketCall(socket, "POST", "/v1.44/containers/create", { pad: "x".repeat(128 * 1024) }).catch(
       (error: unknown) => ({ status: 0, body: String(error) }),
@@ -222,6 +257,25 @@ describe("docker gateway in front of a daemon", () => {
     }
   });
 });
+
+function pull(socket: string, fromImage: string, registryAuth?: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        socketPath: socket,
+        method: "POST",
+        path: `/v1.44/images/create?fromImage=${fromImage}&tag=sha256%3A${"a".repeat(64)}`,
+        headers: registryAuth ? { "x-registry-auth": registryAuth } : {},
+      },
+      (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode ?? 0));
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 function attach(socket: string, id: string): Promise<string> {
   return new Promise((resolve, reject) => {
