@@ -1,4 +1,4 @@
-FROM node:24-slim AS build
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS build
 WORKDIR /app
 
 # Prisma picks its schema engine by the libssl it detects here, so it must match the runtime stage's.
@@ -22,7 +22,7 @@ RUN pnpm --filter @scvs/verification-svc... \
          --filter @scvs/orchestrator-svc... \
          --filter @scvs/query-svc... run build
 
-FROM node:24-slim AS runtime-deps
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime-deps
 WORKDIR /app
 
 RUN apt-get update \
@@ -57,7 +57,7 @@ RUN corepack enable \
 # pnpm never runs @prisma/engines' postinstall, so the CLI fetches its schema engine on first use; do it here, as root.
 RUN cd packages/db && ./node_modules/.bin/prisma --version >/dev/null
 
-FROM node:24-slim
+FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
 ENV NODE_ENV=production
 WORKDIR /app
 

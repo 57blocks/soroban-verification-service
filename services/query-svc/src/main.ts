@@ -9,7 +9,7 @@ import { SwaggerModule } from "@nestjs/swagger";
 import { ThrottlerStorage } from "@nestjs/throttler";
 import cors from "cors";
 import helmet from "helmet";
-import { adapterRouteThrottle } from "@scvs/http";
+import { adapterRouteThrottle, IDENTITY_BODY_PARSERS, refuseEncodedRequestBodies } from "@scvs/http";
 import { AppModule } from "./app.module.js";
 import { AggregationSyncService } from "./modules/aggregation/aggregation-sync.service.js";
 import { buildOpenApiDocument } from "./openapi.js";
@@ -20,7 +20,11 @@ const logger = new ScvsLogger("query-svc-bootstrap");
 async function bootstrap(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: process.env.NODE_ENV === "test" ? false : logger,
+    bodyParser: false,
   });
+
+  app.use(refuseEncodedRequestBodies());
+  for (const [type, options] of IDENTITY_BODY_PARSERS) app.useBodyParser(type, options);
 
   const configService = app.get<AppConfigService>(ConfigService);
 
