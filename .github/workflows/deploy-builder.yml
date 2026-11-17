@@ -167,7 +167,10 @@ jobs:
         env:
           BUILDER_VCPU: "1"
           BUILDER_MEMORY_MIB: "1700"
-          # The docker gateway only relays the runner's few daemon calls.
+          # The docker gateway only relays the runner's few daemon calls. Batch on EC2 refuses a container
+          # without a whole vCPU, so the job reserves 3 vCPU in all; the builder hosts are sized for that
+          # (builder_job_vcpus in the deployment's batch module).
+          GATEWAY_VCPU: "1"
           GATEWAY_MEMORY_MIB: "256"
         run: |
           set -euo pipefail
@@ -264,6 +267,7 @@ jobs:
                         \"command\": [\"docker-gateway\"],
                         \"essential\": false,
                         \"resourceRequirements\": [
+                          {\"type\": \"VCPU\", \"value\": \"${GATEWAY_VCPU}\"},
                           {\"type\": \"MEMORY\", \"value\": \"${GATEWAY_MEMORY_MIB}\"}
                         ],
                         \"environment\": [
