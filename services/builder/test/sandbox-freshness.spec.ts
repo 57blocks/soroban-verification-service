@@ -150,6 +150,7 @@ async function runPrefetch(): Promise<{
     finalSandbox: dockerFinalSandboxOptions(input.config),
     vendorDir,
     egressPolicy: { ok: true, allowed_hosts: ["crates.io"] },
+    cidFile: join(vendorDir, "..", "prefetch.cid"),
   });
 
   return { command: result.command, sourceRoot, vendorDir, cargoHomeDir };

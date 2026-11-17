@@ -84,6 +84,7 @@ async function runPrefetch(rustupToolchain?: string): Promise<{
     vendorDir,
     egressPolicy: { ok: true, allowed_hosts: ["crates.io"] },
     ...(rustupToolchain ? { rustupToolchain } : {}),
+    cidFile: join(jobDir, "prefetch.cid"),
   });
 
   return { command: result.command, vendorDir, cargoHomeDir, jobDir };
