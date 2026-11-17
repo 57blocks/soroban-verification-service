@@ -49,10 +49,12 @@ export function evaluatePrefetchUrl(
     };
   }
 
-  if (!["https:", "ssh:", "git:"].includes(url.protocol)) {
+  // The prefetch stage's only way out is a proxy that tunnels to port 443, so an ssh or git source could not be
+  // fetched anyway; refusing it here says why.
+  if (url.protocol !== "https:") {
     return {
       ok: false,
-      reason: `Dependency prefetch URL uses a disallowed scheme: ${url.protocol}`,
+      reason: `Dependency prefetch URL uses a disallowed scheme: ${url.protocol} (only https sources can be fetched)`,
     };
   }
 

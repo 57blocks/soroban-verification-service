@@ -8,7 +8,8 @@ const LEAVES = new Map([
   [SOURCE, "abc123"],
   [VENDOR, "abc123"],
 ]);
-const context = { sandboxUser: "65532:65532", workspaceOfLeaf: (path: string) => LEAVES.get(path) };
+const PREFETCH = "scvs-prefetch-0a1b2c3d4e5f";
+const context = { sandboxUser: "65532:65532", workspaceOfLeaf: (path: string) => LEAVES.get(path), prefetchNetwork: PREFETCH };
 
 /** What the docker 29 CLI sends for the prefetch stage, recorded from a real `docker run`. */
 function cliCreateBody(): Record<string, any> {
@@ -31,14 +32,14 @@ function cliCreateBody(): Record<string, any> {
     Labels: {},
     NetworkingConfig: {
       EndpointsConfig: {
-        default: { IPAMConfig: null, Links: null, Aliases: null, DriverOpts: null, GwPriority: 0, NetworkID: "", IPAddress: "", DNSNames: null },
+        [PREFETCH]: { IPAMConfig: null, Links: null, Aliases: null, DriverOpts: null, GwPriority: 0, NetworkID: "", IPAddress: "", DNSNames: null },
       },
     },
     HostConfig: {
       Binds: null,
       ContainerIDFile: "/var/tmp/scvs-build-x/prefetch.cid",
       LogConfig: { Type: "", Config: {} },
-      NetworkMode: "default",
+      NetworkMode: PREFETCH,
       PortBindings: {},
       RestartPolicy: { Name: "no", MaximumRetryCount: 0 },
       AutoRemove: true,
@@ -149,6 +150,13 @@ describe("docker gateway: creating a container", () => {
     expect(create(cliCreateBody())).toEqual({ ok: true, workspaces: ["abc123"] });
   });
 
+  it("lets a gateway with no prefetch network give a container no network at all", () => {
+    const body = cliCreateBody();
+    const result = checkCreate("/v1.44/containers/create", body, { ...context, prefetchNetwork: undefined });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toContain('HostConfig.NetworkMode must be "none"');
+  });
+
   it("accepts a probe: no network and no mount", () => {
     const body = cliCreateBody();
     body.HostConfig.NetworkMode = "none";
@@ -172,10 +180,16 @@ describe("docker gateway: creating a container", () => {
     ["no memory limit", (b) => (b.HostConfig.Memory = 0), "HostConfig.Memory must be a positive limit"],
     ["no cpu limit", (b) => delete b.HostConfig.NanoCpus, "HostConfig.NanoCpus must be a positive limit"],
     ["no pids limit", (b) => (b.HostConfig.PidsLimit = -1), "HostConfig.PidsLimit must be a positive limit"],
-    ["the host network", (b) => (b.HostConfig.NetworkMode = "host"), "HostConfig.NetworkMode must be one of"],
-    ["another container's network", (b) => (b.HostConfig.NetworkMode = `container:${ID}`), "HostConfig.NetworkMode must be one of"],
+    ["the host network", (b) => (b.HostConfig.NetworkMode = "host"), `HostConfig.NetworkMode must be "none" or "${PREFETCH}"`],
+    ["another container's network", (b) => (b.HostConfig.NetworkMode = `container:${ID}`), "HostConfig.NetworkMode must be"],
+    ["the default bridge", (b) => (b.HostConfig.NetworkMode = "default"), "HostConfig.NetworkMode must be"],
+    ["the bridge by name", (b) => (b.HostConfig.NetworkMode = "bridge"), "HostConfig.NetworkMode must be"],
+    ["no network mode, which is the default bridge", (b) => delete b.HostConfig.NetworkMode, "HostConfig.NetworkMode must be"],
     ["a named network", (b) => (b.NetworkingConfig.EndpointsConfig = { scvs: {} }), "may not join scvs"],
-    ["an endpoint alias", (b) => (b.NetworkingConfig.EndpointsConfig.default.Aliases = ["x"]), "Aliases must be unset"],
+    ["a second endpoint", (b) => (b.NetworkingConfig.EndpointsConfig.bridge = {}), "may not join bridge"],
+    ["an endpoint alias", (b) => (b.NetworkingConfig.EndpointsConfig[PREFETCH].Aliases = ["x"]), "Aliases must be unset"],
+    ["a fixed address", (b) => (b.NetworkingConfig.EndpointsConfig[PREFETCH].IPAMConfig = { IPv4Address: "172.30.0.9" }), "IPAMConfig must be unset"],
+    ["an extra host entry", (b) => (b.HostConfig.ExtraHosts = ["crates.io:10.0.0.1"]), "HostConfig.ExtraHosts must be unset"],
     ["the host pid namespace", (b) => (b.HostConfig.PidMode = "host"), "HostConfig.PidMode must be unset"],
     ["the host ipc namespace", (b) => (b.HostConfig.IpcMode = "host"), "HostConfig.IpcMode must be one of"],
     ["the host uts namespace", (b) => (b.HostConfig.UTSMode = "host"), "HostConfig.UTSMode must be unset"],

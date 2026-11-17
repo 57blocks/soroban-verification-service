@@ -52,9 +52,29 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
 
     expect(command.some((arg) => arg.startsWith("RUSTUP_TOOLCHAIN="))).toBe(false);
   });
+
+  it("joins the gateway's prefetch network and reaches out only through its proxy", async () => {
+    const egress = { network: "scvs-prefetch-0a1b2c3d4e5f", proxy: "http://scvs-egress-proxy:3128" };
+    const { command } = await runPrefetch(undefined, egress);
+
+    expect(command.filter((arg) => arg === "--network")).toHaveLength(1);
+    expect(command[command.indexOf("--network") + 1]).toBe(egress.network);
+    for (const name of ["CARGO_HTTP_PROXY", "HTTPS_PROXY", "https_proxy"]) {
+      expect(command).toContain(`${name}=${egress.proxy}`);
+    }
+    // Before the image: everything after it is cargo's own arguments.
+    expect(command.indexOf("--network")).toBeLessThan(command.indexOf("vendor"));
+  });
+
+  it("without the gateway, takes Docker's default network and no proxy", async () => {
+    const { command } = await runPrefetch(undefined);
+
+    expect(command).not.toContain("--network");
+    expect(command.some((arg) => /PROXY=/i.test(arg))).toBe(false);
+  });
 });
 
-async function runPrefetch(rustupToolchain?: string): Promise<{
+async function runPrefetch(rustupToolchain?: string, egress?: { network: string; proxy: string }): Promise<{
   command: string[];
   vendorDir: string;
   cargoHomeDir: string;
@@ -85,6 +105,7 @@ async function runPrefetch(rustupToolchain?: string): Promise<{
     egressPolicy: { ok: true, allowed_hosts: ["crates.io"] },
     ...(rustupToolchain ? { rustupToolchain } : {}),
     cidFile: join(jobDir, "prefetch.cid"),
+    ...(egress ? { egress } : {}),
   });
 
   return { command: result.command, vendorDir, cargoHomeDir, jobDir };

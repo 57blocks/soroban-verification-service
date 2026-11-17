@@ -129,14 +129,20 @@ for exact mechanics — this list is not exhaustive):
   sandbox stage needs: creating a container in the shape above, attaching to, waiting on, starting,
   killing and removing containers it created, and pulling an image by digest, which it authenticates
   itself when the image is in ECR. It refuses everything else, including `exec`, listing containers, host namespaces, devices, privileged
-  mode, and any bind that is not one of the job's workspace directories. Those directories sit under a
+  mode, any bind that is not one of the job's workspace directories, and any network but none or the
+  job's internal prefetch network. Those directories sit under a
   root-owned directory, so the runner cannot swap one for a link before a stage binds it. The daemon still
   runs as root, so a container escape through the kernel reaches the host.
 - **Constrained dependency prefetch.** Before `cargo vendor` runs (ahead of the final no-network
   build), every `Cargo.toml` and `Cargo.lock` is parsed as TOML and each source it names is checked:
-  private, local and cloud-metadata hosts are refused, and only hosts on `SCVS_PREFETCH_ALLOWED_HOSTS`
-  pass. A file that cannot be read or parsed fails the job. This is a check on what the source asks
-  for; the prefetch container's network is not yet restricted to those hosts.
+  only `https` sources pass, private, local and cloud-metadata hosts are refused, and only hosts on
+  `SCVS_PREFETCH_ALLOWED_HOSTS` pass. A file that cannot be read or parsed fails the job. The network
+  enforces the same list: the prefetch container sits on an internal Docker network with no route off
+  the host, and its only way out is an egress proxy the docker gateway runs for the job. The proxy opens
+  a tunnel only to port 443 of a host on the list, resolves the name itself, refuses it if any address
+  it resolves to is not public, and connects to the address it checked. The builder hosts also drop
+  traffic from any Docker bridge to a non-public address or to the host itself. Whatever the submitted
+  source or its dependency graph names, nothing else is reachable from the prefetch stage.
 - **Integrity checks on submitted source.** Both source shapes a submission can take — a private
   upload and a `source_uri` archive — are verified against the caller-provided SHA-256 before use, and
   re-hashed inside the sandbox against the bytes actually fetched. A `source_uri` job proves it holds

@@ -146,8 +146,12 @@ describe("evaluatePrefetchUrl — cargo's `<kind>+<url>` source forms", () => {
   it("still refuses a disallowed scheme and a private host", () => {
     expect(evaluatePrefetchUrl("ftp://crates.io/x", ALLOWED)).toEqual({
       ok: false,
-      reason: "Dependency prefetch URL uses a disallowed scheme: ftp:",
+      reason: "Dependency prefetch URL uses a disallowed scheme: ftp: (only https sources can be fetched)",
     });
+    // The prefetch proxy tunnels to port 443 only.
+    for (const url of ["ssh://git@github.com/org/repo", "git://github.com/org/repo", "git+ssh://git@github.com/org/repo"]) {
+      expect(evaluatePrefetchUrl(url, ALLOWED)).toMatchObject({ ok: false, reason: expect.stringContaining("only https sources") });
+    }
     expect(evaluatePrefetchUrl("https://169.254.169.254/latest/meta-data", ALLOWED)).toEqual({
       ok: false,
       reason: "Dependency prefetch URL targets a private, local, or metadata host: 169.254.169.254",

@@ -5,6 +5,7 @@ import {
   RUNNER_ONLY_LEAVES,
   WORKSPACE_LEAVES,
   WORKSPACES_PATH,
+  type PrefetchEgress,
   type WorkspaceDescriptor,
   type WorkspaceLeaf,
   type WorkspaceLeaves,
@@ -19,7 +20,11 @@ export function dockerGatewaySocket(): string | undefined {
   return process.env.SCVS_DOCKER_GATEWAY?.trim() || undefined;
 }
 
-export type SandboxWorkspace = { root: string; leaves: WorkspaceLeaves };
+/**
+ * `prefetch` is set through the gateway: the internal network the prefetch stage joins and the proxy that is its
+ * only way out. Without the gateway the prefetch stage takes Docker's default bridge, as local development does.
+ */
+export type SandboxWorkspace = { root: string; leaves: WorkspaceLeaves; prefetch?: PrefetchEgress };
 
 /**
  * The directories one rebuild binds into its sandbox containers. Through the gateway they sit under a root
@@ -37,7 +42,10 @@ export async function createSandboxWorkspace(input: {
       throw new Error(`the docker gateway did not create a sandbox workspace (${response.status})`);
     }
     input.sandboxWrites?.workspaces?.push(workspace.id);
-    return { root: workspace.root, leaves: workspace.leaves };
+    if (!workspace.prefetch?.network || !workspace.prefetch.proxy) {
+      throw new Error("the docker gateway offers no prefetch network, so dependencies cannot be fetched");
+    }
+    return { root: workspace.root, leaves: workspace.leaves, prefetch: workspace.prefetch };
   }
 
   const root = await realpath(await mkdtemp(join(tmpdir(), "scvs-sandbox-")));

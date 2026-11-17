@@ -217,6 +217,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     // Unconditional: this stage takes only trusted config, and a recorded `bldopt --env` is submitted input.
     rustupToolchain: toolchain.toolchain,
     cidFile: join(jobDir, "prefetch.cid"),
+    egress: workspace.prefetch,
   });
   if (!prefetch.ok) {
     return cliFailure(

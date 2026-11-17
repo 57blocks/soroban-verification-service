@@ -2,6 +2,7 @@ import { createServer, request, type IncomingHttpHeaders, type IncomingMessage, 
 import type { Duplex } from "node:stream";
 import type { LogFields } from "@scvs/core";
 import { checkCreate, checkPull, routeRequest, type Denial } from "./policy.js";
+import type { PrefetchEgress } from "./protocol.js";
 import type { WorkspaceStore } from "./workspaces.js";
 
 export type GatewayLog = (event: string, fields: LogFields) => void;
@@ -18,6 +19,11 @@ export type DockerGatewayOptions = {
    * which the job's own containers cannot reach, so the runner holds no AWS credential at all.
    */
   ecrAuth?: (registry: { host: string; region: string }) => Promise<string>;
+  /**
+   * The internal network a prefetch stage joins, and its proxy. Without it a container may join no network
+   * at all, so a prefetch stage cannot run.
+   */
+  prefetch?: PrefetchEgress;
 };
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -108,6 +114,7 @@ export class DockerGateway {
         const check = checkCreate(req.url ?? "", parseJson(body), {
           sandboxUser: this.options.sandboxUser,
           workspaceOfLeaf: (path) => workspaces.workspaceOfLeaf(path),
+          prefetchNetwork: this.options.prefetch?.network,
         });
         if (!check.ok) throw refused(403, check);
         return this.forward(req, res, body, (status, response) => {
@@ -127,7 +134,7 @@ export class DockerGateway {
       case "workspace-create": {
         const workspace = await this.options.workspaces.create();
         this.options.log("workspace_created", { workspace: workspace.id });
-        return sendJson(res, 201, workspace);
+        return sendJson(res, 201, this.options.prefetch ? { ...workspace, prefetch: this.options.prefetch } : workspace);
       }
       case "workspace-delete": {
         if (!this.options.workspaces.isLive(route.id)) throw new RequestRefused(404, `no workspace ${route.id}`);

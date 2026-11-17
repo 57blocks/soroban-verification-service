@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { ScvsLogger, stderrOnlySink } from "@scvs/core";
 import { runCommand } from "@scvs/core/process";
-import { SANDBOX_USER } from "./modules/builder/run-cli.config.js";
+import { SANDBOX_USER, prefetchAllowedHosts } from "./modules/builder/run-cli.config.js";
 import { DockerGateway } from "./modules/docker-gateway/gateway.js";
 import { encodeRegistryAuth } from "./modules/docker-gateway/policy.js";
+import { PrefetchEgressHost } from "./modules/docker-gateway/prefetch-egress.js";
 import { emptyInContainer } from "./modules/docker-gateway/upstream.js";
 import { WorkspaceStore, type WorkspaceOwner } from "./modules/docker-gateway/workspaces.js";
 
@@ -27,6 +28,17 @@ async function main(): Promise<void> {
   const parent = realpathSync(tmpdir());
   requireUnrenamable(parent);
 
+  // Before the socket exists: the runner waits for it, so no prefetch stage can start without its network.
+  const egress = new PrefetchEgressHost({
+    socket: HOST_DOCKER_SOCKET,
+    image,
+    allowedHosts: prefetchAllowedHosts(),
+    user: SANDBOX_USER,
+    log: (event, fields) => logger.log(event, fields),
+    forward: (line) => process.stderr.write(`${line}\n`),
+  });
+  const prefetch = await egress.start();
+
   mkdirSync(dirname(socket), { recursive: true });
   rmSync(socket, { force: true });
   const gateway = new DockerGateway({
@@ -35,16 +47,23 @@ async function main(): Promise<void> {
     sandboxUser: SANDBOX_USER,
     log: (event, fields) => logger.log(event, fields),
     ecrAuth: ecrRegistryAuth,
+    prefetch,
   });
-  await gateway.listen(socket);
-  chownSync(socket, runner.uid, runner.gid);
-  chmodSync(socket, 0o600);
+  try {
+    await gateway.listen(socket);
+    chownSync(socket, runner.uid, runner.gid);
+    chmodSync(socket, 0o600);
+  } catch (error) {
+    await egress.stop();
+    throw error;
+  }
   logger.log("gateway_listening", { socket, workspace_parent: parent });
 
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.once(signal, () => {
       gateway
         .shutdown()
+        .then(() => egress.stop())
         .catch((error: unknown) => logger.error("gateway_shutdown_failed", { detail: String(error) }))
         .finally(() => process.exit(0));
     });
