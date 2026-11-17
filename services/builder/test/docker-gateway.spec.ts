@@ -10,6 +10,7 @@ import { socketCall } from "../src/modules/docker-gateway/socket-call.js";
 import { WorkspaceStore, emptyInProcess } from "../src/modules/docker-gateway/workspaces.js";
 
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
+const PREFETCH = { network: "scvs-prefetch-0a1b2c3d4e5f", proxy: "http://scvs-egress-proxy:3128" };
 
 /** Just enough of the daemon's API for one `docker run --rm`, recording every call that reaches it. */
 class FakeDaemon {
@@ -121,6 +122,7 @@ describe("docker gateway in front of a daemon", () => {
         if (ecrFails) throw new Error("no instance role");
         return "gateway-token";
       },
+      prefetch: PREFETCH,
     });
     socket = join(dir, "g.sock");
     await gateway.listen(socket);
@@ -158,6 +160,24 @@ describe("docker gateway in front of a daemon", () => {
       `POST /containers/${id}/wait`,
       `POST /containers/${id}/start`,
     ]);
+  });
+
+  it("hands the runner the prefetch network with each workspace", async () => {
+    expect((await newWorkspace()).prefetch).toEqual(PREFETCH);
+  });
+
+  it("lets a container join the prefetch network, never a bridge with a route out", async () => {
+    const workspace = await newWorkspace();
+    const onPrefetch = sandboxBody(workspace.leaves.source);
+    (onPrefetch.HostConfig as Record<string, unknown>).NetworkMode = PREFETCH.network;
+    expect((await socketCall(socket, "POST", "/v1.44/containers/create", onPrefetch)).status).toBe(201);
+
+    const onBridge = sandboxBody(workspace.leaves.source);
+    (onBridge.HostConfig as Record<string, unknown>).NetworkMode = "bridge";
+    const refused = await socketCall(socket, "POST", "/v1.44/containers/create", onBridge);
+    expect(refused.status).toBe(403);
+    expect(JSON.stringify(refused.body)).toContain("HostConfig.NetworkMode must be");
+    expect(daemon.calls).toEqual(["POST /containers/create"]);
   });
 
   it("refuses a container in any other shape before the daemon sees it", async () => {

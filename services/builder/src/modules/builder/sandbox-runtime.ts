@@ -9,6 +9,7 @@ import { dockerCliOptions } from "./docker-env.js";
 import { runSandboxContainer } from "./sandbox-container.js";
 import { bindMount } from "./bind-source.js";
 import { dockerGatewaySocket, waitForDockerGateway } from "./sandbox-workspace.js";
+import type { PrefetchEgress } from "../docker-gateway/protocol.js";
 
 const DOCKER_GATEWAY_START_MS = 30_000;
 
@@ -85,7 +86,7 @@ export function summarizeDockerCommand(input: {
   hasEnv: boolean;
   resourceLimits: DockerResourceLimits;
   finalSandbox?: DockerFinalSandboxOptions;
-  network?: "none";
+  network?: string;
   entrypoint?: string;
   sourceMount?: "/source" | "/source:ro";
   vendorMount?: "/vendor" | "/vendor:ro";
@@ -151,6 +152,8 @@ export async function prefetchCargoDependencies(input: {
   rustupToolchain?: string;
   /** Inside the job directory, which no container mounts. */
   cidFile: string;
+  /** The gateway's internal prefetch network and its proxy. Unset only without the gateway. */
+  egress?: PrefetchEgress;
 }): Promise<
   | { ok: true; result: CommandResult; command: string[]; commandSummary: string }
   | { ok: false; result: CommandResult; command: string[]; commandSummary: string }
@@ -172,9 +175,12 @@ export async function prefetchCargoDependencies(input: {
     ...bindMount(input.cargoHomeDir, PREFETCH_CARGO_HOME),
     "-w",
     "/",
+    ...(input.egress ? ["--network", input.egress.network] : []),
     "-e",
     `CARGO_HOME=${PREFETCH_CARGO_HOME}`,
     ...(input.rustupToolchain ? ["-e", `RUSTUP_TOOLCHAIN=${input.rustupToolchain}`] : []),
+    // The network has no other way out. Cargo's own setting covers its git fetches as well as the registry.
+    ...(input.egress ? proxyEnv(input.egress.proxy) : []),
     input.input.build.image,
     "vendor",
     "--locked",
@@ -194,6 +200,7 @@ export async function prefetchCargoDependencies(input: {
     vendorMount: "/vendor",
     outMount: PREFETCH_CARGO_HOME,
     workDir: "/",
+    network: input.egress?.network,
   });
   const result = await runSandboxContainer(command, {
     cidFile: input.cidFile,
@@ -202,6 +209,10 @@ export async function prefetchCargoDependencies(input: {
   return result.exit_code === 0
     ? { ok: true, result, command, commandSummary }
     : { ok: false, result, command, commandSummary };
+}
+
+function proxyEnv(proxy: string): string[] {
+  return ["-e", `CARGO_HTTP_PROXY=${proxy}`, "-e", `HTTPS_PROXY=${proxy}`, "-e", `https_proxy=${proxy}`];
 }
 
 export async function requireExtractedSourceRoot(sourcePath: string): Promise<

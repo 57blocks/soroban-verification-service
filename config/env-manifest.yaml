@@ -2275,7 +2275,7 @@ services:
         {
           type: csv,
           default: ~,
-          note: comma-separated allowlist for `cargo vendor` prefetch,
+          note: "comma-separated allowlist for `cargo vendor` prefetch; the runner checks sources against it, and the docker gateway hands it to the egress proxy, which enforces it on the network. Set it on both containers, or on neither",
         }
       SCVS_SOURCE_FETCH_TIMEOUT_MS: { type: number, default: 120000 }
       SCVS_TAR_TIMEOUT_MS: { type: number, default: 30000 }

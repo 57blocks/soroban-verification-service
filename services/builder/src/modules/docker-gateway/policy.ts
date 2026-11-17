@@ -99,13 +99,16 @@ export type CreateContext = {
   sandboxUser: string;
   /** The live workspace a bind source is a leaf of, if it is one. */
   workspaceOfLeaf: (path: string) => string | undefined;
+  /** The job's internal prefetch network, the one network other than `none` a container may join. */
+  prefetchNetwork?: string;
 };
 
 export type CheckedCreate = { ok: true; workspaces: string[] };
 
 /**
  * A container is created only in the sandbox's shape: its own uid, no capabilities, no privilege escalation, a
- * read-only root, resource limits, no host namespace or device, and binds of workspace leaves only.
+ * read-only root, resource limits, no host namespace or device, binds of workspace leaves only, and either no
+ * network or the job's internal prefetch network.
  */
 export function checkCreate(url: string, body: unknown, context: CreateContext): CheckedCreate | Denial {
   const query = new URL(url, "http://gateway").searchParams;
@@ -121,7 +124,7 @@ export function checkCreate(url: string, body: unknown, context: CreateContext):
   if (!isRecord(host)) {
     problems.push("HostConfig is missing");
   } else {
-    checkFields("HostConfig.", host, HOST_RULES, problems, ["Mounts"]);
+    checkFields("HostConfig.", host, { ...HOST_RULES, NetworkMode: networkModeRule(context) }, problems, ["Mounts"]);
   }
 
   const workspaces = new Set<string>();
@@ -137,7 +140,7 @@ export function checkCreate(url: string, body: unknown, context: CreateContext):
     }
   }
 
-  checkNetworking(body.NetworkingConfig, problems);
+  checkNetworking(body.NetworkingConfig, isRecord(host) ? host.NetworkMode : undefined, problems);
 
   if (problems.length) return deny(problems.join("; "));
   return { ok: true, workspaces: [...workspaces] };
@@ -207,7 +210,6 @@ const HOST_RULES: Record<string, Rule> = {
   // An empty list unmasks /proc and /sys paths; only Docker's default may apply.
   MaskedPaths: absent,
   ReadonlyPaths: absent,
-  NetworkMode: oneOf("", "default", "bridge", "none"),
   IpcMode: oneOf("", "private", "none"),
   CgroupnsMode: oneOf("", "private"),
   Runtime: oneOf("", "runc"),
@@ -283,7 +285,13 @@ const BIND_OPTION_RULES: Record<string, Rule> = {
   ReadOnlyForceRecursive: any,
 };
 
-function checkNetworking(value: unknown, problems: string[]): void {
+/** No network, or the internal one whose only way out is the egress proxy. Never a bridge with a route out. */
+function networkModeRule(context: CreateContext): Rule {
+  const allowed = context.prefetchNetwork ? ["none", context.prefetchNetwork] : ["none"];
+  return (value) => (typeof value === "string" && allowed.includes(value) ? undefined : `must be ${allowed.map((v) => JSON.stringify(v)).join(" or ")}`);
+}
+
+function checkNetworking(value: unknown, networkMode: unknown, problems: string[]): void {
   if (value === undefined || value === null) return;
   if (!isRecord(value)) {
     problems.push("NetworkingConfig is not an object");
@@ -297,7 +305,8 @@ function checkNetworking(value: unknown, problems: string[]): void {
     return;
   }
   for (const [network, settings] of Object.entries(endpoints)) {
-    if (!["none", "bridge", "default"].includes(network)) {
+    // HostConfig.NetworkMode is checked above; an endpoint may only repeat it.
+    if (network !== networkMode) {
       problems.push(`NetworkingConfig.EndpointsConfig may not join ${network}`);
       continue;
     }

@@ -11,6 +11,7 @@ import { DockerGateway } from "../src/modules/docker-gateway/gateway.js";
 import { WorkspaceStore, emptyInProcess } from "../src/modules/docker-gateway/workspaces.js";
 
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
+const PREFETCH = { network: "scvs-prefetch-0a1b2c3d4e5f", proxy: "http://scvs-egress-proxy:3128" };
 
 describe("the runner through the docker gateway", () => {
   const saved = { ...process.env };
@@ -26,6 +27,7 @@ describe("the runner through the docker gateway", () => {
       workspaces: new WorkspaceStore({ parent: dir, empty: emptyInProcess }),
       sandboxUser: "65532:65532",
       log: () => undefined,
+      prefetch: PREFETCH,
     });
     await gateway.listen(socket);
     process.env.SCVS_DOCKER_GATEWAY = socket;
@@ -56,6 +58,7 @@ describe("the runner through the docker gateway", () => {
     const workspace = await createSandboxWorkspace({ workDirs, sandboxWrites: writes });
 
     expect(workspace.root.startsWith(`${dir}/scvs-sandbox-`)).toBe(true);
+    expect(workspace.prefetch).toEqual(PREFETCH);
     expect(workDirs).toEqual([]);
     expect(writes.dirs).toEqual([]);
     expect(writes.workspaces).toHaveLength(1);
@@ -63,6 +66,24 @@ describe("the runner through the docker gateway", () => {
     await writeFile(join(workspace.leaves.out, "left-behind"), "x");
     expect(await removeSandboxWrites(writes)).toEqual([]);
     await expect(stat(workspace.root)).rejects.toThrow();
+  });
+
+  it("will not build behind a gateway that offers no prefetch network", async () => {
+    const bare = new DockerGateway({
+      upstreamSocket: join(dir, "no-daemon.sock"),
+      workspaces: new WorkspaceStore({ parent: dir, empty: emptyInProcess }),
+      sandboxUser: "65532:65532",
+      log: () => undefined,
+    });
+    process.env.SCVS_DOCKER_GATEWAY = join(dir, "bare.sock");
+    await bare.listen(process.env.SCVS_DOCKER_GATEWAY);
+    try {
+      await expect(createSandboxWorkspace({ workDirs: [], sandboxWrites: { dirs: [], workspaces: [] } })).rejects.toThrow(
+        "offers no prefetch network",
+      );
+    } finally {
+      await bare.shutdown();
+    }
   });
 
   it("reports a workspace the gateway could not delete", async () => {
