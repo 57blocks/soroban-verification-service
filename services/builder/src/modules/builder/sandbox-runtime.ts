@@ -7,12 +7,14 @@ import { runCommand } from "@scvs/core/process";
 import type { CommandResult } from "@scvs/core/process";
 import { cliTimeoutMs, dependencyPrefetchTimeoutMs, dockerCheckTimeoutMs } from "./run-cli.config.js";
 import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPolicyOk, RunCliInput, RunCliRuntimeConfig } from "./run-cli.types.js";
+import { dockerCliOptions } from "./docker-env.js";
 
 export async function checkDockerAvailable(config?: RunCliRuntimeConfig): Promise<
   | { ok: true; result: CommandResult }
   | { ok: false; result: CommandResult }
 > {
   const result = await runCommand(["docker", "ps"], {
+    ...dockerCliOptions(),
     timeout_ms: dockerCheckTimeoutMs(config),
     mirrorOutput: false,
     // None of it belongs in a published build log.
@@ -52,6 +54,7 @@ export async function authenticateForImage(
   }
 
   const login = await runner(["docker", "login", "--username", "AWS", "--password-stdin", registry], {
+    ...dockerCliOptions(),
     timeout_ms: dockerCheckTimeoutMs(config),
     stdin: password.stdout.trim(),
     mirrorOutput: false,
@@ -186,7 +189,10 @@ export async function prefetchCargoDependencies(input: {
     outMount: PREFETCH_CARGO_HOME,
     workDir: "/",
   });
-  const result = await runCommand(command, { timeout_ms: dependencyPrefetchTimeoutMs(input.input.config) });
+  const result = await runCommand(command, {
+    ...dockerCliOptions(),
+    timeout_ms: dependencyPrefetchTimeoutMs(input.input.config),
+  });
   return result.exit_code === 0
     ? { ok: true, result, command, commandSummary }
     : { ok: false, result, command, commandSummary };

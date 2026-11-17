@@ -156,3 +156,26 @@ describe("the submit gate and the publish validator agree, by construction", () 
     expect(SEP58_BLDOPT_ENTRY.test("x")).toBe(false);
   });
 });
+
+describe("a --env build option must give its value", () => {
+  const refusal = (bldopt: string[]) => {
+    const result = submit(bldopt);
+    if (result.ok) throw new Error(`expected ${JSON.stringify(bldopt)} to be rejected`);
+    expect(result.error).toBe("policy_rejected");
+    return result.detail;
+  };
+
+  it("refuses a bare name, which docker would fill from the runner's own environment", () => {
+    expect(refusal(["--env=SCVS_JOB_PARAMS_URL"])).toContain("gives no value");
+    expect(refusal(["--release", "--env=SCVS_JOB_PARAMS_JSON"])).toContain("gives no value");
+  });
+
+  it("refuses a variable the verifier reserves, even with a value", () => {
+    expect(refusal(["--env=AWS_REGION=us-east-1"])).toContain("AWS_");
+    expect(refusal(["--env=scvs_anything=1"])).toContain("SCVS_");
+  });
+
+  it("accepts an assignment", () => {
+    expect(submit(["--env=RUSTFLAGS=-Cdebuginfo=0"]).ok).toBe(true);
+  });
+});

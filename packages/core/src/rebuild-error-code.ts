@@ -32,6 +32,7 @@ export const rebuildErrorCodeClass = {
   absolute_manifest_path_not_supported: "policy",
   manifest_path_escapes_source: "policy",
   recorded_build_option_unsupported: "policy",
+  recorded_env_option_refused: "policy",
 
   sandbox_unavailable: "infrastructure",
   toolchain_probe_failed: "infrastructure",

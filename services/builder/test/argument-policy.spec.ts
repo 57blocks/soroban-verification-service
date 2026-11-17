@@ -87,6 +87,16 @@ describe("assembleBuildCommand", () => {
 });
 
 describe("resolveAddedEnvironment", () => {
+  it.each([
+    ["a bare name, which docker fills from the runner's environment", "SCVS_JOB_PARAMS_URL"],
+    ["a reserved name with a value", "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI=/v2/x"],
+    ["a lower-cased reserved name", "docker_host=tcp://1.2.3.4"],
+  ])("refuses %s before any container starts", (_label, entry) => {
+    const result = resolveAddedEnvironment({ recordedEnv: [entry], recordedBuildArgs: [], cargoNetOffline: true });
+
+    expect(result).toMatchObject({ ok: false, reason: "recorded_env_option_refused" });
+  });
+
   it("suppresses the default target dir when the recipe records --target-dir", () => {
     const result = resolveAddedEnvironment({
       recordedEnv: [],

@@ -102,7 +102,9 @@ Record every option you pass to `contract build`, one `bldopt` each, as `--flag=
 - Short flags such as `-p`, and values separated by a space, cannot be replayed.
 - Leave out `--out-dir`; the verifier replaces it with its own. Avoid `--target-dir`, `--offline`,
   `--config` and `--env`: they change the build environment rather than the build, and the console
-  refuses them, so such a contract could be submitted only through the API.
+  refuses them, so such a contract could be submitted only through the API. The API itself refuses an
+  `--env` that names a variable without a value (`--env=NAME`) or sets an `SCVS_`, `AWS_`, `ECS_` or
+  `DOCKER_` variable.
 
 Drop the `source_uri` line if the archive will not stay at a fixed address; the source can be given at
 submission instead.
