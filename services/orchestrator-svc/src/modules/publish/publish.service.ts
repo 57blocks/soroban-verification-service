@@ -208,7 +208,7 @@ export class PublishService {
         bldarg: toBldarg(builtOptions),
         bldopt: toBldopt(builtOptions),
         sourceSha256: artifact.source.source_sha256,
-        sourceUri: job.sourceRef.source_uri,
+        sourceUri: job.sourceRef.visibility === "public" ? job.sourceRef.source_uri : undefined,
         ...(matched ? {} : { rebuiltHash: finalResult.rebuilt_wasm_hash }),
         processedAt: now,
         resultsUrls: [{ type: "report", location: "verifier_self_storage", url: reportUrl, sha256: reportSha256 }],

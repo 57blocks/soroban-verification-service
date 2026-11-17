@@ -79,8 +79,8 @@ export function assembleArtifact(
       source_sha256: canonicalSourceSha256 ?? requireSourceSha256(job),
       is_public: job.sourceRef.visibility === "public",
       ...(sourceFileName ? { source_file_name: sourceFileName } : {}),
-      // The persisted ref: the submitter's declared source_uri, never a presigned URL.
-      ...(job.sourceRef.source_uri ? { source_uri: job.sourceRef.source_uri } : {}),
+      // The persisted ref: the submitter's declared source_uri, never a presigned URL. Private sources keep it private.
+      ...(job.sourceRef.visibility === "public" && job.sourceRef.source_uri ? { source_uri: job.sourceRef.source_uri } : {}),
       ...(chainSourceSha256 ? { chain_source_sha256: chainSourceSha256 } : {}),
     },
     result: publishedResult(result),

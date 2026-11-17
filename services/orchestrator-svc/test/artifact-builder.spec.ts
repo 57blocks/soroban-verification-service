@@ -324,8 +324,8 @@ describe("published build-environment evidence", () => {
   });
 });
 
-describe("ArtifactSource.source_uri is not gated on is_public (follow-up)", () => {
-  it("publishes source_uri for a private submission that declared one", () => {
+describe("ArtifactSource.source_uri is published only for a public submission", () => {
+  it("omits source_uri for a private submission that declared one", () => {
     const privateJobWithUri: JobRecord = {
       ...job,
       sourceRef: {
@@ -347,7 +347,7 @@ describe("ArtifactSource.source_uri is not gated on is_public (follow-up)", () =
 
     expect(artifact.source.is_public).toBe(false);
     expect(artifact.source.source_file_name).toBeUndefined();
-    expect(artifact.source.source_uri).toBe("https://example.com/private-source.tar.gz");
+    expect(artifact.source.source_uri).toBeUndefined();
   });
 
   it("omits source_uri for a private submission that never declared one (e.g. an upload_id-only manifest)", () => {

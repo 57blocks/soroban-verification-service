@@ -74,9 +74,10 @@ the `is_public` flag, or **Publish this source publicly** in the console, and it
 
 - **Private.** The verifier uses the archive for the rebuild and does not publish it. The upload, or
   the copy the verifier fetched from your URL, is deleted when the job ends, on every outcome, once no
-  job still needs it. The result publishes the archive's hash, and its URL if you gave one.
+  job still needs it. The result publishes the archive's hash; the URL you gave stays private too.
   Anyone holding the same archive can still check it against the hash.
-- **Public.** The verifier also stores the archive in its result root, at `sources/<sha256>` with the
+- **Public.** The result also carries the URL you gave, so a public submission's URL may not carry a
+  user name, password, signature or token; such a URL is refused. The verifier also stores the archive in its result root, at `sources/<sha256>` with the
   archive's own extension, and lists it in the status object's `verified_source_code_uris`. Anyone can then download the
   exact source and repeat the rebuild without asking you for it.
 

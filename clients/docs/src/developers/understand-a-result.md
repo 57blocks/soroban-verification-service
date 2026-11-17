@@ -79,7 +79,8 @@ records `source_sha256` rules that out, because no other archive can then be ver
 
 The report records everything the verifier did, so you can check it, or repeat it:
 
-- **`source`**: the archive's hash, whether it was declared public (`is_public`), the URL it came from,
+- **`source`**: the archive's hash, whether it was declared public (`is_public`), the URL it came from
+  (for a public source only),
   and `chain_source_sha256`, the `source_sha256` the contract records on chain, when it records one.
   When `chain_source_sha256` is present, the author bound this archive to the contract before deploying
   it, and no other source could have been verified. When it is absent, anyone could have submitted this
