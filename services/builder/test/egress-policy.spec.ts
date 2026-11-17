@@ -6,7 +6,6 @@ import {
   evaluatePrefetchEgressPolicy,
   evaluatePrefetchUrl,
   evaluateVendoredEgressPolicy,
-  stripTomlComments,
 } from "../src/modules/builder/egress-policy.js";
 
 const ALLOWED = ["crates.io", "github.com", "githubusercontent.com"];
@@ -82,10 +81,48 @@ describe("collectCargoPrefetchUrls — only what cargo dereferences", () => {
     await expect(collectCargoPrefetchUrls(root)).resolves.toEqual([]);
   });
 
-  it("keeps a `#` that is inside a quoted value", () => {
-    expect(stripTomlComments('git = "https://github.com/a/b#frag" # trailing')).toBe(
-      'git = "https://github.com/a/b#frag" ',
-    );
+  it("keeps a `#` that is inside a quoted value", async () => {
+    const root = await sourceTree({
+      "Cargo.toml": '[dependencies]\nfoo = { git = "https://github.com/a/b#frag" } # trailing\n',
+    });
+    await expect(collectCargoPrefetchUrls(root)).resolves.toEqual(["https://github.com/a/b#frag"]);
+  });
+
+  it.each([
+    ["a unicode escape", 'foo = { git = "\\u0068ttps://evil.example.invalid/x.git" }'],
+    ["a multi-line string", 'foo = { git = """https://evil.example.invalid/x.git""" }'],
+    ["a quoted key", 'foo = { "git" = "https://evil.example.invalid/x.git" }'],
+    ["a dotted key", 'foo.git = "https://evil.example.invalid/x.git"'],
+    ["a registry-index", 'foo = { version = "1", registry-index = "sparse+https://evil.example.invalid/" }'],
+  ])("reads a source written with %s as cargo does", async (_label, line) => {
+    const root = await sourceTree({ "Cargo.toml": `[dependencies]\n${line}\n` });
+
+    const urls = await collectCargoPrefetchUrls(root);
+
+    expect(urls.some((url) => url.includes("evil.example.invalid"))).toBe(true);
+    await expect(evaluatePrefetchEgressPolicy(root, { prefetchAllowedHosts: ALLOWED })).resolves.toMatchObject({ ok: false });
+  });
+
+  it("reads the URL a [patch] table is keyed by", async () => {
+    const root = await sourceTree({
+      "Cargo.toml": '[patch."https://evil.example.invalid/x"]\nfoo = { path = "foo" }\n',
+    });
+    await expect(collectCargoPrefetchUrls(root)).resolves.toEqual(["https://evil.example.invalid/x"]);
+  });
+
+  it("refuses a manifest it cannot parse rather than skipping it", async () => {
+    const root = await sourceTree({ "Cargo.toml": "[dependencies\nfoo = 1\n" });
+
+    await expect(evaluatePrefetchEgressPolicy(root, { prefetchAllowedHosts: ALLOWED })).resolves.toMatchObject({
+      ok: false,
+      detail: expect.stringContaining("not valid TOML"),
+    });
+  });
+
+  it("refuses a vendored tree it cannot read rather than passing it", async () => {
+    await expect(
+      evaluateVendoredEgressPolicy(join(tmpdir(), "scvs-egress-missing-vendor-dir"), ALLOWED),
+    ).resolves.toMatchObject({ ok: false, detail: expect.stringContaining("could not be checked") });
   });
 });
 

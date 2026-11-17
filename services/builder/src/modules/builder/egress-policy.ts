@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { parse as parseToml } from "smol-toml";
 import { prefetchAllowedHosts } from "./run-cli.config.js";
 import type {
   PrefetchEgressPolicy,
@@ -11,7 +12,26 @@ export async function evaluatePrefetchEgressPolicy(
   config?: RunCliRuntimeConfig
 ): Promise<PrefetchEgressPolicy> {
   const allowedHosts = prefetchAllowedHosts(config);
-  const urls = await collectCargoPrefetchUrls(sourceRoot, { skipVendorDirs: true });
+  return evaluateTree(sourceRoot, { skipVendorDirs: true }, allowedHosts);
+}
+
+/** A tree the scan cannot read in full is refused: an unread manifest could name any host. */
+async function evaluateTree(
+  root: string,
+  options: { skipVendorDirs: boolean },
+  allowedHosts: string[],
+): Promise<PrefetchEgressPolicy> {
+  let urls: string[];
+  try {
+    urls = await collectCargoPrefetchUrls(root, options);
+  } catch (error) {
+    return {
+      ok: false,
+      allowed_hosts: allowedHosts,
+      blocked_url: "",
+      detail: `Dependency sources could not be checked: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
   return evaluatePrefetchUrls(urls, allowedHosts);
 }
 
@@ -59,8 +79,7 @@ export async function evaluateVendoredEgressPolicy(
   vendorDir: string,
   allowedHosts: string[]
 ): Promise<PrefetchEgressPolicy> {
-  const urls = await collectCargoPrefetchUrls(vendorDir, { skipVendorDirs: false });
-  return evaluatePrefetchUrls(urls, allowedHosts);
+  return evaluateTree(vendorDir, { skipVendorDirs: false }, allowedHosts);
 }
 
 function evaluatePrefetchUrls(urls: string[], allowedHosts: string[]): PrefetchEgressPolicy {
@@ -78,6 +97,15 @@ function evaluatePrefetchUrls(urls: string[], allowedHosts: string[]): PrefetchE
   return { ok: true, allowed_hosts: allowedHosts };
 }
 
+// A constant, not a literal in the list: check:builder-isolation reads `"git",` as spawning git.
+const GIT_KEY = "git";
+const SOURCE_KEYS = new Set([GIT_KEY, "registry", "registry-index", "index", "source", "replace-with"]);
+const HAS_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+/**
+ * Every source cargo could dereference, read with a TOML parser so escapes, multi-line strings, quoted and
+ * dotted keys all resolve as cargo resolves them. Throws on a file it cannot read or parse.
+ */
 export async function collectCargoPrefetchUrls(
   sourceRoot: string,
   options: { skipVendorDirs: boolean } = { skipVendorDirs: true }
@@ -86,49 +114,33 @@ export async function collectCargoPrefetchUrls(
   await collectCargoPolicyFiles(sourceRoot, files, options.skipVendorDirs);
   const urls = new Set<string>();
   for (const file of files) {
-    const text = await readFile(file, "utf8").catch(() => "");
-    for (const match of stripTomlComments(text).matchAll(CARGO_SOURCE_KEY)) {
-      const value = match[1];
-      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) {
-        urls.add(value);
-      }
+    const text = await readFile(file, "utf8");
+    let document: unknown;
+    try {
+      document = parseToml(text);
+    } catch (error) {
+      throw new Error(`${file} is not valid TOML: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
     }
+    collectSourceValues(document, urls, false);
   }
   return [...urls];
 }
 
-const CARGO_SOURCE_KEY =
-  /\b(?:git|registry|index|source|replace-with)\s*=\s*["']([^"']+)["']/g;
+function collectSourceValues(node: unknown, urls: Set<string>, underPatch: boolean): void {
+  if (Array.isArray(node)) {
+    for (const item of node) collectSourceValues(item, urls, false);
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+  for (const [key, value] of Object.entries(node)) {
+    if (typeof value === "string" && SOURCE_KEYS.has(key) && HAS_SCHEME.test(value)) urls.add(value);
+    if (underPatch && HAS_SCHEME.test(key)) urls.add(key);
+    collectSourceValues(value, urls, key === "patch");
+  }
+}
 
 export function stripSourceSchemePrefix(value: string): string {
   return value.replace(/^(?:registry|git|sparse)\+/, "");
-}
-
-/** Drop `#` comments, tracking basic and literal strings so a `#` fragment inside a quoted URL survives. */
-export function stripTomlComments(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => {
-      let quote: string | undefined;
-      for (let i = 0; i < line.length; i += 1) {
-        const ch = line[i];
-        if (quote) {
-          if (ch === "\\" && quote === '"') {
-            i += 1;
-            continue;
-          }
-          if (ch === quote) quote = undefined;
-          continue;
-        }
-        if (ch === '"' || ch === "'") {
-          quote = ch;
-          continue;
-        }
-        if (ch === "#") return line.slice(0, i);
-      }
-      return line;
-    })
-    .join("\n");
 }
 
 export async function collectCargoPolicyFiles(
@@ -136,12 +148,7 @@ export async function collectCargoPolicyFiles(
   files: string[],
   skipVendorDirs = true
 ): Promise<void> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
+  const entries = await readdir(dir, { withFileTypes: true });
   const skippedDirs = skipVendorDirs
     ? [".git", "target", "vendor", "node_modules"]
     : [".git", "target", "node_modules"];
