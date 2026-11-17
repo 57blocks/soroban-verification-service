@@ -582,7 +582,7 @@ describe("ADR-008 pipeline, end to end", () => {
     expect(wasmStatus.source_code_verifications[0].status).toBe("verified");
   });
 
-  it("publishes the byte verdict, recording contract_binding_drifted, when the contract upgrades mid-rebuild", async () => {
+  it("publishes nothing when the contract upgrades mid-rebuild, even to bytes the rebuild produced", async () => {
     const sourceSha256 = randomBytes(32).toString("hex");
     const contract = contractId();
     chain.deployed.set(contract, OTHER_HASH);
@@ -598,18 +598,41 @@ describe("ADR-008 pipeline, end to end", () => {
       rebuiltWasmHash: REBUILT_HASH,
     });
     chain.deployed.set(contract, REBUILT_HASH);
+    chain.recordedRecipe.set(contract, { source_sha256: "f".repeat(64) });
 
     await pipeline.run(attached);
     const final = await reload(job.jobId);
 
-    expect(final.result?.contract_binding_drifted).toBe(true);
-    expect(final.result?.matched).toBe(true);
-    expect(final.result?.wasm_hash).toBe(REBUILT_HASH);
+    expect(final.status).toBe("failed");
+    expect(final.failureReason).toBe("policy_rejected");
+    expect(final.error).toBe("target_changed_during_build");
+    const published = await readFile(join(resultRoot, "wasms", `${REBUILT_HASH}.json`), "utf8").catch(() => "{}");
+    expect(published).not.toContain(sourceSha256);
+    chain.recordedRecipe.delete(contract);
+  });
 
-    const wasmStatus = JSON.parse(
-      await readFile(join(resultRoot, "wasms", `${REBUILT_HASH}.json`), "utf8")
-    );
-    expect(wasmStatus.source_code_verifications[0].status).toBe("verified");
+  it("publishes nothing for a Wasm whose own metadata pins a different source", async () => {
+    const sourceSha256 = randomBytes(32).toString("hex");
+    const wasmHash = randomBytes(32).toString("hex");
+    chain.deployed.set(wasmHash, wasmHash);
+
+    const job = await createJob({ wasmHash, sourceSha256 });
+    await pipeline.run(job);
+    const attached = await reload(job.jobId);
+    await rebuilds.markTerminal(attached.rebuildId!, {
+      outcome: "success",
+      runner: "stellar_contract_verify",
+      rebuiltWasmHash: wasmHash,
+    });
+    chain.recordedRecipe.set(wasmHash, { source_sha256: "e".repeat(64) });
+
+    await pipeline.run(attached);
+    const final = await reload(job.jobId);
+
+    expect(final.status).toBe("failed");
+    expect(final.error).toBe("source_archive_not_chain_recorded");
+    await expect(readFile(join(resultRoot, "wasms", `${wasmHash}.json`), "utf8")).rejects.toThrow();
+    chain.recordedRecipe.delete(wasmHash);
   });
 
   it("sends a recipe that deviates from the chain's straight to the sandbox, never the CLI (PA1)", async () => {

@@ -127,6 +127,8 @@ These come from the steps around the build.
 | `stellar_contract_fetch_failed` | `build_failed`, retried | The ledger could not be read. A contract that does not exist ends here too | Check the network and contract ID |
 | `metadata_parse_failed` | `build_failed`, retried | The deployed Wasm's metadata could not be parsed | Report it to the verifier's operator |
 | `missing_wasm_hash` | `source_unavailable` | No Wasm hash could be determined for the target | Give the Wasm hash directly |
+| `target_changed_during_build` | `policy_rejected` | The contract was upgraded to another Wasm while the rebuild ran, so nothing was published | Submit again for the Wasm it runs now |
+| `source_archive_not_chain_recorded` | `policy_rejected` | The Wasm records a different `source_sha256` than the one the job built from | Submit the archive the contract records |
 | `image_not_digest_pinned` | `not_attempted` | The contract names a build image by tag, not by digest | — |
 | `image_not_official_trusted` | `not_attempted` | The contract names a build image this verifier does not accept | — |
 | `missing_toolchain_pair` | `not_attempted` | The contract does not record both `cliver` and `rsver` | — |

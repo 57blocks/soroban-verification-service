@@ -93,9 +93,12 @@ failure was the rebuild's or the job's own target resolution.
 Verified by: `services/orchestrator-svc/src/modules/batch-events/rebuild-outcome.service.ts`,
 `packages/db/src/rebuilds.repo.ts`.
 
-Contract binding drift: when a job's freshly fetched deployed hash no longer matches the one observed
-at job creation, the job still publishes its byte-level verdict through the by-hash index, but skips
-writing the by-contract pointer.
+Contract binding drift: when a `contract_id` job's freshly fetched deployed hash no longer matches the
+one frozen at prepare, the job fails `policy_rejected` with `target_changed_during_build` and publishes
+nothing; the source binding and recipe it was checked against belong to the earlier Wasm. Before any
+verdict is published, the Wasm's own recorded `source_sha256`, if any, must equal the job's, or the job
+fails with `source_archive_not_chain_recorded`. `contract_binding_drifted` appears only in results
+published before this rule.
 
 ## Claiming and concurrency
 
