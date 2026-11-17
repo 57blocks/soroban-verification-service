@@ -1,4 +1,4 @@
-import { checkAuth, checkCreate, checkPull, routeRequest } from "../src/modules/docker-gateway/policy.js";
+import { checkCreate, checkPull, encodeRegistryAuth, routeRequest } from "../src/modules/docker-gateway/policy.js";
 
 const ID = "c".repeat(64);
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
@@ -99,7 +99,6 @@ describe("docker gateway routes", () => {
   it.each([
     ["HEAD", "/_ping", "ping"],
     ["GET", "/v1.44/version", "version"],
-    ["POST", "/v1.44/auth", "auth"],
     ["POST", "/v1.44/images/create?fromImage=x&tag=sha256:abc", "pull"],
     ["POST", "/v1.44/containers/create", "create"],
     ["POST", `/v1.44/containers/${ID}/attach?stream=1&stdout=1`, "container"],
@@ -129,6 +128,7 @@ describe("docker gateway routes", () => {
     ["POST", "/v1.44/networks/create"],
     ["POST", "/v1.44/plugins/pull"],
     ["GET", "/v1.44/info"],
+    ["POST", "/v1.44/auth"],
     ["GET", "/v1.44/events"],
     ["POST", "/v1.44/swarm/init"],
     ["POST", "/v1.44/session"],
@@ -238,7 +238,7 @@ describe("docker gateway: creating a container", () => {
   });
 });
 
-describe("docker gateway: pulls and logins", () => {
+describe("docker gateway: pulls", () => {
   it("pulls an image only by digest", () => {
     expect(checkPull(`/v1.44/images/create?fromImage=docker.io%2Fstellar%2Fstellar-cli&tag=sha256%3A${"a".repeat(64)}`).ok).toBe(true);
     expect(checkPull(`/v1.44/images/create?fromImage=docker.io%2Fstellar%2Fstellar-cli%40sha256%3A${"a".repeat(64)}`).ok).toBe(true);
@@ -250,11 +250,23 @@ describe("docker gateway: pulls and logins", () => {
     expect(checkPull(`/v1.44/images/create?fromSrc=http%3A%2F%2F169.254.169.254%2F&tag=sha256%3A${"a".repeat(64)}`).ok).toBe(false);
   });
 
-  it("logs in only to an ECR registry", () => {
-    expect(checkAuth({ serveraddress: "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com" }).ok).toBe(true);
-    expect(checkAuth({ serveraddress: "https://123456789012.dkr.ecr.ap-southeast-2.amazonaws.com" }).ok).toBe(true);
-    expect(checkAuth({ serveraddress: "169.254.169.254" }).ok).toBe(false);
-    expect(checkAuth({ serveraddress: "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com.evil.example" }).ok).toBe(false);
-    expect(checkAuth({}).ok).toBe(false);
+  it("names the ECR registry a pull is from, and no other", () => {
+    const digest = `sha256%3A${"a".repeat(64)}`;
+    expect(checkPull(`/v1.44/images/create?fromImage=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com%2Fsv-dev-composed-environments&tag=${digest}`)).toEqual({
+      ok: true,
+      ecrRegistry: { host: "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com", region: "ap-southeast-2" },
+    });
+    expect(checkPull(`/v1.44/images/create?fromImage=docker.io%2Fstellar%2Fstellar-cli&tag=${digest}`)).toEqual({ ok: true });
+    expect(checkPull(`/v1.44/images/create?fromImage=123456789012.dkr.ecr.ap-southeast-2.amazonaws.com.evil.example%2Fx&tag=${digest}`)).toEqual({ ok: true });
+  });
+
+  it("encodes the registry auth as the daemon decodes it", () => {
+    const encoded = encodeRegistryAuth({ username: "AWS", password: "p>?~".repeat(10), serveraddress: "r" });
+    expect(encoded).not.toMatch(/[+/]/);
+    expect(JSON.parse(Buffer.from(encoded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString())).toEqual({
+      username: "AWS",
+      password: "p>?~".repeat(10),
+      serveraddress: "r",
+    });
   });
 });

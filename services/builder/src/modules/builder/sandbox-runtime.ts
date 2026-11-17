@@ -8,7 +8,7 @@ import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPol
 import { dockerCliOptions } from "./docker-env.js";
 import { runSandboxContainer } from "./sandbox-container.js";
 import { bindMount } from "./bind-source.js";
-import { waitForDockerGateway } from "./sandbox-workspace.js";
+import { dockerGatewaySocket, waitForDockerGateway } from "./sandbox-workspace.js";
 
 const DOCKER_GATEWAY_START_MS = 30_000;
 
@@ -40,6 +40,8 @@ export async function authenticateForImage(
   const registry = image.split("/")[0] ?? "";
   const region = ecrRegistryRegion(registry);
   if (!region) return { ok: true, skipped: true };
+  // Through the docker gateway the runner holds no AWS credential: the gateway authenticates the pull itself.
+  if (dockerGatewaySocket()) return { ok: true, skipped: true };
 
   const password = await runner(["aws", "ecr", "get-login-password", "--region", region], {
     timeout_ms: dockerCheckTimeoutMs(config),

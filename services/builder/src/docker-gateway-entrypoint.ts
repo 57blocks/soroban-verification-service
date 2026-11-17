@@ -3,14 +3,17 @@ import { chmodSync, chownSync, lstatSync, mkdirSync, readFileSync, realpathSync,
 import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { ScvsLogger, stderrOnlySink } from "@scvs/core";
+import { runCommand } from "@scvs/core/process";
 import { SANDBOX_USER } from "./modules/builder/run-cli.config.js";
 import { DockerGateway } from "./modules/docker-gateway/gateway.js";
+import { encodeRegistryAuth } from "./modules/docker-gateway/policy.js";
 import { emptyInContainer } from "./modules/docker-gateway/upstream.js";
 import { WorkspaceStore, type WorkspaceOwner } from "./modules/docker-gateway/workspaces.js";
 
 /** The host's root daemon. The gateway is the only container in the job that mounts it. */
 const HOST_DOCKER_SOCKET = "/var/run/docker.sock";
 const RUNNER_ACCOUNT = "node";
+const ECR_TOKEN_TIMEOUT_MS = 30_000;
 
 const logger = new ScvsLogger("docker-gateway", { sink: stderrOnlySink });
 
@@ -31,6 +34,7 @@ async function main(): Promise<void> {
     workspaces: new WorkspaceStore({ parent, runner, empty: emptyInContainer(HOST_DOCKER_SOCKET, image) }),
     sandboxUser: SANDBOX_USER,
     log: (event, fields) => logger.log(event, fields),
+    ecrAuth: ecrRegistryAuth,
   });
   await gateway.listen(socket);
   chownSync(socket, runner.uid, runner.gid);
@@ -45,6 +49,23 @@ async function main(): Promise<void> {
         .finally(() => process.exit(0));
     });
   }
+}
+
+/**
+ * An ECR token from the host's instance role. The hosts drop the job's own containers' traffic to the metadata
+ * service, so this root process is the only one in the job that can fetch it.
+ */
+async function ecrRegistryAuth(registry: { host: string; region: string }): Promise<string> {
+  const token = await runCommand(["aws", "ecr", "get-login-password", "--region", registry.region], {
+    timeout_ms: ECR_TOKEN_TIMEOUT_MS,
+    // stdout is a registry credential.
+    mirrorOutput: false,
+    record: false,
+  });
+  if (token.exit_code !== 0 || !token.stdout.trim()) {
+    throw new Error(`aws ecr get-login-password exited ${token.exit_code ?? "without a code"}: ${token.stderr.slice(0, 300)}`);
+  }
+  return encodeRegistryAuth({ username: "AWS", password: token.stdout.trim(), serveraddress: registry.host });
 }
 
 function required(name: string, raw: string | undefined): string {
