@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -205,6 +205,19 @@ describe("writeVendorCargoConfig", () => {
     expect(written).toContain('replace-with = "vendored-sources"');
     expect(written).toContain('directory = "/vendor"');
     expect(written).toContain("offline = true");
+  });
+
+  it("leaves the redirect readable by the build sandbox, which runs as its own uid", async () => {
+    const root = await mkdtemp(join(tmpdir(), "scvs-cargo-mode-"));
+    const cargoHome = join(root, "cargo-home");
+    const previous = process.umask(0o077);
+    try {
+      await writeVendorCargoConfig(cargoHome, "/vendor");
+    } finally {
+      process.umask(previous);
+    }
+
+    expect((await stat(join(cargoHome, "config.toml"))).mode & 0o777).toBe(0o644);
   });
 
   it("preserves a project's own .cargo/config.toml untouched", async () => {
