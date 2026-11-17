@@ -53,14 +53,14 @@ describe("E2E harness fixture isolation", () => {
 
   it("replaces a caller-supplied scope instead of publishing duplicates", () => {
     const result = runScopedBldopt(
-      ["--locked", "--env=SCVS_E2E_RECIPE_SCOPE=caller-value"],
+      ["--locked", "--env=E2E_RECIPE_SCOPE=caller-value"],
       "run-a",
       "case-a",
       "F-LEG-1"
     );
 
     expect(result).toContain("--locked");
-    expect(result.filter((entry) => entry.startsWith("--env=SCVS_E2E_RECIPE_SCOPE="))).toHaveLength(1);
-    expect(result).not.toContain("--env=SCVS_E2E_RECIPE_SCOPE=caller-value");
+    expect(result.filter((entry) => entry.startsWith("--env=E2E_RECIPE_SCOPE="))).toHaveLength(1);
+    expect(result).not.toContain("--env=E2E_RECIPE_SCOPE=caller-value");
   });
 });

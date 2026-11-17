@@ -49,6 +49,8 @@ export interface SubmittedManifest {
 export interface SubmitBody {
   target: VerificationTarget;
   manifest?: SubmittedManifest;
+  /** The secret the upload named by `manifest.upload_id` returned. */
+  upload_secret?: string;
   dry_run?: boolean;
 }
 
@@ -104,6 +106,7 @@ export interface VerificationResultSummary {
 
 export interface UploadSourceResponse {
   upload_id: string;
+  upload_secret: string;
   expires_at: string;
   max_size_bytes: number;
   filename: string;

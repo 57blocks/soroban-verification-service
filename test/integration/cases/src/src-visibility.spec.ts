@@ -24,6 +24,7 @@ import {
 } from "../../support/result-tree.js";
 import { sourceCodeUriUrls } from "../../support/types.js";
 import type { VerificationArtifact } from "../../support/types.js";
+import { withUploadSecret } from "../../support/upload-secrets.js";
 
 function publishedBldopt(artifact: VerificationArtifact): string[] | undefined {
   const buildOptions = artifact.build_recipe?.build_options;
@@ -338,7 +339,7 @@ caseBlock(
       const outcome = await http(`${env.verifyUrl}/api/verification/v1/verifications`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(withUploadSecret(body)),
       });
 
       if (outcome.status >= 400) {
