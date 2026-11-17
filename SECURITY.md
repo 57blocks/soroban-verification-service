@@ -121,6 +121,14 @@ for exact mechanics — this list is not exhaustive):
   source mount and a separate writable output mount, each a non-recursive `--mount` bind. Docker's
   default seccomp profile applies, since nothing passes `seccomp=unconfined`; no custom seccomp,
   AppArmor or SELinux profile is added. If that gap is exploitable given the above, it is worth reporting.
+- **No docker socket in the runner.** The runner reaches the host's Docker daemon only through a gateway
+  container in the same job, over a socket no other job can reach. The gateway forwards only what a
+  sandbox stage needs: creating a container in the shape above, attaching to, waiting on, starting,
+  killing and removing containers it created, pulling an image by digest, and logging in to ECR. It
+  refuses everything else, including `exec`, listing containers, host namespaces, devices, privileged
+  mode, and any bind that is not one of the job's workspace directories. Those directories sit under a
+  root-owned directory, so the runner cannot swap one for a link before a stage binds it. The daemon still
+  runs as root, so a container escape through the kernel reaches the host.
 - **Constrained dependency prefetch.** Before `cargo vendor` runs (ahead of the final no-network
   build), every `Cargo.toml` and `Cargo.lock` is parsed as TOML and each source it names is checked:
   private, local and cloud-metadata hosts are refused, and only hosts on `SCVS_PREFETCH_ALLOWED_HOSTS`

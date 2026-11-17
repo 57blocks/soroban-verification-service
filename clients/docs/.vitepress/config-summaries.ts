@@ -101,15 +101,19 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_DOCKER_CHECK_TIMEOUT_MS:
     "Time limit, in milliseconds, for the builder's quick Docker checks: that the daemon answers, and which options a build image supports.",
   SCVS_DOCKER_CPUS:
-    "CPU limit for the build container, passed to `docker run --cpus`. An empty value removes the limit.",
+    "CPU limit for the build container, passed to `docker run --cpus`. An empty value removes the limit, and the docker gateway then refuses the container.",
+  SCVS_DOCKER_GATEWAY:
+    "Socket of the docker gateway, the builder job's only route to the host's Docker daemon. When set, the runner's `docker` commands go through it and the gateway makes the sandbox's directories; deployed jobs always set it.",
+  SCVS_DOCKER_GATEWAY_IMAGE:
+    "The docker gateway's own image, which it runs to empty a sandbox's directories after a build.",
   SCVS_DOCKER_HOST:
     "Intended Docker daemon address for the builder's sandbox runs. This release accepts the value but does not apply it, so the builder uses Docker's own DOCKER_HOST setting.",
   SCVS_DOCKER_MEMORY:
-    "Memory limit for the build container, passed to `docker run --memory` (for example `4g`). An empty value removes the limit.",
+    "Memory limit for the build container, passed to `docker run --memory` (for example `4g`). An empty value removes the limit, and the docker gateway then refuses the container.",
   SCVS_DOCKER_PIDS_LIMIT:
-    "Most processes the build container may run at once, passed to `docker run --pids-limit`. An empty value removes the limit.",
+    "Most processes the build container may run at once, passed to `docker run --pids-limit`. An empty value removes the limit, and the docker gateway then refuses the container.",
   SCVS_DOCKER_USER:
-    "User and group (`uid:gid`) the build container runs as. Never set it to root (`0:0`).",
+    "User and group (`uid:gid`) the build container runs as. Never set it to root (`0:0`); the docker gateway accepts only `65532:65532`.",
   SCVS_DRAIN_GRACE_MS:
     "How long, in milliseconds, a service keeps serving after SIGTERM while reporting not ready, so the load balancer can stop routing to it. Must exceed the deregistration delay plus one health-check interval.",
   SCVS_ENABLE_AGGREGATOR:

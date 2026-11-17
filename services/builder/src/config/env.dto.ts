@@ -47,6 +47,12 @@ export class BuilderEnvDto {
   SCVS_DOCKER_HOST?: string;
 
   @IsOptional() @IsString()
+  SCVS_DOCKER_GATEWAY?: string;
+
+  @IsOptional() @IsString()
+  SCVS_DOCKER_GATEWAY_IMAGE?: string;
+
+  @IsOptional() @IsString()
   SCVS_PREFETCH_ALLOWED_HOSTS?: string;
 
   @IsOptional() @IsString()

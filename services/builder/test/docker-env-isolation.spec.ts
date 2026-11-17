@@ -15,7 +15,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 fs.appendFileSync(path.join(__dirname, "runs.log"), JSON.stringify({ args, env: process.env }) + "\\n");
-if (args[0] === "ps") process.exit(0);
+if (args[0] === "version") process.exit(0);
 const entrypoint = args.includes("--entrypoint") ? args[args.indexOf("--entrypoint") + 1] : undefined;
 if (entrypoint === "rustup") { console.log("stable"); process.exit(0); }
 if (entrypoint === "cargo") process.exit(0);

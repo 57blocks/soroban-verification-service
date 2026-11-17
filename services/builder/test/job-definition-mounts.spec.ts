@@ -88,6 +88,26 @@ describe("check-mount-paths against the deployed job definitions", () => {
     expect(output).toContain("composer/container: TMPDIR=/opt/scratch is not inside");
   });
 
+  it("refuses a runner that holds the host's docker socket itself", async () => {
+    const socketMount = `{${quoted("sourceVolume")}: ${quoted("docker-sock")}, ${quoted("containerPath")}: ${quoted("/var/run/docker.sock")}, ${quoted("readOnly")}: false},`;
+    const gatewayMount = `{${quoted("sourceVolume")}: ${quoted("docker-gateway")}, ${quoted("containerPath")}: ${quoted("/run/scvs-docker-gateway")}, ${quoted("readOnly")}: false},`;
+    const { exitCode, output } = await check({
+      builder: (text) => text.replace(gatewayMount, `${socketMount}\n                          ${gatewayMount}`),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(output).toContain("builder/runner: mounts the host's docker socket, which only the docker-gateway container may hold");
+  });
+
+  it("refuses a runner that is not pointed at the gateway", async () => {
+    const { exitCode, output } = await check({
+      builder: (text) => text.replace(`${quoted("SCVS_DOCKER_GATEWAY")}, ${quoted("value")}`, `${quoted("SCVS_UNUSED")}, ${quoted("value")}`),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(output).toContain("builder/runner: SCVS_DOCKER_GATEWAY is not set to a socket in /run/scvs-docker-gateway");
+  });
+
   it("refuses a handoff root outside the shared mount", async () => {
     const { exitCode, output } = await check({
       builder: (text) =>

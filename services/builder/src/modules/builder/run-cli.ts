@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { ScvsLogger, resolveContainerManifestPath, stderrOnlySink, repeatedBuildOption } from "@scvs/core";
 import { sha256File } from "@scvs/core/process";
 import { CONTAINER_ARTIFACT_DIR, CONTAINER_OUT_DIR, parseBuildArtifactReports, selectArtifactFromOutput, snapshotWasmPaths } from "./artifact-selection.js";
@@ -16,6 +16,7 @@ import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, 
 import { bindMount, requireBindSources, type BindSourceCheck } from "./bind-source.js";
 import { detectSourceCargoSourceOverride, resolveTrustedToolchain, writeVendorCargoConfig } from "./toolchain.js";
 import { runSandboxContainer } from "./sandbox-container.js";
+import { createSandboxWorkspace, type SandboxWorkspace } from "./sandbox-workspace.js";
 
 const logger = new ScvsLogger("run-cli", { sink: stderrOnlySink });
 
@@ -106,7 +107,24 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     });
   }
 
-  const stagedSource = await stageSourceForOfflineBuild(sourceRoot, input.workDirs, input.config);
+  if (input.sandboxWrites) {
+    input.sandboxWrites.image = input.build.image;
+    input.sandboxWrites.user = sandboxUser(input.config);
+  }
+  // Every stage binds only these directories. Through the docker gateway their root is not the runner's, so no
+  // process in the job can swap one for a link before a later stage binds it.
+  let workspace: SandboxWorkspace;
+  try {
+    workspace = await createSandboxWorkspace(input);
+  } catch (error) {
+    return cliFailure("sandbox_unavailable", "docker_build_image_rebuild", null, {
+      runner: "docker_build_image_rebuild",
+      build_image: input.build.image,
+      detail: `Could not prepare the sandbox workspace: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  const stagedSource = await stageSourceForOfflineBuild(sourceRoot, workspace.leaves.source, input.config);
   if (!stagedSource.ok) {
     return cliFailure(stagedSource.reason, "docker_build_image_rebuild", null, {
       runner: "docker_build_image_rebuild",
@@ -118,28 +136,14 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   const offlineSourceRoot = stagedSource.source_root;
   const offlineManifestPath = resolveManifestPath(offlineSourceRoot, input.build.workspace_path);
 
-  // Never mounted into a container, so no stage can replace `out` or `vendor` before a later stage binds them.
+  // Never mounted into a container: it holds the stages' container-id files.
   const jobDir = await realpath(await mkdtemp(join(tmpdir(), "scvs-build-")));
   input.workDirs.push(jobDir);
-  // Separate from `outDir` so the only `.wasm` here is one the build tool put there.
-  const artifactRoot = await realpath(await mkdtemp(join(tmpdir(), "scvs-artifact-")));
-  input.workDirs.push(artifactRoot);
-  const artifactDir = join(artifactRoot, "artifact");
-  const outDir = join(jobDir, "out");
-  const vendorDir = join(jobDir, "vendor");
-  const cargoHomeDir = join(outDir, "cargo-home");
-  await mkdir(join(outDir, "tmp"), { recursive: true });
-  await mkdir(cargoHomeDir, { recursive: true });
-  await mkdir(vendorDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
-  // The sandbox runs as its own uid; each parent stays 0700, so no other host user reaches these.
-  for (const dir of [outDir, join(outDir, "tmp"), cargoHomeDir, vendorDir, artifactDir]) await chmod(dir, 0o777);
-  if (input.sandboxWrites) {
-    input.sandboxWrites.image = input.build.image;
-    input.sandboxWrites.user = sandboxUser(input.config);
-    input.sandboxWrites.dirs.push(outDir, vendorDir, artifactDir);
-  }
-  const stagedSourceParent = dirname(offlineSourceRoot);
+  const workspaceRoot = workspace.root;
+  // `artifact` is not inside `out`, so the only `.wasm` there is one the build tool put there.
+  const { out: outDir, vendor: vendorDir, cargoHome: cargoHomeDir, artifact: artifactDir } = workspace.leaves;
+  await mkdir(join(outDir, "tmp"));
+  await chmod(join(outDir, "tmp"), 0o777);
   const unsafeMount = (check: Extract<BindSourceCheck, { ok: false }>, stage: "prefetch" | "build") =>
     cliFailure("sandbox_mount_source_unsafe", "docker_build_image_rebuild", null, {
       runner: "docker_build_image_rebuild",
@@ -196,9 +200,9 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     );
   }
   const prefetchMounts = await requireBindSources([
-    { path: offlineSourceRoot, root: stagedSourceParent },
-    { path: vendorDir, root: jobDir },
-    { path: cargoHomeDir, root: jobDir },
+    { path: offlineSourceRoot, root: workspaceRoot },
+    { path: vendorDir, root: workspaceRoot },
+    { path: cargoHomeDir, root: workspaceRoot },
   ]);
   if (!prefetchMounts.ok) return unsafeMount(prefetchMounts, "prefetch");
   const prefetch = await prefetchCargoDependencies({
@@ -250,11 +254,11 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   }
   // Before anything reads or writes these by pathname: the prefetch stage ran submitted dependency code.
   const buildMounts = await requireBindSources([
-    { path: offlineSourceRoot, root: stagedSourceParent },
-    { path: vendorDir, root: jobDir },
-    { path: outDir, root: jobDir },
-    { path: cargoHomeDir, root: jobDir },
-    { path: artifactDir, root: artifactRoot },
+    { path: offlineSourceRoot, root: workspaceRoot },
+    { path: vendorDir, root: workspaceRoot },
+    { path: outDir, root: workspaceRoot },
+    { path: cargoHomeDir, root: workspaceRoot },
+    { path: artifactDir, root: workspaceRoot },
   ]);
   if (!buildMounts.ok) return unsafeMount(buildMounts, "build");
   const vendoredEgressPolicy = await evaluateVendoredEgressPolicy(vendorDir, egressPolicy.allowed_hosts);
@@ -366,6 +370,8 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
       ...bindMount(offlineSourceRoot, "/source", { readOnly: true }),
       ...bindMount(vendorDir, "/vendor", { readOnly: true }),
       ...bindMount(outDir, CONTAINER_OUT_DIR),
+      // Its own leaf, so neither stage can swap it inside the writable `out` before the next binds it.
+      ...bindMount(cargoHomeDir, `${CONTAINER_OUT_DIR}/cargo-home`),
       ...bindMount(artifactDir, CONTAINER_ARTIFACT_DIR),
       "-w",
       "/source",

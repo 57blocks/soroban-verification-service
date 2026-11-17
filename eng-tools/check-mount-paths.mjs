@@ -18,6 +18,10 @@ const TARGETS = [
 ];
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
+// One job's gateway socket: Docker-managed on purpose, so no other task on the host can reach it. No path in it is
+// ever handed to the daemon.
+const GATEWAY_VOLUME = { name: "docker-gateway", containerPath: "/run/scvs-docker-gateway" };
+const GATEWAY_CONTAINER = "docker-gateway";
 const TMPFS_HOST_PATHS = ["/tmp", "/dev/shm", "/run"];
 const SCRATCH_VARIABLES = ["TMPDIR", "SCVS_HANDOFF_ROOT"];
 
@@ -78,6 +82,16 @@ for (const { label, path } of TARGETS) {
     continue;
   }
 
+  if (label === "builder") {
+    const runner = containers.find((container) => container.name === "runner");
+    const gateway = (runner?.environment ?? []).find((entry) => entry.name === "SCVS_DOCKER_GATEWAY");
+    if (!gateway?.value?.startsWith(`${GATEWAY_VOLUME.containerPath}/`)) {
+      findings.push(
+        `${label}/runner: SCVS_DOCKER_GATEWAY is not set to a socket in ${GATEWAY_VOLUME.containerPath}, so the ` +
+          `runner would reach no daemon, or one it was never meant to hold (A9)`,
+      );
+    }
+  }
   for (const container of containers) {
     const where = `${label}/${container.name}`;
     const hostVolumes = new Map(
@@ -96,6 +110,9 @@ for (const { label, path } of TARGETS) {
         continue;
       }
       const hostPath = hostVolumes.get(sourceVolume);
+      if (hostPath === undefined && sourceVolume === GATEWAY_VOLUME.name && containerPath === GATEWAY_VOLUME.containerPath) {
+        continue;
+      }
       if (hostPath === undefined) {
         findings.push(
           `${where}: volume "${sourceVolume}", mounted at ${containerPath}, declares no ` +
@@ -122,13 +139,22 @@ for (const { label, path } of TARGETS) {
         );
         continue;
       }
+      if (hostPath === DOCKER_SOCKET && label === "builder" && container.name !== GATEWAY_CONTAINER) {
+        findings.push(
+          `${where}: mounts the host's docker socket, which only the ${GATEWAY_CONTAINER} container may hold — ` +
+            `whoever holds it is root on the host (A9)`,
+        );
+        continue;
+      }
       if (hostPath !== DOCKER_SOCKET) sharedPaths.push(containerPath);
     }
 
     const environment = new Map((container.environment ?? []).map((entry) => [entry.name, entry.value]));
     const scratch = SCRATCH_VARIABLES.filter((name) => environment.has(name)).map((name) => [name, environment.get(name)]);
     const mountsSocket = (container.mountPoints ?? []).some((mount) => mount.containerPath === DOCKER_SOCKET);
-    if (mountsSocket && !environment.has("TMPDIR")) scratch.push(["TMPDIR", "/tmp"]);
+    // Through the gateway the runner still names host paths to the daemon.
+    const namesHostPaths = mountsSocket || environment.has("SCVS_DOCKER_GATEWAY");
+    if (namesHostPaths && !environment.has("TMPDIR")) scratch.push(["TMPDIR", "/tmp"]);
     for (const [name, value] of scratch) {
       if (!sharedPaths.some((shared) => within(value, shared))) {
         findings.push(

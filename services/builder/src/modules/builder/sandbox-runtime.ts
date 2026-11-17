@@ -1,8 +1,6 @@
 import type { RebuildErrorCode } from "@scvs/core";
 
-import { mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdir, stat } from "node:fs/promises";
 import { runCommand } from "@scvs/core/process";
 import type { CommandResult } from "@scvs/core/process";
 import { cliTimeoutMs, dependencyPrefetchTimeoutMs, dockerCheckTimeoutMs } from "./run-cli.config.js";
@@ -10,12 +8,17 @@ import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPol
 import { dockerCliOptions } from "./docker-env.js";
 import { runSandboxContainer } from "./sandbox-container.js";
 import { bindMount } from "./bind-source.js";
+import { waitForDockerGateway } from "./sandbox-workspace.js";
+
+const DOCKER_GATEWAY_START_MS = 30_000;
 
 export async function checkDockerAvailable(config?: RunCliRuntimeConfig): Promise<
   | { ok: true; result: CommandResult }
   | { ok: false; result: CommandResult }
 > {
-  const result = await runCommand(["docker", "ps"], {
+  await waitForDockerGateway(DOCKER_GATEWAY_START_MS);
+  // `version`, not `ps`: listing containers is the host's business, and the gateway refuses it.
+  const result = await runCommand(["docker", "version", "--format", "{{.Server.Version}}"], {
     ...dockerCliOptions(),
     timeout_ms: dockerCheckTimeoutMs(config),
     mirrorOutput: false,
@@ -113,14 +116,11 @@ function summaryMount(placeholder: string, spec: string): string[] {
   return bindMount(placeholder, readOnly ? spec.slice(0, -":ro".length) : spec, { readOnly });
 }
 
-export async function stageSourceForOfflineBuild(sourceRoot: string, workDirs: string[], config?: RunCliRuntimeConfig): Promise<
+/** Copies the materialised source into the workspace's empty `source` directory, which the stages bind read-only. */
+export async function stageSourceForOfflineBuild(sourceRoot: string, stagedRoot: string, config?: RunCliRuntimeConfig): Promise<
   | { ok: true; source_root: string }
   | { ok: false; reason: RebuildErrorCode; detail: string; copy?: CommandResult }
 > {
-  const stagedParent = await realpath(await mkdtemp(join(tmpdir(), "scvs-offline-src-")));
-  workDirs.push(stagedParent);
-  const stagedRoot = join(stagedParent, "source");
-  await mkdir(stagedRoot, { recursive: true });
   const copy = await runCommand(["cp", "-R", `${sourceRoot}/.`, stagedRoot], {
     timeout_ms: cliTimeoutMs(config),
   });

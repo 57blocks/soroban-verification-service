@@ -4,7 +4,7 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runCommand } from "@scvs/core/process";
 import type { CommandResult } from "@scvs/core/process";
-import { dependencyPrefetchTimeoutMs } from "./run-cli.config.js";
+import { dependencyPrefetchTimeoutMs, probeSandboxArgs } from "./run-cli.config.js";
 import type { RunCliRuntimeConfig } from "./run-cli.types.js";
 import { dockerCliOptions } from "./docker-env.js";
 
@@ -60,7 +60,7 @@ export async function probeActiveToolchain(
   config?: RunCliRuntimeConfig,
 ): Promise<{ toolchain?: string; result: CommandResult }> {
   const result = await runCommand(
-    ["docker", "run", "--rm", "--entrypoint", "rustup", image, "show", "active-toolchain"],
+    ["docker", "run", "--rm", ...probeSandboxArgs(config), "--entrypoint", "rustup", image, "show", "active-toolchain"],
     { ...dockerCliOptions(), timeout_ms: dependencyPrefetchTimeoutMs(config) },
   );
   if (result.exit_code !== 0) return { result };

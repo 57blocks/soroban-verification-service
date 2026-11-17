@@ -15,13 +15,13 @@ const JOB_ID = "11111111-2222-3333-4444-555555555555";
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"c".repeat(64)}`;
 const WASM = Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 const WASM_SHA256 = createHash("sha256").update(WASM).digest("hex");
-const PER_JOB_PREFIXES = ["scvs-build-", "scvs-artifact-", "scvs-src-", "scvs-offline-src-"];
+const PER_JOB_PREFIXES = ["scvs-build-", "scvs-sandbox-", "scvs-src-"];
 
 const FAKE_DOCKER = `#!/usr/bin/env node
 const { appendFileSync, existsSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const args = process.argv.slice(2);
-if (args[0] === "ps") process.exit(0);
+if (args[0] === "version") process.exit(0);
 args.forEach((arg, index) => {
   if (args[index - 1] === "--mount") appendFileSync(join(__dirname, "mounts.log"), /source=([^,]+)/.exec(arg)[1] + "\\n");
 });
@@ -136,11 +136,7 @@ describe("per-job work directories", () => {
     });
 
     expect(result.outcome).toBe("built");
-    expect(workDirs.map((dir) => basename(dir).replace(/-[^-]+$/, "-")).sort()).toEqual([
-      "scvs-artifact-",
-      "scvs-build-",
-      "scvs-offline-src-",
-    ]);
+    expect(workDirs.map((dir) => basename(dir).replace(/-[^-]+$/, "-")).sort()).toEqual(["scvs-build-", "scvs-sandbox-"]);
     const bound = await boundHostPaths();
     expect(bound.length).toBeGreaterThan(0);
     for (const path of bound) {

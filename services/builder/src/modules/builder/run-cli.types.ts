@@ -27,8 +27,11 @@ export type RunCliInput = {
   sandboxWrites?: SandboxWrites;
 };
 
-/** Directories a sandbox wrote as its own user, which only that user can empty again. */
-export type SandboxWrites = { image?: string; user?: string; dirs: string[] };
+/**
+ * Directories a sandbox wrote as its own user, which only that user can empty again, and the docker gateway
+ * workspaces the gateway empties instead.
+ */
+export type SandboxWrites = { image?: string; user?: string; dirs: string[]; workspaces?: string[] };
 
 export type RunCliOutcome = "verified" | "comparison_mismatch" | "cli_failure" | "built";
 
