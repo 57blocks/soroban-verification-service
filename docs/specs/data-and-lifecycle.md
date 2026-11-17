@@ -63,11 +63,13 @@ Verified by: `services/orchestrator-svc/src/modules/scheduler/rebuild-reconciler
 ## The idempotency key
 
 Identifies a **rebuild**, not a target. Computed over content, not location — `source_sha256`,
-`bldimg`, ordered `bldarg` (default `["contract", "build"]`), bytewise-sorted `bldopt`, and an
+`bldimg`, ordered `bldarg` (default `["contract", "build"]`), `bldopt` in submitted order, and an
 optional `metadata_replay` component when one applies — with each element length-prefixed so no two
 distinct input tuples can serialise to the same byte string. Excludes network, contract ID, and Wasm
 hash, which is what makes a cached rebuild reusable across targets while the verdict is recomputed
 per target. `Rebuild.idempotencyKey` is unique in the schema: two rebuild rows never share a key.
+Order matters because the builder reads the first `--package`; a `bldopt` that sets one setting twice
+is refused at submit and in the builder, and publication records the options stored on the rebuild.
 Verified by: `packages/core/src/rebuild-key.ts` (`computeIdempotencyKey`), `packages/core/src/rebuild-key-test.ts`,
 `packages/db/prisma/schema.prisma`.
 

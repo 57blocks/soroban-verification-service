@@ -179,3 +179,13 @@ describe("a --env build option must give its value", () => {
     expect(submit(["--env=RUSTFLAGS=-Cdebuginfo=0"]).ok).toBe(true);
   });
 });
+
+describe("one value per setting", () => {
+  it("refuses two --package entries, whose order would pick the package", () => {
+    expect(rejectionFor(["--package=alpha", "--package=beta"])).toContain("--package more than once");
+  });
+
+  it("refuses the same --env name twice", () => {
+    expect(rejectionFor(["--env=A=1", "--env=A=2"])).toContain("--env A");
+  });
+});

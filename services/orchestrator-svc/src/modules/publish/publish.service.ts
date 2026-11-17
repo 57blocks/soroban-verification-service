@@ -147,15 +147,17 @@ export class PublishService {
 
     const verifier = this.configService.get("verifierIdentity", { infer: true });
     const storage = this.buildResultStorage();
-    const { rebuildId, buildMode, mechanismReason, buildEnvironment, canonicalSource, chainSourceSha256 } =
+    const { rebuildId, buildMode, mechanismReason, buildEnvironment, canonicalSource, chainSourceSha256, buildOptions } =
       await this.resolveBuildContext(job);
+    // The recipe the rebuild ran, not the job's copy of it: that is the one replaying must reproduce.
+    const builtOptions = buildOptions ?? job.buildOptions;
     const buildIsolation = toBuildIsolation(buildMode);
     const sourceFileName =
       job.sourceRef.visibility === "public"
         ? await declareSourceFileName(job.sourceRef, this.sourceResolution, canonicalSource)
         : undefined;
     const artifact = assembleArtifact(
-      { ...job, result: finalResult },
+      { ...job, buildOptions: builtOptions, result: finalResult },
       verifier,
       buildIsolation,
       buildEnvironment,
@@ -203,8 +205,8 @@ export class PublishService {
         recipeSource: artifact.provenance.recipe_source,
         imageTrustLevel: buildEnvironment.trustLevel,
         bldimg: buildEnvironment.buildImage,
-        bldarg: toBldarg(job.buildOptions),
-        bldopt: toBldopt(job.buildOptions),
+        bldarg: toBldarg(builtOptions),
+        bldopt: toBldopt(builtOptions),
         sourceSha256: artifact.source.source_sha256,
         sourceUri: job.sourceRef.source_uri,
         ...(matched ? {} : { rebuiltHash: finalResult.rebuilt_wasm_hash }),
@@ -509,6 +511,7 @@ export class PublishService {
     buildEnvironment: PublishedBuildEnvironment;
     canonicalSource?: CanonicalSource;
     chainSourceSha256?: string;
+    buildOptions?: unknown;
   }> {
     const rebuild = job.rebuildId ? await this.rebuilds.getById(job.rebuildId) : undefined;
 
@@ -525,6 +528,7 @@ export class PublishService {
         ? { canonicalSource: canonicalSourceOf(rebuild) }
         : {}),
       ...(rebuild.chainSourceSha256 ? { chainSourceSha256: rebuild.chainSourceSha256 } : {}),
+      ...(rebuild.buildOptions ? { buildOptions: rebuild.buildOptions } : {}),
     };
   }
 

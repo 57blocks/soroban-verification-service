@@ -26,6 +26,7 @@
     "rebuilt_bytes_too_large": "build",
     "recorded_build_option_unsupported": "policy",
     "recorded_env_option_refused": "policy",
+    "recorded_build_option_repeated": "policy",
     "reported_artifact_hash_mismatch": "build",
     "reported_artifact_missing": "build",
     "reported_artifact_was_pre_existing": "build",

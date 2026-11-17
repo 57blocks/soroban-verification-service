@@ -12,9 +12,9 @@ export function computeIdempotencyKey(
   const hash = createHash("sha256");
   hash.update(encodeString(sourceContentHash(sourceRef)));
   hash.update(encodeString(imageDigest));
-  // `bldarg` order is significant; `bldopt` order is not, so only it is sorted.
+  // Both in the order the builder reads them: a reordered `bldopt` can select a different package.
   hash.update(encodeList(bldarg));
-  hash.update(encodeList(sortBytewise(bldopt)));
+  hash.update(encodeList(bldopt));
   if (metadataReplay.length > 0) {
     hash.update(encodeList(metadataReplay));
   }
@@ -49,13 +49,6 @@ function encodeList(values: readonly string[]): Buffer {
     Buffer.from(`${values.length}:`, "ascii"),
     ...values.map(encodeString),
   ]);
-}
-
-/** Bytewise UTF-8 order, not `sort()`'s UTF-16 order; they differ above U+FFFF. */
-function sortBytewise(values: readonly string[]): string[] {
-  return [...values].sort((a, b) =>
-    Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")),
-  );
 }
 
 function readBuildOptions(buildOptions: unknown): {
