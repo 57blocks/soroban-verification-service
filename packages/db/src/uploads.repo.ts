@@ -12,14 +12,22 @@ export type UploadRecord = {
   sizeBytes?: number;
   sourceSha256?: string;
   visibility: "public" | "private";
+  secretSha256?: string;
+  visibilityLocked: boolean;
 };
 
 @Injectable()
 export class UploadsRepository {
   constructor(@Inject(PRISMA_CLIENT) private readonly prisma: PrismaClient) {}
 
-  async createUpload(input: { id: string; expiresAt: string }): Promise<void> {
-    await this.prisma.upload.create({ data: { id: input.id, expiresAt: new Date(input.expiresAt) } });
+  async createUpload(input: { id: string; expiresAt: string; secretSha256?: string }): Promise<void> {
+    await this.prisma.upload.create({
+      data: {
+        id: input.id,
+        expiresAt: new Date(input.expiresAt),
+        ...(input.secretSha256 ? { secretSha256: input.secretSha256 } : {}),
+      },
+    });
   }
 
   async markUploadReceived(
@@ -55,8 +63,13 @@ export class UploadsRepository {
     return existing;
   }
 
-  async setUploadVisibility(id: string, visibility: "public" | "private"): Promise<void> {
-    await this.prisma.upload.update({ where: { id }, data: { visibility } });
+  /** False when an earlier submission already fixed the upload's visibility to the other value. */
+  async lockUploadVisibility(id: string, visibility: "public" | "private"): Promise<boolean> {
+    const { count } = await this.prisma.upload.updateMany({
+      where: { id, OR: [{ visibilityLocked: false }, { visibility }] },
+      data: { visibility, visibilityLocked: true },
+    });
+    return count === 1;
   }
 }
 
@@ -66,6 +79,8 @@ function rowToUpload(row: PrismaUpload): UploadRecord {
     expiresAt: row.expiresAt.toISOString(),
     received: row.received,
     visibility: row.visibility === "public" ? "public" : "private",
+    visibilityLocked: row.visibilityLocked,
+    ...(row.secretSha256 ? { secretSha256: row.secretSha256 } : {}),
     ...(row.path ? { path: row.path } : {}),
     ...(row.filename ? { filename: row.filename } : {}),
     ...(row.sizeBytes !== null ? { sizeBytes: row.sizeBytes } : {}),

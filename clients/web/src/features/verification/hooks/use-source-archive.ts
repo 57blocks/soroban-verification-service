@@ -104,7 +104,7 @@ export const useSourceArchive = (
       throw new Error(errorMessage(cause, "Source archive upload failed."), { cause });
     }
 
-    if (!data.upload_id || !data.source_sha256) {
+    if (!data.upload_id || !data.upload_secret || !data.source_sha256) {
       throw new Error("Source archive upload failed.");
     }
     if (

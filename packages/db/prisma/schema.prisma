@@ -165,6 +165,8 @@ model Upload {
   sizeBytes    Int?      @map("size_bytes")
   sourceSha256 String?   @map("source_sha256")
   visibility   String    @default("private")
+  secretSha256 String?   @map("secret_sha256")
+  visibilityLocked Boolean @default(false) @map("visibility_locked")
 
   @@index([expiresAt])
   @@map("uploads")

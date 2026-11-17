@@ -33,18 +33,23 @@ afterAll(async () => {
   }
 });
 
-async function seedUpload(options: { expiresInMs?: number } = {}): Promise<{ uploadId: string; sourceSha256: string }> {
+const SECRET = "test-upload-secret";
+const SECRET_SHA256 = createHash("sha256").update(SECRET).digest("hex");
+
+async function seedUpload(
+  options: { expiresInMs?: number } = {},
+): Promise<{ uploadId: string; sourceSha256: string; secret: string }> {
   const uploadId = randomUUID();
   const sourceSha256 = createHash("sha256").update(randomBytes(64)).digest("hex");
   const expiresAt = new Date(Date.now() + (options.expiresInMs ?? 30 * 60 * 1000)).toISOString();
-  await uploadsRepository.createUpload({ id: uploadId, expiresAt });
+  await uploadsRepository.createUpload({ id: uploadId, expiresAt, secretSha256: SECRET_SHA256 });
   await uploadsRepository.markUploadReceived(uploadId, {
     path: `staging/uploads/${uploadId}/source.tar.gz`,
     filename: "source.tar.gz",
     sizeBytes: 64,
     sourceSha256,
   });
-  return { uploadId, sourceSha256 };
+  return { uploadId, sourceSha256, secret: SECRET };
 }
 
 function target() {
@@ -60,6 +65,7 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
       .post("/api/verification/v1/verifications")
       .send({
         target: target(),
+        upload_secret: SECRET,
         manifest: {
           schema: "stellar-submitted-source-verification-manifest-v1",
           source_sha256: claimedWrongHash,
@@ -83,6 +89,7 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
       .post("/api/verification/v1/verifications")
       .send({
         target: target(),
+        upload_secret: SECRET,
         manifest: {
           schema: "stellar-submitted-source-verification-manifest-v1",
           source_sha256: sourceSha256,
@@ -115,6 +122,7 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
       .post("/api/verification/v1/verifications")
       .send({
         target: target(),
+        upload_secret: SECRET,
         manifest: {
           schema: "stellar-submitted-source-verification-manifest-v1",
           source_sha256: sourceSha256,
@@ -138,6 +146,7 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
       .post("/api/verification/v1/verifications")
       .send({
         target: target(),
+        upload_secret: SECRET,
         manifest: {
           schema: "stellar-submitted-source-verification-manifest-v1",
           source_sha256: createHash("sha256").update(randomBytes(64)).digest("hex"),
@@ -158,6 +167,7 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
       .post("/api/verification/v1/verifications")
       .send({
         target: target(),
+        upload_secret: SECRET,
         manifest: {
           schema: "stellar-submitted-source-verification-manifest-v1",
           source_sha256: sourceSha256,
@@ -172,4 +182,43 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
 
     await uploadsRepository.deleteUpload(uploadId);
   });
+
+  it("refuses an upload_id sent without the upload's secret, or with someone else's", async () => {
+    const { uploadId, sourceSha256 } = await seedUpload();
+    createdRows.upload(uploadId);
+    const manifest = { schema: "stellar-submitted-source-verification-manifest-v1", source_sha256: sourceSha256, upload_id: uploadId };
+
+    for (const secret of [undefined, "a-guess"]) {
+      const res = await request(server)
+        .post("/api/verification/v1/verifications")
+        .send({ target: target(), manifest: { ...manifest, is_public: true }, ...(secret ? { upload_secret: secret } : {}) });
+      createdRows.job(res.body?.job_id);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("upload_secret_invalid");
+    }
+    expect((await uploadsRepository.getUpload(uploadId))?.visibility).toBe("private");
+  });
+
+  it("keeps the visibility the first submission gave the upload", async () => {
+    const { uploadId, sourceSha256 } = await seedUpload();
+    createdRows.upload(uploadId);
+    const manifest = { schema: "stellar-submitted-source-verification-manifest-v1", source_sha256: sourceSha256, upload_id: uploadId };
+
+    const first = await request(server)
+      .post("/api/verification/v1/verifications")
+      .send({ target: target(), upload_secret: SECRET, manifest: { ...manifest, is_public: false } });
+    createdRows.job(first.body?.job_id);
+    expect(first.status).toBe(202);
+
+    const second = await request(server)
+      .post("/api/verification/v1/verifications")
+      .send({ target: target(), upload_secret: SECRET, manifest: { ...manifest, is_public: true } });
+    createdRows.job(second.body?.job_id);
+
+    expect(second.status).toBe(409);
+    expect(second.body.error).toBe("upload_visibility_conflict");
+    expect((await uploadsRepository.getUpload(uploadId))?.visibility).toBe("private");
+  });
 });
+

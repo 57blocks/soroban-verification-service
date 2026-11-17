@@ -38,6 +38,7 @@ SUBMITTED=$(post verifications -H 'Content-Type: application/json' -d "$(jq -n \
     manifest: ({schema: "stellar-submitted-source-verification-manifest-v1",
                 upload_id: $u.upload_id, source_sha256: $u.source_sha256, bldopt: $opt}
                + if $arg == [] then {} else {bldarg: $arg} end),
+    upload_secret: $u.upload_secret,
     accepted_terms_version: $t,
     dry_run: $dry
   }')")

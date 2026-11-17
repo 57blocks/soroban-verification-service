@@ -56,7 +56,7 @@ you pick a file.
 
 | | At a URL | As an upload |
 | --- | --- | --- |
-| You send | The URL and the archive's SHA-256 | The archive itself; the response gives an `upload_id` and the SHA-256 the verifier computed |
+| You send | The URL and the archive's SHA-256 | The archive itself; the response gives an `upload_id`, the SHA-256 the verifier computed, and an `upload_secret` the submission must carry |
 | When the verifier reads it | When the job runs | At upload |
 | Limits | HTTPS only, no private or local addresses, at most 5 redirects, 2 minutes to download | Use it within 30 minutes |
 | Published with the result | The URL, always | Nothing but the hash, unless you declare the source public |
