@@ -119,7 +119,8 @@ for exact mechanics — this list is not exhaustive):
   ([`docs/invariants.md` rule 10](docs/invariants.md)).
   Both are container-execution-capable and both are therefore under CE1–CE5, for opposite reasons.
 - **Sandboxed rebuilds.** The `docker run` rebuild — the only rebuild path — uses `--cap-drop ALL`,
-  `--security-opt no-new-privileges`, `--network none`, `--read-only`, a non-root `--user` (65532, never the runner's own uid), `nosuid`
+  `--security-opt no-new-privileges`, `--network none` (only the dependency prefetch stage has a network,
+  described below), `--read-only`, a non-root `--user` (65532, never the runner's own uid), `nosuid`
   `nodev` `noexec` tmpfs for `/tmp` and `/var/tmp`, and CPU / memory / PID limits, with a read-only
   source mount and a separate writable output mount, each a non-recursive `--mount` bind. Docker's
   default seccomp profile applies, since nothing passes `seccomp=unconfined`; no custom seccomp,
@@ -132,7 +133,9 @@ for exact mechanics — this list is not exhaustive):
   mode, any bind that is not one of the job's workspace directories, and any network but none or the
   job's internal prefetch network. Those directories sit under a
   root-owned directory, so the runner cannot swap one for a link before a stage binds it. The daemon still
-  runs as root, so a container escape through the kernel reaches the host.
+  runs as root, so a container escape through the kernel reaches the host. In the reference deployment
+  that host runs no other build, before or after: each builder host takes one job and is terminated when
+  it ends, by a function outside the host that nothing on it can stop.
 - **Constrained dependency prefetch.** Before `cargo vendor` runs (ahead of the final no-network
   build), every `Cargo.toml` and `Cargo.lock` is parsed as TOML and each source it names is checked:
   only `https` sources pass, private, local and cloud-metadata hosts are refused, and only hosts on
@@ -145,7 +148,7 @@ for exact mechanics — this list is not exhaustive):
   source or its dependency graph names, nothing else is reachable from the prefetch stage.
 - **Integrity checks on submitted source.** Both source shapes a submission can take — a private
   upload and a `source_uri` archive — are verified against the caller-provided SHA-256 before use, and
-  re-hashed inside the sandbox against the bytes actually fetched. A `source_uri` job proves it holds
+  the build job's materialise container hashes the bytes it downloads again before it unpacks them. A `source_uri` job proves it holds
   those bytes by fetching its own URL before it may share a rebuild another submission started.
 - **Abuse controls on the public API.** `services/verification-svc` combines an in-process rate limiter
   (`@nestjs/throttler`) with a DB-backed `AbuseGuard` for stronger enforcement, and gives its public read
