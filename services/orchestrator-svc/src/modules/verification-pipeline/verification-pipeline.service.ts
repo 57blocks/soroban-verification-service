@@ -34,7 +34,6 @@ import {
 } from "./chain-reader.service.js";
 import { BuildEnvironmentIdentityService } from "./build-environment-identity.service.js";
 import {
-  declareSourceFileName,
   SourceResolutionService,
   StagedSourceReleaseService,
 } from "../source-resolution/index.js";
@@ -231,6 +230,13 @@ export class VerificationPipelineService {
       return;
     }
 
+    // Before the rebuild key is computed: a job that shares a rebuild never builds, so this is its only proof.
+    const possession = await this.sourceResolution.proveSourcePossession(job.sourceRef, job.jobId);
+    if (!possession.ok) {
+      await this.failJob(job, "source_unreachable", possession.reason, possession.detail);
+      return;
+    }
+
     const environmentIdentity = await this.resolveEnvironmentIdentity(
       job,
       chainLookup.metadata
@@ -311,29 +317,6 @@ export class VerificationPipelineService {
         }
       }
       rebuild = (await this.rebuilds.getById(rebuild.rebuildId)) ?? rebuild;
-    }
-
-    if (
-      rebuild.status === "done" &&
-      !job.dryRun &&
-      job.sourceRef.type === "source_uri" &&
-      job.sourceRef.visibility === "public" &&
-      // A canonical archive cannot be re-staged without a build; publication falls back to "not published".
-      !rebuild.canonicalSourceKey &&
-      !(await this.publish.isSourcePublished(
-        await declareSourceFileName(job.sourceRef, this.sourceResolution)
-      ))
-    ) {
-      const restaged = await this.sourceResolution.ensureStagedRemoteSource(
-        job.sourceRef,
-        rebuild.rebuildId,
-        rebuild.buildMode ?? "verify"
-      );
-      if (restaged === "staged") {
-        this.logger.log("attached to a finished rebuild; re-staged its public source for publishing", {
-          rebuild_id: rebuild.rebuildId,
-        });
-      }
     }
 
     if (
@@ -493,7 +476,8 @@ export class VerificationPipelineService {
     const resolved = await this.sourceResolution.resolveSourceRefForDispatch(
       job.sourceRef,
       rebuild.rebuildId,
-      mode
+      mode,
+      job.jobId
     );
     if (!resolved.ok) {
       await this.rebuilds.releaseClaim(rebuild.rebuildId);

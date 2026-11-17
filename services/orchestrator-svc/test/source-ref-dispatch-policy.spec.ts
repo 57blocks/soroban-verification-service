@@ -5,10 +5,13 @@ import { SourceResolutionService } from "../src/modules/source-resolution/source
 
 const STAGING = { bucket: "sv-test-scratch", region: "ap-southeast-2" };
 const REBUILD = "rb-0001";
+const JOB = "0b0b0b0b-1111-2222-3333-444444444444";
+const OWN_COPY = `staging/jobs/${JOB}/source`;
 
 class TestService extends SourceResolutionService {
   readonly fetched: string[] = [];
   readonly staged: { key: string; bytes: number }[] = [];
+  readonly objects = new Map<string, Uint8Array>();
   bodyBytes: Uint8Array = new Uint8Array([1, 2, 3]);
   failWith?: Error;
 
@@ -20,7 +23,16 @@ class TestService extends SourceResolutionService {
 
   protected override putStagedObject(_s3: never, _bucket: string, key: string, bytes: Uint8Array) {
     this.staged.push({ key, bytes: bytes.byteLength });
+    this.objects.set(key, bytes);
     return Promise.resolve();
+  }
+
+  protected override stagedObjectExists(_s3: never, _bucket: string, key: string): Promise<boolean> {
+    return Promise.resolve(this.objects.has(key));
+  }
+
+  override readStagingObjectBytes(key: string): Promise<Uint8Array | undefined> {
+    return Promise.resolve(this.objects.get(key));
   }
 
   protected override presignUploadGet(_s3: never, bucket: string, key: string): Promise<string> {
@@ -51,6 +63,7 @@ describe("resolveSourceRefForDispatch — shapes this verifier will not acquire"
       { type, visibility: "public", repo: "https://example.com/x.git", rev: "HEAD" } as SourceReference,
       REBUILD,
       "build",
+      JOB,
     );
 
     expect(result.ok).toBe(false);
@@ -61,7 +74,7 @@ describe("resolveSourceRefForDispatch — shapes this verifier will not acquire"
   it("names a missing source_uri rather than reporting it as unreachable", async () => {
     const svc = service();
 
-    const result = await svc.resolveSourceRefForDispatch(sourceUriRef(undefined, BODY_SHA256), REBUILD, "build");
+    const result = await svc.resolveSourceRefForDispatch(sourceUriRef(undefined, BODY_SHA256), REBUILD, "build", JOB);
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("source_uri_missing");
@@ -80,7 +93,7 @@ describe("resolveSourceRefForDispatch — destinations refused before any reques
   ])("refuses %s, and never requests it", async (_label, uri) => {
     const svc = service();
 
-    const result = await svc.resolveSourceRefForDispatch(sourceUriRef(uri, BODY_SHA256), REBUILD, "build");
+    const result = await svc.resolveSourceRefForDispatch(sourceUriRef(uri, BODY_SHA256), REBUILD, "build", JOB);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -98,6 +111,7 @@ describe("resolveSourceRefForDispatch — destinations refused before any reques
       sourceUriRef("https://cdn.example.com/source.tar.gz", BODY_SHA256),
       REBUILD,
       "build",
+      JOB,
     );
 
     expect(result.ok).toBe(false);
@@ -122,6 +136,7 @@ describe("resolveSourceRefForDispatch — a destination we admitted that deliver
       sourceUriRef("https://cdn.example.com/source.tar.gz", BODY_SHA256),
       REBUILD,
       "build",
+      JOB,
     );
 
     expect(result.ok).toBe(false);
@@ -142,11 +157,15 @@ describe("resolveSourceRefForDispatch — what the builder is handed", () => {
       sourceUriRef("https://example.com/source.tar.gz", BODY_SHA256),
       REBUILD,
       "build",
+      JOB,
     );
 
     expect(result.ok).toBe(true);
     expect(svc.fetched).toEqual(["https://example.com/source.tar.gz"]);
-    expect(svc.staged).toEqual([{ key: `staging/${REBUILD}/build/fetched-source`, bytes: BODY.byteLength }]);
+    expect(svc.staged).toEqual([
+      { key: OWN_COPY, bytes: BODY.byteLength },
+      { key: `staging/${REBUILD}/build/fetched-source`, bytes: BODY.byteLength },
+    ]);
     if (result.ok) {
       expect(result.sourceRef.source_uri).toContain(`${STAGING.bucket}.s3.amazonaws.com`);
       expect(result.sourceRef.source_uri).not.toContain("example.com/source.tar.gz");
@@ -156,13 +175,15 @@ describe("resolveSourceRefForDispatch — what the builder is handed", () => {
   it("keys the staged object per mode, so a redispatch cannot read the other attempt's bytes", async () => {
     const svc = service();
 
-    await svc.resolveSourceRefForDispatch(sourceUriRef("https://example.com/s.tgz", BODY_SHA256), REBUILD, "build");
-    await svc.resolveSourceRefForDispatch(sourceUriRef("https://example.com/s.tgz", BODY_SHA256), REBUILD, "verify");
+    await svc.resolveSourceRefForDispatch(sourceUriRef("https://example.com/s.tgz", BODY_SHA256), REBUILD, "build", JOB);
+    await svc.resolveSourceRefForDispatch(sourceUriRef("https://example.com/s.tgz", BODY_SHA256), REBUILD, "verify", JOB);
 
     expect(svc.staged.map((s) => s.key)).toEqual([
+      OWN_COPY,
       `staging/${REBUILD}/build/fetched-source`,
       `staging/${REBUILD}/verify/fetched-source`,
     ]);
+    expect(svc.fetched).toHaveLength(1);
   });
 
   it("refuses bytes that do not hash to the submitted source_sha256, and stages nothing", async () => {
@@ -173,6 +194,7 @@ describe("resolveSourceRefForDispatch — what the builder is handed", () => {
       sourceUriRef("https://example.com/source.tar.gz", "b".repeat(64)),
       REBUILD,
       "build",
+      JOB,
     );
 
     expect(result.ok).toBe(false);
@@ -188,8 +210,74 @@ describe("resolveSourceRefForDispatch — what the builder is handed", () => {
       sourceUriRef("https://example.com/source.tar.gz", BODY_SHA256.toUpperCase()),
       REBUILD,
       "build",
+      JOB,
     );
 
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("proveSourcePossession — a job holds what it declares before it may share a rebuild", () => {
+  it("fetches the job's own URL, checks the hash, and keeps the bytes under the job's own key", async () => {
+    const svc = service();
+    svc.bodyBytes = BODY;
+
+    const result = await svc.proveSourcePossession(sourceUriRef("https://example.com/source.tar.gz", BODY_SHA256), JOB);
+
+    expect(result).toEqual({ ok: true });
+    expect(svc.fetched).toEqual(["https://example.com/source.tar.gz"]);
+    expect(svc.staged).toEqual([{ key: OWN_COPY, bytes: BODY.byteLength }]);
+  });
+
+  it("refuses a URL that never serves the declared bytes, and keeps nothing", async () => {
+    const svc = service();
+    svc.failWith = new UpstreamNotDeliveredError("Status 404 from https://attacker.invalid");
+
+    const result = await svc.proveSourcePossession(sourceUriRef("https://attacker.invalid/never-served.tar.gz", BODY_SHA256), JOB);
+
+    expect(result).toMatchObject({ ok: false, reason: "source_uri_not_materialized" });
+    expect(svc.staged).toEqual([]);
+  });
+
+  it("refuses bytes that hash to something other than the declared source_sha256", async () => {
+    const svc = service();
+    svc.bodyBytes = new Uint8Array([9, 9, 9]);
+
+    const result = await svc.proveSourcePossession(sourceUriRef("https://example.com/source.tar.gz", BODY_SHA256), JOB);
+
+    expect(result).toMatchObject({ ok: false, reason: "source_hash_mismatch" });
+    expect(svc.staged).toEqual([]);
+  });
+
+  it("does not fetch again once the job's own copy exists", async () => {
+    const svc = service();
+    svc.objects.set(OWN_COPY, BODY);
+
+    expect(await svc.proveSourcePossession(sourceUriRef("https://example.com/source.tar.gz", BODY_SHA256), JOB)).toEqual({ ok: true });
+    expect(svc.fetched).toEqual([]);
+  });
+
+  it("builds from the job's own copy without requesting the URL a second time", async () => {
+    const svc = service();
+    svc.objects.set(OWN_COPY, BODY);
+    svc.failWith = new Error("the submitter URL must not be requested again");
+
+    const result = await svc.resolveSourceRefForDispatch(sourceUriRef("https://example.com/source.tar.gz", BODY_SHA256), REBUILD, "build", JOB);
+
+    expect(result.ok).toBe(true);
+    expect(svc.fetched).toEqual([]);
+    expect(svc.staged).toEqual([{ key: `staging/${REBUILD}/build/fetched-source`, bytes: BODY.byteLength }]);
+  });
+
+  it("asks nothing of an uploaded source, whose hash was checked when it was received", async () => {
+    const svc = service();
+
+    const result = await svc.proveSourcePossession(
+      { type: "private_tarball", visibility: "private", tarball_sha256: BODY_SHA256, upload_id: JOB } as SourceReference,
+      JOB,
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(svc.fetched).toEqual([]);
   });
 });

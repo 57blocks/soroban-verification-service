@@ -181,7 +181,7 @@ export class PublishService {
       storage,
       sourceFileName,
       jobId,
-      { rebuildId, buildMode },
+      { jobId, rebuildId, buildMode },
       canonicalSource,
     );
     const verifiedSourceCodeUri: RegistrySourceCodeUri | undefined =
@@ -410,7 +410,7 @@ export class PublishService {
       storage,
       sourceFileName,
       job.jobId,
-      { rebuildId, buildMode },
+      { jobId: job.jobId, rebuildId, buildMode },
       canonicalSource,
     );
 

@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
   createS3Client,
   deleteObject,
   getObjectBytesBounded,
+  listObjectKeys,
   objectExists,
   presignGetUrl,
   putObjectBytes,
@@ -17,8 +17,8 @@ import {
   type SourceReference as SourceReferenceDto,
 } from "@scvs/core";
 import { FetchPolicyError, ResponseTooLargeError, checkUrl, normalizePolicy } from "@scvs/core/fetch-policy";
-import { fetchedSourceKey } from "../../common/staging-keys.util.js";
-import { MAX_ARCHIVE_BYTES } from "./publish-source-bytes.util.js";
+import { fetchedSourceKey, jobSourceKey } from "../../common/staging-keys.util.js";
+import { MAX_ARCHIVE_BYTES, sha256Hex } from "./publish-source-bytes.util.js";
 import { fetchThroughDestinationPolicy } from "@scvs/core/policy-bound-fetch";
 import type { AppConfigService } from "../../config/configuration.js";
 
@@ -50,6 +50,7 @@ export class SourceResolutionService {
     sourceRef: SourceReferenceDto,
     rebuildId: string,
     mode: BuildMode,
+    jobId: string,
   ): Promise<
     | { ok: true; sourceRef: SourceReferenceDto }
     | { ok: false; reason: string; detail: string }
@@ -66,17 +67,101 @@ export class SourceResolutionService {
           "Submit an uploaded archive (upload_id) or an https source_uri.",
       };
     }
-    return this.stageRemoteSource(sourceRef, rebuildId, mode);
+    return this.stageRemoteSource(sourceRef, rebuildId, mode, jobId);
   }
 
+  /**
+   * A `source_uri` job proves it holds the bytes it declares before it may attach to a rebuild: its own URL is
+   * fetched and re-hashed, and the bytes kept under its own key. That key is written only after the hash
+   * matched, so its presence is the proof.
+   */
+  async proveSourcePossession(
+    sourceRef: SourceReferenceDto,
+    jobId: string,
+  ): Promise<{ ok: true } | { ok: false; reason: string; detail: string }> {
+    if (sourceRef.type !== "source_uri") return { ok: true };
+    try {
+      const staging = this.configService.get("stagingStorage", { infer: true });
+      const s3 = createS3Client({ region: staging.region });
+      if (await this.stagedObjectExists(s3, staging.bucket, jobSourceKey(jobId))) return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error) };
+    }
+    const own = await this.ownVerifiedCopy(sourceRef, jobId);
+    return own.ok ? { ok: true } : own;
+  }
+
+  /** Builds from the dispatching job's own hash-checked copy; the submitter's URL is not requested a second time. */
   protected async stageRemoteSource(
     sourceRef: SourceReferenceDto,
     rebuildId: string,
     mode: BuildMode,
+    jobId: string,
   ): Promise<
     | { ok: true; sourceRef: SourceReferenceDto }
     | { ok: false; reason: string; detail: string }
   > {
+    const own = await this.ownVerifiedCopy(sourceRef, jobId);
+    if (!own.ok) return own;
+
+    const staging = this.configService.get("stagingStorage", { infer: true });
+    const s3 = createS3Client({ region: staging.region });
+    const key = fetchedSourceKey(rebuildId, mode);
+    try {
+      await this.putStagedObject(s3, staging.bucket, key, own.bytes);
+      const stagedUri = await this.presignUploadGet(s3, staging.bucket, key);
+      this.logger.log("staged a job's own source copy for the builder", {
+        rebuild_id: rebuildId,
+        job_id: jobId,
+        mode,
+        bytes: own.bytes.byteLength,
+      });
+      return { ok: true, sourceRef: { ...sourceRef, source_uri: stagedUri } };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: "source_stage_copy_failed",
+        detail: describeError(error),
+      };
+    }
+  }
+
+  private async ownVerifiedCopy(
+    sourceRef: SourceReferenceDto,
+    jobId: string,
+  ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: string; detail: string }> {
+    const declared = sourceRef.source_sha256?.toLowerCase();
+    if (!declared) {
+      return { ok: false, reason: "source_sha256_missing", detail: "A source_uri submission must declare its source_sha256." };
+    }
+    const key = jobSourceKey(jobId);
+
+    let held: Uint8Array | undefined;
+    try {
+      held = await this.readStagingObjectBytes(key);
+    } catch (error) {
+      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error) };
+    }
+    if (held && sha256Hex(held) === declared) return { ok: true, bytes: held };
+
+    const fetched = await this.fetchDeclaredSource(sourceRef, declared);
+    if (!fetched.ok) return fetched;
+
+    const staging = this.configService.get("stagingStorage", { infer: true });
+    const s3 = createS3Client({ region: staging.region });
+    try {
+      await this.putStagedObject(s3, staging.bucket, key, fetched.bytes);
+    } catch (error) {
+      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error) };
+    }
+    this.logger.log("fetched and hash-checked a job's own source", { job_id: jobId, bytes: fetched.bytes.byteLength });
+    return fetched;
+  }
+
+  private async fetchDeclaredSource(
+    sourceRef: SourceReferenceDto,
+    declared: string,
+  ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: string; detail: string }> {
     const uri = sourceRef.source_uri;
     if (!uri) {
       return {
@@ -109,69 +194,15 @@ export class SourceResolutionService {
       return { ok: false, reason: "source_uri_not_materialized", detail: describeError(error) };
     }
 
-    const digest = createHash("sha256").update(bytes).digest("hex");
-    const declared = sourceRef.source_sha256?.toLowerCase();
-    if (declared && digest !== declared) {
+    const digest = sha256Hex(bytes);
+    if (digest !== declared) {
       return {
         ok: false,
         reason: "source_hash_mismatch",
         detail: `Source SHA-256 mismatch: expected ${declared}, got ${digest}.`,
       };
     }
-
-    const staging = this.configService.get("stagingStorage", { infer: true });
-    const s3 = createS3Client({ region: staging.region });
-    const key = fetchedSourceKey(rebuildId, mode);
-    try {
-      await this.putStagedObject(s3, staging.bucket, key, bytes);
-      const stagedUri = await this.presignUploadGet(s3, staging.bucket, key);
-      this.logger.log("staged a fetched source archive for the builder", {
-        rebuild_id: rebuildId,
-        mode,
-        bytes: bytes.byteLength,
-      });
-      return { ok: true, sourceRef: { ...sourceRef, source_uri: stagedUri } };
-    } catch (error) {
-      return {
-        ok: false,
-        reason: "source_stage_copy_failed",
-        detail: describeError(error),
-      };
-    }
-  }
-
-  /**
-   * A public job that attaches to a rebuild already finished finds no fresh dispatch to stage its source,
-   * so the copy its publication will read is staged here, hash-checked like any dispatch fetch. Best
-   * effort: a job whose copy cannot be staged still gets its verdict, only no published source.
-   */
-  async ensureStagedRemoteSource(
-    sourceRef: SourceReferenceDto,
-    rebuildId: string,
-    mode: BuildMode,
-  ): Promise<"present" | "staged" | "unavailable"> {
-    if (sourceRef.type !== "source_uri" || sourceRef.visibility !== "public") return "present";
-    try {
-      const staging = this.configService.get("stagingStorage", { infer: true });
-      const s3 = createS3Client({ region: staging.region });
-      if (await this.stagedObjectExists(s3, staging.bucket, fetchedSourceKey(rebuildId, mode))) return "present";
-      const staged = await this.stageRemoteSource(sourceRef, rebuildId, mode);
-      if (staged.ok) return "staged";
-      this.logger.warn("could not re-stage a public source for a rebuild that had already finished", {
-        rebuild_id: rebuildId,
-        mode,
-        reason: staged.reason,
-        detail: staged.detail,
-      });
-      return "unavailable";
-    } catch (error) {
-      this.logger.warn("could not check or re-stage a public source for a finished rebuild", {
-        rebuild_id: rebuildId,
-        mode,
-        error: describeError(error),
-      });
-      return "unavailable";
-    }
+    return { ok: true, bytes };
   }
 
   async resolvePrivateUploadSourceRef(
@@ -270,6 +301,12 @@ export class SourceResolutionService {
       throw new Error(`staging object ${key} is ${object.tooLarge} bytes, over the ${maxBytes} byte ceiling`);
     }
     return object.bytes;
+  }
+
+  listStagingKeys(prefix: string): Promise<string[]> {
+    const staging = this.configService.get("stagingStorage", { infer: true });
+    const s3 = createS3Client({ region: staging.region });
+    return listObjectKeys(s3, staging.bucket, prefix);
   }
 
   /** Idempotent: a key that is already gone is not an error. */

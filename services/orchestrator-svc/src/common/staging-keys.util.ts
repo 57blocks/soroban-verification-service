@@ -19,6 +19,18 @@ export function fetchedSourceKey(rebuildId: string, mode: BuildMode): string {
   return `staging/${rebuildId}/${mode}/fetched-source`;
 }
 
+/** The copy one `source_uri` job fetched and hash-checked itself; written only after the hash matched. */
+export function jobSourceKey(jobId: string): string {
+  return `${JOB_SOURCE_PREFIX}${jobId}/source`;
+}
+
+export const JOB_SOURCE_PREFIX = "staging/jobs/";
+
+/** The job a {@link jobSourceKey} belongs to, or undefined for any other key. */
+export function jobIdOfSourceKey(key: string): string | undefined {
+  return /^staging\/jobs\/([0-9a-f-]{36})\/source$/.exec(key)?.[1];
+}
+
 /** Every staging copy of a rebuild's source, under both modes: a release must not depend on which one ran. */
 export function stagedSourceKeys(rebuildId: string): string[] {
   return buildModes.flatMap((mode) => [fetchedSourceKey(rebuildId, mode), canonicalSourceKey(rebuildId, mode)]);

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { buildModes, type BuildMode, type SourceReference } from "@scvs/core";
-import { fetchedSourceKey } from "../../common/staging-keys.util.js";
+import type { BuildMode, SourceReference } from "@scvs/core";
+import { jobSourceKey } from "../../common/staging-keys.util.js";
 import type { SourceResolutionService } from "./source-resolution.service.js";
 
 export const MAX_ARCHIVE_BYTES = 52_428_800; // 50 MiB
@@ -9,8 +9,8 @@ const FALLBACK_EXTENSION = ".tar.gz";
 
 export type CanonicalSource = { sha256: string; key: string; format?: string };
 
-/** Where the copy staged before the build lives: under the rebuild, in the mode that ran. */
-export type StagedSourceLocator = { rebuildId: string; buildMode?: BuildMode };
+/** The job publishing, and the rebuild it attached to. */
+export type StagedSourceLocator = { jobId: string; rebuildId: string; buildMode?: BuildMode };
 
 export type SourceBytesUnavailableReason =
   | "no_staged_copy"
@@ -68,8 +68,8 @@ export function sha256Hex(bytes: Uint8Array): string {
 }
 
 /**
- * The bytes that may land in `sources/`: a copy this service staged itself, re-hashed here against the
- * hash the published name carries. Nothing is fetched from a submitter-supplied URL at this point.
+ * The bytes that may land in `sources/`: the publishing job's own copy, re-hashed here against the hash the
+ * published name carries. Never a copy another job staged, and nothing is fetched from a submitter URL here.
  */
 export async function readSourceBytesForPublishing(
   sourceRef: SourceReference,
@@ -101,13 +101,11 @@ export async function readSourceBytesForPublishing(
   }
 
   if (sourceRef.type === "source_uri") {
-    for (const mode of modesToTry(staged.buildMode)) {
-      const key = fetchedSourceKey(staged.rebuildId, mode);
-      const read = await readStagingObject(sourceResolution, key);
-      if (!read.ok) return read;
-      if (read.bytes) return verified(read.bytes, declared, deriveExtension(sourceRef.source_uri), key);
-    }
-    return noStagedCopy(`No staged copy of the fetched source under rebuild ${staged.rebuildId}.`);
+    const key = jobSourceKey(staged.jobId);
+    const read = await readStagingObject(sourceResolution, key);
+    if (!read.ok) return read;
+    if (read.bytes) return verified(read.bytes, declared, deriveExtension(sourceRef.source_uri), key);
+    return noStagedCopy(`No copy of the source job ${staged.jobId} fetched for itself.`);
   }
 
   return {
@@ -115,11 +113,6 @@ export async function readSourceBytesForPublishing(
     reason: "source_type_not_publishable",
     detail: `Source reference type "${sourceRef.type}" has no staged copy this service can publish.`,
   };
-}
-
-function modesToTry(preferred: BuildMode | undefined): BuildMode[] {
-  const first = preferred ?? "verify";
-  return [first, ...buildModes.filter((mode) => mode !== first)];
 }
 
 async function readStagingObject(

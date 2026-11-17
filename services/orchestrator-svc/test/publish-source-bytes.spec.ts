@@ -57,6 +57,8 @@ const CANONICAL_BYTES = new Uint8Array([0x1f, 0x8b, 0x08, 0x00]);
 const CANONICAL_SHA = sha256(CANONICAL_BYTES);
 const REBUILD_ID = "11111111-2222-3333-4444-555555555555";
 const CANONICAL_KEY = `staging/${REBUILD_ID}/verify/canonical-source`;
+const JOB_ID = "66666666-7777-8888-9999-000000000000";
+const OWN_COPY_KEY = `staging/jobs/${JOB_ID}/source`;
 const FETCHED_VERIFY_KEY = `staging/${REBUILD_ID}/verify/fetched-source`;
 const FETCHED_BUILD_KEY = `staging/${REBUILD_ID}/build/fetched-source`;
 const OTHER_BYTES = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
@@ -93,7 +95,7 @@ function resolution(
 }
 
 const CANONICAL = { sha256: CANONICAL_SHA, key: CANONICAL_KEY, format: "gzip" };
-const STAGED = { rebuildId: REBUILD_ID, buildMode: "verify" as const };
+const STAGED = { jobId: JOB_ID, rebuildId: REBUILD_ID, buildMode: "verify" as const };
 
 describe("canonicalArchiveExtension", () => {
   it("names the archive by its FORMAT, not by what the submitter called the container", () => {
@@ -164,20 +166,24 @@ describe("readSourceBytesForPublishing — which bytes land in sources/", () => 
     expect(read).toMatchObject({ ok: false, reason: "sha256_mismatch", expectedSha256: SUBMITTED_SHA });
   });
 
-  it("reads a URL source from the copy staged before the build, never from the URL", async () => {
-    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [FETCHED_VERIFY_KEY]: UPLOAD_BYTES }), STAGED);
+  it("reads a URL source from the copy the publishing job fetched for itself, never from the URL", async () => {
+    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [OWN_COPY_KEY]: UPLOAD_BYTES }), STAGED);
 
     expect(read).toEqual({ ok: true, bytes: UPLOAD_BYTES, extension: ".zip", sha256: SUBMITTED_SHA });
   });
 
-  it("finds the staged copy under the other build mode when the recorded mode has none", async () => {
-    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [FETCHED_BUILD_KEY]: UPLOAD_BYTES }), STAGED);
+  it("never publishes the rebuild's copy, which another job may have fetched", async () => {
+    const read = await readSourceBytesForPublishing(
+      FROM_URL,
+      resolution({ [FETCHED_VERIFY_KEY]: UPLOAD_BYTES, [FETCHED_BUILD_KEY]: UPLOAD_BYTES }),
+      STAGED,
+    );
 
-    expect(read).toMatchObject({ ok: true, sha256: SUBMITTED_SHA });
+    expect(read).toMatchObject({ ok: false, reason: "no_staged_copy" });
   });
 
   it("refuses a staged URL copy whose bytes do not hash to the declared source_sha256", async () => {
-    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [FETCHED_VERIFY_KEY]: OTHER_BYTES }), STAGED);
+    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [OWN_COPY_KEY]: OTHER_BYTES }), STAGED);
 
     expect(read).toMatchObject({ ok: false, reason: "sha256_mismatch", expectedSha256: SUBMITTED_SHA, actualSha256: sha256(OTHER_BYTES) });
   });
@@ -192,7 +198,7 @@ describe("readSourceBytesForPublishing — which bytes land in sources/", () => 
     const boom = () => {
       throw new Error("staging object is 60000000 bytes, over the ceiling");
     };
-    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [FETCHED_VERIFY_KEY]: boom }), STAGED);
+    const read = await readSourceBytesForPublishing(FROM_URL, resolution({ [OWN_COPY_KEY]: boom }), STAGED);
 
     expect(read).toMatchObject({ ok: false, reason: "staging_read_failed" });
     expect((read as { detail: string }).detail).toContain("over the ceiling");

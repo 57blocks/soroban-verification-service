@@ -13,6 +13,7 @@ export const METRIC_UNITS = {
   build_log_expiry_backlog: "count",
   staged_source_release_backlog: "count",
   staged_source_released_total: "count",
+  job_source_released_total: "count",
   source_publish_unavailable_total: "count",
   verifier_aggregation_seconds: "seconds",
   verifier_aggregation_total: "count",
