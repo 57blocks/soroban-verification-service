@@ -22,6 +22,8 @@ import { extractBuildPackage } from "./build-options.js";
 import { buildRecipeArtifact } from "./recipe.js";
 import { uploadRebuiltWasm, uploadRecipeArtifact } from "./upload.js";
 import type { AppConfigService } from "../../config/configuration.js";
+import { removeSandboxWrites } from "./sandbox-container.js";
+import type { SandboxWrites } from "./run-cli.types.js";
 
 type Classification =
   | "success"
@@ -77,14 +79,17 @@ export class BuilderService {
 
   private async runForJob(job: BatchJobParams): Promise<BuilderRunResult> {
     const workDirs: string[] = [];
+    const sandboxWrites: SandboxWrites = { dirs: [] };
     try {
-      return await this.rebuild(job, workDirs);
+      return await this.rebuild(job, workDirs, sandboxWrites);
     } finally {
+      const left = await removeSandboxWrites(sandboxWrites);
+      if (left.length > 0) this.logger.warn("the sandbox's own files could not all be removed", { dirs: left });
       await this.removeWorkDirs(workDirs);
     }
   }
 
-  private async rebuild(job: BatchJobParams, workDirs: string[]): Promise<BuilderRunResult> {
+  private async rebuild(job: BatchJobParams, workDirs: string[], sandboxWrites: SandboxWrites): Promise<BuilderRunResult> {
     this.logger.log("rebuild starting", { source_ref_type: job.source_ref.type });
 
     const path = handoffPath(this.handoffRoot(), job.job_id);
@@ -126,6 +131,7 @@ export class BuilderService {
       source: handoff.source,
       config: this.runCliConfig(),
       workDirs,
+      sandboxWrites,
     });
 
     return this.finish(job, result);

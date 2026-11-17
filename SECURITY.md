@@ -116,7 +116,7 @@ for exact mechanics — this list is not exhaustive):
   ([`docs/invariants.md` rule 10](docs/invariants.md)).
   Both are container-execution-capable and both are therefore under CE1–CE5, for opposite reasons.
 - **Sandboxed rebuilds.** The `docker run` rebuild — the only rebuild path — uses `--cap-drop ALL`,
-  `--security-opt no-new-privileges`, `--network none`, `--read-only`, a non-root `--user`, `nosuid`
+  `--security-opt no-new-privileges`, `--network none`, `--read-only`, a non-root `--user` (65532, never the runner's own uid), `nosuid`
   `nodev` `noexec` tmpfs for `/tmp` and `/var/tmp`, and CPU / memory / PID limits, with a read-only
   source mount and a separate writable output mount. No seccomp or AppArmor profile is applied; if
   that gap is exploitable given the above, it is worth reporting.

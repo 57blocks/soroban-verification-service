@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,7 +10,7 @@ import { dockerEnvOptions, leadingBuildArgs, replayableBuildOptions, resolveMani
 import { cliFailure, dockerBuildDiagnostics, dockerPrefetchDiagnostics, dockerPrefetchPolicyDiagnostics, dockerUnavailableDiagnostics } from "./diagnostics.js";
 import { evaluatePrefetchEgressPolicy, evaluateVendoredEgressPolicy } from "./egress-policy.js";
 import { referenceAlignment } from "./reference-alignment.js";
-import { cliTimeoutMs, dockerFinalSandboxOptions, dockerResourceLimits } from "./run-cli.config.js";
+import { cliTimeoutMs, dockerFinalSandboxOptions, dockerResourceLimits, sandboxUser } from "./run-cli.config.js";
 import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResult } from "./run-cli.types.js";
 import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, requireExtractedSourceRoot, stageSourceForOfflineBuild, summarizeDockerCommand } from "./sandbox-runtime.js";
 import { requireBindSources, type BindSourceCheck } from "./bind-source.js";
@@ -114,14 +114,23 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
   const jobDir = await realpath(await mkdtemp(join(tmpdir(), "scvs-build-")));
   input.workDirs.push(jobDir);
   // Separate from `outDir` so the only `.wasm` here is one the build tool put there.
-  const artifactDir = await realpath(await mkdtemp(join(tmpdir(), "scvs-artifact-")));
-  input.workDirs.push(artifactDir);
+  const artifactRoot = await realpath(await mkdtemp(join(tmpdir(), "scvs-artifact-")));
+  input.workDirs.push(artifactRoot);
+  const artifactDir = join(artifactRoot, "artifact");
   const outDir = join(jobDir, "out");
   const vendorDir = join(jobDir, "vendor");
   const cargoHomeDir = join(outDir, "cargo-home");
   await mkdir(join(outDir, "tmp"), { recursive: true });
   await mkdir(cargoHomeDir, { recursive: true });
   await mkdir(vendorDir, { recursive: true });
+  await mkdir(artifactDir, { recursive: true });
+  // The sandbox runs as its own uid; each parent stays 0700, so no other host user reaches these.
+  for (const dir of [outDir, join(outDir, "tmp"), cargoHomeDir, vendorDir, artifactDir]) await chmod(dir, 0o777);
+  if (input.sandboxWrites) {
+    input.sandboxWrites.image = input.build.image;
+    input.sandboxWrites.user = sandboxUser(input.config);
+    input.sandboxWrites.dirs.push(outDir, vendorDir, artifactDir);
+  }
   const stagedSourceParent = dirname(offlineSourceRoot);
   const unsafeMount = (check: Extract<BindSourceCheck, { ok: false }>, stage: "prefetch" | "build") =>
     cliFailure("sandbox_mount_source_unsafe", "docker_build_image_rebuild", null, {
@@ -237,7 +246,7 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     { path: vendorDir, root: jobDir },
     { path: outDir, root: jobDir },
     { path: cargoHomeDir, root: jobDir },
-    { path: artifactDir, root: artifactDir },
+    { path: artifactDir, root: artifactRoot },
   ]);
   if (!buildMounts.ok) return unsafeMount(buildMounts, "build");
   const vendoredEgressPolicy = await evaluateVendoredEgressPolicy(vendorDir, egressPolicy.allowed_hosts);

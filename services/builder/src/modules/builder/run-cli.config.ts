@@ -71,16 +71,11 @@ export function dockerResourceLimits(
   };
 }
 
-function sandboxUser(config?: RunCliRuntimeConfig): string {
-  const configured = config?.dockerUser || process.env.SCVS_DOCKER_USER?.trim();
-  if (configured) return configured;
-  const uid =
-    typeof process.getuid === "function" ? process.getuid() : undefined;
-  const gid =
-    typeof process.getgid === "function" ? process.getgid() : undefined;
-  if (uid !== undefined && gid !== undefined && uid !== 0)
-    return `${uid}:${gid}`;
-  return "65532:65532";
+/** Never the runner's own uid: sharing it lets a sandbox read the runner's /proc and its docker credentials. */
+export const SANDBOX_USER = "65532:65532";
+
+export function sandboxUser(config?: RunCliRuntimeConfig): string {
+  return config?.dockerUser || process.env.SCVS_DOCKER_USER?.trim() || SANDBOX_USER;
 }
 
 export function dockerFinalSandboxOptions(
