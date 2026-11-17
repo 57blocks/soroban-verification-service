@@ -285,7 +285,7 @@ function optionalManifestStringArray(manifest: Record<string, unknown>, field: s
   return value;
 }
 
-const RECIPE_SCOPE_PREFIX = "--env=SCVS_E2E_RECIPE_SCOPE=";
+const RECIPE_SCOPE_PREFIX = "--env=E2E_RECIPE_SCOPE=";
 
 export function runScopedBldopt(
   bldopt: readonly string[],

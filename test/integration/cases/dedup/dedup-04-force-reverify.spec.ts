@@ -11,6 +11,7 @@ import {
 } from "../../support/http.js";
 import { submitAndWait, waitForTerminal } from "../../support/job.js";
 import { submitUrl } from "../../support/routes.js";
+import { withUploadSecret } from "../../support/upload-secrets.js";
 import { reportForJob, requireStatusObject } from "../../support/result-tree.js";
 import type { SubmitBody } from "../../support/types.js";
 
@@ -24,24 +25,24 @@ interface PublicForceAttempt {
 const publicForceAttempts: readonly PublicForceAttempt[] = [
   {
     label: "body.force",
-    send: (body) => postJson(submitUrl(), { ...body, force: true }),
+    send: (body) => postJson(submitUrl(), withUploadSecret({ ...body, force: true })),
   },
   {
     label: "body.force_reverify",
-    send: (body) => postJson(submitUrl(), { ...body, force_reverify: true }),
+    send: (body) => postJson(submitUrl(), withUploadSecret({ ...body, force_reverify: true })),
   },
   {
     label: "body.reverify",
-    send: (body) => postJson(submitUrl(), { ...body, reverify: true }),
+    send: (body) => postJson(submitUrl(), withUploadSecret({ ...body, reverify: true })),
   },
   {
     label: "query.force",
-    send: (body) => postJson(`${submitUrl()}?force=true`, body),
+    send: (body) => postJson(`${submitUrl()}?force=true`, withUploadSecret(body)),
   },
   {
     label: "header.X-Force-Reverify",
     send: (body) =>
-      postJson(submitUrl(), body, { headers: { "x-force-reverify": "true" } }),
+      postJson(submitUrl(), withUploadSecret(body), { headers: { "x-force-reverify": "true" } }),
   },
 ];
 

@@ -1,6 +1,6 @@
 import type { RebuildErrorCode } from "@scvs/core";
 
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { runCommand } from "@scvs/core/process";
 import type { CommandResult } from "@scvs/core/process";
@@ -16,21 +16,27 @@ export async function writeVendorCargoConfig(cargoHomeDir: string, vendorDir: st
   for (const name of ["config", "config.toml"]) {
     await rm(join(cargoHomeDir, name), { recursive: true, force: true });
   }
-  await writeFile(
-    join(cargoHomeDir, "config.toml"),
-    [
-      "[source.crates-io]",
-      "replace-with = \"vendored-sources\"",
-      "",
-      "[source.vendored-sources]",
-      `directory = "${vendorDir}"`,
-      "",
-      "[net]",
-      "offline = true",
-      "",
-    ].join("\n"),
-    { mode: 0o600, flag: "wx" },
-  );
+  // The build sandbox runs as its own uid, not the runner's, so it must be able to read this; it holds only the
+  // vendor redirect. Set on the open file, so neither the umask nor a link can change what is made readable.
+  const file = await open(join(cargoHomeDir, "config.toml"), "wx", 0o644);
+  try {
+    await file.writeFile(
+      [
+        "[source.crates-io]",
+        "replace-with = \"vendored-sources\"",
+        "",
+        "[source.vendored-sources]",
+        `directory = "${vendorDir}"`,
+        "",
+        "[net]",
+        "offline = true",
+        "",
+      ].join("\n"),
+    );
+    await file.chmod(0o644);
+  } finally {
+    await file.close();
+  }
   return "/out/cargo-home/config.toml";
 }
 

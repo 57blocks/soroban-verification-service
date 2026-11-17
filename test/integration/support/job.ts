@@ -2,6 +2,7 @@ import { buildLogTokenFor } from "./build-log-token.js";
 import { deploymentParameters, env } from "./env.js";
 import { expectStatus, http, postJson, sleep, type HttpResult } from "./http.js";
 import { jobLogUrl, jobUrl, submitUrl, preflightUrl, uploadSourceUrl } from "./routes.js";
+import { rememberUploadSecret, withUploadSecret } from "./upload-secrets.js";
 import {
   TERMINAL_JOB_STATUSES,
   type JobStatusBody,
@@ -24,7 +25,7 @@ export async function preflight(body: {
 }
 
 export async function submit(body: SubmitBody): Promise<SubmissionOutcome> {
-  const response = await postJson(submitUrl(), body);
+  const response = await postJson(submitUrl(), withUploadSecret(body));
   const jobId =
     response.status === 202 && typeof response.json?.job_id === "string"
       ? (response.json as SubmitQueued).job_id
@@ -144,7 +145,9 @@ export async function uploadSource(
     body: bytes,
   });
   expectStatus(result, 201);
-  return result.json as UploadSourceResponse;
+  const uploaded = result.json as UploadSourceResponse;
+  rememberUploadSecret(uploaded.upload_id, uploaded.upload_secret);
+  return uploaded;
 }
 
 /** Must match the detail JobsRepository.requeueRetryableFailures writes. */
