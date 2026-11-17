@@ -13,7 +13,7 @@ import { referenceAlignment } from "./reference-alignment.js";
 import { cliTimeoutMs, dockerFinalSandboxOptions, dockerResourceLimits, sandboxUser } from "./run-cli.config.js";
 import type { BuildOutcomeClassification, RunCliInput, RunCliOutcome, RunCliResult } from "./run-cli.types.js";
 import { authenticateForImage, checkDockerAvailable, prefetchCargoDependencies, requireExtractedSourceRoot, stageSourceForOfflineBuild, summarizeDockerCommand } from "./sandbox-runtime.js";
-import { requireBindSources, type BindSourceCheck } from "./bind-source.js";
+import { bindMount, requireBindSources, type BindSourceCheck } from "./bind-source.js";
 import { detectSourceCargoSourceOverride, resolveTrustedToolchain, writeVendorCargoConfig } from "./toolchain.js";
 import { runSandboxContainer } from "./sandbox-container.js";
 
@@ -363,14 +363,10 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
       ...finalSandbox.args,
       "--network",
       "none",
-      "-v",
-      `${offlineSourceRoot}:/source:ro`,
-      "-v",
-      `${vendorDir}:/vendor:ro`,
-      "-v",
-      `${outDir}:${CONTAINER_OUT_DIR}`,
-      "-v",
-      `${artifactDir}:${CONTAINER_ARTIFACT_DIR}`,
+      ...bindMount(offlineSourceRoot, "/source", { readOnly: true }),
+      ...bindMount(vendorDir, "/vendor", { readOnly: true }),
+      ...bindMount(outDir, CONTAINER_OUT_DIR),
+      ...bindMount(artifactDir, CONTAINER_ARTIFACT_DIR),
       "-w",
       "/source",
     ],

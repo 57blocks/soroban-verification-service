@@ -19,7 +19,7 @@ if (args[0] === "ps") process.exit(0);
 const entrypoint = args.includes("--entrypoint") ? args[args.indexOf("--entrypoint") + 1] : undefined;
 if (entrypoint === "rustup") { console.log("stable"); process.exit(0); }
 if (entrypoint === "cargo") process.exit(0);
-const artifact = args.flatMap((arg, i) => (args[i - 1] === "-v" && arg.split(":")[1] === "/artifact" ? [arg.split(":")[0]] : []))[0];
+const artifact = args.flatMap((arg, i) => (args[i - 1] === "--mount" && arg.includes("target=/artifact,") ? [/source=([^,]+)/.exec(arg)[1]] : []))[0];
 if (artifact) {
   fs.writeFileSync(path.join(artifact, "c.wasm"), Buffer.from(${JSON.stringify([...WASM])}));
   console.log("Wasm File: /artifact/c.wasm");

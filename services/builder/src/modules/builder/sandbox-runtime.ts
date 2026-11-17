@@ -9,6 +9,7 @@ import { cliTimeoutMs, dependencyPrefetchTimeoutMs, dockerCheckTimeoutMs } from 
 import type { DockerFinalSandboxOptions, DockerResourceLimits, PrefetchEgressPolicyOk, RunCliInput, RunCliRuntimeConfig } from "./run-cli.types.js";
 import { dockerCliOptions } from "./docker-env.js";
 import { runSandboxContainer } from "./sandbox-container.js";
+import { bindMount } from "./bind-source.js";
 
 export async function checkDockerAvailable(config?: RunCliRuntimeConfig): Promise<
   | { ok: true; result: CommandResult }
@@ -95,11 +96,9 @@ export function summarizeDockerCommand(input: {
     ...input.resourceLimits.summaryArgs,
     ...(input.finalSandbox ? input.finalSandbox.summaryArgs : []),
     ...(input.network ? ["--network", input.network] : []),
-    "-v",
-    `<source>:${input.sourceMount || "/source:ro"}`,
-    ...(input.vendorMount ? ["-v", `<vendor>:${input.vendorMount}`] : []),
-    "-v",
-    `<out>:${input.outMount ?? "/out"}`,
+    ...summaryMount("<source>", input.sourceMount || "/source:ro"),
+    ...(input.vendorMount ? summaryMount("<vendor>", input.vendorMount) : []),
+    ...summaryMount("<out>", input.outMount ?? "/out"),
     "-w",
     input.workDir ?? "/source",
     ...(input.hasEnv ? ["-e", "<env>"] : []),
@@ -107,6 +106,11 @@ export function summarizeDockerCommand(input: {
     input.image,
   ];
   return [...prefix, ...args].join(" ");
+}
+
+function summaryMount(placeholder: string, spec: string): string[] {
+  const readOnly = spec.endsWith(":ro");
+  return bindMount(placeholder, readOnly ? spec.slice(0, -":ro".length) : spec, { readOnly });
 }
 
 export async function stageSourceForOfflineBuild(sourceRoot: string, workDirs: string[], config?: RunCliRuntimeConfig): Promise<
@@ -161,12 +165,9 @@ export async function prefetchCargoDependencies(input: {
     ...input.finalSandbox.args,
     "--entrypoint",
     "cargo",
-    "-v",
-    `${input.sourceRoot}:/source:ro`,
-    "-v",
-    `${input.vendorDir}:/vendor`,
-    "-v",
-    `${input.cargoHomeDir}:${PREFETCH_CARGO_HOME}`,
+    ...bindMount(input.sourceRoot, "/source", { readOnly: true }),
+    ...bindMount(input.vendorDir, "/vendor"),
+    ...bindMount(input.cargoHomeDir, PREFETCH_CARGO_HOME),
     "-w",
     "/",
     "-e",

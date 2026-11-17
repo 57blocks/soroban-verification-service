@@ -24,11 +24,14 @@ const SHARED_CACHE_TARGETS = [
 
 const ALLOWED_MOUNT_TARGETS = ["/source:ro", "/vendor", "/vendor:ro", "/out"];
 
+/** Each mount as `source:target[:ro]`, whichever flag carried it. */
 function mountValues(command: string[]): string[] {
   const mounts: string[] = [];
   for (let i = 0; i < command.length; i += 1) {
-    if (command[i] === "-v" || command[i] === "--volume" || command[i] === "--mount") {
-      mounts.push(command[i + 1]);
+    if (command[i] === "-v" || command[i] === "--volume") mounts.push(command[i + 1]);
+    if (command[i] === "--mount") {
+      const kv = Object.fromEntries(command[i + 1].split(",").map((part) => [part.split("=")[0], part.split("=")[1] ?? ""]));
+      mounts.push(`${kv.source}:${kv.target}${"readonly" in kv ? ":ro" : ""}`);
     }
   }
   return mounts;
@@ -54,7 +57,12 @@ describe("TB4 — the acquisition container shares nothing with any other job", 
       `${cargoHomeDir}:/out/cargo-home`,
     ]);
 
-    expect(command.some((arg) => arg === "--mount" || arg === "--volume")).toBe(false);
+    expect(command.some((arg) => arg === "-v" || arg === "--volume")).toBe(false);
+    for (let i = 0; i < command.length; i += 1) {
+      if (command[i] !== "--mount") continue;
+      expect(command[i + 1]).toMatch(/^type=bind,/);
+      expect(command[i + 1]).toMatch(/,bind-recursive=disabled$/);
+    }
 
     for (const value of mounts) {
       expect(value.split(":")[0].startsWith("/")).toBe(true);
@@ -103,8 +111,10 @@ describe("TB4 — the build stage's per-job directories are derived from a fresh
       expect(runtime).not.toContain(target);
     }
     for (const source of [runCli, runtime]) {
-      expect(source).not.toMatch(/--mount\b/);
+      expect(source).not.toMatch(/"-v"/);
       expect(source).not.toMatch(/--volume\b/);
+      expect(source).not.toMatch(/type=volume/);
+      expect(source).not.toMatch(/unconfined/);
     }
   });
 });

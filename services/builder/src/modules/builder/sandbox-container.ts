@@ -2,6 +2,7 @@ import { readFile, rm } from "node:fs/promises";
 import { runCommand, type CommandResult } from "@scvs/core/process";
 import { dockerCliOptions } from "./docker-env.js";
 import { SANDBOX_USER } from "./run-cli.config.js";
+import { bindMount } from "./bind-source.js";
 import type { SandboxWrites } from "./run-cli.types.js";
 
 const REMOVE_TIMEOUT_MS = 60_000;
@@ -40,7 +41,7 @@ export async function removeSandboxWrites(writes: SandboxWrites, timeout_ms = RE
     const result = await runCommand(
       [
         "docker", "run", "--rm", "--network", "none", "--user", writes.user ?? SANDBOX_USER,
-        "--entrypoint", "find", "-v", `${dir}:/w`, writes.image, "/w", "-mindepth", "1", "-delete",
+        "--entrypoint", "find", ...bindMount(dir, "/w"), writes.image, "/w", "-mindepth", "1", "-delete",
       ],
       { ...dockerCliOptions(), timeout_ms, mirrorOutput: false, record: false },
     );

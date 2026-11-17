@@ -40,3 +40,15 @@ export async function requireBindSources(
   }
   return { ok: true };
 }
+
+/**
+ * A non-recursive bind: `-v` would carry the source's submounts (/proc, /sys, /run) along, and would create a
+ * missing source as an empty root-owned directory instead of failing.
+ */
+export function bindMount(source: string, target: string, options: { readOnly?: boolean } = {}): string[] {
+  if (/[,"\n]/.test(source) || /[,"\n]/.test(target)) throw new Error(`bind mount path cannot be expressed in --mount: ${source}`);
+  return [
+    "--mount",
+    `type=bind,source=${source},target=${target}${options.readOnly ? ",readonly" : ""},bind-recursive=disabled`,
+  ];
+}

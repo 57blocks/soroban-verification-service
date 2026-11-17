@@ -29,10 +29,10 @@ describe("prefetchCargoDependencies — the acquisition container's shape", () =
   it("keeps the writable mounts the stage exists to produce, and never their parent", async () => {
     const { command, vendorDir, cargoHomeDir, jobDir } = await runPrefetch();
 
-    expect(command).toContain(`${vendorDir}:/vendor`);
-    expect(command).toContain(`${cargoHomeDir}:/out/cargo-home`);
-    expect(command.some((arg) => arg.endsWith(":/source:ro"))).toBe(true);
-    expect(command.some((arg) => arg.startsWith(`${jobDir}:`))).toBe(false);
+    expect(command).toContain(`type=bind,source=${vendorDir},target=/vendor,bind-recursive=disabled`);
+    expect(command).toContain(`type=bind,source=${cargoHomeDir},target=/out/cargo-home,bind-recursive=disabled`);
+    expect(command.some((arg) => arg.includes(",target=/source,readonly,"))).toBe(true);
+    expect(command.some((arg) => arg.includes(`source=${jobDir},`))).toBe(false);
   });
 
   it("runs outside /source, so cargo never loads the submitted .cargo/config", async () => {
