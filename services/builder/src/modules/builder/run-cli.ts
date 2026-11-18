@@ -124,6 +124,15 @@ async function runManualRebuild(input: RunCliInput): Promise<RunCliResult> {
     });
   }
 
+  if (!workspace.prefetch) {
+    // Local development runs this way; a deployment must not, so say so on every build that does.
+    logger.warn(
+      "no docker gateway is configured (SCVS_DOCKER_GATEWAY): the dependency prefetch runs on Docker's default bridge, " +
+        "with no egress proxy and nothing but the source checks between it and any address the host can reach",
+      { build_image: input.build.image },
+    );
+  }
+
   const stagedSource = await stageSourceForOfflineBuild(sourceRoot, workspace.leaves.source, input.config);
   if (!stagedSource.ok) {
     return cliFailure(stagedSource.reason, "docker_build_image_rebuild", null, {
