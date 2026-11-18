@@ -441,7 +441,8 @@ groups:
           publish both.
 
           Distinct from SCVS_STORAGE_BUCKET as well, which is the sandbox handoff:
-          `staging/{rebuildId}/{mode}/…` (each dispatch's own objects under `{dispatchNonce}/`) recipes and private uploads, reached only by presigned URL. One results bucket per
+          `staging/{rebuildId}/{mode}/…` (a dispatch's own objects under its `{dispatchNonce}/`, once it has
+          one) and `staging/jobs/{jobId}/source` recipes and private uploads, reached only by presigned URL. One results bucket per
           environment.
       SCVS_PUBLISHER_PREFIX:
         type: string
@@ -838,7 +839,8 @@ services:
           than boot. A healthy container proves nothing here — smoke-test an upload after deploy.
 
           One per environment. This is the SCRATCH bucket — the sandbox handoff prefix
-          `staging/{rebuildId}/{mode}/…` (each dispatch's own objects under `{dispatchNonce}/`) and private uploads live here, not in SCVS_PUBLISHER_BUCKET, and no CDN
+          `staging/{rebuildId}/{mode}/…` (a dispatch's own objects under its `{dispatchNonce}/`, once it has
+          one), `staging/jobs/{jobId}/source` and private uploads live here, not in SCVS_PUBLISHER_BUCKET, and no CDN
           fronts it.
       SCVS_JOB_STREAM_SAFETY_POLL_MS:
         type: number
