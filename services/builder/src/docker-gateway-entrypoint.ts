@@ -7,7 +7,7 @@ import { runCommand } from "@scvs/core/process";
 import { SANDBOX_USER, prefetchAllowedHosts } from "./modules/builder/run-cli.config.js";
 import { DockerGateway } from "./modules/docker-gateway/gateway.js";
 import { encodeRegistryAuth } from "./modules/docker-gateway/policy.js";
-import { PrefetchEgressHost } from "./modules/docker-gateway/prefetch-egress.js";
+import { PrefetchEgressHost, reapPrefetchLeftovers } from "./modules/docker-gateway/prefetch-egress.js";
 import { emptyInContainer } from "./modules/docker-gateway/upstream.js";
 import { WorkspaceStore, type WorkspaceOwner } from "./modules/docker-gateway/workspaces.js";
 
@@ -27,6 +27,9 @@ async function main(): Promise<void> {
   const runner = account(RUNNER_ACCOUNT);
   const parent = realpathSync(tmpdir());
   requireUnrenamable(parent);
+
+  // What a gateway killed before it could stop left behind would otherwise accumulate on a long-lived host.
+  await reapPrefetchLeftovers(HOST_DOCKER_SOCKET, (event, fields) => logger.log(event, fields));
 
   // Before the socket exists: the runner waits for it, so no prefetch stage can start without its network.
   const egress = new PrefetchEgressHost({

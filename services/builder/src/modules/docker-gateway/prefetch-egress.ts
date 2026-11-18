@@ -159,6 +159,50 @@ export class PrefetchEgressHost {
   }
 }
 
+/** Older than the longest a live gateway takes between making an object and putting it to use. */
+const LEFTOVER_MIN_AGE_MS = 10 * 60_000;
+
+/**
+ * Removes what a gateway that died without stopping (OOM, SIGKILL) left on this daemon: its stopped egress proxy
+ * and its networks. Only objects carrying the gateway's label and older than a live gateway's set-up window are
+ * touched, a running container never is, and a network still in use is refused by the daemon and left. Never
+ * throws: a gateway starts whether or not anything could be removed.
+ */
+export async function reapPrefetchLeftovers(
+  socket: string,
+  log: GatewayLog,
+  now = Date.now(),
+  minAgeMs = LEFTOVER_MIN_AGE_MS,
+): Promise<{ containers: number; networks: number }> {
+  const filter = encodeURIComponent(JSON.stringify({ label: [OWNER_LABEL] }));
+  const cutoff = now - minAgeMs;
+  let containers = 0;
+  let networks = 0;
+  try {
+    const listed = await socketCall(socket, "GET", `/containers/json?all=1&filters=${filter}`);
+    for (const container of Array.isArray(listed.body) ? (listed.body as { Id?: unknown; State?: unknown; Created?: unknown }[]) : []) {
+      if (typeof container.Id !== "string" || container.State === "running") continue;
+      if (typeof container.Created !== "number" || container.Created * 1000 >= cutoff) continue;
+      const removed = await socketCall(socket, "DELETE", `/containers/${container.Id}?force=1`);
+      if (removed.status === 204 || removed.status === 404) containers += 1;
+    }
+    const nets = await socketCall(socket, "GET", `/networks?filters=${filter}`);
+    for (const network of Array.isArray(nets.body) ? (nets.body as { Id?: unknown; Created?: unknown }[]) : []) {
+      if (typeof network.Id !== "string" || typeof network.Created !== "string") continue;
+      const created = Date.parse(network.Created);
+      if (!Number.isFinite(created) || created >= cutoff) continue;
+      // A network with a container still attached is refused (403/409) and stays, as it should.
+      const removed = await socketCall(socket, "DELETE", `/networks/${network.Id}`);
+      if (removed.status === 204 || removed.status === 404) networks += 1;
+    }
+  } catch (error) {
+    log("prefetch_leftovers_unreaped", { error: error instanceof Error ? error.message : String(error) });
+    return { containers, networks };
+  }
+  if (containers || networks) log("prefetch_leftovers_reaped", { containers, networks });
+  return { containers, networks };
+}
+
 function expect(response: SocketResponse, statuses: number[], what: string): void {
   if (!statuses.includes(response.status)) {
     throw new Error(`could not ${what} (${response.status}): ${JSON.stringify(response.body)}`);
