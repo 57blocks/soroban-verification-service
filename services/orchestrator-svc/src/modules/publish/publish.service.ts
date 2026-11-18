@@ -586,17 +586,17 @@ export class PublishService {
     }
   }
 
-  /** The source file name the job's published report records, when that report can be read. */
+  /**
+   * The source file name the job's published report records. A report that exists but cannot be read is an error,
+   * not an absent name: re-deriving the name then could rename what the report already published.
+   */
   private async reportedSourceFileName(job: JobRecord, storage: ResultStorage): Promise<string | undefined> {
     const reportSha256 = job.result?.artifact_sha256;
     if (!reportSha256) return undefined;
-    try {
-      const text = await storage.readText(reportKey(reportSha256));
-      const name = text ? (JSON.parse(text) as { source?: { source_file_name?: unknown } }).source?.source_file_name : undefined;
-      return typeof name === "string" ? name : undefined;
-    } catch {
-      return undefined;
-    }
+    const text = await storage.readText(reportKey(reportSha256));
+    if (!text) return undefined;
+    const name = (JSON.parse(text) as { source?: { source_file_name?: unknown } }).source?.source_file_name;
+    return typeof name === "string" ? name : undefined;
   }
 
   private async resolveBuildContext(job: JobRecord): Promise<{
