@@ -215,6 +215,15 @@ describe("docker gateway: creating a container", () => {
     ["stdin", (b) => (b.OpenStdin = true), "OpenStdin must be unset"],
     ["a tty", (b) => (b.Tty = true), "Tty must be unset"],
     ["an anonymous volume", (b) => (b.Volumes = { "/data": {} }), "Volumes must be unset"],
+    ["unmasked /proc spelled in lower case", (b) => (b.HostConfig.maskedpaths = []), "HostConfig.maskedpaths must be spelled MaskedPaths"],
+    ["writable /proc/sys spelled in lower case", (b) => (b.HostConfig.readonlypaths = []), "HostConfig.readonlypaths must be spelled ReadonlyPaths"],
+    ["an empty user after the real one", (b) => (b.user = ""), "user repeats User in another case"],
+    ["a second HostConfig in another case", (b) => (b.hostconfig = {}), "hostconfig must be spelled HostConfig"],
+    ["a mount field in another case", (b) => (b.HostConfig.Mounts[0].bindoptions = {}), "bindoptions must be spelled BindOptions"],
+    ["a restart policy spelled in lower case", (b) => (b.HostConfig.RestartPolicy = { name: "always" }), "must not restart"],
+    ["a log driver spelled in lower case", (b) => (b.HostConfig.LogConfig = { type: "syslog" }), "log driver"],
+    ["two tmpfs paths that differ only in case", (b) => (b.HostConfig.Tmpfs["/TMP"] = "rw"), "repeats HostConfig.Tmpfs./tmp in another case"],
+    ["a limit too large to check exactly", (b) => (b.HostConfig.Memory = 2 ** 60), "too large to check exactly"],
   ])("refuses %s", (_name, edit, reason) => {
     const body = cliCreateBody();
     edit(body);

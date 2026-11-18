@@ -118,6 +118,9 @@ export function checkCreate(url: string, body: unknown, context: CreateContext):
   if (!isRecord(body)) return deny("the create body is not a JSON object");
 
   const problems: string[] = [];
+  // The daemon decodes this body with Go, which matches a key to a field whatever its case and keeps the last
+  // of two that match one field. Every check below reads exact names, so a spelling only Go would read is refused.
+  checkDecodable("", body, problems);
   checkFields("", body, configRules(context), problems, ["HostConfig", "NetworkingConfig"]);
 
   const host = body.HostConfig;
@@ -214,14 +217,8 @@ const HOST_RULES: Record<string, Rule> = {
   CgroupnsMode: oneOf("", "private"),
   Runtime: oneOf("", "runc"),
   Isolation: oneOf("", "default"),
-  RestartPolicy: (value) =>
-    value === undefined || value === null || (isRecord(value) && oneOf("", "no")(value.Name) === undefined && isZero(value.MaximumRetryCount))
-      ? undefined
-      : "must not restart",
-  LogConfig: (value) =>
-    value === undefined || value === null || (isRecord(value) && isZero(value.Type) && isZero(value.Config))
-      ? undefined
-      : "must use the daemon's own log driver",
+  RestartPolicy: nested({ Name: oneOf("", "no"), MaximumRetryCount: unset }, "must not restart"),
+  LogConfig: nested({ Type: unset, Config: unset }, "must use the daemon's own log driver"),
   OomScoreAdj: nonNegative,
   // Harmless whatever their value: the container's own view, or its share of what the limits above allow.
   AutoRemove: any,
@@ -318,7 +315,10 @@ function checkNetworking(value: unknown, networkMode: unknown, problems: string[
   }
 }
 
-/** Every field must pass its rule; a field with no rule must be at its zero value. */
+/**
+ * Every field must pass its rule; a field with no rule must be at its zero value. A key that names a field this
+ * policy reads, spelled in another case, is refused: Go would decode it into that field, past the rule.
+ */
 function checkFields(
   where: string,
   object: Record<string, unknown>,
@@ -326,7 +326,13 @@ function checkFields(
   problems: string[],
   handledElsewhere: string[],
 ): void {
+  const known = new Map([...Object.keys(rules), ...handledElsewhere].map((name) => [name.toLowerCase(), name]));
   for (const [key, value] of Object.entries(object)) {
+    const meant = known.get(key.toLowerCase());
+    if (meant !== undefined && meant !== key) {
+      problems.push(`${where}${key} must be spelled ${meant}`);
+      continue;
+    }
     if (handledElsewhere.includes(key)) continue;
     const rule = Object.prototype.hasOwnProperty.call(rules, key) ? rules[key]! : unset;
     const problem = rule(value);
@@ -336,6 +342,43 @@ function checkFields(
     if (key in object || handledElsewhere.includes(key)) continue;
     const problem = rule(undefined);
     if (problem) problems.push(`${where}${key} ${problem}`);
+  }
+}
+
+/** A struct-valued field, checked field by field like the levels above it. */
+function nested(rules: Record<string, Rule>, refusal: string): Rule {
+  return (value) => {
+    if (value === undefined || value === null) return undefined;
+    if (!isRecord(value)) return refusal;
+    const problems: string[] = [];
+    checkFields("", value, rules, problems, []);
+    return problems.length ? `${refusal} (${problems.join("; ")})` : undefined;
+  };
+}
+
+/**
+ * What Go and JSON.parse would read differently: two keys of one object that differ only in case, of which Go
+ * keeps whichever comes last, and a number past the range both read exactly.
+ */
+function checkDecodable(where: string, value: unknown, problems: string[]): void {
+  if (typeof value === "number") {
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      problems.push(`${where.replace(/\.$/, "") || "the body"} is a number too large to check exactly`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => checkDecodable(`${where.replace(/\.$/, "")}[${index}].`, item, problems));
+    return;
+  }
+  if (!isRecord(value)) return;
+  const seen = new Map<string, string>();
+  for (const [key, item] of Object.entries(value)) {
+    const folded = key.toLowerCase();
+    const first = seen.get(folded);
+    if (first !== undefined) problems.push(`${where}${key} repeats ${where}${first} in another case`);
+    else seen.set(folded, key);
+    checkDecodable(`${where}${key}.`, item, problems);
   }
 }
 

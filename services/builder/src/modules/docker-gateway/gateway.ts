@@ -111,13 +111,15 @@ export class DockerGateway {
       }
       case "create": {
         const workspaces = this.options.workspaces;
-        const check = checkCreate(req.url ?? "", parseJson(body), {
+        const parsed = parseJson(body);
+        const check = checkCreate(req.url ?? "", parsed, {
           sandboxUser: this.options.sandboxUser,
           workspaceOfLeaf: (path) => workspaces.workspaceOfLeaf(path),
           prefetchNetwork: this.options.prefetch?.network,
         });
         if (!check.ok) throw refused(403, check);
-        return this.forward(req, res, body, (status, response) => {
+        // The daemon gets the document that was checked, never the bytes the runner sent.
+        return this.forward(req, res, Buffer.from(JSON.stringify(parsed)), (status, response) => {
           const id = (parseJson(response) as { Id?: unknown } | undefined)?.Id;
           if (status === 201 && typeof id === "string") this.containers.set(id, check.workspaces);
         });
