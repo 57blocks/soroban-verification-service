@@ -72,6 +72,16 @@ describe("requeueStaleCliFailure — the reset that survived the retirement", ()
     expect(row?.chainSourceSha256).toBe(CHAIN_SHA);
   });
 
+  it("★ a fresh attempt forgets the earlier dispatch's nonce, so it cannot read that dispatch's staging copies", async () => {
+    const rebuildId = await burnedVerifyAttempt();
+    await client.$executeRawUnsafe(`UPDATE rebuilds SET dispatch_nonce = $1 WHERE id = $2::uuid`, "a".repeat(32), rebuildId);
+    expect((await rebuilds.getById(rebuildId))?.dispatchNonce).toBe("a".repeat(32));
+
+    expect(await rebuilds.requeueStaleCliFailure(rebuildId, "build")).toBe(true);
+
+    expect((await rebuilds.getById(rebuildId))?.dispatchNonce).toBeUndefined();
+  });
+
   it("★ a duplicate delivery does not reset twice", async () => {
     const rebuildId = await burnedVerifyAttempt();
     expect(await rebuilds.requeueStaleCliFailure(rebuildId, "build")).toBe(true);

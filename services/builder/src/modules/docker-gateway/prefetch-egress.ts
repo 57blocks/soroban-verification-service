@@ -6,6 +6,8 @@ import { socketCall, type SocketResponse } from "./socket-call.js";
 
 export const EGRESS_PROXY_ENTRYPOINT = ["node", "/app/services/builder/dist/egress-proxy-entrypoint.js"];
 const READY_TIMEOUT_MS = 30_000;
+/** Each set-up and tear-down call to the daemon: one that stops answering must fail the stage, not hold it. */
+const DAEMON_CALL_TIMEOUT_MS = 30_000;
 const OWNER_LABEL = "scvs.docker-gateway";
 
 export type PrefetchEgressOptions = {
@@ -155,7 +157,7 @@ export class PrefetchEgressHost {
   }
 
   private call(method: string, path: string, body?: unknown): Promise<SocketResponse> {
-    return socketCall(this.options.socket, method, path, body);
+    return socketCall(this.options.socket, method, path, body, { timeoutMs: DAEMON_CALL_TIMEOUT_MS });
   }
 }
 
@@ -178,40 +180,54 @@ export async function reapPrefetchLeftovers(
   timeoutMs = REAP_TIMEOUT_MS,
 ): Promise<{ containers: number; networks: number }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let gaveUp = false;
+  // Once given up, the reaping's own late failure is not logged a second time.
+  const reapLog: GatewayLog = (...args) => {
+    if (!gaveUp) log(...args);
+  };
   const timedOut = new Promise<{ containers: number; networks: number }>((resolve) => {
     timer = setTimeout(() => {
+      gaveUp = true;
       log("prefetch_leftovers_unreaped", { error: `the daemon did not answer within ${timeoutMs} ms` });
       resolve({ containers: 0, networks: 0 });
     }, timeoutMs);
     timer.unref?.();
   });
   try {
-    return await Promise.race([reap(socket, log, now, minAgeMs), timedOut]);
+    return await Promise.race([reap(socket, reapLog, now, minAgeMs, timeoutMs), timedOut]);
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function reap(socket: string, log: GatewayLog, now: number, minAgeMs: number): Promise<{ containers: number; networks: number }> {
+async function reap(
+  socket: string,
+  log: GatewayLog,
+  now: number,
+  minAgeMs: number,
+  timeoutMs: number,
+): Promise<{ containers: number; networks: number }> {
+  // Each call is bounded too, so nothing is left waiting on the daemon after the overall limit gives up.
+  const call = (method: string, path: string) => socketCall(socket, method, path, undefined, { timeoutMs });
   const filter = encodeURIComponent(JSON.stringify({ label: [OWNER_LABEL] }));
   const cutoff = now - minAgeMs;
   let containers = 0;
   let networks = 0;
   try {
-    const listed = await socketCall(socket, "GET", `/containers/json?all=1&filters=${filter}`);
+    const listed = await call("GET", `/containers/json?all=1&filters=${filter}`);
     for (const container of Array.isArray(listed.body) ? (listed.body as { Id?: unknown; State?: unknown; Created?: unknown }[]) : []) {
       if (typeof container.Id !== "string" || container.State === "running") continue;
       if (typeof container.Created !== "number" || container.Created * 1000 >= cutoff) continue;
-      const removed = await socketCall(socket, "DELETE", `/containers/${container.Id}?force=1`);
+      const removed = await call("DELETE", `/containers/${container.Id}?force=1`);
       if (removed.status === 204 || removed.status === 404) containers += 1;
     }
-    const nets = await socketCall(socket, "GET", `/networks?filters=${filter}`);
+    const nets = await call("GET", `/networks?filters=${filter}`);
     for (const network of Array.isArray(nets.body) ? (nets.body as { Id?: unknown; Created?: unknown }[]) : []) {
       if (typeof network.Id !== "string" || typeof network.Created !== "string") continue;
       const created = Date.parse(network.Created);
       if (!Number.isFinite(created) || created >= cutoff) continue;
       // A network with a container still attached is refused (403/409) and stays, as it should.
-      const removed = await socketCall(socket, "DELETE", `/networks/${network.Id}`);
+      const removed = await call("DELETE", `/networks/${network.Id}`);
       if (removed.status === 204 || removed.status === 404) networks += 1;
     }
   } catch (error) {

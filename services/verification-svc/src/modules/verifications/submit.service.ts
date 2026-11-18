@@ -301,6 +301,15 @@ export class SubmitService {
     if (validation.manifest.upload_id) {
       const visibility = declaredVisibility(validation.manifest);
       if (!(await this.uploads.lockUploadVisibility(validation.manifest.upload_id, visibility))) {
+        // The lock also misses an upload deleted since it was checked (expired and swept, or used by another job).
+        if (!(await this.uploads.getUpload(validation.manifest.upload_id))) {
+          this.logger.warn("manifest rejected", { ...targetFields(target), reason: "upload_not_found" });
+          const detail = `upload_id ${validation.manifest.upload_id} does not reference a received upload. It may have expired or already been used.`;
+          return {
+            statusCode: 400,
+            body: errorBody(400, { error: "upload_not_found", detail, message: detail }),
+          };
+        }
         this.logger.warn("manifest rejected", { ...targetFields(target), reason: "upload_visibility_conflict" });
         const detail = `This upload was already submitted with the other visibility; upload the archive again to submit it as ${visibility}.`;
         return {
