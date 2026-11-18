@@ -134,7 +134,21 @@ export class PublishService {
       throw new Error(`republishStoredResult: job ${jobId} has no comparison to republish.`);
     }
     const { artifact_url: _artifactUrl, artifact_sha256: _artifactSha256, arweave_tx_id: _arweaveTxId, ...reassemblyInput } = stored;
-    await this.writePublication(job, reassemblyInput, stored.matched, { ownsRow: false });
+    const written = await this.writePublication(job, reassemblyInput, stored.matched, { ownsRow: false });
+
+    // A private job's earlier report may carry the source_uri it no longer publishes. Point its row at the report
+    // just written, and stop naming the earlier report's permanent copy, which cannot be withdrawn.
+    if (written && job.sourceRef.visibility === "private" && written.reportUrl !== stored.artifact_url) {
+      const { arweave_tx_id: _staleCopy, ...kept } = stored;
+      await this.jobs.updateJob(jobId, {
+        result: { ...kept, artifact_url: written.reportUrl, artifact_sha256: written.reportSha256 },
+      });
+      this.logger.log("pointed a private job at its rewritten report", {
+        job_id: jobId,
+        report_sha256: written.reportSha256,
+        dropped_archive: Boolean(stored.arweave_tx_id),
+      });
+    }
   }
 
   private async writePublication(
@@ -142,7 +156,7 @@ export class PublishService {
     finalResult: VerificationResultSummaryDto,
     matched: boolean,
     options: { ownsRow: boolean } = { ownsRow: true },
-  ): Promise<void> {
+  ): Promise<{ reportUrl: string; reportSha256: string } | undefined> {
     const jobId = job.jobId;
 
     const verifier = this.configService.get("verifierIdentity", { infer: true });
@@ -224,11 +238,11 @@ export class PublishService {
     const wasmStatusChanged = statusOutcome === "written";
 
     if (!options.ownsRow) {
-      this.logger.log("re-wrote a published job's objects; the row was already correct", {
+      this.logger.log("re-wrote a published job's objects", {
         job_id: jobId,
         report_sha256: reportSha256,
       });
-      return;
+      return { reportUrl, reportSha256 };
     }
 
     const recorded = await this.jobs.advanceJob(jobId, "publishing", "published", {

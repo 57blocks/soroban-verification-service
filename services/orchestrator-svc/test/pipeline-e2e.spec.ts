@@ -1668,6 +1668,43 @@ describe("ADR-008 pipeline, end to end", () => {
     );
     expect(reReadArtifact).toBe(originalArtifact);
   });
+
+  it("points a private job published before SUG-00 at its rewritten report, and stops naming the old copy", async () => {
+    const sourceSha256 = randomBytes(32).toString("hex");
+    const contract = contractId();
+    chain.deployed.set(contract, REBUILT_HASH);
+
+    const job = await createJob({ contractId: contract, sourceSha256 });
+    await pipeline.run(job);
+    const attached = await reload(job.jobId);
+    await rebuilds.markTerminal(attached.rebuildId!, {
+      outcome: "success",
+      runner: "stellar_contract_verify",
+      rebuiltWasmHash: REBUILT_HASH,
+    });
+    await pipeline.run(attached);
+    const published = await reload(job.jobId);
+
+    // As a private job published before its source_uri was withheld: an earlier report, archived for good.
+    const oldReport = "http://localhost:4999/reports/" + "0".repeat(64) + ".json";
+    await prisma.job.update({
+      where: { id: job.jobId },
+      data: {
+        sourceRef: { ...published.sourceRef, visibility: "private" },
+        resultSummary: { ...published.result!, artifact_url: oldReport, artifact_sha256: "0".repeat(64), arweave_tx_id: "old-archive-tx" },
+      },
+    });
+
+    await publish.republishStoredResult(job.jobId);
+
+    const after = await reload(job.jobId);
+    expect(after.result?.artifact_url).not.toBe(oldReport);
+    expect(after.result?.artifact_url).toBe(`http://localhost:4999/reports/${after.result?.artifact_sha256}.json`);
+    expect(after.result?.arweave_tx_id).toBeUndefined();
+    const rewritten = await readFile(join(resultRoot, "reports", `${after.result?.artifact_sha256}.json`), "utf8");
+    expect(rewritten).not.toContain(published.sourceRef.source_uri!);
+    expect(after.status).toBe("published");
+  });
 });
 
 describe("a failed job reports what the sandbox saw", () => {
