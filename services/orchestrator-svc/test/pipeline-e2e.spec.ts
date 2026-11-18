@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 import { isRetryableFailure } from "@scvs/core";
 import { UpstreamNotDeliveredError } from "@scvs/core/fetch-policy";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Test, type TestingModule } from "@nestjs/testing";
@@ -1720,6 +1720,52 @@ describe("ADR-008 pipeline, end to end", () => {
     expect(again.result?.artifact_sha256).toBe(after.result?.artifact_sha256);
     expect(again.archivedTxId).toBe("new-copy");
     expect(again.archivePendingSince).toBeUndefined();
+  });
+});
+
+describe("republishing a public job that adopted a private job's verdict", () => {
+  it("points it at its own report, away from the private report it adopted, and owes the new report a copy", async () => {
+    const sourceSha256 = randomBytes(32).toString("hex");
+    const contract = contractId();
+    chain.deployed.set(contract, REBUILT_HASH);
+
+    const job = await createJob({ contractId: contract, sourceSha256 });
+    await pipeline.run(job);
+    const attached = await reload(job.jobId);
+    await rebuilds.markTerminal(attached.rebuildId!, {
+      outcome: "success",
+      runner: "stellar_contract_verify",
+      rebuiltWasmHash: REBUILT_HASH,
+    });
+    await pipeline.run(attached);
+    const published = await reload(job.jobId);
+
+    // The adopted report: a private job's, written before reports withheld source_uri.
+    const adoptedSha = "1".repeat(64);
+    await mkdir(join(resultRoot, "reports"), { recursive: true });
+    await writeFile(
+      join(resultRoot, "reports", `${adoptedSha}.json`),
+      JSON.stringify({ source: { is_public: false, source_uri: "https://private.invalid/secret.tar.gz?token=x" } }),
+    );
+    const adoptedUrl = `http://localhost:4999/reports/${adoptedSha}.json`;
+    await prisma.job.update({
+      where: { id: job.jobId },
+      data: {
+        resultSummary: { ...published.result!, artifact_url: adoptedUrl, artifact_sha256: adoptedSha },
+        archivedTxId: "adopted-copy",
+        archivePendingSince: null,
+      },
+    });
+
+    await publish.republishStoredResult(job.jobId);
+
+    const after = await reload(job.jobId);
+    expect(after.result?.artifact_url).not.toBe(adoptedUrl);
+    expect(after.result?.artifact_url).toBe(`http://localhost:4999/reports/${after.result?.artifact_sha256}.json`);
+    expect(after.archivedTxId).toBeUndefined();
+    expect(after.archivePendingSince).toBeDefined();
+    const own = await readFile(join(resultRoot, "reports", `${after.result?.artifact_sha256}.json`), "utf8");
+    expect(own).not.toContain("private.invalid");
   });
 });
 

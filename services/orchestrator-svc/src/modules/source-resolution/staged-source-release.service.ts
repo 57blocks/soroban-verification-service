@@ -68,11 +68,26 @@ export class StagedSourceReleaseService {
     for (const key of await this.sourceResolution.listStagingKeys(rebuildStagingPrefix(rebuildId))) {
       if (isStagedSourceKey(key)) keys.add(key);
     }
+    // A requeue between the check above and here dispatches a fresh attempt, whose fetched copy is not under a nonce.
+    if ((await this.rebuilds.getById(rebuildId))?.status !== "done") return "not_done";
     for (const key of keys) {
       await this.sourceResolution.deleteStagingObject(key);
     }
-    for (const job of await this.jobs.listJobsAttachedToRebuild(rebuildId)) {
-      if (job.sourceRef.type === "source_uri") await this.sourceResolution.deleteStagingObject(jobSourceKey(job.jobId));
+    // Read after the deletes, and each job asked again: one that attached since the check above may still publish
+    // from its own copy, as releaseJobSource asks.
+    const attached = (await this.jobs.listJobsAttachedToRebuild(rebuildId)).filter((job) => job.sourceRef.type === "source_uri");
+    const stillNeeded = new Set(
+      attached.length === 0
+        ? []
+        : await this.jobs.listJobIdsStillNeedingOwnSource(
+            attached.map((job) => job.jobId),
+            this.configService.get("stagingSweepJobAgeCeilingMs", { infer: true }),
+            new Date(),
+            this.configService.get("maxJobRetryAttempts", { infer: true }),
+          ),
+    );
+    for (const job of attached) {
+      if (!stillNeeded.has(job.jobId)) await this.sourceResolution.deleteStagingObject(jobSourceKey(job.jobId));
     }
     await this.rebuilds.markStagedSourceReleased(rebuildId);
     this.metrics.counter("staged_source_released_total", 1, { trigger });

@@ -135,6 +135,9 @@ async function createComparedJob(
 
 function stageObjects(staged: Staged): void {
   jest.spyOn(sourceResolution, "readStagingObjectBytes").mockImplementation(async (key: string) => staged[key]);
+  jest.spyOn(sourceResolution, "listStagingKeys").mockImplementation(async (prefix: string) =>
+    Object.keys(staged).filter((key) => key.startsWith(prefix)),
+  );
 }
 
 const publicUrlRef = (bytes: Uint8Array): SourceReference => ({
@@ -223,6 +226,43 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
     expect(published.sourceFileName).toBe(`${sha256(canonicalBytes)}.tar.gz`);
     expect(await publishedSource(published.sourceFileName!)).toEqual(canonicalBytes);
     expect(fetchThroughDestinationPolicy).not.toHaveBeenCalled();
+  });
+
+  it("a public job attached after the rebuild's canonical copy is gone publishes its own copy under its declared hash", async () => {
+    const submitted = randomBytes(96);
+    const canonicalBytes = randomBytes(80);
+    const { job, rebuildId } = await createComparedJob(publicUrlRef(submitted), { bytes: canonicalBytes, sha256: sha256(canonicalBytes) });
+    // Released, or expired by the scratch bucket: only the job's own hash-checked copy is left.
+    stageObjects({ [`staging/jobs/${job.jobId}/source`]: submitted });
+
+    await publish.publishJobResult(job.jobId);
+
+    const published = (await jobs.getJobById(job.jobId))!;
+    expect(published.sourceFileName).toBe(`${sha256(submitted)}.tar.gz`);
+    expect(await publishedSource(published.sourceFileName!)).toEqual(submitted);
+    expect(await publishedSource(`${sha256(canonicalBytes)}.tar.gz`)).toBeUndefined();
+    const report = JSON.parse(await readFile(join(resultRoot, "reports", `${published.result!.artifact_sha256}.json`), "utf8"));
+    expect(report.source.source_sha256).toBe(sha256(submitted));
+    expect(report.source.source_file_name).toBe(`${sha256(submitted)}.tar.gz`);
+    expect(rebuildId).toBeDefined();
+  });
+
+  it("a retry publishes under the name the job's report gave, even once the canonical copy is gone", async () => {
+    const submitted = randomBytes(96);
+    const canonicalBytes = randomBytes(80);
+    const { job, rebuildId } = await createComparedJob(publicUrlRef(submitted), { bytes: canonicalBytes, sha256: sha256(canonicalBytes) });
+    stageObjects({ [`staging/${rebuildId}/verify/canonical-source`]: randomBytes(80), [`staging/jobs/${job.jobId}/source`]: submitted });
+    await publish.publishJobResult(job.jobId);
+    const refused = (await jobs.getJobById(job.jobId))!;
+    expect(refused.sourceFileName).toBeUndefined();
+
+    // The canonical copy disappears before the retry: the report names it, so nothing else is published.
+    stageObjects({ [`staging/jobs/${job.jobId}/source`]: submitted });
+    await publish.retryPendingSourcePublish(refused);
+
+    const after = (await jobs.getJobById(job.jobId))!;
+    expect(after.sourceFileName).toBeUndefined();
+    expect(await publishedSource(`${sha256(submitted)}.tar.gz`)).toBeUndefined();
   });
 
   it("a private job publishes nothing from staging and releases every copy at termination", async () => {
