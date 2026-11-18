@@ -36,6 +36,14 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function unsupportedSourceRef(type: string): SourceFailure {
+  return {
+    ok: false,
+    reason: "source_ref_unsupported",
+    detail: `Source reference type "${type}" is not accepted. Submit an uploaded archive (upload_id) or an https source_uri.`,
+  };
+}
+
 /** Why a job could not get its source. `retryable` marks a fault that a later attempt may not meet. */
 export type SourceFailure = { ok: false; reason: string; detail: string; retryable?: boolean };
 
@@ -71,15 +79,7 @@ export class SourceResolutionService {
     if (sourceRef.type === "private_tarball") {
       return this.resolvePrivateUploadSourceRef(sourceRef);
     }
-    if (sourceRef.type === "git" || sourceRef.type === "hosted_tarball") {
-      return {
-        ok: false,
-        reason: "source_ref_unsupported",
-        detail:
-          `Source reference type "${sourceRef.type}" is not accepted. ` +
-          "Submit an uploaded archive (upload_id) or an https source_uri.",
-      };
-    }
+    if (sourceRef.type !== "source_uri") return unsupportedSourceRef(sourceRef.type);
     return this.stageRemoteSource(sourceRef, rebuildId, mode, jobId);
   }
 
@@ -92,7 +92,10 @@ export class SourceResolutionService {
     sourceRef: SourceReferenceDto,
     jobId: string,
   ): Promise<{ ok: true } | SourceFailure> {
-    if (sourceRef.type !== "source_uri") return { ok: true };
+    // An upload's possession was proven at submit, by the secret only its uploader received.
+    if (sourceRef.type === "private_tarball") return { ok: true };
+    // Named, never assumed: a kind no job may be dispatched with may not attach to another job's rebuild either.
+    if (sourceRef.type !== "source_uri") return unsupportedSourceRef(sourceRef.type);
     try {
       const staging = this.configService.get("stagingStorage", { infer: true });
       const s3 = createS3Client({ region: staging.region });
