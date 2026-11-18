@@ -5,6 +5,23 @@ export type ManifestValidation =
   | { ok: true; manifest: SubmittedSourceManifest }
   | { ok: false; error: string; detail: string };
 
+/**
+ * A contract is read by the Wasm it runs now, so a `wasm_hash` named beside its `contract_id` must be that Wasm:
+ * the recipe and source binding read from the chain are the deployed Wasm's, never the named one's.
+ */
+export function compareTargetAgainstChain(
+  target: { contract_id?: string; wasm_hash?: string },
+  deployedWasmHash: string | undefined,
+): ManifestValidation | { ok: true } {
+  if (!target.contract_id || !target.wasm_hash || !deployedWasmHash) return { ok: true };
+  if (target.wasm_hash.toLowerCase() === deployedWasmHash.toLowerCase()) return { ok: true };
+  return invalid(
+    "target_wasm_not_deployed",
+    `Contract ${target.contract_id} runs Wasm ${deployedWasmHash.toLowerCase()}, not the ${target.wasm_hash.toLowerCase()} ` +
+      "this submission named. Submit the contract alone to verify the Wasm it runs, or the Wasm hash alone to verify that Wasm.",
+  );
+}
+
 export function compareSourceAgainstChain(
   chainSourceSha256: string | undefined,
   submittedSha256: string,

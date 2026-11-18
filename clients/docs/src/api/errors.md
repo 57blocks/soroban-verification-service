@@ -50,6 +50,7 @@ Some routes add their own fields, named below.
 | `upload_secret_invalid` | 403 | Submit | `manifest.upload_id` came without the `upload_secret` that upload returned, or with another one |
 | `upload_visibility_conflict` | 409 | Submit | An earlier submission already used this upload with the other `is_public`. Upload the archive again |
 | `source_hash_mismatch` | 400 | Submit | `source_sha256` differs from the hash computed when the archive was uploaded |
+| `target_wasm_not_deployed` | 400 | Submit | The target names a `contract_id` and a `wasm_hash`, and the contract runs another Wasm. Submit the contract alone, or the Wasm hash alone |
 | `source_archive_not_chain_recorded` | 400 | Submit | The contract records a `source_sha256` on chain, and the manifest's differs |
 | `invalid_upload` | 400 | Upload | The body is empty |
 | `source_archive_format_unsupported` | 400 | Upload | The bytes are neither a gzip tarball nor a zip file |
