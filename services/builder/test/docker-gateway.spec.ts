@@ -17,6 +17,7 @@ class FakeDaemon {
   readonly calls: string[] = [];
   readonly removed: string[] = [];
   readonly registryAuth: (string | undefined)[] = [];
+  readonly created: string[] = [];
   private readonly exits = new Map<string, () => void>();
   private server?: Server;
 
@@ -24,8 +25,10 @@ class FakeDaemon {
     const server = createServer((req, res) => {
       const path = (req.url ?? "").replace(/^\/v\d+\.\d+/, "").split("?")[0]!;
       this.calls.push(`${req.method} ${path}`);
-      req.resume();
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
       req.on("end", () => {
+        if (path === "/containers/create") this.created.push(Buffer.concat(chunks).toString("utf8"));
         const id = path.split("/")[2] ?? "";
         if (path === "/_ping") return void res.writeHead(200).end("OK");
         if (path === "/version") return json(res, 200, { Version: "25.0.5", ApiVersion: "1.44" });
@@ -178,6 +181,27 @@ describe("docker gateway in front of a daemon", () => {
     expect(refused.status).toBe(403);
     expect(JSON.stringify(refused.body)).toContain("HostConfig.NetworkMode must be");
     expect(daemon.calls).toEqual(["POST /containers/create"]);
+  });
+
+  it("hands the daemon the document it checked, never the runner's bytes", async () => {
+    const workspace = await newWorkspace();
+    const checked = sandboxBody(workspace.leaves.source);
+    // JSON.parse keeps the last User; the raw bytes also carry a first one, which the daemon must never see.
+    const raw = `{"User":"0:0",${JSON.stringify(checked).slice(1)}`;
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        { socketPath: socket, method: "POST", path: "/v1.44/containers/create", headers: { "content-type": "application/json" } },
+        (response) => {
+          response.resume();
+          response.on("end", () => resolve(response.statusCode ?? 0));
+        },
+      );
+      req.on("error", reject);
+      req.end(raw);
+    });
+
+    expect(status).toBe(201);
+    expect(daemon.created).toEqual([JSON.stringify(checked)]);
   });
 
   it("refuses a container in any other shape before the daemon sees it", async () => {
