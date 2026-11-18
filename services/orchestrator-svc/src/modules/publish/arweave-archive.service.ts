@@ -348,17 +348,28 @@ export class ArweaveArchiveService implements OnModuleDestroy {
     txId: string;
     legacyCustody?: LegacyCustody;
   }): Promise<void> {
+    // A republish may have pointed the row at a newer report while this copy was uploading; the earlier report's
+    // copy is permanent, but it must not be linked or recorded. The pending flag stays set for the newer report.
+    const current = await this.jobs.getJobById(input.jobId);
+    if (current?.result?.artifact_sha256 !== input.reportSha256) {
+      this.logger.warn(`job ${input.jobId}: archived report ${input.reportSha256} is no longer the job's report — not recording it`);
+      return;
+    }
     const wrote = await appendArchiveReference(input.storage, input.wasmHash, {
       reportUrl: input.reportUrl,
       reportSha256: input.reportSha256,
       archiveUrl: input.archiveUrl,
       legacyCustody: input.legacyCustody,
     });
-    await this.jobs.recordArchiveOutcome(input.jobId, {
+    const recorded = await this.jobs.recordArchiveOutcome(input.jobId, {
       archived: true,
       txId: input.txId,
+      reportSha256: input.reportSha256,
       statusLink: toStatusLinkOutcome(wrote, { jobId: input.jobId, wasmHash: input.wasmHash, link: "report archive", logger: this.logger, metrics: this.metrics }),
     });
+    if (!recorded) {
+      this.logger.warn(`job ${input.jobId}: report ${input.reportSha256} was replaced while its copy was being linked — not recording it`);
+    }
   }
 
   scheduleSourceArchive(params: {

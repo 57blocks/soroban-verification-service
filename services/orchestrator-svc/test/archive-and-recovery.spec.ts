@@ -192,6 +192,38 @@ describe("JobsRepository archive-pending queries", () => {
     expect(reloaded?.archivedTxId).toBe("tx-success");
   });
 
+  it("recordArchiveOutcome with a report hash records the copy only while the row still points at that report", async () => {
+    const job = await createVerifiedJob();
+    const current = "c".repeat(64);
+    await jobs.updateJob(job.jobId, {
+      archivePendingSince: new Date(),
+      result: { ...job.result!, artifact_sha256: current } as never,
+    });
+
+    // An earlier report's copy, finished after a republish pointed the row at a newer report.
+    const stale = await jobs.recordArchiveOutcome(job.jobId, {
+      archived: true,
+      txId: "tx-stale",
+      reportSha256: "0".repeat(64),
+      statusLink: { state: "complete", advancePublished: true },
+    });
+    expect(stale).toBe(false);
+    const untouched = await jobs.getJobById(job.jobId);
+    expect(untouched?.archivedTxId).toBeUndefined();
+    expect(untouched?.archivePendingSince).toBeDefined();
+
+    const recorded = await jobs.recordArchiveOutcome(job.jobId, {
+      archived: true,
+      txId: "tx-current",
+      reportSha256: current,
+      statusLink: { state: "complete", advancePublished: true },
+    });
+    expect(recorded).toBe(true);
+    const reloaded = await jobs.getJobById(job.jobId);
+    expect(reloaded?.archivedTxId).toBe("tx-current");
+    expect(reloaded?.archivePendingSince).toBeUndefined();
+  });
+
   it("recordArchiveOutcome({archived: false}) increments archiveAttempts and leaves archivePendingSince untouched", async () => {
     const job = await createVerifiedJob();
     const since = new Date();

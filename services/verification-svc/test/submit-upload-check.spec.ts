@@ -220,5 +220,32 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
     expect(second.body.error).toBe("upload_visibility_conflict");
     expect((await uploadsRepository.getUpload(uploadId))?.visibility).toBe("private");
   });
+
+  it("answers upload_not_found, not a visibility conflict, when the upload is deleted before the lock", async () => {
+    const { uploadId, sourceSha256 } = await seedUpload();
+    createdRows.upload(uploadId);
+    const serviceUploads = app.get(UploadsRepository);
+    const lock = jest.spyOn(serviceUploads, "lockUploadVisibility").mockImplementationOnce(async (id: string) => {
+      await uploadsRepository.deleteUpload(id);
+      return false;
+    });
+
+    try {
+      const res = await request(server)
+        .post("/api/verification/v1/verifications")
+        .send({
+          target: target(),
+          upload_secret: SECRET,
+          manifest: { schema: "stellar-submitted-source-verification-manifest-v1", source_sha256: sourceSha256, upload_id: uploadId, is_public: false },
+        });
+      createdRows.job(res.body?.job_id);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("upload_not_found");
+      expect(res.body.job_id).toBeUndefined();
+    } finally {
+      lock.mockRestore();
+    }
+  });
 });
 

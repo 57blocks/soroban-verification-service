@@ -20,13 +20,14 @@ change what the verification API accepts; those are also listed under **Changed*
 - **A private upload needs its own secret.** `POST /api/verification/v1/uploads/source` returns an
   `upload_secret` beside the `upload_id`, once. A submission whose manifest names that `upload_id` must
   send the secret as the top-level `upload_secret`, or it is refused with `403` `upload_secret_invalid`.
-  An upload's visibility is fixed by its first submission; a later one asking for the other visibility
-  is refused with `409` `upload_visibility_conflict`. (#246)
+  An upload's visibility is fixed by the first submission that creates a job; a later one asking for the
+  other visibility is refused with `409` `upload_visibility_conflict`, and one whose upload has meanwhile
+  expired or been used is refused with `400` `upload_not_found`. (#246)
 - **A private submission's `source_uri` is no longer published.** The report's `source.source_uri` and the
   status object's `source_uri` are written only for a public submission. Republishing (the orchestrator's
-  `publish-once`) rewrites earlier results without it and points each private job at its rewritten report;
-  the earlier reports stay in result storage, and copies already archived to Arweave cannot be withdrawn.
-  (#243, #268)
+  `publish-once`) rewrites earlier results without it and points each private job at its rewritten report,
+  which is then archived in its own right; the earlier reports stay in result storage, and copies already
+  archived to Arweave cannot be withdrawn. (#243, #268)
 - **A `source_uri` job proves it holds its source before it shares a rebuild.** Each job fetches its
   own URL and checks the declared `source_sha256` before attaching to a rebuild another submission
   started, and a source is published only from the publishing job's own copy. (#237, #255)

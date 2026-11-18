@@ -24,7 +24,8 @@ the whole tree — every row below is under a few KB.
 ## Twelve words that mean something specific here
 
 - **builder** — the sandboxed service that runs untrusted, submitter-supplied source. Holds no
-  database access and no AWS credentials of any kind ([rule 1](docs/invariants.md)).
+  database access and no AWS SDK; no process in a build job but the docker gateway reaches an AWS
+  credential, and the gateway uses the instance role only for an ECR token ([rule 1](docs/invariants.md)).
 - **composer** — the trusted counterpart to builder: composes and caches build environments from
   official components only, holds registry-push access builder must never have.
 - **orchestrator-svc** — the state machine. Dispatches builds, computes the verdict itself from

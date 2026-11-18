@@ -383,15 +383,28 @@ export class JobsRepository {
     return rows.map(rowToJob);
   }
 
+  /**
+   * With `reportSha256`, records the copy only while the row still points at that report, and returns false
+   * otherwise: a republish that rewrote the report must not get the earlier report's copy back.
+   */
   async recordArchiveOutcome(
     jobId: string,
-    outcome: { archived: true; txId: string; statusLink: StatusLinkOutcome } | { archived: false },
-  ): Promise<void> {
+    outcome:
+      | { archived: true; txId: string; statusLink: StatusLinkOutcome; reportSha256?: string }
+      | { archived: false },
+  ): Promise<boolean> {
     if (!outcome.archived) {
       await this.prisma.job.update({ where: { id: jobId }, data: { archiveAttempts: { increment: 1 } } });
-      return;
+      return true;
     }
-    await this.writeArchiveAndLink(jobId, "archived_tx_id", "archive_pending_since", outcome.txId, outcome.statusLink);
+    return this.writeArchiveAndLink(
+      jobId,
+      "archived_tx_id",
+      "archive_pending_since",
+      outcome.txId,
+      outcome.statusLink,
+      outcome.reportSha256,
+    );
   }
 
   async listJobsPendingSourcePublish(olderThan: Date): Promise<JobRecord[]> {
@@ -473,32 +486,35 @@ export class JobsRepository {
     pendingColumn: "archive_pending_since" | "source_archive_pending_since",
     txId: string,
     statusLink: StatusLinkOutcome,
-  ): Promise<void> {
+    reportSha256?: string,
+  ): Promise<boolean> {
     const now = new Date();
     const txIdSql = Prisma.raw(`"${txIdColumn}"`);
     const pendingSql = Prisma.raw(`"${pendingColumn}"`);
+    const reportGuard = reportSha256 === undefined
+      ? Prisma.empty
+      : Prisma.sql` AND "result_summary"->>'artifact_sha256' = ${reportSha256}`;
+    const write = (update: Promise<number>) => this.expectOneRow(update, jobId, reportSha256 !== undefined);
     if (statusLink.state === "complete") {
       // Never clears the link flag: it covers every link this job owes; only `recordStatusLinkOutcome` may clear it.
-      await this.expectOneRow(this.prisma.$executeRaw`
+      return write(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
           ${pendingSql} = NULL,
           "published_updated_at" = ${statusLink.advancePublished ? now : Prisma.raw('"published_updated_at"')},
           "updated_at" = ${now}
-        WHERE "id" = ${jobId}::uuid`, jobId);
-      return;
+        WHERE "id" = ${jobId}::uuid${reportGuard}`);
     }
     if (statusLink.state === "pending") {
-      await this.expectOneRow(this.prisma.$executeRaw`
+      return write(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
           ${pendingSql} = NULL,
           "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
           "updated_at" = ${now}
-        WHERE "id" = ${jobId}::uuid`, jobId);
-      return;
+        WHERE "id" = ${jobId}::uuid${reportGuard}`);
     }
-    await this.expectOneRow(this.prisma.$executeRaw`
+    return write(this.prisma.$executeRaw`
       UPDATE "jobs" SET
         ${txIdSql} = ${txId},
         ${pendingSql} = NULL,
@@ -506,13 +522,15 @@ export class JobsRepository {
         "status_link_blocked_since" = COALESCE("status_link_blocked_since", ${now}),
         "status_link_blocked_reason" = ${statusLink.reason},
         "updated_at" = ${now}
-      WHERE "id" = ${jobId}::uuid`, jobId);
+      WHERE "id" = ${jobId}::uuid${reportGuard}`);
   }
 
   /** A raw UPDATE reports rows touched rather than throwing when its WHERE matched nothing. */
-  private async expectOneRow(update: Promise<number>, jobId: string): Promise<void> {
+  private async expectOneRow(update: Promise<number>, jobId: string, guarded = false): Promise<boolean> {
     const rows = await update;
+    if (guarded && rows === 0) return false;
     if (rows !== 1) throw new Error(`jobs repository: expected to update job ${jobId}, updated ${rows} row(s)`);
+    return true;
   }
 
   async listJobsPendingStatusLink(): Promise<JobRecord[]> {

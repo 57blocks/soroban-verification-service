@@ -1652,12 +1652,16 @@ describe("ADR-008 pipeline, end to end", () => {
       "utf8",
     );
     const reportFilesBeforeRepublish = new Set(await readdir(join(resultRoot, "reports")));
+    await prisma.job.update({ where: { id: job.jobId }, data: { archivedTxId: "public-copy", archivePendingSince: null } });
 
     await publish.republishStoredResult(job.jobId);
 
     const afterRepublish = await reload(job.jobId);
     expect(afterRepublish.result?.artifact_sha256).toBe(originalSha256);
     expect(afterRepublish.status).toBe("published");
+    // A public job's row is not repointed: its report, and that report's copy, stand.
+    expect(afterRepublish.archivedTxId).toBe("public-copy");
+    expect(afterRepublish.archivePendingSince).toBeUndefined();
 
     const reportFilesAfterRepublish = await readdir(join(resultRoot, "reports"));
     expect(reportFilesAfterRepublish.sort()).toEqual(Array.from(reportFilesBeforeRepublish).sort());
@@ -1693,6 +1697,7 @@ describe("ADR-008 pipeline, end to end", () => {
         sourceRef: { ...published.sourceRef, visibility: "private" },
         resultSummary: { ...published.result!, artifact_url: oldReport, artifact_sha256: "0".repeat(64) },
         archivedTxId: "old-archive-tx",
+        archivePendingSince: null,
       },
     });
 
@@ -1702,9 +1707,19 @@ describe("ADR-008 pipeline, end to end", () => {
     expect(after.result?.artifact_url).not.toBe(oldReport);
     expect(after.result?.artifact_url).toBe(`http://localhost:4999/reports/${after.result?.artifact_sha256}.json`);
     expect(after.archivedTxId).toBeUndefined();
+    // The rewritten report owes its own permanent copy.
+    expect(after.archivePendingSince).toBeDefined();
     const rewritten = await readFile(join(resultRoot, "reports", `${after.result?.artifact_sha256}.json`), "utf8");
     expect(rewritten).not.toContain(published.sourceRef.source_uri!);
     expect(after.status).toBe("published");
+
+    // Republished again, the report is unchanged: its copy is kept and nothing more is owed.
+    await prisma.job.update({ where: { id: job.jobId }, data: { archivedTxId: "new-copy", archivePendingSince: null } });
+    await publish.republishStoredResult(job.jobId);
+    const again = await reload(job.jobId);
+    expect(again.result?.artifact_sha256).toBe(after.result?.artifact_sha256);
+    expect(again.archivedTxId).toBe("new-copy");
+    expect(again.archivePendingSince).toBeUndefined();
   });
 });
 
