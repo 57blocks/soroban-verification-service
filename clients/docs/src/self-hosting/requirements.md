@@ -47,6 +47,12 @@ build, and a gateway that is the build's only way to the host's Docker daemon. T
 directory. The repository's builder deployment workflow registers it, and is
 the reference for its shape.
 
+Run the builder with its gateway. The gateway is also what confines the dependency prefetch: it puts that
+stage on a network with no route out, whose only exit is a proxy to the hosts in
+`SCVS_PREFETCH_ALLOWED_HOSTS`. A builder started without `SCVS_DOCKER_GATEWAY`, as local development runs it,
+prefetches on Docker's default bridge with the host's whole network in reach, and logs a warning on every
+build that does.
+
 ## Storage
 
 | What | Kind | Access |
