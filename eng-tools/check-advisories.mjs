@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-/** Reads the npm advisory database, no AWS. Fails when a high or critical advisory reaches a shipped unit, or when the database cannot be read. */
+/** Reads the npm advisory database, no AWS. Fails when a critical, high or moderate advisory reaches a shipped unit, or when the database cannot be read. */
 import { collectAdvisories } from "./advisories.mjs";
 
-const GATED = new Set(["critical", "high"]);
+// Moderate too: a denial of service that takes a public API down is often rated no higher (GHSA-27r3-jxmh-p828 was).
+const GATED = new Set(["critical", "high", "moderate"]);
 
 const result = collectAdvisories();
 if (result.unavailable) {
@@ -12,7 +13,7 @@ if (result.unavailable) {
 
 const blocking = result.reaching.filter((row) => GATED.has(row.severity));
 if (blocking.length === 0) {
-  console.log(`check:advisories: no high or critical advisory reaches a shipped unit (${result.rows.length} advisories in all).`);
+  console.log(`check:advisories: no critical, high or moderate advisory reaches a shipped unit (${result.rows.length} advisories in all).`);
   process.exit(0);
 }
 

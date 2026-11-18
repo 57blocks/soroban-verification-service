@@ -100,7 +100,7 @@ jobs:
       - name: Report dependency advisories
         run: pnpm run report:advisories
 
-      - name: Check no high or critical advisory reaches a shipped unit
+      - name: Check no critical, high or moderate advisory reaches a shipped unit
         run: pnpm run check:advisories
 
       - name: Check every base image is pinned by digest
