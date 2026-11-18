@@ -275,6 +275,28 @@ describe("StagedSourceReleaseService.sweepJobSources", () => {
 
     expect(deleted.sort()).toEqual([jobSourceKey(finished.jobId), jobSourceKey(gone)].sort());
   });
+
+  it("reaches a finished job's copy listed after more than a batch of copies that are still needed", async () => {
+    const rebuild = await seedRebuild();
+    const inFlight = await Promise.all(
+      [0, 1, 2].map(() => seedJob(rebuild.rebuildId, { visibility: "private", status: "queued" })),
+    );
+    const finished = await seedJob(rebuild.rebuildId, { visibility: "private", status: "published" });
+    const { release, deleted } = sweepHarness([...inFlight, finished].map((job) => jobSourceKey(job.jobId)));
+
+    expect(await release.sweepJobSources(2)).toBe(1);
+
+    expect(deleted).toEqual([jobSourceKey(finished.jobId)]);
+  });
+
+  it("deletes at most a batch in one call", async () => {
+    const gone = [randomUUID(), randomUUID(), randomUUID()];
+    const { release, deleted } = sweepHarness(gone.map((jobId) => jobSourceKey(jobId)));
+
+    expect(await release.sweepJobSources(2)).toBe(2);
+
+    expect(deleted).toHaveLength(2);
+  });
 });
 
 describe("RebuildsRepository staged-source bookkeeping", () => {
