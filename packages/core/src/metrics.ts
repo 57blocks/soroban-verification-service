@@ -15,6 +15,7 @@ export const METRIC_UNITS = {
   staged_source_released_total: "count",
   job_source_released_total: "count",
   source_publish_unavailable_total: "count",
+  canonical_source_unavailable_total: "count",
   verifier_aggregation_seconds: "seconds",
   verifier_aggregation_total: "count",
   environment_composition_total: "count",

@@ -140,14 +140,20 @@ export class PublishService {
     // just written, and forget the earlier report's permanent copy (archived_tx_id), which cannot be withdrawn: kept,
     // the status-link recovery would link it to the new report. The new report owes its own copy, so the archive
     // retry picks it up.
-    if (written && job.sourceRef.visibility === "private" && written.reportUrl !== stored.artifact_url) {
+    // A public job that adopted a private job's verdict before reports withheld source_uri points at that job's
+    // report, which carries it: it is pointed at its own report the same way.
+    const repoint =
+      written &&
+      written.reportUrl !== stored.artifact_url &&
+      (job.sourceRef.visibility === "private" || (await this.storedReportIsPrivate(stored)));
+    if (written && repoint) {
       const { arweave_tx_id: _staleCopy, ...kept } = stored;
       await this.jobs.updateJob(jobId, {
         result: { ...kept, artifact_url: written.reportUrl, artifact_sha256: written.reportSha256 },
         archivedTxId: null,
         archivePendingSince: new Date(),
       });
-      this.logger.log("pointed a private job at its rewritten report", {
+      this.logger.log("pointed a job at its rewritten report", {
         job_id: jobId,
         report_sha256: written.reportSha256,
         dropped_archive: Boolean(job.archivedTxId),
@@ -165,15 +171,14 @@ export class PublishService {
 
     const verifier = this.configService.get("verifierIdentity", { infer: true });
     const storage = this.buildResultStorage();
-    const { rebuildId, buildMode, mechanismReason, buildEnvironment, canonicalSource, chainSourceSha256, buildOptions } =
-      await this.resolveBuildContext(job);
+    const context = await this.resolveBuildContext(job);
+    const { rebuildId, buildMode, mechanismReason, buildEnvironment, chainSourceSha256, buildOptions } = context;
+    const naming = await this.sourceNaming(job, storage, context.canonicalSource);
+    const canonicalSource = naming.canonicalSource;
     // The recipe the rebuild ran, not the job's copy of it: that is the one replaying must reproduce.
     const builtOptions = buildOptions ?? job.buildOptions;
     const buildIsolation = toBuildIsolation(buildMode);
-    const sourceFileName =
-      job.sourceRef.visibility === "public"
-        ? await declareSourceFileName(job.sourceRef, this.sourceResolution, canonicalSource)
-        : undefined;
+    const sourceFileName = naming.sourceFileName;
     const artifact = assembleArtifact(
       { ...job, buildOptions: builtOptions, result: finalResult },
       verifier,
@@ -419,12 +424,9 @@ export class PublishService {
       return;
     }
     const storage = this.buildResultStorage();
-    const { rebuildId, buildMode, canonicalSource } = await this.resolveBuildContext(job);
-    const sourceFileName = await declareSourceFileName(
-      job.sourceRef,
-      this.sourceResolution,
-      canonicalSource,
-    );
+    const { rebuildId, buildMode, canonicalSource: rebuildCanonical } = await this.resolveBuildContext(job);
+    const { canonicalSource, sourceFileName: named } = await this.sourceNaming(job, storage, rebuildCanonical);
+    const sourceFileName = named!;
     const durable = await this.attemptSourcePublish(
       job,
       storage,
@@ -520,6 +522,81 @@ export class PublishService {
   // An instance method so tests can substitute it.
   private buildResultStorage(): ResultStorage {
     return createResultStorage(this.configService.get("resultStorage", { infer: true }));
+  }
+
+  /**
+   * The archive a public job's report names, and the canonical source behind it if any. A job that already has a
+   * report keeps the name it gives, so a retry or a republish never renames what was published; a job without one
+   * names the canonical archive while its bytes can still be had. A private job publishes no source.
+   */
+  private async sourceNaming(
+    job: JobRecord,
+    storage: ResultStorage,
+    rebuildCanonical: CanonicalSource | undefined,
+  ): Promise<{ canonicalSource?: CanonicalSource; sourceFileName?: string }> {
+    if (job.sourceRef.visibility !== "public") return { canonicalSource: rebuildCanonical };
+    const reported = await this.reportedSourceFileName(job, storage);
+    if (reported) {
+      const canonicalName = rebuildCanonical
+        ? await declareSourceFileName(job.sourceRef, this.sourceResolution, rebuildCanonical)
+        : undefined;
+      return { canonicalSource: reported === canonicalName ? rebuildCanonical : undefined, sourceFileName: reported };
+    }
+    const canonicalSource = await this.canonicalToPublish(job, storage, rebuildCanonical);
+    return { canonicalSource, sourceFileName: await declareSourceFileName(job.sourceRef, this.sourceResolution, canonicalSource) };
+  }
+
+  /**
+   * The canonical archive a public job publishes, while its bytes can still be had: already in `sources/`, or still
+   * staged. A done rebuild stays attachable after its staged copies are released (or the scratch bucket expires
+   * them); a public job that attaches later publishes its own hash-checked copy instead, under its declared hash,
+   * which is the hash of the rebuild's input too, since that hash is part of the rebuild's key.
+   */
+  private async canonicalToPublish(
+    job: JobRecord,
+    storage: ResultStorage,
+    canonical: CanonicalSource | undefined,
+  ): Promise<CanonicalSource | undefined> {
+    if (!canonical || job.sourceRef.visibility !== "public") return canonical;
+    const name = await declareSourceFileName(job.sourceRef, this.sourceResolution, canonical);
+    if (await storage.exists(sourceKeyFromFileName(name))) return canonical;
+    try {
+      if ((await this.sourceResolution.listStagingKeys(canonical.key)).includes(canonical.key)) return canonical;
+    } catch {
+      // Unknown is not gone: the name stays canonical, and a publish that cannot read the bytes is retried.
+      return canonical;
+    }
+    this.logger.warn("the rebuild's canonical source archive is gone; publishing the job's own copy under its declared hash", {
+      job_id: job.jobId,
+      rebuild_id: job.rebuildId,
+      canonical_key: canonical.key,
+    });
+    this.metrics.counter("canonical_source_unavailable_total", 1);
+    return undefined;
+  }
+
+  /** Whether the report a row points at was written for a private source; false when it cannot be read. */
+  private async storedReportIsPrivate(stored: VerificationResultSummaryDto): Promise<boolean> {
+    if (!stored.artifact_sha256) return false;
+    try {
+      const text = await this.buildResultStorage().readText(reportKey(stored.artifact_sha256));
+      return text ? (JSON.parse(text) as { source?: { is_public?: unknown } }).source?.is_public === false : false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The source file name the job's published report records. A report that exists but cannot be read is an error,
+   * not an absent name: re-deriving the name then could rename what the report already published.
+   */
+  private async reportedSourceFileName(job: JobRecord, storage: ResultStorage): Promise<string | undefined> {
+    const reportSha256 = job.result?.artifact_sha256;
+    if (!reportSha256) return undefined;
+    const text = await storage.readText(reportKey(reportSha256));
+    if (!text) return undefined;
+    const name = (JSON.parse(text) as { source?: { source_file_name?: unknown } }).source?.source_file_name;
+    return typeof name === "string" ? name : undefined;
   }
 
   private async resolveBuildContext(job: JobRecord): Promise<{
