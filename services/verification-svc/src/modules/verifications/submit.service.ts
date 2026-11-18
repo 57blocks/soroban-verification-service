@@ -14,6 +14,7 @@ import {
 } from "@scvs/core";
 import {
   compareSourceAgainstChain,
+  compareTargetAgainstChain,
   getWasmMetadata,
   runPreflight,
   validateSubmittedManifest,
@@ -256,7 +257,7 @@ export class SubmitService {
       }
     }
 
-    const chainCheck = await this.checkSourceAgainstChain(target, validation.manifest.source_sha256);
+    const chainCheck = await this.checkAgainstChain(target, validation.manifest.source_sha256);
     if (!chainCheck.ok) {
       this.logger.warn("manifest rejected", {
         ...targetFields(target),
@@ -271,6 +272,19 @@ export class SubmitService {
           message: chainCheck.detail,
         }),
       };
+    }
+
+    // Only once nothing else refuses it: a submission turned away must not fix the upload's visibility.
+    if (validation.manifest.upload_id) {
+      const visibility = declaredVisibility(validation.manifest);
+      if (!(await this.uploads.lockUploadVisibility(validation.manifest.upload_id, visibility))) {
+        this.logger.warn("manifest rejected", { ...targetFields(target), reason: "upload_visibility_conflict" });
+        const detail = `This upload was already submitted with the other visibility; upload the archive again to submit it as ${visibility}.`;
+        return {
+          statusCode: 409,
+          body: errorBody(409, { error: "upload_visibility_conflict", detail, message: detail }),
+        };
+      }
     }
 
     const activeJob = await this.jobs.getActiveJobForTarget(
@@ -327,14 +341,21 @@ export class SubmitService {
     };
   }
 
-  private async checkSourceAgainstChain(
+  private async checkAgainstChain(
     target: VerificationTarget,
     submittedSha256: string,
   ): Promise<ManifestValidation | { ok: true }> {
     // A throwing chain read is the same as a contract that records nothing: no oracle, so no refusal.
-    const lookup = await getWasmMetadata(target, this.chainReaderConfig()).catch(() => undefined);
-    const chainSourceSha256 = lookup?.ok ? lookup.metadata.sep58.source_sha256 : undefined;
-    return compareSourceAgainstChain(chainSourceSha256, submittedSha256);
+    const lookup = await this.readChain(target);
+    if (!lookup?.ok) return { ok: true };
+    const targetCheck = compareTargetAgainstChain(target, lookup.metadata.wasm_hash);
+    if (!targetCheck.ok) return targetCheck;
+    return compareSourceAgainstChain(lookup.metadata.sep58.source_sha256, submittedSha256);
+  }
+
+  /** The deployed Wasm's metadata, or undefined when the chain could not be read. */
+  protected readChain(target: VerificationTarget): Promise<Awaited<ReturnType<typeof getWasmMetadata>> | undefined> {
+    return getWasmMetadata(target, this.chainReaderConfig()).catch(() => undefined);
   }
 
   /** Holding an `upload_id` is not enough: the submitter also proves it received the upload's response. */
@@ -383,14 +404,6 @@ export class SubmitService {
         statusCode: 400,
         error: "source_hash_mismatch",
         detail: "manifest.source_sha256 does not match the hash computed when the archive was uploaded.",
-      };
-    }
-    if (!(await this.uploads.lockUploadVisibility(uploadId, visibility))) {
-      return {
-        ok: false,
-        statusCode: 409,
-        error: "upload_visibility_conflict",
-        detail: `This upload was already submitted with the other visibility; upload the archive again to submit it as ${visibility}.`,
       };
     }
     return { ok: true };
