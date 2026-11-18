@@ -16,7 +16,7 @@ import {
   type BuildMode,
   type SourceReference as SourceReferenceDto,
 } from "@scvs/core";
-import { FetchPolicyError, ResponseTooLargeError, checkUrl, normalizePolicy } from "@scvs/core/fetch-policy";
+import { FetchPolicyError, ResponseTooLargeError, UpstreamNotDeliveredError, checkUrl, normalizePolicy } from "@scvs/core/fetch-policy";
 import { fetchedSourceKey, jobSourceKey } from "../../common/staging-keys.util.js";
 import { MAX_ARCHIVE_BYTES, sha256Hex } from "./publish-source-bytes.util.js";
 import { fetchThroughDestinationPolicy } from "@scvs/core/policy-bound-fetch";
@@ -36,6 +36,19 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Why a job could not get its source. `retryable` marks a fault that a later attempt may not meet. */
+export type SourceFailure = { ok: false; reason: string; detail: string; retryable?: boolean };
+
+/**
+ * An upstream that timed out, dropped the connection, or answered 408, 429 or 5xx may deliver next time; one
+ * that answered another 4xx, or served other bytes, will not.
+ */
+function isTransientUpstreamFailure(error: unknown): boolean {
+  if (!(error instanceof UpstreamNotDeliveredError)) return true;
+  const status = error.status;
+  return status === undefined || status >= 500 || status === 408 || status === 429;
+}
+
 @Injectable()
 export class SourceResolutionService {
   private readonly logger = new ScvsLogger("source-resolution");
@@ -53,7 +66,7 @@ export class SourceResolutionService {
     jobId: string,
   ): Promise<
     | { ok: true; sourceRef: SourceReferenceDto }
-    | { ok: false; reason: string; detail: string }
+    | SourceFailure
   > {
     if (sourceRef.type === "private_tarball") {
       return this.resolvePrivateUploadSourceRef(sourceRef);
@@ -78,14 +91,14 @@ export class SourceResolutionService {
   async proveSourcePossession(
     sourceRef: SourceReferenceDto,
     jobId: string,
-  ): Promise<{ ok: true } | { ok: false; reason: string; detail: string }> {
+  ): Promise<{ ok: true } | SourceFailure> {
     if (sourceRef.type !== "source_uri") return { ok: true };
     try {
       const staging = this.configService.get("stagingStorage", { infer: true });
       const s3 = createS3Client({ region: staging.region });
       if (await this.stagedObjectExists(s3, staging.bucket, jobSourceKey(jobId))) return { ok: true };
     } catch (error) {
-      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error) };
+      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error), retryable: true };
     }
     const own = await this.ownVerifiedCopy(sourceRef, jobId);
     return own.ok ? { ok: true } : own;
@@ -99,7 +112,7 @@ export class SourceResolutionService {
     jobId: string,
   ): Promise<
     | { ok: true; sourceRef: SourceReferenceDto }
-    | { ok: false; reason: string; detail: string }
+    | SourceFailure
   > {
     const own = await this.ownVerifiedCopy(sourceRef, jobId);
     if (!own.ok) return own;
@@ -122,6 +135,7 @@ export class SourceResolutionService {
         ok: false,
         reason: "source_stage_copy_failed",
         detail: describeError(error),
+        retryable: true,
       };
     }
   }
@@ -129,7 +143,7 @@ export class SourceResolutionService {
   private async ownVerifiedCopy(
     sourceRef: SourceReferenceDto,
     jobId: string,
-  ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: string; detail: string }> {
+  ): Promise<{ ok: true; bytes: Uint8Array } | SourceFailure> {
     const declared = sourceRef.source_sha256?.toLowerCase();
     if (!declared) {
       return { ok: false, reason: "source_sha256_missing", detail: "A source_uri submission must declare its source_sha256." };
@@ -140,7 +154,7 @@ export class SourceResolutionService {
     try {
       held = await this.readStagingObjectBytes(key);
     } catch (error) {
-      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error) };
+      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error), retryable: true };
     }
     if (held && sha256Hex(held) === declared) return { ok: true, bytes: held };
 
@@ -152,7 +166,7 @@ export class SourceResolutionService {
     try {
       await this.putStagedObject(s3, staging.bucket, key, fetched.bytes);
     } catch (error) {
-      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error) };
+      return { ok: false, reason: "source_stage_copy_failed", detail: describeError(error), retryable: true };
     }
     this.logger.log("fetched and hash-checked a job's own source", { job_id: jobId, bytes: fetched.bytes.byteLength });
     return fetched;
@@ -161,7 +175,7 @@ export class SourceResolutionService {
   private async fetchDeclaredSource(
     sourceRef: SourceReferenceDto,
     declared: string,
-  ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: string; detail: string }> {
+  ): Promise<{ ok: true; bytes: Uint8Array } | SourceFailure> {
     const uri = sourceRef.source_uri;
     if (!uri) {
       return {
@@ -191,7 +205,12 @@ export class SourceResolutionService {
       if (error instanceof FetchPolicyError) {
         return { ok: false, reason: "source_uri_refused", detail: describeError(error) };
       }
-      return { ok: false, reason: "source_uri_not_materialized", detail: describeError(error) };
+      return {
+        ok: false,
+        reason: "source_uri_not_materialized",
+        detail: describeError(error),
+        retryable: isTransientUpstreamFailure(error),
+      };
     }
 
     const digest = sha256Hex(bytes);
@@ -209,7 +228,7 @@ export class SourceResolutionService {
     sourceRef: SourceReferenceDto
   ): Promise<
     | { ok: true; sourceRef: SourceReferenceDto }
-    | { ok: false; reason: string; detail: string }
+    | SourceFailure
   > {
     if (sourceRef.type !== "private_tarball" || !sourceRef.upload_id) {
       return { ok: true, sourceRef };
