@@ -229,9 +229,10 @@ const HOST_RULES: Record<string, Rule> = {
       ? undefined
       : "must map absolute paths to option strings",
   ShmSize: any,
-  Dns: stringList,
-  DnsOptions: stringList,
-  DnsSearch: stringList,
+  // The prefetch stage resolves only the proxy's alias, through Docker's own resolver; nothing chooses another.
+  Dns: unset,
+  DnsOptions: unset,
+  DnsSearch: unset,
   CpuShares: any,
   CpuPeriod: any,
   CpuQuota: any,
