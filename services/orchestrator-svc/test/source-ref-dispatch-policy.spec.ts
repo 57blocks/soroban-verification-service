@@ -280,4 +280,17 @@ describe("proveSourcePossession — a job holds what it declares before it may s
     expect(result).toEqual({ ok: true });
     expect(svc.fetched).toEqual([]);
   });
+
+  it.each(["git", "hosted_tarball"] as const)("lets no %s ref share a rebuild, as none is ever dispatched", async (type) => {
+    const svc = service();
+
+    const result = await svc.proveSourcePossession(
+      { type, visibility: "public", repo: "https://example.com/x.git", rev: "HEAD" } as SourceReference,
+      JOB,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("source_ref_unsupported");
+    expect(svc.fetched).toEqual([]);
+  });
 });
