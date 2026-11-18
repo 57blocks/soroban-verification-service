@@ -68,25 +68,33 @@ export class StagedSourceReleaseService {
     return "released";
   }
 
-  /** Job copies the terminal path could not delete, including those of jobs that never attached to a rebuild. */
+  /**
+   * Job copies the terminal path could not delete, including those of jobs that never attached to a rebuild.
+   * Every held copy is considered, `limit` at a time, so copies still needed at the front of the listing never
+   * keep a later one past its time; at most `limit` are deleted in one call.
+   */
   async sweepJobSources(limit: number, now = new Date()): Promise<number> {
     const held = (await this.sourceResolution.listStagingKeys(JOB_SOURCE_PREFIX))
       .map((key) => ({ key, jobId: jobIdOfSourceKey(key) }))
-      .filter((entry): entry is { key: string; jobId: string } => entry.jobId !== undefined)
-      .slice(0, limit);
-    const needed = new Set(
-      await this.jobs.listJobIdsStillNeedingOwnSource(
-        held.map((entry) => entry.jobId),
-        this.configService.get("stagingSweepJobAgeCeilingMs", { infer: true }),
-        now,
-        this.configService.get("maxJobRetryAttempts", { infer: true }),
-      ),
-    );
+      .filter((entry): entry is { key: string; jobId: string } => entry.jobId !== undefined);
+    const batch = Math.max(1, limit);
     let released = 0;
-    for (const { key, jobId } of held) {
-      if (needed.has(jobId)) continue;
-      await this.sourceResolution.deleteStagingObject(key);
-      released += 1;
+    for (let start = 0; start < held.length && released < batch; start += batch) {
+      const chunk = held.slice(start, start + batch);
+      const needed = new Set(
+        await this.jobs.listJobIdsStillNeedingOwnSource(
+          chunk.map((entry) => entry.jobId),
+          this.configService.get("stagingSweepJobAgeCeilingMs", { infer: true }),
+          now,
+          this.configService.get("maxJobRetryAttempts", { infer: true }),
+        ),
+      );
+      for (const { key, jobId } of chunk) {
+        if (needed.has(jobId)) continue;
+        if (released >= batch) break;
+        await this.sourceResolution.deleteStagingObject(key);
+        released += 1;
+      }
     }
     if (released > 0) this.metrics.counter("job_source_released_total", released, { trigger: "sweep" });
     return released;
