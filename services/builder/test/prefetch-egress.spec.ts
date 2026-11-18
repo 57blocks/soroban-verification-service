@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FrameReader, LineSplitter, PrefetchEgressHost } from "../src/modules/docker-gateway/prefetch-egress.js";
+import { FrameReader, LineSplitter, PrefetchEgressHost, reapPrefetchLeftovers } from "../src/modules/docker-gateway/prefetch-egress.js";
 
 const IMAGE = `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/scvs-builder@sha256:${"b".repeat(64)}`;
 const PROXY_ID = "e".repeat(64);
@@ -168,6 +168,77 @@ describe("the gateway's prefetch network", () => {
     expect(daemon.calls.filter((call) => call.method === "DELETE").map((call) => call.path)).toEqual([
       expect.stringMatching(/^\/networks\/scvs-egress-/),
     ]);
+  });
+});
+
+describe("reaping what a killed gateway left behind", () => {
+  const NOW = Date.parse("2026-11-18T12:00:00Z");
+  const OLD = NOW - 60 * 60_000;
+  const FRESH = NOW - 60_000;
+  let dir: string;
+  let server: ReturnType<typeof createServer>;
+  let deleted: string[];
+  let failList: boolean;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "scvs-reap-"));
+    deleted = [];
+    failList = false;
+    server = createServer((req, res) => {
+      const path = req.url ?? "";
+      req.resume();
+      req.on("end", () => {
+        if (failList) return json(res, 500, { message: "daemon unavailable" });
+        if (path.startsWith("/containers/json")) {
+          expect(decodeURIComponent(path)).toContain('"label":["scvs.docker-gateway"]');
+          return json(res, 200, [
+            { Id: "a".repeat(64), State: "exited", Created: OLD / 1000 },
+            { Id: "b".repeat(64), State: "running", Created: OLD / 1000 },
+            { Id: "c".repeat(64), State: "created", Created: FRESH / 1000 },
+          ]);
+        }
+        if (path.startsWith("/networks?")) {
+          return json(res, 200, [
+            { Id: "n-old", Created: new Date(OLD).toISOString() },
+            { Id: "n-busy", Created: new Date(OLD).toISOString() },
+            { Id: "n-new", Created: new Date(FRESH).toISOString() },
+          ]);
+        }
+        if (req.method === "DELETE") {
+          if (path === "/networks/n-busy") return json(res, 409, { message: "network has active endpoints" });
+          deleted.push(path.split("?")[0]!);
+          return void res.writeHead(204).end();
+        }
+        json(res, 404, { message: "no such route" });
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(join(dir, "d.sock"), resolve));
+  });
+
+  afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("removes only stopped, old leftovers, and leaves a network still in use", async () => {
+    const logged: string[] = [];
+    const reaped = await reapPrefetchLeftovers(join(dir, "d.sock"), (event) => logged.push(event), NOW);
+
+    expect(reaped).toEqual({ containers: 1, networks: 1 });
+    expect(deleted).toEqual([`/containers/${"a".repeat(64)}`, "/networks/n-old"]);
+    expect(logged).toEqual(["prefetch_leftovers_reaped"]);
+  });
+
+  it("never throws when the daemon cannot list, so the gateway still starts", async () => {
+    failList = true;
+    const logged: string[] = [];
+
+    await expect(reapPrefetchLeftovers(join(dir, "d.sock"), (event) => logged.push(event), NOW)).resolves.toEqual({
+      containers: 0,
+      networks: 0,
+    });
+    expect(deleted).toEqual([]);
   });
 });
 
