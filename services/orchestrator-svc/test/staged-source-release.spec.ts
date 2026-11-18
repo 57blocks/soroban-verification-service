@@ -218,6 +218,27 @@ describe("StagedSourceReleaseService.releaseForTerminalJob", () => {
     expect((await rebuilds.getById(rebuild.rebuildId))!.stagedSourceReleasedAt).toBeUndefined();
   });
 
+  it("keeps the job's own copy while it owes a source publish, which only that copy can serve", async () => {
+    const rebuild = await seedRebuild();
+    const adopted = await seedJob(rebuild.rebuildId, { visibility: "public", status: "published", sourcePublishPending: true });
+    const { release, deleted } = harness();
+
+    await release.releaseForTerminalJob(adopted);
+
+    expect(deleted).not.toContain(jobSourceKey(adopted.jobId));
+    expect(deleted).toEqual([]);
+  });
+
+  it("keeps the job's own copy while the job may still be retried", async () => {
+    const { release, deleted } = harness();
+    const rebuild = await seedRebuild("pending");
+    const failed = await seedJob(rebuild.rebuildId, { visibility: "private", status: "failed", failureReason: "internal_error", retryAttempts: 0 });
+
+    await release.releaseForTerminalJob({ ...failed, rebuildId: undefined });
+
+    expect(deleted).toEqual([]);
+  });
+
   it("deletes only the job's own copy for a job that never attached to a rebuild", async () => {
     const { release, deleted } = harness();
     const jobId = randomUUID();

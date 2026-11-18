@@ -92,10 +92,24 @@ export class StagedSourceReleaseService {
     return released;
   }
 
-  /** A job's own source copy, once the job can no longer publish from it. A delete that fails is only logged. */
+  /**
+   * A job's own source copy, once the job can no longer publish from it: the row is read again, because a job that
+   * adopted a published verdict marks its source publish owed just before this runs, and only this copy can
+   * serve it. A copy kept here is left to the sweep. A delete that fails is only logged.
+   */
   private async releaseJobSource(job: Pick<JobRecord, "jobId" | "sourceRef">, trigger: "job_terminal"): Promise<void> {
     if (job.sourceRef.type !== "source_uri") return;
     try {
+      const needed = await this.jobs.listJobIdsStillNeedingOwnSource(
+        [job.jobId],
+        this.configService.get("stagingSweepJobAgeCeilingMs", { infer: true }),
+        new Date(),
+        this.configService.get("maxJobRetryAttempts", { infer: true }),
+      );
+      if (needed.includes(job.jobId)) {
+        this.logger.log("keeping a job's own source copy: the job can still publish from it", { job_id: job.jobId, trigger });
+        return;
+      }
       await this.sourceResolution.deleteStagingObject(jobSourceKey(job.jobId));
     } catch (error) {
       this.logger.warn("failed to release a job's own source copy at job termination", {
