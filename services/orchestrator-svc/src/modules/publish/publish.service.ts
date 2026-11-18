@@ -173,14 +173,12 @@ export class PublishService {
     const storage = this.buildResultStorage();
     const context = await this.resolveBuildContext(job);
     const { rebuildId, buildMode, mechanismReason, buildEnvironment, chainSourceSha256, buildOptions } = context;
-    const canonicalSource = await this.canonicalToPublish(job, storage, context.canonicalSource);
+    const naming = await this.sourceNaming(job, storage, context.canonicalSource);
+    const canonicalSource = naming.canonicalSource;
     // The recipe the rebuild ran, not the job's copy of it: that is the one replaying must reproduce.
     const builtOptions = buildOptions ?? job.buildOptions;
     const buildIsolation = toBuildIsolation(buildMode);
-    const sourceFileName =
-      job.sourceRef.visibility === "public"
-        ? await declareSourceFileName(job.sourceRef, this.sourceResolution, canonicalSource)
-        : undefined;
+    const sourceFileName = naming.sourceFileName;
     const artifact = assembleArtifact(
       { ...job, buildOptions: builtOptions, result: finalResult },
       verifier,
@@ -427,19 +425,8 @@ export class PublishService {
     }
     const storage = this.buildResultStorage();
     const { rebuildId, buildMode, canonicalSource: rebuildCanonical } = await this.resolveBuildContext(job);
-    // The name the job's report already gives its source is the one to publish under, whatever is staged now.
-    const reported = await this.reportedSourceFileName(job, storage);
-    let canonicalSource: CanonicalSource | undefined;
-    if (reported) {
-      const canonicalName = rebuildCanonical
-        ? await declareSourceFileName(job.sourceRef, this.sourceResolution, rebuildCanonical)
-        : undefined;
-      canonicalSource = reported === canonicalName ? rebuildCanonical : undefined;
-    } else {
-      canonicalSource = await this.canonicalToPublish(job, storage, rebuildCanonical);
-    }
-    const sourceFileName =
-      reported ?? (await declareSourceFileName(job.sourceRef, this.sourceResolution, canonicalSource));
+    const { canonicalSource, sourceFileName: named } = await this.sourceNaming(job, storage, rebuildCanonical);
+    const sourceFileName = named!;
     const durable = await this.attemptSourcePublish(
       job,
       storage,
@@ -535,6 +522,28 @@ export class PublishService {
   // An instance method so tests can substitute it.
   private buildResultStorage(): ResultStorage {
     return createResultStorage(this.configService.get("resultStorage", { infer: true }));
+  }
+
+  /**
+   * The archive a public job's report names, and the canonical source behind it if any. A job that already has a
+   * report keeps the name it gives, so a retry or a republish never renames what was published; a job without one
+   * names the canonical archive while its bytes can still be had. A private job publishes no source.
+   */
+  private async sourceNaming(
+    job: JobRecord,
+    storage: ResultStorage,
+    rebuildCanonical: CanonicalSource | undefined,
+  ): Promise<{ canonicalSource?: CanonicalSource; sourceFileName?: string }> {
+    if (job.sourceRef.visibility !== "public") return { canonicalSource: rebuildCanonical };
+    const reported = await this.reportedSourceFileName(job, storage);
+    if (reported) {
+      const canonicalName = rebuildCanonical
+        ? await declareSourceFileName(job.sourceRef, this.sourceResolution, rebuildCanonical)
+        : undefined;
+      return { canonicalSource: reported === canonicalName ? rebuildCanonical : undefined, sourceFileName: reported };
+    }
+    const canonicalSource = await this.canonicalToPublish(job, storage, rebuildCanonical);
+    return { canonicalSource, sourceFileName: await declareSourceFileName(job.sourceRef, this.sourceResolution, canonicalSource) };
   }
 
   /**

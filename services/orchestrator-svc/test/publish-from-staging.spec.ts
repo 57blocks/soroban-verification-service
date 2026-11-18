@@ -265,6 +265,23 @@ describe("publishing a public source reads the staged copy and re-hashes it; it 
     expect(await publishedSource(`${sha256(submitted)}.tar.gz`)).toBeUndefined();
   });
 
+  it("a republish keeps the name the job's report gives, once the canonical copy is gone", async () => {
+    const submitted = randomBytes(96);
+    const canonicalBytes = randomBytes(80);
+    const { job, rebuildId } = await createComparedJob(publicUrlRef(submitted), { bytes: canonicalBytes, sha256: sha256(canonicalBytes) });
+    stageObjects({ [`staging/${rebuildId}/verify/canonical-source`]: randomBytes(80), [`staging/jobs/${job.jobId}/source`]: submitted });
+    await publish.publishJobResult(job.jobId);
+    const first = (await jobs.getJobById(job.jobId))!;
+
+    // Released since, and never published: republishing must not rename the source and rewrite the report.
+    stageObjects({ [`staging/jobs/${job.jobId}/source`]: submitted });
+    await publish.republishStoredResult(job.jobId);
+
+    const after = (await jobs.getJobById(job.jobId))!;
+    expect(after.result?.artifact_sha256).toBe(first.result?.artifact_sha256);
+    expect(await publishedSource(`${sha256(submitted)}.tar.gz`)).toBeUndefined();
+  });
+
   it("a private job publishes nothing from staging and releases every copy at termination", async () => {
     const bytes = randomBytes(96);
     const { job, rebuildId } = await createComparedJob({ ...publicUrlRef(bytes), visibility: "private" });
