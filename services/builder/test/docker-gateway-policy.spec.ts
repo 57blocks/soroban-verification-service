@@ -227,6 +227,10 @@ describe("docker gateway: creating a container", () => {
     ["a log driver spelled in lower case", (b) => (b.HostConfig.LogConfig = { type: "syslog" }), "log driver"],
     ["two tmpfs paths that differ only in case", (b) => (b.HostConfig.Tmpfs["/TMP"] = "rw"), "repeats HostConfig.Tmpfs./tmp in another case"],
     ["a limit too large to check exactly", (b) => (b.HostConfig.Memory = 2 ** 60), "too large to check exactly"],
+    // JSON `1e400` parses to Infinity, and JSON.stringify forwards it as null: no limit at all.
+    ["a memory limit that parses to Infinity", (b) => (b.HostConfig.Memory = Infinity), "HostConfig.Memory is not a finite number"],
+    ["a cpu limit that parses to Infinity", (b) => (b.HostConfig.NanoCpus = Infinity), "HostConfig.NanoCpus is not a finite number"],
+    ["a pid limit that parses to Infinity", (b) => (b.HostConfig.PidsLimit = Infinity), "HostConfig.PidsLimit is not a finite number"],
     // Go folds the long s (U+017F) onto s and the Kelvin sign (U+212A) onto k; JavaScript's toLowerCase does not.
     ["a second HostConfig spelled with a long s", (b) => (b["Ho\u017ftConfig"] = null), "is not a plain ASCII name"],
     ["an empty user spelled with a long s", (b) => (b["U\u017fer"] = ""), "is not a plain ASCII name"],

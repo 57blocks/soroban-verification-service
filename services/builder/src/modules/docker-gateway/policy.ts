@@ -158,7 +158,7 @@ const oneOf =
   (...allowed: unknown[]): Rule =>
   (value) =>
     allowed.includes(value ?? "") ? undefined : `must be one of ${allowed.map((v) => JSON.stringify(v)).join(", ")}`;
-const positive: Rule = (value) => (typeof value === "number" && value > 0 ? undefined : "must be a positive limit");
+const positive: Rule = (value) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? undefined : "must be a positive limit");
 const nonNegative: Rule = (value) =>
   value === undefined || value === null || (typeof value === "number" && value >= 0) ? undefined : "must not be negative";
 const isTrue: Rule = (value) => (value === true ? undefined : "must be true");
@@ -369,10 +369,15 @@ export function goFold(name: string): string {
 /**
  * What Go and JSON.parse would read differently: a key that is not plain ASCII (every name the Engine API reads
  * is, and Go folds some other letters onto ASCII ones), two keys of one object that fold to the same name, of
- * which Go keeps whichever comes last, and a number past the range both read exactly.
+ * which Go keeps whichever comes last, a number that is not finite, and one past the range both read exactly.
  */
 function checkDecodable(where: string, value: unknown, problems: string[]): void {
   if (typeof value === "number") {
+    // `1e400` parses to Infinity, which passes a positive-limit rule and is forwarded as null: Go reads that unset.
+    if (!Number.isFinite(value)) {
+      problems.push(`${where.replace(/\.$/, "") || "the body"} is not a finite number`);
+      return;
+    }
     if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
       problems.push(`${where.replace(/\.$/, "") || "the body"} is a number too large to check exactly`);
     }
