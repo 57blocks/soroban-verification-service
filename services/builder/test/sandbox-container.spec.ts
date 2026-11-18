@@ -46,7 +46,8 @@ describe("a sandbox stage's container never outlives the stage", () => {
   it("removes the container when the stage times out", async () => {
     const cidFile = join(fakeBin, "build.cid");
 
-    const result = await runSandboxContainer(["docker", "run", "--rm", "image", "hang"], { cidFile, timeout_ms: 300 });
+    // Long enough for the fake CLI, itself a node process, to start and write its cidfile on a busy machine.
+    const result = await runSandboxContainer(["docker", "run", "--rm", "image", "hang"], { cidFile, timeout_ms: 2_000 });
 
     expect(result.timed_out).toBe(true);
     expect(result.containerRemoved).toBe(true);
