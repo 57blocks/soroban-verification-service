@@ -494,7 +494,14 @@ export class JobsRepository {
     const reportGuard = reportSha256 === undefined
       ? Prisma.empty
       : Prisma.sql` AND "result_summary"->>'artifact_sha256' = ${reportSha256}`;
-    const write = (update: Promise<number>) => this.expectOneRow(update, jobId, reportSha256 !== undefined);
+    const write = async (update: Promise<number>) => {
+      if (await this.expectOneRow(update, jobId, reportSha256 !== undefined)) return true;
+      // Zero rows under the guard: a newer report, unless the row itself is gone, which is an error as unguarded.
+      if ((await this.prisma.job.count({ where: { id: jobId } })) === 0) {
+        throw new Error(`jobs repository: expected to update job ${jobId}, updated 0 row(s)`);
+      }
+      return false;
+    };
     if (statusLink.state === "complete") {
       // Never clears the link flag: it covers every link this job owes; only `recordStatusLinkOutcome` may clear it.
       return write(this.prisma.$executeRaw`

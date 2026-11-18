@@ -222,6 +222,16 @@ describe("JobsRepository archive-pending queries", () => {
     const reloaded = await jobs.getJobById(job.jobId);
     expect(reloaded?.archivedTxId).toBe("tx-current");
     expect(reloaded?.archivePendingSince).toBeUndefined();
+
+    // A row that is gone is still an error, not a replaced report.
+    await expect(
+      jobs.recordArchiveOutcome("00000000-0000-4000-8000-0000000000fe", {
+        archived: true,
+        txId: "tx-orphan",
+        reportSha256: current,
+        statusLink: { state: "complete", advancePublished: true },
+      }),
+    ).rejects.toThrow(/updated 0 row/);
   });
 
   it("recordArchiveOutcome({archived: false}) increments archiveAttempts and leaves archivePendingSince untouched", async () => {
