@@ -161,6 +161,8 @@ export class PrefetchEgressHost {
 
 /** Older than the longest a live gateway takes between making an object and putting it to use. */
 const LEFTOVER_MIN_AGE_MS = 10 * 60_000;
+/** A daemon that stops answering must not hold the gateway's start: the reaping is a courtesy, not a step. */
+const REAP_TIMEOUT_MS = 30_000;
 
 /**
  * Removes what a gateway that died without stopping (OOM, SIGKILL) left on this daemon: its stopped egress proxy
@@ -173,7 +175,24 @@ export async function reapPrefetchLeftovers(
   log: GatewayLog,
   now = Date.now(),
   minAgeMs = LEFTOVER_MIN_AGE_MS,
+  timeoutMs = REAP_TIMEOUT_MS,
 ): Promise<{ containers: number; networks: number }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<{ containers: number; networks: number }>((resolve) => {
+    timer = setTimeout(() => {
+      log("prefetch_leftovers_unreaped", { error: `the daemon did not answer within ${timeoutMs} ms` });
+      resolve({ containers: 0, networks: 0 });
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([reap(socket, log, now, minAgeMs), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function reap(socket: string, log: GatewayLog, now: number, minAgeMs: number): Promise<{ containers: number; networks: number }> {
   const filter = encodeURIComponent(JSON.stringify({ label: [OWNER_LABEL] }));
   const cutoff = now - minAgeMs;
   let containers = 0;

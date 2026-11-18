@@ -1691,7 +1691,8 @@ describe("ADR-008 pipeline, end to end", () => {
       where: { id: job.jobId },
       data: {
         sourceRef: { ...published.sourceRef, visibility: "private" },
-        resultSummary: { ...published.result!, artifact_url: oldReport, artifact_sha256: "0".repeat(64), arweave_tx_id: "old-archive-tx" },
+        resultSummary: { ...published.result!, artifact_url: oldReport, artifact_sha256: "0".repeat(64) },
+        archivedTxId: "old-archive-tx",
       },
     });
 
@@ -1700,7 +1701,7 @@ describe("ADR-008 pipeline, end to end", () => {
     const after = await reload(job.jobId);
     expect(after.result?.artifact_url).not.toBe(oldReport);
     expect(after.result?.artifact_url).toBe(`http://localhost:4999/reports/${after.result?.artifact_sha256}.json`);
-    expect(after.result?.arweave_tx_id).toBeUndefined();
+    expect(after.archivedTxId).toBeUndefined();
     const rewritten = await readFile(join(resultRoot, "reports", `${after.result?.artifact_sha256}.json`), "utf8");
     expect(rewritten).not.toContain(published.sourceRef.source_uri!);
     expect(after.status).toBe("published");

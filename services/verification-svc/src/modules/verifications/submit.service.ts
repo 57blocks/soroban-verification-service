@@ -274,19 +274,6 @@ export class SubmitService {
       };
     }
 
-    // Only once nothing else refuses it: a submission turned away must not fix the upload's visibility.
-    if (validation.manifest.upload_id) {
-      const visibility = declaredVisibility(validation.manifest);
-      if (!(await this.uploads.lockUploadVisibility(validation.manifest.upload_id, visibility))) {
-        this.logger.warn("manifest rejected", { ...targetFields(target), reason: "upload_visibility_conflict" });
-        const detail = `This upload was already submitted with the other visibility; upload the archive again to submit it as ${visibility}.`;
-        return {
-          statusCode: 409,
-          body: errorBody(409, { error: "upload_visibility_conflict", detail, message: detail }),
-        };
-      }
-    }
-
     const activeJob = await this.jobs.getActiveJobForTarget(
       target,
       this.dedupQuestion(dryRun, validation.manifest)
@@ -307,6 +294,20 @@ export class SubmitService {
             "A verification job for this target is already queued or running. Its build log belongs to the submission that created it.",
         },
       };
+    }
+
+    // Only for a job this submission creates: one refused, or answered with another submission's job, must not fix
+    // the upload's visibility.
+    if (validation.manifest.upload_id) {
+      const visibility = declaredVisibility(validation.manifest);
+      if (!(await this.uploads.lockUploadVisibility(validation.manifest.upload_id, visibility))) {
+        this.logger.warn("manifest rejected", { ...targetFields(target), reason: "upload_visibility_conflict" });
+        const detail = `This upload was already submitted with the other visibility; upload the archive again to submit it as ${visibility}.`;
+        return {
+          statusCode: 409,
+          body: errorBody(409, { error: "upload_visibility_conflict", detail, message: detail }),
+        };
+      }
     }
 
     const created = await this.createJob(

@@ -737,6 +737,7 @@ function toUpdateData(updates: UpdateJobInput): Prisma.JobUncheckedUpdateManyInp
     ...("publishAttempts" in updates ? { publishAttempts: updates.publishAttempts } : {}),
     ...("retryAttempts" in updates ? { retryAttempts: updates.retryAttempts } : {}),
     ...("archivePendingSince" in updates ? { archivePendingSince: updates.archivePendingSince } : {}),
+    ...("archivedTxId" in updates ? { archivedTxId: updates.archivedTxId } : {}),
     ...("publishedUpdatedAt" in updates ? { publishedUpdatedAt: updates.publishedUpdatedAt } : {}),
     ...("sourcePublishPendingSince" in updates
       ? { sourcePublishPendingSince: updates.sourcePublishPendingSince }
@@ -765,6 +766,8 @@ export type UpdateJobInput = Partial<{
   publishAttempts: number;
   retryAttempts: number;
   archivePendingSince: Date;
+  /** Cleared when the report it archived is no longer the job's: that copy must not be linked again. */
+  archivedTxId: null;
   publishedUpdatedAt: Date;
   sourcePublishPendingSince: Date | null;
   sourceArchivePendingSince: Date | null;

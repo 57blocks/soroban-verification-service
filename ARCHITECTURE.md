@@ -284,8 +284,9 @@ now follows use:
 Two placements are load-bearing and must not be "simplified":
 
 - `BatchJobParams`/`BuildArtifact` live in **core, not `packages/aws`**, because `services/builder` consumes
-  them and deliberately has no `@scvs/aws` dependency (it holds no AWS credentials and uploads via a plain
-  `fetch` PUT to a presigned URL — see `services/builder/src/modules/builder/upload.ts`). Routing them
+  them and deliberately has no `@scvs/aws` dependency (its runner and materialise hold no AWS credentials
+  and upload via a plain `fetch` PUT to a presigned URL — see `services/builder/src/modules/builder/upload.ts`;
+  the job's docker gateway alone uses the host's instance role, through the `aws` CLI, for an ECR token). Routing them
   through the AWS package would drag the AWS SDK into the sandbox image.
 - `Aggregated*` live in **core, not query-svc**, because `clients/sdk` produces them and **query-svc depends
   on sdk** — owning them in query-svc would invert that edge into a cycle.

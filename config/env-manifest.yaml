@@ -484,7 +484,7 @@ groups:
 
           **Never set this to `staging`.** That is not about environments at all: `staging/` is this
           system's sandbox handoff prefix — the glossary's "Staging bucket" entry and
-          `getStagingStorageConfig`: `staging/{jobId}/{mode}/recipe.json` plus private uploads. It
+          `getStagingStorageConfig`: `staging/{rebuildId}/{mode}/{dispatchNonce}/recipe.json` plus private uploads. It
           lives in SCVS_STORAGE_BUCKET, a different bucket from this one, so the
           collision is not reachable today; publishing under `staging/` in a bucket that also held
           those objects would make a submitter's private source archive publicly readable, since the
@@ -2220,7 +2220,7 @@ services:
         code: services/builder/src/config/configuration.ts
         note: >-
           ★ A presigned GET of this container's params document, staged by orchestrator-svc
-          at `staging/{rebuildId}/{mode}/params/{container}.json` — injected exactly when
+          at `staging/{rebuildId}/{mode}/{dispatchNonce}/params/{container}.json` — injected exactly when
           SCVS_JOB_PARAMS_TRANSPORT is `presigned_url`. Same rule as SCVS_JOB_PARAMS_JSON: per job
           at SubmitJob time, never baked into the job definition, and DevOps should not set it.
       SCVS_ARTIFACT_DIR:

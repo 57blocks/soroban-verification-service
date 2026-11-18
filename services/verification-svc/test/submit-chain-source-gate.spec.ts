@@ -74,7 +74,7 @@ describe("a submission the chain refuses leaves its upload's visibility open", (
   const SECRET = "s3cret";
   const secretSha256 = createHash("sha256").update(SECRET).digest("hex");
 
-  async function serviceReading(chain: { wasm_hash: string; source_sha256?: string }) {
+  async function serviceReading(chain: { wasm_hash: string; source_sha256?: string }, inFlight?: { jobId: string; status: string }) {
     const legal = new LegalService(
       { get: () => join(findWorkspaceRoot() as string, "config/legal-documents.example.json") } as never,
       {} as never,
@@ -91,7 +91,7 @@ describe("a submission the chain refuses leaves its upload's visibility open", (
       })),
       lockUploadVisibility: jest.fn(async () => true),
     };
-    const jobs = { getActiveJobForTarget: jest.fn(), createJob: jest.fn() };
+    const jobs = { getActiveJobForTarget: jest.fn(async () => inFlight), createJob: jest.fn() };
     class ChainStub extends SubmitService {
       protected override readChain() {
         return Promise.resolve({ ok: true, metadata: { wasm_hash: chain.wasm_hash, sep58: { source_sha256: chain.source_sha256 } } } as never);
@@ -121,6 +121,17 @@ describe("a submission the chain refuses leaves its upload's visibility open", (
 
     expect(response.statusCode).toBe(400);
     expect(response.body).toMatchObject({ error: "target_wasm_not_deployed" });
+    expect(uploads.lockUploadVisibility).not.toHaveBeenCalled();
+    expect(jobs.createJob).not.toHaveBeenCalled();
+  });
+
+  it("answers with another submission's in-flight job without locking this upload", async () => {
+    const { service, uploads, jobs } = await serviceReading({ wasm_hash: hash() }, { jobId: "in-flight-job", status: "building" });
+
+    const response = await service.submit(submission({ wasm_hash: hash() }) as never);
+
+    expect(response.statusCode).toBe(202);
+    expect(response.body).toMatchObject({ job_id: "in-flight-job" });
     expect(uploads.lockUploadVisibility).not.toHaveBeenCalled();
     expect(jobs.createJob).not.toHaveBeenCalled();
   });
