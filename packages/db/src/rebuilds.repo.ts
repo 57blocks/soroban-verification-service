@@ -26,6 +26,7 @@ export type RebuildRecord = {
   status: RebuildStatus;
   batchJobId?: string;
   buildMode?: BuildMode;
+  dispatchNonce?: string;
   mechanismReason: MechanismReason;
   outcome?: RebuildOutcome;
   runner?: string;
@@ -130,7 +131,7 @@ export class RebuildsRepository {
 
   async markDispatched(
     rebuildId: string,
-    input: { batchJobId: string; buildMode: BuildMode },
+    input: { batchJobId: string; buildMode: BuildMode; dispatchNonce?: string },
   ): Promise<void> {
     await this.prisma.rebuild.update({
       where: { id: rebuildId },
@@ -138,6 +139,7 @@ export class RebuildsRepository {
         status: "running" satisfies RebuildStatus,
         batchJobId: input.batchJobId,
         buildMode: input.buildMode,
+        dispatchNonce: input.dispatchNonce ?? null,
         // This attempt writes fresh staging copies, so whatever was released before no longer holds.
         stagedSourceReleasedAt: null,
       },
@@ -286,6 +288,7 @@ function rowToRebuild(row: PrismaRebuild): RebuildRecord {
     status: assertRebuildStatus(row.status),
     ...(row.batchJobId ? { batchJobId: row.batchJobId } : {}),
     ...(row.buildMode ? { buildMode: assertBuildModeValue(row.buildMode) } : {}),
+    ...(row.dispatchNonce ? { dispatchNonce: row.dispatchNonce } : {}),
     mechanismReason: assertMechanismReason(row.mechanismReason),
     ...(row.outcome ? { outcome: assertRebuildOutcome(row.outcome) } : {}),
     ...(row.runner ? { runner: row.runner } : {}),

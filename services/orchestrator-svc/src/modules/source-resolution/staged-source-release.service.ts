@@ -2,7 +2,14 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ScvsLogger, ScvsMetrics } from "@scvs/core";
 import { JobsRepository, RebuildsRepository, type JobRecord } from "@scvs/db";
-import { JOB_SOURCE_PREFIX, jobIdOfSourceKey, jobSourceKey, stagedSourceKeys } from "../../common/staging-keys.util.js";
+import {
+  JOB_SOURCE_PREFIX,
+  isStagedSourceKey,
+  jobIdOfSourceKey,
+  jobSourceKey,
+  rebuildStagingPrefix,
+  stagedSourceKeys,
+} from "../../common/staging-keys.util.js";
 import type { AppConfigService } from "../../config/configuration.js";
 import { SourceResolutionService } from "./source-resolution.service.js";
 
@@ -56,7 +63,12 @@ export class StagedSourceReleaseService {
       return "kept";
     }
 
-    for (const key of stagedSourceKeys(rebuildId)) {
+    // The layout before dispatch nonces, then every dispatch's copies: a failed attempt's canonical copy is released too.
+    const keys = new Set(stagedSourceKeys(rebuildId));
+    for (const key of await this.sourceResolution.listStagingKeys(rebuildStagingPrefix(rebuildId))) {
+      if (isStagedSourceKey(key)) keys.add(key);
+    }
+    for (const key of keys) {
       await this.sourceResolution.deleteStagingObject(key);
     }
     for (const job of await this.jobs.listJobsAttachedToRebuild(rebuildId)) {

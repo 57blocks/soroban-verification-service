@@ -81,7 +81,7 @@ export class RebuildOutcomeService {
   }
 
   private artifactKey(rebuild: RebuildRecord): string {
-    return recipeArtifactKey(rebuild.rebuildId, rebuild.buildMode ?? "verify");
+    return recipeArtifactKey(rebuild.rebuildId, rebuild.buildMode ?? "verify", rebuild.dispatchNonce);
   }
 
   // Bounded before buffering: untrusted code writes this object, so its size is the submitter's choice.
@@ -93,7 +93,7 @@ export class RebuildOutcomeService {
   > {
     const staging = this.configService.get("stagingStorage", { infer: true });
     const maxBytes = this.configService.get("maxRebuiltWasmBytes", { infer: true });
-    const key = rebuiltWasmKey(rebuild.rebuildId, rebuild.buildMode ?? "verify");
+    const key = rebuiltWasmKey(rebuild.rebuildId, rebuild.buildMode ?? "verify", rebuild.dispatchNonce);
     const s3 = createS3Client({ region: staging.region });
 
     const object = await getObjectBytesBounded(s3, staging.bucket, key, maxBytes);
@@ -131,7 +131,7 @@ export class RebuildOutcomeService {
   > {
     const staging = this.configService.get("stagingStorage", { infer: true });
     const maxBytes = MAX_ARCHIVE_BYTES;
-    const key = canonicalSourceKey(rebuild.rebuildId, rebuild.buildMode ?? "verify");
+    const key = canonicalSourceKey(rebuild.rebuildId, rebuild.buildMode ?? "verify", rebuild.dispatchNonce);
     const s3 = createS3Client({ region: staging.region });
 
     const object = await getObjectBytesBounded(s3, staging.bucket, key, maxBytes);
