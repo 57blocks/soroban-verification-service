@@ -327,9 +327,9 @@ function checkFields(
   problems: string[],
   handledElsewhere: string[],
 ): void {
-  const known = new Map([...Object.keys(rules), ...handledElsewhere].map((name) => [name.toLowerCase(), name]));
+  const known = new Map([...Object.keys(rules), ...handledElsewhere].map((name) => [goFold(name), name]));
   for (const [key, value] of Object.entries(object)) {
-    const meant = known.get(key.toLowerCase());
+    const meant = known.get(goFold(key));
     if (meant !== undefined && meant !== key) {
       problems.push(`${where}${key} must be spelled ${meant}`);
       continue;
@@ -358,8 +358,18 @@ function nested(rules: Record<string, Rule>, refusal: string): Rule {
 }
 
 /**
- * What Go and JSON.parse would read differently: two keys of one object that differ only in case, of which Go
- * keeps whichever comes last, and a number past the range both read exactly.
+ * A field name as Go's `encoding/json` matches it: case-insensitively under Unicode simple folding, in which the
+ * long s (U+017F) is an `s` and the Kelvin sign (U+212A) a `k`. JavaScript's `toLowerCase` leaves both alone, so
+ * `HoſtConfig` would read as an unknown field here and as `HostConfig` to the daemon.
+ */
+export function goFold(name: string): string {
+  return name.replace(/\u017f/g, "s").replace(/\u212a/g, "k").toLowerCase();
+}
+
+/**
+ * What Go and JSON.parse would read differently: a key that is not plain ASCII (every name the Engine API reads
+ * is, and Go folds some other letters onto ASCII ones), two keys of one object that fold to the same name, of
+ * which Go keeps whichever comes last, and a number past the range both read exactly.
  */
 function checkDecodable(where: string, value: unknown, problems: string[]): void {
   if (typeof value === "number") {
@@ -375,7 +385,9 @@ function checkDecodable(where: string, value: unknown, problems: string[]): void
   if (!isRecord(value)) return;
   const seen = new Map<string, string>();
   for (const [key, item] of Object.entries(value)) {
-    const folded = key.toLowerCase();
+    // eslint-disable-next-line no-control-regex
+    if (/[^\x00-\x7f]/.test(key)) problems.push(`${where}${JSON.stringify(key)} is not a plain ASCII name`);
+    const folded = goFold(key);
     const first = seen.get(folded);
     if (first !== undefined) problems.push(`${where}${key} repeats ${where}${first} in another case`);
     else seen.set(folded, key);

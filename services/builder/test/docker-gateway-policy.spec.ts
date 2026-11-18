@@ -1,4 +1,4 @@
-import { checkCreate, checkPull, encodeRegistryAuth, routeRequest } from "../src/modules/docker-gateway/policy.js";
+import { checkCreate, checkPull, encodeRegistryAuth, goFold, routeRequest } from "../src/modules/docker-gateway/policy.js";
 
 const ID = "c".repeat(64);
 const IMAGE = `docker.io/stellar/stellar-cli@sha256:${"a".repeat(64)}`;
@@ -227,12 +227,37 @@ describe("docker gateway: creating a container", () => {
     ["a log driver spelled in lower case", (b) => (b.HostConfig.LogConfig = { type: "syslog" }), "log driver"],
     ["two tmpfs paths that differ only in case", (b) => (b.HostConfig.Tmpfs["/TMP"] = "rw"), "repeats HostConfig.Tmpfs./tmp in another case"],
     ["a limit too large to check exactly", (b) => (b.HostConfig.Memory = 2 ** 60), "too large to check exactly"],
+    // Go folds the long s (U+017F) onto s and the Kelvin sign (U+212A) onto k; JavaScript's toLowerCase does not.
+    ["a second HostConfig spelled with a long s", (b) => (b["Ho\u017ftConfig"] = null), "is not a plain ASCII name"],
+    ["an empty user spelled with a long s", (b) => (b["U\u017fer"] = ""), "is not a plain ASCII name"],
+    ["unmasked /proc spelled with a long s", (b) => (b.HostConfig["Ma\u017fkedPaths"] = []), "is not a plain ASCII name"],
+    ["a writable root spelled with a long s", (b) => (b.HostConfig["ReadonlyRootf\u017f"] = false), "is not a plain ASCII name"],
+    ["no pid limit spelled with a long s", (b) => (b.HostConfig["Pid\u017fLimit"] = 0), "is not a plain ASCII name"],
+    ["a network mode spelled with a Kelvin sign", (b) => (b.HostConfig["NetworkMode".replace("k", "\u212a")] = "host"), "is not a plain ASCII name"],
+    ["a recursive bind spelled with a long s", (b) => (b.HostConfig.Mounts[0].BindOptions["NonRecur\u017five"] = false), "is not a plain ASCII name"],
   ])("refuses %s", (_name, edit, reason) => {
     const body = cliCreateBody();
     edit(body);
     const result = create(body);
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toContain(reason);
+  });
+
+  it("refuses the whole unconfined body the long s spells, and folds names as Go does", () => {
+    const body = cliCreateBody();
+    Object.assign(body, { "U\u017fer": "" });
+    Object.assign(body.HostConfig, {
+      "ReadonlyRootf\u017f": false,
+      "\u017fecurityOpt": [],
+      "Pid\u017fLimit": 0,
+      "Ma\u017fkedPaths": [],
+      "ReadonlyPath\u017f": [],
+    });
+    const result = create(body);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason.match(/is not a plain ASCII name/g)?.length).toBe(6);
+    expect(goFold("Ho\u017ftConfig")).toBe(goFold("HostConfig"));
+    expect(goFold("Networ\u212aMode")).toBe("networkmode");
   });
 
   it.each<[string, Record<string, unknown>, string]>([
