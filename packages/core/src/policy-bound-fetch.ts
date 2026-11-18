@@ -78,7 +78,8 @@ export async function fetchThroughDestinationPolicy(
     }
 
     return {
-      bytes: await readBounded(response as IncomingMessage, policy.maxResponseBytes),
+      // The deadline covers the body too: a server that sends a byte now and then never idles the socket.
+      bytes: await readBounded(response as IncomingMessage, policy.maxResponseBytes, deadline - Date.now(), policy.timeoutMs),
       finalUrl: current.toString(),
     };
   }
@@ -147,7 +148,12 @@ export function pinningLookup(policy: FetchPolicy, resolver: AddressResolver = d
   }) as unknown as LookupFunction;
 }
 
-async function readBounded(response: IncomingMessage, maxResponseBytes: number): Promise<Uint8Array> {
+async function readBounded(
+  response: IncomingMessage,
+  maxResponseBytes: number,
+  remainingMs: number,
+  timeoutMs: number,
+): Promise<Uint8Array> {
   const declared = Number(response.headers["content-length"] ?? Number.NaN);
   if (Number.isFinite(declared) && declared > maxResponseBytes) {
     response.destroy();
@@ -157,16 +163,25 @@ async function readBounded(response: IncomingMessage, maxResponseBytes: number):
   const chunks: Buffer[] = [];
   let total = 0;
   return new Promise<Uint8Array>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const error = new UpstreamNotDeliveredError(`Timed out after ${timeoutMs}ms reading the response body (${total} bytes received)`);
+      response.destroy(error);
+      reject(error);
+    }, Math.max(0, remainingMs));
+    const settle = <T>(done: (value: T) => void) => (value: T) => {
+      clearTimeout(timer);
+      done(value);
+    };
     response.on("data", (chunk: Buffer) => {
       total += chunk.byteLength;
       if (total > maxResponseBytes) {
         response.destroy();
-        reject(new ResponseTooLargeError(`Response exceeded the ${maxResponseBytes}-byte limit`));
+        settle(reject)(new ResponseTooLargeError(`Response exceeded the ${maxResponseBytes}-byte limit`));
         return;
       }
       chunks.push(chunk);
     });
-    response.on("end", () => resolve(new Uint8Array(Buffer.concat(chunks))));
-    response.on("error", reject);
+    response.on("end", () => settle(resolve)(new Uint8Array(Buffer.concat(chunks))));
+    response.on("error", settle(reject));
   });
 }

@@ -233,7 +233,8 @@ export class VerificationPipelineService {
     // Before the rebuild key is computed: a job that shares a rebuild never builds, so this is its only proof.
     const possession = await this.sourceResolution.proveSourcePossession(job.sourceRef, job.jobId);
     if (!possession.ok) {
-      await this.failJob(job, "source_unreachable", possession.reason, possession.detail);
+      // A transient fault is an internal_error, which the retry scan revives; the reason code still says what failed.
+      await this.failJob(job, possession.retryable ? "internal_error" : "source_unreachable", possession.reason, possession.detail);
       return;
     }
 
@@ -483,7 +484,7 @@ export class VerificationPipelineService {
       await this.rebuilds.releaseClaim(rebuild.rebuildId);
       await this.failJob(
         job,
-        "source_unreachable",
+        resolved.retryable ? "internal_error" : "source_unreachable",
         resolved.reason,
         resolved.detail
       );

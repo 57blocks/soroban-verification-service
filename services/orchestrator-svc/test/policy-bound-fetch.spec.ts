@@ -193,6 +193,37 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
     ).rejects.toBeInstanceOf(UpstreamNotDeliveredError);
   });
 
+  it("gives up on a body that trickles in past the deadline, though the socket never goes idle", async () => {
+    const impatient = normalizePolicy({ ...POLICY, timeoutMs: 200 });
+    let destroyed = false;
+    let drip: ReturnType<typeof setInterval> | undefined;
+    const trickle = async (): Promise<HopResponse> => ({
+      statusCode: 200,
+      headers: {},
+      destroy: () => {
+        destroyed = true;
+        clearInterval(drip);
+        return undefined as never;
+      },
+      on(event: string, handler: (chunk?: unknown) => void) {
+        if (event === "data") drip = setInterval(() => handler(Buffer.from("x")), 10);
+        return this as never;
+      },
+    });
+
+    const started = Date.now();
+    const error = await fetchThroughDestinationPolicy("https://source.example.com/a.tar.gz", {
+      policy: impatient,
+      maxRedirects: 5,
+      requestImpl: trickle,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(UpstreamNotDeliveredError);
+    expect(String((error as Error).message)).toContain("reading the response body");
+    expect(destroyed).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
   it("refuses http:, which the guard this replaced accepted", async () => {
     const { requested, requestImpl } = recordingRequester([bodyOf("never reached")]);
     await expect(

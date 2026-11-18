@@ -490,7 +490,7 @@ describe("ADR-008 pipeline, end to end", () => {
     jest.spyOn(sourceResolution, "readStagingObjectBytes").mockResolvedValueOnce(undefined);
     const fetchOwnUrl = jest
       .spyOn(internals, "fetchUnderPolicy")
-      .mockRejectedValueOnce(new UpstreamNotDeliveredError("Status 404 from https://attacker.invalid"));
+      .mockRejectedValueOnce(new UpstreamNotDeliveredError("Status 404 from https://attacker.invalid", 404));
 
     const claimant = await createJob({
       contractId: contract,
@@ -506,6 +506,31 @@ describe("ADR-008 pipeline, end to end", () => {
     expect(refused.error).toBe("source_uri_not_materialized");
     expect(refused.rebuildId ?? undefined).toBeUndefined();
     expect((await reload(owner.jobId)).rebuildId).toBe(building.rebuildId);
+  });
+
+  it.each([
+    ["a body that never finished arriving", new UpstreamNotDeliveredError("Timed out after 120000ms reading the response body (812 bytes received)")],
+    ["a server error", new UpstreamNotDeliveredError("Status 503 from https://source.invalid", 503)],
+  ])("fails a job whose source fetch met %s as retryable, keeping the reason", async (_name, fault) => {
+    const sourceSha256 = randomBytes(32).toString("hex");
+    const contract = contractId();
+    chain.deployed.set(contract, REBUILT_HASH);
+    const internals = sourceResolution as unknown as {
+      stagedObjectExists: () => Promise<boolean>;
+      fetchUnderPolicy: (uri: string) => Promise<{ bytes: Uint8Array; finalUrl: string }>;
+    };
+    jest.spyOn(internals, "stagedObjectExists").mockResolvedValueOnce(false);
+    jest.spyOn(sourceResolution, "readStagingObjectBytes").mockResolvedValueOnce(undefined);
+    jest.spyOn(internals, "fetchUnderPolicy").mockRejectedValueOnce(fault);
+
+    const job = await createJob({ contractId: contract, sourceSha256, sourceUri: "https://source.invalid/slow.tar.gz" });
+    await pipeline.run(job);
+
+    const failed = await reload(job.jobId);
+    expect(failed.status).toBe("failed");
+    expect(failed.failureReason).toBe("internal_error");
+    expect(failed.error).toBe("source_uri_not_materialized");
+    expect(isRetryableFailure(failed.failureReason!)).toBe(true);
   });
 
   it("scopes rebuild identity and published recipe by chain-derived metadata_replay", async () => {
