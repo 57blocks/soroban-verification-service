@@ -19,6 +19,8 @@ model Rebuild {
   status         String  @default("pending")
   batchJobId     String? @map("batch_job_id")
   buildMode      String? @map("build_mode")
+  // Names the current dispatch; the keys its job writes sit under it. Absent on rebuilds dispatched before it existed.
+  dispatchNonce  String? @map("dispatch_nonce")
   mechanismReason String @map("mechanism_reason")
 
   outcome         String? @map("outcome")

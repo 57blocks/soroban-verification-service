@@ -61,6 +61,7 @@ beforeAll(async () => {
   jest.spyOn(sourceResolution, "deleteStagingObject").mockImplementation(async (key: string) => {
     deletedKeys.push(key);
   });
+  jest.spyOn(sourceResolution, "listStagingKeys").mockResolvedValue([]);
 });
 
 afterAll(async () => {

@@ -42,6 +42,7 @@ function harness() {
   jest.spyOn(sourceResolution, "deleteStagingObject").mockImplementation(async (key: string) => {
     deleted.push(key);
   });
+  jest.spyOn(sourceResolution, "listStagingKeys").mockResolvedValue([]);
   const release = new StagedSourceReleaseService(configService, jobs, rebuilds, sourceResolution);
   return { release, deleted };
 }
@@ -119,6 +120,33 @@ describe("StagedSourceReleaseService.releaseRebuildSources", () => {
 
     expect(deleted.sort()).toEqual([...expectedKeys(rebuild.rebuildId), jobSourceKey(job.jobId)].sort());
     expect((await rebuilds.getById(rebuild.rebuildId))!.stagedSourceReleasedAt).toBeDefined();
+  });
+
+  it("also deletes the source copies every earlier dispatch left under its own nonce, and nothing else", async () => {
+    const rebuild = await seedRebuild();
+    const job = await seedJob(rebuild.rebuildId, { visibility: "private", status: "published" });
+    const { release, deleted } = harness();
+    const sourceResolution = (release as unknown as { sourceResolution: SourceResolutionService }).sourceResolution;
+    const earlier = `staging/${rebuild.rebuildId}/build/0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f`;
+    const latest = `staging/${rebuild.rebuildId}/build/1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e`;
+    jest.spyOn(sourceResolution, "listStagingKeys").mockResolvedValue([
+      `${earlier}/canonical-source`,
+      `${earlier}/recipe.json`,
+      `${latest}/canonical-source`,
+      `${latest}/params/runner.json`,
+      `${latest}/rebuilt.wasm`,
+    ]);
+
+    expect(await release.releaseRebuildSources(rebuild.rebuildId, "sweep")).toBe("released");
+
+    expect(new Set(deleted)).toEqual(
+      new Set([
+        ...expectedKeys(rebuild.rebuildId),
+        `${earlier}/canonical-source`,
+        `${latest}/canonical-source`,
+        jobSourceKey(job.jobId),
+      ]),
+    );
   });
 
   it("is idempotent: a released rebuild is not deleted from again", async () => {

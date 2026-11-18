@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -58,9 +59,11 @@ export class BatchDispatchService {
     const staging =
       this.configService.get("stagingStorage", { infer: true });
     const s3 = createS3Client({ region: staging.region });
-    const artifactKey = recipeArtifactKey(params.rebuildId, mode);
-    const wasmKey = rebuiltWasmKey(params.rebuildId, mode);
-    const canonicalKey = canonicalSourceKey(params.rebuildId, mode);
+    // Fresh for every dispatch: no link minted for another dispatch of this rebuild reaches what this one writes.
+    const dispatchNonce = randomBytes(16).toString("hex");
+    const artifactKey = recipeArtifactKey(params.rebuildId, mode, dispatchNonce);
+    const wasmKey = rebuiltWasmKey(params.rebuildId, mode, dispatchNonce);
+    const canonicalKey = canonicalSourceKey(params.rebuildId, mode, dispatchNonce);
     // Minted unconditionally: only the materialiser can tell whether a canonical archive will be uploaded.
     const [uploadUrl, artifactUploadUrl, canonicalSourceUploadUrl] = await Promise.all([
       presignPutUrl(s3, staging.bucket, artifactKey, { contentType: "application/json" }),
@@ -78,7 +81,7 @@ export class BatchDispatchService {
     const transport = this.configService.get("jobParamsTransport", { infer: true });
     const containers: OverrideContainer[] =
       transport === "presigned_url"
-        ? await this.buildUrlTransportContainers(s3, staging.bucket, params.rebuildId, mode, containerParams)
+        ? await this.buildUrlTransportContainers(s3, staging.bucket, params.rebuildId, mode, dispatchNonce, containerParams)
         : this.buildInlineTransportContainers(containerParams);
 
     const platform = params.imageArchitecture
@@ -111,8 +114,8 @@ export class BatchDispatchService {
       params_transport: transport,
       ...(transport === "presigned_url"
         ? {
-            params_materialise_key: paramsDocumentKey(params.rebuildId, mode, "materialise"),
-            params_runner_key: paramsDocumentKey(params.rebuildId, mode, "runner"),
+            params_materialise_key: paramsDocumentKey(params.rebuildId, mode, "materialise", dispatchNonce),
+            params_runner_key: paramsDocumentKey(params.rebuildId, mode, "runner", dispatchNonce),
           }
         : {}),
       overrides_bytes: described
@@ -140,7 +143,7 @@ export class BatchDispatchService {
       batch_job_id: batchJobId,
       mode,
     });
-    await this.rebuilds.markDispatched(params.rebuildId, { batchJobId, buildMode: mode });
+    await this.rebuilds.markDispatched(params.rebuildId, { batchJobId, buildMode: mode, dispatchNonce });
     return batchJobId;
   }
 
@@ -169,10 +172,11 @@ export class BatchDispatchService {
     bucket: string,
     rebuildId: string,
     mode: BuildMode,
+    dispatchNonce: string,
     containerParams: { materialise: unknown; runner: unknown },
   ): Promise<OverrideContainer[]> {
-    const materialiseKey = paramsDocumentKey(rebuildId, mode, "materialise");
-    const runnerKey = paramsDocumentKey(rebuildId, mode, "runner");
+    const materialiseKey = paramsDocumentKey(rebuildId, mode, "materialise", dispatchNonce);
+    const runnerKey = paramsDocumentKey(rebuildId, mode, "runner", dispatchNonce);
     await Promise.all([
       this.putParamsDocument(s3, bucket, materialiseKey, JSON.stringify(containerParams.materialise)),
       this.putParamsDocument(s3, bucket, runnerKey, JSON.stringify(containerParams.runner)),

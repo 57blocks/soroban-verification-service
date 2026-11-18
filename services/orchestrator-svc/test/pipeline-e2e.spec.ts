@@ -233,6 +233,7 @@ function substituteOutboundRequests(service: SourceResolutionService): void {
   jest.spyOn(internals, "presignUploadGet").mockResolvedValue("https://staging.test/staged-upload?sig=stub");
   jest.spyOn(internals, "deleteStagedObject").mockResolvedValue(undefined);
   jest.spyOn(internals, "stagedObjectExists").mockResolvedValue(true);
+  jest.spyOn(service, "listStagingKeys").mockResolvedValue([]);
   jest
     .spyOn(service, "readStagedUploadBytes")
     .mockRejectedValue(new Error("pipeline-e2e: readStagedUploadBytes() was called; see substituteOutboundRequests()."));

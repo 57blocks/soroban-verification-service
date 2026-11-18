@@ -19,6 +19,7 @@ export class MismatchDiagnosticsService {
   async describe(input: {
     rebuildId: string;
     buildMode: BuildMode;
+    dispatchNonce?: string;
     runner?: string;
     deployedWasmPath?: string;
     existing?: SandboxDiagnostics;
@@ -31,7 +32,7 @@ export class MismatchDiagnosticsService {
       return undefined;
     }
 
-    const rebuilt = await this.fetchRebuiltBytes(input.rebuildId, input.buildMode);
+    const rebuilt = await this.fetchRebuiltBytes(input.rebuildId, input.buildMode, input.dispatchNonce);
     if (!rebuilt) return undefined;
 
     const deployed = await this.readDeployedBytes(input.deployedWasmPath);
@@ -58,10 +59,11 @@ export class MismatchDiagnosticsService {
   private async fetchRebuiltBytes(
     rebuildId: string,
     buildMode: BuildMode,
+    dispatchNonce?: string,
   ): Promise<Uint8Array | undefined> {
     const staging = this.configService.get("stagingStorage", { infer: true });
     const maxBytes = this.configService.get("maxRebuiltWasmBytes", { infer: true });
-    const key = rebuiltWasmKey(rebuildId, buildMode);
+    const key = rebuiltWasmKey(rebuildId, buildMode, dispatchNonce);
 
     try {
       const object = await getObjectBytesBounded(

@@ -673,6 +673,7 @@ export class VerificationPipelineService {
       : await this.mismatchDiagnostics.describe({
           rebuildId: rebuild.rebuildId,
           buildMode: rebuild.buildMode ?? "build",
+          dispatchNonce: rebuild.dispatchNonce,
           runner: rebuild.runner,
           deployedWasmPath: chainLookup.metadata.wasm_path,
           existing: verdict.result.sandbox_diagnostics,
