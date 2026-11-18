@@ -230,6 +230,20 @@ describe("reaping what a killed gateway left behind", () => {
     expect(logged).toEqual(["prefetch_leftovers_reaped"]);
   });
 
+  it("gives up on a daemon that never answers, so the gateway still starts", async () => {
+    const silent = createServer(() => undefined);
+    await new Promise<void>((resolve) => silent.listen(join(dir, "silent.sock"), resolve));
+    const logged: string[] = [];
+    try {
+      const reaped = await reapPrefetchLeftovers(join(dir, "silent.sock"), (event) => logged.push(event), NOW, 60_000, 200);
+      expect(reaped).toEqual({ containers: 0, networks: 0 });
+      expect(logged).toEqual(["prefetch_leftovers_unreaped"]);
+    } finally {
+      silent.closeAllConnections();
+      await new Promise<void>((resolve) => silent.close(() => resolve()));
+    }
+  });
+
   it("never throws when the daemon cannot list, so the gateway still starts", async () => {
     failList = true;
     const logged: string[] = [];

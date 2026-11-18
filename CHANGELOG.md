@@ -23,8 +23,10 @@ change what the verification API accepts; those are also listed under **Changed*
   An upload's visibility is fixed by its first submission; a later one asking for the other visibility
   is refused with `409` `upload_visibility_conflict`. (#246)
 - **A private submission's `source_uri` is no longer published.** The report's `source.source_uri` and the
-  status object's `source_uri` are written only for a public submission. Results published before this
-  change still carry it. (#243)
+  status object's `source_uri` are written only for a public submission. Republishing (the orchestrator's
+  `publish-once`) rewrites earlier results without it and points each private job at its rewritten report;
+  the earlier reports stay in result storage, and copies already archived to Arweave cannot be withdrawn.
+  (#243, #268)
 - **A `source_uri` job proves it holds its source before it shares a rebuild.** Each job fetches its
   own URL and checks the declared `source_sha256` before attaching to a rebuild another submission
   started, and a source is published only from the publishing job's own copy. (#237, #255)
@@ -47,6 +49,8 @@ change what the verification API accepts; those are also listed under **Changed*
 - **Breaking: a public submission's `source_uri` may not carry credentials.** A user name, a password or
   a credential-like query parameter (`X-Amz-Signature`, `X-Goog-Signature`, `sig`, `token`,
   `access_token`, `api_key` and similar) is refused with `400` `invalid_manifest`. (#243)
+- **Breaking: a target that names a contract and a Wasm the contract does not run is refused** with `400`
+  `target_wasm_not_deployed`. Submit the contract alone, or the Wasm hash alone. (#264)
 - **Breaking: stricter build options.** A `--env` without a value, or naming a reserved prefix, is
   refused with `400` `policy_rejected`. A single-valued option given twice (`--package`,
   `--manifest-path`, `--profile`, `--out-dir`), the same `--env` name twice, or the same `--meta` key

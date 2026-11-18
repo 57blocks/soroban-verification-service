@@ -187,6 +187,7 @@ export class RebuildsRepository {
       data: {
         status: "pending" satisfies RebuildStatus,
         batchJobId: null,
+        dispatchNonce: null,
         buildMode,
         outcome: null,
         runner: null,

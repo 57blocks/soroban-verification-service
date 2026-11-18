@@ -124,6 +124,37 @@ beforeEach(() => {
   putObjectText.mockReset();
 });
 
+describe("a dispatch's outputs are read only under its own nonce", () => {
+  const NONCE = "ab".repeat(16);
+  const DISPATCHED: RebuildRecord = { ...REBUILD, dispatchNonce: NONCE };
+
+  it("reads recipe.json, the Wasm and the canonical archive under the rebuild's nonce", async () => {
+    getObjectTextBounded.mockResolvedValue({ text: artifact({ ...PEELED, canonical_sha256: CANONICAL_SHA }) });
+    givenObjects({
+      [`staging/${REBUILD_ID}/verify/${NONCE}/rebuilt.wasm`]: WASM_BYTES,
+      [`staging/${REBUILD_ID}/verify/${NONCE}/canonical-source`]: CANONICAL_BYTES,
+    });
+
+    const { recorded, service } = harness();
+    const outcome = await service.recordFromBatchTerminalState(DISPATCHED, { status: "SUCCEEDED" });
+
+    expect(outcome.outcome).toBe("success");
+    expect(getObjectTextBounded.mock.calls[0]?.[2]).toBe(`staging/${REBUILD_ID}/verify/${NONCE}/recipe.json`);
+    expect(recorded[0].canonicalSourceKey).toBe(`staging/${REBUILD_ID}/verify/${NONCE}/canonical-source`);
+  });
+
+  it("never takes outputs an earlier dispatch left at the old layout", async () => {
+    getObjectTextBounded.mockResolvedValue({ text: artifact() });
+    givenObjects({ [WASM_KEY]: WASM_BYTES });
+
+    const { service } = harness();
+    const outcome = await service.recordFromBatchTerminalState(DISPATCHED, { status: "SUCCEEDED" });
+
+    expect(outcome.outcome).toBe("cli_failure");
+    expect(getObjectBytesBounded.mock.calls.every((call) => String(call[2]).includes(`/${NONCE}/`))).toBe(true);
+  });
+});
+
 describe("the canonical source archive's hash is ours, not the sandbox's", () => {
   it("records the hash of the uploaded bytes, not the one the artifact claims", async () => {
     getObjectTextBounded.mockResolvedValue({

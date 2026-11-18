@@ -137,16 +137,18 @@ export class PublishService {
     const written = await this.writePublication(job, reassemblyInput, stored.matched, { ownsRow: false });
 
     // A private job's earlier report may carry the source_uri it no longer publishes. Point its row at the report
-    // just written, and stop naming the earlier report's permanent copy, which cannot be withdrawn.
+    // just written, and forget the earlier report's permanent copy (archived_tx_id), which cannot be withdrawn: kept,
+    // the status-link recovery would link it to the new report.
     if (written && job.sourceRef.visibility === "private" && written.reportUrl !== stored.artifact_url) {
       const { arweave_tx_id: _staleCopy, ...kept } = stored;
       await this.jobs.updateJob(jobId, {
         result: { ...kept, artifact_url: written.reportUrl, artifact_sha256: written.reportSha256 },
+        archivedTxId: null,
       });
       this.logger.log("pointed a private job at its rewritten report", {
         job_id: jobId,
         report_sha256: written.reportSha256,
-        dropped_archive: Boolean(stored.arweave_tx_id),
+        dropped_archive: Boolean(job.archivedTxId),
       });
     }
   }
