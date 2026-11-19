@@ -89,6 +89,10 @@ export class DockerGateway {
     const route = routeRequest(req.method ?? "", req.url ?? "");
     if (!route.ok) throw refused(403, route);
     const body = await readBody(req, this.options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES);
+    // Only a create's body is checked, so no other request may carry one to the daemon.
+    if (route.kind !== "create" && body.length > 0) {
+      throw new RequestRefused(400, `${req.method} ${route.kind} may not carry a body`);
+    }
 
     switch (route.kind) {
       case "ping":

@@ -19,7 +19,12 @@ export type Route =
   | { ok: true; kind: "workspace-create" }
   | { ok: true; kind: "workspace-delete"; id: string };
 
-const API_VERSION_PREFIX = /^\/v\d+\.\d+(?=\/)/;
+const API_VERSION_PREFIX = /^\/v(\d+)\.(\d+)(?=\/)/;
+/**
+ * Below 1.24 a daemon that still serves the version applies a `HostConfig` sent with a container start, which this
+ * gateway never checks: only a create is. The CLI the builder pins speaks a far newer version.
+ */
+const MIN_API_VERSION = { major: 1, minor: 24 };
 const CONTAINER_ID = /^[0-9a-f]{64}$/;
 const WORKSPACE_ID = /^[A-Za-z0-9]{6,32}$/;
 const DIGEST_PINNED_IMAGE = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
@@ -34,6 +39,13 @@ export function routeRequest(method: string, url: string): Route | Denial {
     parsed = new URL(url, "http://gateway");
   } catch {
     return deny(`unparseable request target ${url}`);
+  }
+  const version = API_VERSION_PREFIX.exec(parsed.pathname);
+  if (version) {
+    const [major, minor] = [Number(version[1]), Number(version[2])];
+    if (major < MIN_API_VERSION.major || (major === MIN_API_VERSION.major && minor < MIN_API_VERSION.minor)) {
+      return deny(`API version ${major}.${minor} is older than ${MIN_API_VERSION.major}.${MIN_API_VERSION.minor}, the oldest this gateway forwards`);
+    }
   }
   const path = parsed.pathname.replace(API_VERSION_PREFIX, "");
   const segments = path.split("/").filter(Boolean);
