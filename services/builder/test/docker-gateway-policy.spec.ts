@@ -105,6 +105,7 @@ describe("docker gateway routes", () => {
     ["POST", `/v1.44/containers/${ID}/attach?stream=1&stdout=1`, "container"],
     ["POST", `/v1.44/containers/${ID}/wait?condition=removed`, "container"],
     ["POST", `/v1.44/containers/${ID}/start`, "container"],
+    ["POST", `/v1.24/containers/${ID}/start`, "container"],
     ["POST", `/v1.44/containers/${ID}/kill?signal=TERM`, "container"],
     ["DELETE", `/v1.44/containers/${ID}?force=1`, "container"],
     ["GET", `/v1.44/containers/${ID}/json`, "container"],
@@ -134,6 +135,10 @@ describe("docker gateway routes", () => {
     ["POST", "/v1.44/swarm/init"],
     ["POST", "/v1.44/session"],
     ["DELETE", "/scvs/v1/workspaces/../../etc"],
+    // Below 1.24 a start may carry a HostConfig the gateway never checks.
+    ["POST", `/v1.23/containers/${ID}/start`],
+    ["POST", "/v1.12/containers/create"],
+    ["GET", "/v0.99/version"],
   ])("refuses %s %s", (method, url) => {
     expect(routeRequest(method, url).ok).toBe(false);
   });

@@ -241,6 +241,21 @@ describe("docker gateway in front of a daemon", () => {
     expect(daemon.calls).toEqual([]);
   });
 
+  it("refuses a start that carries a HostConfig, on any API version, before the daemon sees it", async () => {
+    const workspace = await newWorkspace();
+    const created = await createContainer(workspace.leaves.source);
+    expect(created.status).toBe(201);
+    daemon.calls.length = 0;
+    const escalation = { Privileged: true, Binds: ["/:/host"], CapAdd: ["ALL"] };
+
+    // Below 1.24 a daemon that still serves the version applies a start's HostConfig; at any version, a body
+    // on anything but a create is never checked, so it is never forwarded.
+    expect((await socketCall(socket, "POST", `/v1.23/containers/${created.id}/start`, escalation)).status).toBe(403);
+    expect((await socketCall(socket, "POST", `/v1.44/containers/${created.id}/start`, escalation)).status).toBe(400);
+    expect((await socketCall(socket, "GET", "/v1.12/version")).status).toBe(403);
+    expect(daemon.calls).toEqual([]);
+  });
+
   it("authenticates an ECR pull itself, replacing whatever the runner sent", async () => {
     const ecr = "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com";
     const response = await pull(socket, `${ecr}%2Fsv-dev-composed-environments`, "runner-token");
