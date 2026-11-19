@@ -103,13 +103,25 @@ function requestOnce(url: URL, policy: FetchPolicy, timeoutMs: number): Promise<
         agent: false,
         headers: { "user-agent": "scvs-orchestrator", accept: "*/*" },
       },
-      resolve,
+      (response) => {
+        clearTimeout(deadline);
+        resolve(response);
+      },
     );
+    // The idle timer alone never fires for a server that trickles a byte now and then into its handshake or its
+    // headers: the remaining deadline bounds everything up to the response, as `readBounded` bounds the body.
+    const deadline = setTimeout(() => {
+      request.destroy(new UpstreamNotDeliveredError(`Timed out after ${timeoutMs}ms waiting for a response from ${url.origin}`));
+    }, timeoutMs);
+    deadline.unref?.();
     // `timeout` only arms the socket-idle timer; without this the request hangs rather than aborting.
     request.on("timeout", () => {
       request.destroy(new UpstreamNotDeliveredError(`Timed out after ${timeoutMs}ms connecting to ${url.origin}`));
     });
-    request.on("error", reject);
+    request.on("error", (error) => {
+      clearTimeout(deadline);
+      reject(error);
+    });
     request.end();
   });
 }

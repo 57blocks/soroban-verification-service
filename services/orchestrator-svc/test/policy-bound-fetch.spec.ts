@@ -224,6 +224,38 @@ describe("fetchThroughDestinationPolicy — redirect handling", () => {
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 
+  it("gives up on a server that trickles its handshake past the deadline, though the socket never goes idle", async () => {
+    const { createServer } = await import("node:net");
+    const sockets: import("node:net").Socket[] = [];
+    const server = createServer((socket) => {
+      sockets.push(socket);
+      // A TLS record header announcing a 16 KiB handshake record, then one byte at a time: the client waits for the
+      // whole record, and every byte re-arms its idle timer.
+      socket.write(Buffer.from([0x16, 0x03, 0x03, 0x40, 0x00]));
+      const drip = setInterval(() => socket.write(Buffer.from([0x00])), 50);
+      socket.on("close", () => clearInterval(drip));
+      socket.on("error", () => clearInterval(drip));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as import("node:net").AddressInfo).port;
+    const loopback = normalizePolicy({ ...POLICY, blockPrivateRanges: false, timeoutMs: 600 });
+
+    const started = Date.now();
+    try {
+      const error = await fetchThroughDestinationPolicy(`https://localhost:${port}/a.tar.gz`, {
+        policy: loopback,
+        maxRedirects: 0,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(UpstreamNotDeliveredError);
+      expect(String((error as Error).message)).toContain("waiting for a response");
+      expect(Date.now() - started).toBeLessThan(3_000);
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("refuses http:, which the guard this replaced accepted", async () => {
     const { requested, requestImpl } = recordingRequester([bodyOf("never reached")]);
     await expect(
