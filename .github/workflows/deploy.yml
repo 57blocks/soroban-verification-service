@@ -631,6 +631,12 @@ jobs:
               echo "::notice::no deploy contract for arweave-funder-svc in ${TARGET_ENV} yet — not checking it"
               continue
             fi
+            if [ "$SERVICE" = "arweave-funder-svc" ] && [ "$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$SERVICE" \
+                --region "$AWS_REGION" --query 'services[0].desiredCount' --output text)" = "0" ]; then
+              # Only one environment runs the shared non-production funder; the other keeps it registered at 0 tasks.
+              echo "::notice::arweave-funder-svc is at 0 desired tasks in ${TARGET_ENV} — not checking it"
+              continue
+            fi
             TASK_ARN=$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$SERVICE" \
               --desired-status RUNNING --region "$AWS_REGION" \
               --query 'taskArns[0]' --output text)

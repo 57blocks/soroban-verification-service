@@ -80,6 +80,15 @@ runningDigests() {
 
 FAILED=0
 for SERVICE in "${SERVICES[@]}"; do
+  # dev and staging share one funding key, so only one of them runs the funder; the other keeps it at 0 tasks.
+  if [ "$SERVICE" = "arweave-funder-svc" ]; then
+    DESIRED=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+      --query 'services[0].desiredCount' --output text)
+    if [ "$DESIRED" = "0" ]; then
+      echo "::notice::$SERVICE is at 0 desired tasks in this environment — registered, not running"
+      continue
+    fi
+  fi
   RUNNING=""
   for _ in $(seq "$SETTLE_ATTEMPTS"); do
     RUNNING=$(runningDigests "$SERVICE" || true)
