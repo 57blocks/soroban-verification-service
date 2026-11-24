@@ -44,7 +44,11 @@ class FakeChain implements Chain {
   async fees() {
     return this.fee;
   }
-  async estimateGas() {
+  estimates: bigint[] = [];
+  async estimateGas(tx: { value: bigint }) {
+    // Like a real node: estimating a value transfer the sender cannot cover fails.
+    if (tx.value > this.wei) throw new Error("eth_estimateGas: EVM error: OutOfFunds (-32003)");
+    this.estimates.push(tx.value);
     return 21_000n;
   }
   async send(raw: string) {
@@ -229,6 +233,29 @@ describe("topping up", () => {
     chain.wei = ETH / 5n;
     await round();
     expect(chain.sent).toEqual([]);
+  });
+
+  it("reports an empty funding address as empty, and still keeps the approval in place", async () => {
+    const { chain, irys, round } = setup();
+    chain.wei = 0n;
+    await expect(round()).resolves.toBe("done");
+    expect(chain.sent).toEqual([]);
+    expect(irys.approvals).toHaveLength(1);
+  });
+
+  it("estimates the transfer's gas without its value", async () => {
+    const { chain, round } = setup();
+    await round();
+    expect(chain.estimates).toEqual([0n]);
+  });
+
+  it("still renews the approval when the top-up fails, then reports the failure", async () => {
+    const { chain, irys, round } = setup();
+    chain.fees = async () => {
+      throw new Error("RPC down");
+    };
+    await expect(round()).rejects.toThrow(/RPC down/);
+    expect(irys.approvals).toHaveLength(1);
   });
 
   it("refuses to sign for a different chain", async () => {

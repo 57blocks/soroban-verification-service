@@ -15,6 +15,7 @@ const DAY_SECONDS = 86_400;
 const APPROVAL_HISTORY_SECONDS = 30 * DAY_SECONDS;
 const SETTLED_HISTORY_SECONDS = 30 * DAY_SECONDS;
 const RECEIPT_GRACE_SECONDS = 180;
+const PLAIN_TRANSFER_GAS = 21_000n;
 
 export type TxStatus = "signed" | "broadcast" | "mined" | "credited" | "failed" | "dropped";
 
@@ -169,8 +170,20 @@ export class FunderRound {
 
     if ((await this.reconcileInFlight(latest)) === "halted") return "halted";
     await this.creditMined();
-    if ((await this.maybeTopUp(latest)) === "halted") return "halted";
+    // A top-up that cannot proceed (RPC trouble, fees) must not also keep the upload key's approval from renewing:
+    // the approval is what uploads run on, and it needs no ETH.
+    let topUpError: unknown;
+    try {
+      if ((await this.maybeTopUp(latest)) === "halted") return "halted";
+    } catch (error) {
+      if (error instanceof Conflict) throw error;
+      topUpError = error;
+    }
     await this.maybeRenewApproval();
+    if (topUpError !== undefined) {
+      await this.save();
+      throw topUpError;
+    }
     this.prune();
     await this.save();
     await this.reportBalances();
@@ -312,9 +325,19 @@ export class FunderRound {
     }
     telemetry.gauge("arweave_funder_fee_cap_reached", 0);
 
-    const gasLimit = await chain.estimateGas({ from: signer.address, to: s.depositAddress, value: s.topUpWei });
-    if (gasLimit > s.maxGasLimit) throw new Error(`a top-up would need ${gasLimit} gas, above the ${s.maxGasLimit} limit`);
+    // Balance first: a node refuses to estimate a value transfer the sender cannot cover, so an empty wallet would
+    // otherwise fail the round here instead of reporting that it is empty.
     const onChain = await chain.balance(signer.address);
+    if (onChain < s.topUpWei + PLAIN_TRANSFER_GAS * fees.maxFeePerGas) {
+      telemetry.event("warn", "arweave funder: Irys balance is low and the funding address holds too little ETH to top it up", {
+        address: signer.address,
+        balance_wei: onChain.toString(),
+      });
+      return "ok";
+    }
+    // Estimated without the value: the gas of a transfer to an account does not depend on the amount.
+    const gasLimit = await chain.estimateGas({ from: signer.address, to: s.depositAddress, value: 0n });
+    if (gasLimit > s.maxGasLimit) throw new Error(`a top-up would need ${gasLimit} gas, above the ${s.maxGasLimit} limit`);
     if (onChain < s.topUpWei + gasLimit * fees.maxFeePerGas) {
       telemetry.event("warn", "arweave funder: Irys balance is low and the funding address holds too little ETH to top it up", {
         address: signer.address,
@@ -337,7 +360,7 @@ export class FunderRound {
   ): Promise<void> {
     const { chain, signer, telemetry } = this.deps;
     const s = this.settings;
-    const limit = gasLimit ?? (await chain.estimateGas({ from: signer.address, to: s.depositAddress, value }));
+    const limit = gasLimit ?? (await chain.estimateGas({ from: signer.address, to: s.depositAddress, value: 0n }));
     const { raw, hash } = await signer.signTransaction({
       type: 2,
       chainId: s.chainId,
