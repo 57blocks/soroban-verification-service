@@ -1721,6 +1721,23 @@ services:
           carries its own region. The orchestrator's task role needs kms:GetPublicKey and kms:Sign on it, and
           boot fails if either is missing or the key is the wrong type. Not a secret: the key id grants
           nothing without those permissions.
+      SCVS_ARWEAVE_PAID_BY:
+        type: string
+        required: no
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        observable: presence
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Ethereum address whose Irys balance pays for uploads, through an Irys balance approval it
+          granted the signer's address (createApproval with an amount and an expiry). Unset, the
+          signer's own Irys balance pays. With a KMS signer this keeps the funds in a wallet held
+          outside AWS and caps what the signer can spend at the approval's remaining amount. Uploads
+          stop with insufficient_balance when the approval is used up, expired, or exceeds what the
+          payer still holds; renewing it is a manual step by the paying wallet.
       SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
         type: string
         required: no

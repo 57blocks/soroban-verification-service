@@ -80,6 +80,10 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY?: string;
 
   @IsOptional()
+  @Matches(/^0x[0-9a-fA-F]{40}$/, { message: "SCVS_ARWEAVE_PAID_BY must be a 0x-prefixed 20-byte Ethereum address" })
+  SCVS_ARWEAVE_PAID_BY?: string;
+
+  @IsOptional()
   @IsUrl({ require_tld: false }, { message: "SCVS_ARWEAVE_GATEWAY_URL must be a URL" })
   SCVS_ARWEAVE_GATEWAY_URL?: string;
 

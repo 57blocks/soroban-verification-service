@@ -104,6 +104,7 @@ export const ENV_CONTRACT: Readonly<Record<string, readonly VariableDescriptor[]
     { name: "SCVS_ARWEAVE_KMS_KEY_ID", observable: "presence", digest: false },
     { name: "SCVS_ARWEAVE_MODE", observable: "value", digest: false },
     { name: "SCVS_ARWEAVE_NETWORK", observable: "value", digest: false },
+    { name: "SCVS_ARWEAVE_PAID_BY", observable: "presence", digest: false },
     { name: "SCVS_ARWEAVE_RPC_URL", observable: "presence", digest: false },
     { name: "SCVS_ARWEAVE_SIGNER", observable: "value", digest: false },
     { name: "SCVS_ARWEAVE_WALLET_PRIVATE_KEY", observable: "presence", digest: false },

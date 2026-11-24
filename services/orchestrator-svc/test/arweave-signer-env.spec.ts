@@ -25,6 +25,12 @@ describe("Arweave signer environment", () => {
     expect(() => validate({ ...IRYS, SCVS_ARWEAVE_SIGNER: "kms", SCVS_ARWEAVE_KMS_KEY_ID: KEY_ID })).not.toThrow();
   });
 
+  it("accepts a paying wallet only as an Ethereum address", () => {
+    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: `0x${"aB".repeat(20)}` })).not.toThrow();
+    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: "aB".repeat(20) })).toThrow(/SCVS_ARWEAVE_PAID_BY must be/);
+    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: "0x1234" })).toThrow(/SCVS_ARWEAVE_PAID_BY must be/);
+  });
+
   it("does not ask for a key id while archiving is off", () => {
     expect(() => validate({ ...BASE, SCVS_ARWEAVE_SIGNER: "kms" })).not.toThrow();
   });

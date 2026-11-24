@@ -28,6 +28,7 @@ import { KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsEthereumToken } from "./k
 import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
+type IrysPrice = Awaited<ReturnType<IrysUploader["getPrice"]>>;
 
 // Must agree with storage-layout's readLegacyCustody: both read the same document.
 export function legacyCustodyFromReport(reportBytes: string): LegacyCustody | undefined {
@@ -163,6 +164,27 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     ];
   }
 
+  private async signerShortfall(uploader: IrysUploader, price: IrysPrice): Promise<string | undefined> {
+    const balance = await uploader.getBalance();
+    if (!balance.lt(price)) return undefined;
+    return `Wallet balance is below the price of this upload (need ${price.toString()}, have ${balance.toString()}). Fund the wallet manually — this service never auto-funds.`;
+  }
+
+  // An approval caps what the signer may spend; it does not prove the payer still holds that much.
+  private async payerShortfall(uploader: IrysUploader, paidBy: string, price: IrysPrice): Promise<string | undefined> {
+    const [approval, payerBalance] = await Promise.all([
+      uploader.approval.getApprovedBalanceFrom(paidBy),
+      uploader.getBalance(paidBy),
+    ]);
+    if (price.gt(approval.amount)) {
+      return `${paidBy}'s approval for ${uploader.address} is below the price of this upload (need ${price.toString()}, approved ${approval.amount}). The paying wallet must renew it with createApproval — this service never approves itself.`;
+    }
+    if (payerBalance.lt(price)) {
+      return `Paying wallet ${paidBy} holds less than the price of this upload (need ${price.toString()}, have ${payerBalance.toString()}). Fund it manually — this service never auto-funds.`;
+    }
+    return undefined;
+  }
+
   private async uploadToIrys(
     kind: ArchivePayloadKind,
     input: {
@@ -193,17 +215,13 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       const tags = this.buildTags(kind, input);
 
       const byteLength = typeof input.bytes === "string" ? Buffer.byteLength(input.bytes) : input.bytes.byteLength;
-      const [price, balance] = await Promise.all([uploader.getPrice(byteLength, { tags }), uploader.getBalance()]);
-      if (balance.lt(price)) {
-        return {
-          ok: false,
-          reason: "insufficient_balance",
-          detail: `Wallet balance is below the price of this upload (need ${price.toString()}, have ${balance.toString()}). Fund the wallet manually — this service never auto-funds.`,
-        };
-      }
+      const { paidBy } = config;
+      const price = await uploader.getPrice(byteLength, { tags });
+      const shortfall = paidBy ? await this.payerShortfall(uploader, paidBy, price) : await this.signerShortfall(uploader, price);
+      if (shortfall) return { ok: false, reason: "insufficient_balance", detail: shortfall };
 
       const body = typeof input.bytes === "string" ? input.bytes : Buffer.from(input.bytes);
-      const receipt = await uploader.upload(body, { tags });
+      const receipt = await uploader.upload(body, { tags, ...(paidBy ? { upload: { paidBy } } : {}) });
       return { ok: true, tx_id: receipt.id, archive_url: this.gatewayUrlFor(receipt.id) };
     } catch (error) {
       return {

@@ -48,6 +48,8 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
     "Whether verification reports are also archived to Arweave: `disabled`, `dry-run` (records a placeholder transaction id without uploading) or `irys` (real uploads through Irys). Startup rejects any other value.",
   SCVS_ARWEAVE_NETWORK:
     "Irys network archives are uploaded to: `devnet` (free, not durable) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly.",
+  SCVS_ARWEAVE_PAID_BY:
+    "Address of the wallet whose Irys balance pays for uploads, through a balance approval it granted the signing address. Unset, the signing wallet pays from its own balance. With a KMS signer, this keeps the funds outside AWS and caps spending at the approval.",
   SCVS_ARWEAVE_RPC_URL:
     "Ethereum RPC endpoint the archiving wallet signs Irys payments through. Needed on `mainnet`; `devnet` has a built-in endpoint.",
   SCVS_ARWEAVE_SIGNER:
