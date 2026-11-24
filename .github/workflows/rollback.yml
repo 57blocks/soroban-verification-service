@@ -168,6 +168,11 @@ jobs:
               esac
             done
 
+            if [ -z "$MATCH" ] && [ "$SERVICE" = "arweave-funder-svc" ]; then
+              # A commit from before the funder's first deploy has no funder revision; leave the funder where it is.
+              echo "::notice::no arweave-funder-svc revision pins $DIGEST — leaving the funder on its current revision"
+              continue
+            fi
             if [ -z "$MATCH" ]; then
               echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${COMMIT_SHA} was never deployed to ${TARGET_ENV}, or its revision is no longer ACTIVE"
               exit 1
