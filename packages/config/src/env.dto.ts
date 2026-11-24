@@ -4,6 +4,8 @@ const resultStorageKinds = ["filesystem", "s3", "r2"] as const;
 
 const arweaveModes = ["disabled", "dry-run", "dry_run", "irys"] as const;
 
+const arweaveSigners = ["kms", "private-key"] as const;
+
 const nodeEnvs = ["production", "development", "test"] as const;
 
 export class SharedEnvDto {
@@ -140,6 +142,6 @@ export class ResultStorageEnvDto extends SharedEnvDto {
   SCVS_VERIFIER_POLICY_ID?: string;
 }
 
-export { arweaveModes, nodeEnvs, resultStorageKinds };
+export { arweaveModes, arweaveSigners, nodeEnvs, resultStorageKinds };
 
 export { createEnvValidator, EnvValidationError } from "@scvs/core";

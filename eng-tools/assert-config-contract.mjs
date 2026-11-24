@@ -36,7 +36,18 @@ function contractVariables(service) {
   };
 }
 
+/** `A == x && B != y`: false as soon as one term is false, undefined if any other term is undecidable. */
 function evaluateRequiredWhen(clause, report) {
+  let result = true;
+  for (const term of String(clause).split("&&")) {
+    const holds = evaluateTerm(term, report);
+    if (holds === false) return false;
+    if (holds === undefined) result = undefined;
+  }
+  return result;
+}
+
+function evaluateTerm(clause, report) {
   const match = /^\s*([A-Z0-9_]+)\s*(==|!=)\s*(.+?)\s*$/.exec(String(clause));
   if (!match) return undefined;
   const [, governing, op, rawExpected] = match;

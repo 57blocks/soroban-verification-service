@@ -1688,10 +1688,62 @@ services:
           Ethereum RPC endpoint the archiving wallet signs through. devnet has a working default
           (Sepolia's public RPC) baked into getArweaveConfig, so this is only ever set for a
           mainnet deployment.
+      SCVS_ARWEAVE_SIGNER:
+        type: enum
+        values: [kms, private-key]
+        required: no
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_NETWORK == mainnet
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: private-key
+        observable: value
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          What signs Irys uploads. `kms` signs through the AWS KMS key named by SCVS_ARWEAVE_KMS_KEY_ID,
+          so the wallet key never enters process memory; `private-key` signs with
+          SCVS_ARWEAVE_WALLET_PRIVATE_KEY and is for local development and self-hosters only. Boot
+          rejects anything but `kms` when SCVS_ARWEAVE_MODE=irys and SCVS_ARWEAVE_NETWORK=mainnet.
+      SCVS_ARWEAVE_KMS_KEY_ID:
+        type: string
+        required: no
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER == kms
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        observable: presence
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Key ARN of an ECC_SECG_P256K1 / SIGN_VERIFY KMS key; its Ethereum address is the archiving
+          wallet. An alias also resolves, but anyone allowed kms:UpdateAlias can repoint it at another
+          key, so deployments name the key ARN. A bare key id or alias name needs AWS_REGION; an ARN
+          carries its own region. The orchestrator's task role needs kms:GetPublicKey and kms:Sign on it, and
+          boot fails if either is missing or the key is the wrong type. Not a secret: the key id grants
+          nothing without those permissions.
+      SCVS_ARWEAVE_PAID_BY:
+        type: string
+        required: no
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        observable: presence
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Ethereum address whose Irys balance pays for uploads, through an Irys balance approval it
+          granted the signer's address (createApproval with an amount and an expiry). Unset, the
+          signer's own Irys balance pays. With a KMS signer this keeps the funds in a wallet held
+          outside AWS and caps what the signer can spend at the approval's remaining amount. Uploads
+          stop with insufficient_balance when the approval is used up, expired, or exceeds what the
+          payer still holds; renewing it is a manual step by the paying wallet.
       SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
         type: string
         required: no
-        required_when: SCVS_ARWEAVE_MODE == irys
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER != kms
         fail: first-use
         secret: true
         source: secret
@@ -1701,9 +1753,9 @@ services:
         default: ~
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          Ethereum wallet private key, ecs-secrets injected (archive-and-recovery plan.md §7) — read
-          as a plain process.env value at container start, never fetched from Secrets Manager by
-          this service's own code. Dev uses this secret with Irys devnet; the ECS task execution role
+          Ethereum wallet private key, read only when SCVS_ARWEAVE_SIGNER=private-key (local development
+          and self-hosters; never on Irys mainnet) — read as a plain process.env value at container
+          start, never fetched from Secrets Manager by this service's own code. Dev uses this secret with Irys devnet; the ECS task execution role
           needs secretsmanager:GetSecretValue on this secret before the container can start.
       SCVS_ARWEAVE_GATEWAY_URL:
         type: url

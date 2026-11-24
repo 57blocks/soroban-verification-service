@@ -87,7 +87,13 @@ export type ArweaveConfig = {
   network: "mainnet" | "devnet";
   /** The Ethereum L1 RPC the wallet signs through, not an Irys endpoint. */
   rpcUrl?: string;
+  signer: "kms" | "private-key";
+  /** Read only when `signer` is `kms`. */
+  kmsKeyId?: string;
+  /** Read only when `signer` is `private-key`. */
   privateKey?: string;
+  /** Lowercased address whose Irys balance pays, through its approval of the signer; unset means the signer pays. */
+  paidBy?: string;
   gatewayUrl: string;
   /** Whether public mainnet source is eligible for Arweave archival; independent of `mode`. */
   sourceArchiveEnabled: boolean;
@@ -110,7 +116,10 @@ export function getArweaveConfig(): ArweaveConfig {
     mode,
     network,
     rpcUrl: process.env.SCVS_ARWEAVE_RPC_URL || (network === "devnet" ? DEVNET_DEFAULT_RPC_URL : undefined),
+    signer: (process.env.SCVS_ARWEAVE_SIGNER || "private-key").toLowerCase() === "kms" ? "kms" : "private-key",
+    kmsKeyId: process.env.SCVS_ARWEAVE_KMS_KEY_ID || undefined,
     privateKey: process.env.SCVS_ARWEAVE_WALLET_PRIVATE_KEY,
+    paidBy: process.env.SCVS_ARWEAVE_PAID_BY?.toLowerCase() || undefined,
     gatewayUrl: (process.env.SCVS_ARWEAVE_GATEWAY_URL || DEFAULT_ARWEAVE_GATEWAY_URL).replace(/\/+$/, ""),
     sourceArchiveEnabled: boolEnv("SCVS_SOURCE_ARCHIVE_ENABLED", false),
   };

@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Uploader } from "@irys/upload";
 import { Ethereum } from "@irys/upload-ethereum";
@@ -22,10 +22,13 @@ import {
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
 import { DetachedWork, IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
+import { createKmsClient, kmsKeyRegion, type KmsSendClient } from "@scvs/aws";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
+import { KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsEthereumToken } from "./kms-ethereum-signer.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
+type IrysPrice = Awaited<ReturnType<IrysUploader["getPrice"]>>;
 
 // Must agree with storage-layout's readLegacyCustody: both read the same document.
 export function legacyCustodyFromReport(reportBytes: string): LegacyCustody | undefined {
@@ -70,11 +73,12 @@ const SOURCE_CONTENT_TYPES: Record<string, string> = {
 };
 
 @Injectable()
-export class ArweaveArchiveService implements OnModuleDestroy {
+export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("arweave-archive");
   private readonly metrics = new ScvsMetrics("arweave-archive", { logger: this.logger });
   private readonly detached = new DetachedWork(this.logger);
   private uploaderPromise: Promise<IrysUploader> | undefined;
+  private kmsSigner: KmsEthereumSigner | undefined;
 
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
@@ -85,19 +89,64 @@ export class ArweaveArchiveService implements OnModuleDestroy {
     private readonly reportArchiveUploads: ReportArchiveUploadsRepository,
   ) {}
 
+  async onModuleInit(): Promise<void> {
+    const config = this.configService.get("arweave", { infer: true });
+    if (config.mode !== "irys" || config.signer !== "kms") return;
+    const signer = await this.getKmsSigner();
+    this.logger.log("arweave KMS signer ready", { address: signer.address, network: config.network });
+  }
+
+  protected kmsClient(keyId: string): KmsSendClient {
+    const region = kmsKeyRegion(keyId) ?? this.configService.get("awsRegion", { infer: true });
+    // An alias or bare key id resolves only in the client's region; a guessed region fails as "not found".
+    if (!region) throw new Error("SCVS_ARWEAVE_KMS_KEY_ID is not a key ARN and AWS_REGION is unset — no region to find the key in");
+    return createKmsClient(region);
+  }
+
+  private async getKmsSigner(): Promise<KmsEthereumSigner> {
+    if (!this.kmsSigner) {
+      const { kmsKeyId } = this.configService.get("arweave", { infer: true });
+      if (!kmsKeyId) throw new Error("SCVS_ARWEAVE_KMS_KEY_ID is required when SCVS_ARWEAVE_SIGNER is kms");
+      this.kmsSigner = await KmsEthereumSigner.create(this.kmsClient(kmsKeyId), kmsKeyId);
+    }
+    return this.kmsSigner;
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.detached.drain();
   }
 
   private async getUploader(): Promise<IrysUploader> {
     if (!this.uploaderPromise) {
-      const config = this.configService.get("arweave", { infer: true });
-      let builder = Uploader(Ethereum).withWallet(config.privateKey);
-      if (config.rpcUrl) builder = builder.withRpc(config.rpcUrl);
-      builder = config.network === "mainnet" ? builder.mainnet() : builder.devnet();
-      this.uploaderPromise = Promise.resolve(builder);
+      const promise = this.buildUploader();
+      // A failed build (KMS unreachable, permission missing) must not stick: the next attempt retries it.
+      promise.catch(() => {
+        if (this.uploaderPromise === promise) this.uploaderPromise = undefined;
+      });
+      this.uploaderPromise = promise;
     }
     return this.uploaderPromise;
+  }
+
+  private async buildUploader(): Promise<IrysUploader> {
+    const config = this.configService.get("arweave", { infer: true });
+    let builder;
+    let kmsAddress: string | undefined;
+    if (config.signer === "kms") {
+      const signer = await this.getKmsSigner();
+      kmsAddress = signer.address;
+      builder = Uploader(kmsEthereumToken(signer)).withWallet(KMS_WALLET_PLACEHOLDER);
+    } else {
+      builder = Uploader(Ethereum).withWallet(config.privateKey);
+    }
+    if (config.rpcUrl) builder = builder.withRpc(config.rpcUrl);
+    builder = config.network === "mainnet" ? builder.mainnet() : builder.devnet();
+    const uploader = await builder;
+    if (kmsAddress !== undefined && uploader.address !== kmsAddress) {
+      throw new Error(`Irys uploader resolved address ${uploader.address}, not the KMS key's ${kmsAddress} — refusing to upload`);
+    }
+    this.logger.log("arweave uploader ready", { signer: config.signer, address: uploader.address, network: config.network });
+    return uploader;
   }
 
   private buildTags(kind: ArchivePayloadKind, tags: ArchiveTags): { name: string; value: string }[] {
@@ -113,6 +162,27 @@ export class ArweaveArchiveService implements OnModuleDestroy {
       { name: "Verifier", value: tags.verifierId },
       ...(kind === "source" && tags.sourceExtension ? [{ name: "Source-Extension", value: tags.sourceExtension }] : []),
     ];
+  }
+
+  private async signerShortfall(uploader: IrysUploader, price: IrysPrice): Promise<string | undefined> {
+    const balance = await uploader.getBalance();
+    if (!balance.lt(price)) return undefined;
+    return `Wallet balance is below the price of this upload (need ${price.toString()}, have ${balance.toString()}). Fund the wallet manually — this service never auto-funds.`;
+  }
+
+  // An approval caps what the signer may spend; it does not prove the payer still holds that much.
+  private async payerShortfall(uploader: IrysUploader, paidBy: string, price: IrysPrice): Promise<string | undefined> {
+    const [approval, payerBalance] = await Promise.all([
+      uploader.approval.getApprovedBalanceFrom(paidBy),
+      uploader.getBalance(paidBy),
+    ]);
+    if (price.gt(approval.amount)) {
+      return `${paidBy}'s approval for ${uploader.address} is below the price of this upload (need ${price.toString()}, approved ${approval.amount}). The paying wallet must renew it with createApproval — this service never approves itself.`;
+    }
+    if (payerBalance.lt(price)) {
+      return `Paying wallet ${paidBy} holds less than the price of this upload (need ${price.toString()}, have ${payerBalance.toString()}). Fund it manually — this service never auto-funds.`;
+    }
+    return undefined;
   }
 
   private async uploadToIrys(
@@ -145,17 +215,13 @@ export class ArweaveArchiveService implements OnModuleDestroy {
       const tags = this.buildTags(kind, input);
 
       const byteLength = typeof input.bytes === "string" ? Buffer.byteLength(input.bytes) : input.bytes.byteLength;
-      const [price, balance] = await Promise.all([uploader.getPrice(byteLength, { tags }), uploader.getBalance()]);
-      if (balance.lt(price)) {
-        return {
-          ok: false,
-          reason: "insufficient_balance",
-          detail: `Wallet balance is below the price of this upload (need ${price.toString()}, have ${balance.toString()}). Fund the wallet manually — this service never auto-funds.`,
-        };
-      }
+      const { paidBy } = config;
+      const price = await uploader.getPrice(byteLength, { tags });
+      const shortfall = paidBy ? await this.payerShortfall(uploader, paidBy, price) : await this.signerShortfall(uploader, price);
+      if (shortfall) return { ok: false, reason: "insufficient_balance", detail: shortfall };
 
       const body = typeof input.bytes === "string" ? input.bytes : Buffer.from(input.bytes);
-      const receipt = await uploader.upload(body, { tags });
+      const receipt = await uploader.upload(body, { tags, ...(paidBy ? { upload: { paidBy } } : {}) });
       return { ok: true, tx_id: receipt.id, archive_url: this.gatewayUrlFor(receipt.id) };
     } catch (error) {
       return {
@@ -173,7 +239,15 @@ export class ArweaveArchiveService implements OnModuleDestroy {
     const config = this.configService.get("arweave", { infer: true });
     if (config.mode !== "irys") return undefined;
 
-    const uploader = await this.getUploader();
+    let uploader: IrysUploader;
+    try {
+      uploader = await this.getUploader();
+    } catch (error) {
+      this.logger.error("findExistingUpload could not build the uploader — treating as indeterminate; the upload attempt reports it", {
+        error: error instanceof Error ? error : String(error),
+      });
+      return undefined;
+    }
     const graphqlUrl = `https://${config.network === "mainnet" ? "arweave" : "devnet"}.irys.xyz/graphql`;
     const tagName = kind === "report" ? "Report_Hash" : "Source_Hash";
     const query = `{
