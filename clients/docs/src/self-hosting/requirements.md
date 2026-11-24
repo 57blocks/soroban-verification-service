@@ -124,7 +124,7 @@ Secrets:
   (`SCVS_ARWEAVE_SIGNER=kms` and `SCVS_ARWEAVE_KMS_KEY_ID`): the orchestrator does not start with a
   private key on mainnet. A KMS-signed wallet cannot fund itself: hold the balance in a wallet of
   your own, grant the KMS address an Irys balance approval from it, and name that wallet in
-  `SCVS_ARWEAVE_PAID_BY`.
+  `SCVS_ARWEAVE_PAID_BY`. The orchestrator does not start with the KMS signer and no paying wallet.
 
 Keep secrets apart from ordinary settings, so that permission to read configuration never grants access
 to a password or a key.

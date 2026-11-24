@@ -6,6 +6,8 @@ const validate = createEnvValidator(OrchestratorSvcEnvDto, "orchestrator-svc");
 const BASE = { SCVS_STORAGE_BUCKET: "stellar-scratch" };
 const IRYS = { ...BASE, SCVS_ARWEAVE_MODE: "irys" };
 const KEY_ID = "arn:aws:kms:ap-southeast-2:000000000000:alias/scvs-nonprod-arweave-signer";
+const PAYER = `0x${"aB".repeat(20)}`;
+const KMS = { SCVS_ARWEAVE_SIGNER: "kms", SCVS_ARWEAVE_KMS_KEY_ID: KEY_ID, SCVS_ARWEAVE_PAID_BY: PAYER };
 
 describe("Arweave signer environment", () => {
   it("leaves the private-key signer as the default off mainnet", () => {
@@ -18,15 +20,25 @@ describe("Arweave signer environment", () => {
   });
 
   it("requires a key id for the kms signer", () => {
-    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_SIGNER: "kms" })).toThrow(/SCVS_ARWEAVE_KMS_KEY_ID is required/);
-    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_SIGNER: "kms", SCVS_ARWEAVE_KMS_KEY_ID: "" })).toThrow(
-      /SCVS_ARWEAVE_KMS_KEY_ID is required/,
+    expect(() => validate({ ...IRYS, ...KMS, SCVS_ARWEAVE_KMS_KEY_ID: undefined })).toThrow(/SCVS_ARWEAVE_KMS_KEY_ID is required/);
+    expect(() => validate({ ...IRYS, ...KMS, SCVS_ARWEAVE_KMS_KEY_ID: "" })).toThrow(/SCVS_ARWEAVE_KMS_KEY_ID is required/);
+    expect(() => validate({ ...IRYS, ...KMS })).not.toThrow();
+  });
+
+  it("requires a paying wallet for the kms signer, whose address cannot hold a balance of its own", () => {
+    expect(() => validate({ ...IRYS, ...KMS, SCVS_ARWEAVE_PAID_BY: undefined })).toThrow(/SCVS_ARWEAVE_PAID_BY is required/);
+    expect(() => validate({ ...IRYS, ...KMS, SCVS_ARWEAVE_PAID_BY: "" })).toThrow(/SCVS_ARWEAVE_PAID_BY is required/);
+    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_NETWORK: "devnet", ...KMS, SCVS_ARWEAVE_PAID_BY: undefined })).toThrow(
+      /SCVS_ARWEAVE_PAID_BY is required/,
     );
-    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_SIGNER: "kms", SCVS_ARWEAVE_KMS_KEY_ID: KEY_ID })).not.toThrow();
+  });
+
+  it("leaves the paying wallet optional for the private-key signer", () => {
+    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_SIGNER: "private-key" })).not.toThrow();
   });
 
   it("accepts a paying wallet only as an Ethereum address", () => {
-    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: `0x${"aB".repeat(20)}` })).not.toThrow();
+    expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: PAYER })).not.toThrow();
     expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: "aB".repeat(20) })).toThrow(/SCVS_ARWEAVE_PAID_BY must be/);
     expect(() => validate({ ...IRYS, SCVS_ARWEAVE_PAID_BY: "0x1234" })).toThrow(/SCVS_ARWEAVE_PAID_BY must be/);
   });
@@ -44,7 +56,11 @@ describe("Arweave signer environment", () => {
     });
 
     it("accepts the kms signer with a key id", () => {
-      expect(() => validate({ ...MAINNET, SCVS_ARWEAVE_SIGNER: "kms", SCVS_ARWEAVE_KMS_KEY_ID: KEY_ID })).not.toThrow();
+      expect(() => validate({ ...MAINNET, ...KMS })).not.toThrow();
+    });
+
+    it("refuses the kms signer without a paying wallet", () => {
+      expect(() => validate({ ...MAINNET, ...KMS, SCVS_ARWEAVE_PAID_BY: undefined })).toThrow(/SCVS_ARWEAVE_PAID_BY is required/);
     });
 
     it("does not apply while archiving is off", () => {

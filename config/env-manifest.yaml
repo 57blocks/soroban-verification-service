@@ -1726,6 +1726,7 @@ services:
       SCVS_ARWEAVE_PAID_BY:
         type: string
         required: no
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER == kms
         fail: boot
         source: literal
         tier: knob
@@ -1735,9 +1736,12 @@ services:
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
           Ethereum address whose Irys balance pays for uploads, through an Irys balance approval it
-          granted the signer's address (createApproval with an amount and an expiry). Unset, the
-          signer's own Irys balance pays. With a KMS signer this keeps the funds in a wallet held
-          outside AWS and caps what the signer can spend at the approval's remaining amount. Uploads
+          granted the signer's address (createApproval with an amount and an expiry). Required with
+          the KMS signer, whose address can never hold an Irys balance of its own: Irys credits a
+          deposit to the on-chain sender, and only the orchestrator may sign with the key. With the
+          private-key signer it is optional, and unset the signer's own Irys balance pays. It keeps
+          the funds in a wallet held outside AWS and caps what the signer can spend at the
+          approval's remaining amount. Uploads
           stop with insufficient_balance when the approval is used up, expired, or exceeds what the
           payer still holds; renewing it is a manual step by the paying wallet.
       SCVS_ARWEAVE_WALLET_PRIVATE_KEY:

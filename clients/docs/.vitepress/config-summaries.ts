@@ -49,7 +49,7 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_ARWEAVE_NETWORK:
     "Irys network archives are uploaded to: `devnet` (free, not durable) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly.",
   SCVS_ARWEAVE_PAID_BY:
-    "Address of the wallet whose Irys balance pays for uploads, through a balance approval it granted the signing address. Unset, the signing wallet pays from its own balance. With a KMS signer, this keeps the funds outside AWS and caps spending at the approval.",
+    "Address of the wallet whose Irys balance pays for uploads, through a balance approval it granted the signing address. Required with SCVS_ARWEAVE_SIGNER `kms`, because a KMS address cannot hold an Irys balance of its own, so the orchestrator does not start without it. With `private-key` it is optional, and unset the signing wallet pays from its own balance. It keeps the funds outside AWS and caps spending at the approval.",
   SCVS_ARWEAVE_RPC_URL:
     "Ethereum RPC endpoint the archiving wallet signs Irys payments through. Needed on `mainnet`; `devnet` has a built-in endpoint.",
   SCVS_ARWEAVE_SIGNER:
