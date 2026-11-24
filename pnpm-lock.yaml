@@ -287,6 +287,9 @@ importers:
       '@aws-sdk/client-eventbridge':
         specifier: ^3.1149.0
         version: 3.1152.0
+      '@aws-sdk/client-kms':
+        specifier: ^3.1152.0
+        version: 3.1152.0
       '@aws-sdk/client-s3':
         specifier: ^3.1149.0
         version: 3.1152.0
@@ -642,6 +645,18 @@ importers:
 
   services/orchestrator-svc:
     dependencies:
+      '@ethersproject/bytes':
+        specifier: ^5.8.0
+        version: 5.8.0
+      '@ethersproject/hash':
+        specifier: ^5.8.0
+        version: 5.8.0
+      '@ethersproject/signing-key':
+        specifier: ^5.8.0
+        version: 5.8.0
+      '@ethersproject/transactions':
+        specifier: ^5.8.0
+        version: 5.8.0
       '@irys/upload':
         specifier: ^0.0.15
         version: 0.0.15(@types/node@22.20.5)(arweave@1.15.7)
@@ -1000,6 +1015,10 @@ packages:
 
   '@aws-sdk/client-eventbridge@3.1152.0':
     resolution: {integrity: sha512-cCUtfQWN3T54OF5fpiN4AyRuBODOxGZpdp1tLuRfWkKBDXmPpPgbrt7Z/YounPJeYBwMWw8fOkvn/Bys/egPog==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-kms@3.1152.0':
+    resolution: {integrity: sha512-hQ9HoblAMUloJD+/uP0CJ/w0wAWrGNBtwJe5obXY8FzuZ8c1S1Vis0/l3lE2SMnmRi0ziY9+b2RpMr1x/O0A9A==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-s3@3.1152.0':
@@ -7764,6 +7783,17 @@ snapshots:
       '@aws-sdk/core': 3.978.3
       '@aws-sdk/credential-provider-node': 3.972.86
       '@aws-sdk/signature-v4-multi-region': 3.996.48
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.36.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-kms@3.1152.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.3
+      '@aws-sdk/credential-provider-node': 3.972.86
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.36.0
       '@smithy/fetch-http-handler': 5.8.0

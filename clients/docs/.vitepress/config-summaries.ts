@@ -42,14 +42,18 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
     "Writable scratch directory for temporary working files, such as `stellar` CLI working directories and the builder's and composer's per-job scratch space.",
   SCVS_ARWEAVE_GATEWAY_URL:
     "Arweave gateway base URL used to build links to archived reports and sources. Devnet uploads are reachable only through the Irys gateway, whatever this is set to.",
+  SCVS_ARWEAVE_KMS_KEY_ID:
+    "ARN of the AWS KMS key that signs Irys uploads when SCVS_ARWEAVE_SIGNER is `kms`. It must be an `ECC_SECG_P256K1` signing key; its Ethereum address is the archiving wallet. The orchestrator needs `kms:GetPublicKey` and `kms:Sign` on it, or it does not start.",
   SCVS_ARWEAVE_MODE:
     "Whether verification reports are also archived to Arweave: `disabled`, `dry-run` (records a placeholder transaction id without uploading) or `irys` (real uploads through Irys). Startup rejects any other value.",
   SCVS_ARWEAVE_NETWORK:
     "Irys network archives are uploaded to: `devnet` (free, not durable) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly.",
   SCVS_ARWEAVE_RPC_URL:
     "Ethereum RPC endpoint the archiving wallet signs Irys payments through. Needed on `mainnet`; `devnet` has a built-in endpoint.",
+  SCVS_ARWEAVE_SIGNER:
+    "What signs Irys uploads: `kms` (an AWS KMS key, so the wallet key never enters the service's memory) or `private-key` (SCVS_ARWEAVE_WALLET_PRIVATE_KEY; the default, for local development). Archiving to Irys `mainnet` requires `kms`.",
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
-    "Private key of the Ethereum wallet that pays for Irys uploads when SCVS_ARWEAVE_MODE is `irys`. Inject it as a secret.",
+    "Private key of the Ethereum wallet that pays for Irys uploads when SCVS_ARWEAVE_SIGNER is `private-key`. Inject it as a secret. Not accepted for Irys `mainnet`; use a KMS key there.",
   SCVS_BATCH_DEFAULT_ARCH:
     "Which builder queue (`arm64` or `amd64`) runs a build image published for both architectures, or one whose architecture cannot be determined. Single-architecture images always go to the matching queue.",
   SCVS_BATCH_JOB_DEFINITION_ARN_AMD64:

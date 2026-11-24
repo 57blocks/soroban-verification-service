@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Uploader } from "@irys/upload";
 import { Ethereum } from "@irys/upload-ethereum";
@@ -22,7 +22,9 @@ import {
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
 import { DetachedWork, IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
+import { createKmsClient } from "@scvs/aws";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
+import { KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsEthereumToken } from "./kms-ethereum-signer.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
@@ -70,11 +72,12 @@ const SOURCE_CONTENT_TYPES: Record<string, string> = {
 };
 
 @Injectable()
-export class ArweaveArchiveService implements OnModuleDestroy {
+export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("arweave-archive");
   private readonly metrics = new ScvsMetrics("arweave-archive", { logger: this.logger });
   private readonly detached = new DetachedWork(this.logger);
   private uploaderPromise: Promise<IrysUploader> | undefined;
+  private kmsSigner: KmsEthereumSigner | undefined;
 
   constructor(
     @Inject(ConfigService) private readonly configService: AppConfigService,
@@ -85,19 +88,61 @@ export class ArweaveArchiveService implements OnModuleDestroy {
     private readonly reportArchiveUploads: ReportArchiveUploadsRepository,
   ) {}
 
+  // A missing grant or a wrong key type fails the boot, not the first upload hours later.
+  async onModuleInit(): Promise<void> {
+    const config = this.configService.get("arweave", { infer: true });
+    if (config.mode !== "irys" || config.signer !== "kms") return;
+    const signer = await this.getKmsSigner();
+    this.logger.log("arweave KMS signer ready", { address: signer.address, network: config.network });
+  }
+
+  private async getKmsSigner(): Promise<KmsEthereumSigner> {
+    if (!this.kmsSigner) {
+      const { kmsKeyId } = this.configService.get("arweave", { infer: true });
+      if (!kmsKeyId) throw new Error("SCVS_ARWEAVE_KMS_KEY_ID is required when SCVS_ARWEAVE_SIGNER is kms");
+      this.kmsSigner = await KmsEthereumSigner.create(
+        createKmsClient(this.configService.get("awsRegion", { infer: true })),
+        kmsKeyId,
+      );
+    }
+    return this.kmsSigner;
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.detached.drain();
   }
 
   private async getUploader(): Promise<IrysUploader> {
     if (!this.uploaderPromise) {
-      const config = this.configService.get("arweave", { infer: true });
-      let builder = Uploader(Ethereum).withWallet(config.privateKey);
-      if (config.rpcUrl) builder = builder.withRpc(config.rpcUrl);
-      builder = config.network === "mainnet" ? builder.mainnet() : builder.devnet();
-      this.uploaderPromise = Promise.resolve(builder);
+      const promise = this.buildUploader();
+      // A failed build (KMS unreachable, permission missing) must not stick: the next attempt retries it.
+      promise.catch(() => {
+        if (this.uploaderPromise === promise) this.uploaderPromise = undefined;
+      });
+      this.uploaderPromise = promise;
     }
     return this.uploaderPromise;
+  }
+
+  private async buildUploader(): Promise<IrysUploader> {
+    const config = this.configService.get("arweave", { infer: true });
+    let builder;
+    let kmsAddress: string | undefined;
+    if (config.signer === "kms") {
+      const signer = await this.getKmsSigner();
+      kmsAddress = signer.address;
+      builder = Uploader(kmsEthereumToken(signer)).withWallet(KMS_WALLET_PLACEHOLDER);
+    } else {
+      builder = Uploader(Ethereum).withWallet(config.privateKey);
+    }
+    if (config.rpcUrl) builder = builder.withRpc(config.rpcUrl);
+    builder = config.network === "mainnet" ? builder.mainnet() : builder.devnet();
+    const uploader = await builder;
+    if (kmsAddress !== undefined && uploader.address !== kmsAddress) {
+      throw new Error(`Irys uploader resolved address ${uploader.address}, not the KMS key's ${kmsAddress} — refusing to upload`);
+    }
+    this.logger.log("arweave uploader ready", { signer: config.signer, address: uploader.address, network: config.network });
+    return uploader;
   }
 
   private buildTags(kind: ArchivePayloadKind, tags: ArchiveTags): { name: string; value: string }[] {

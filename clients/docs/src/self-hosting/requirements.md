@@ -109,7 +109,10 @@ Secrets:
   without it.
 - Database credentials, for each database.
 - `SCVS_R2_ACCESS_KEY_ID` and `SCVS_R2_SECRET_ACCESS_KEY`, for R2 or another S3-compatible store.
-- `SCVS_ARWEAVE_WALLET_PRIVATE_KEY`, only if you archive results to Arweave.
+- `SCVS_ARWEAVE_WALLET_PRIVATE_KEY`, only if you archive results to Irys devnet with
+  `SCVS_ARWEAVE_SIGNER=private-key`. To archive to Irys mainnet, sign with an AWS KMS key instead
+  (`SCVS_ARWEAVE_SIGNER=kms` and `SCVS_ARWEAVE_KMS_KEY_ID`): the orchestrator does not start with a
+  private key on mainnet.
 
 Keep secrets apart from ordinary settings, so that permission to read configuration never grants access
 to a password or a key.

@@ -1,6 +1,10 @@
-import { arweaveModes, ResultStorageEnvDto } from "@scvs/config";
-import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUrl, Matches } from "class-validator";
+import { arweaveModes, arweaveSigners, ResultStorageEnvDto } from "@scvs/config";
+import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUrl, Matches, ValidateBy, ValidateIf } from "class-validator";
 import { buildArchitectures } from "./configuration.js";
+
+const archivesThroughIrys = (env: OrchestratorSvcEnvDto) => (env.SCVS_ARWEAVE_MODE || "").toLowerCase() === "irys";
+const archivesToIrysMainnet = (env: OrchestratorSvcEnvDto) =>
+  archivesThroughIrys(env) && (env.SCVS_ARWEAVE_NETWORK || "").toLowerCase() === "mainnet";
 
 export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsNotEmpty({
@@ -53,6 +57,24 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
 
   @IsOptional() @IsString()
   SCVS_ARWEAVE_RPC_URL?: string;
+
+  @ValidateIf((env: OrchestratorSvcEnvDto) => env.SCVS_ARWEAVE_SIGNER !== undefined || archivesToIrysMainnet(env))
+  @IsIn(arweaveSigners, {
+    message: `SCVS_ARWEAVE_SIGNER must be one of: ${arweaveSigners.join(", ")}, and must be set to kms when archiving to Irys mainnet`,
+  })
+  @ValidateBy({
+    name: "kmsOnIrysMainnet",
+    validator: {
+      validate: (value, args) => !archivesToIrysMainnet(args?.object as OrchestratorSvcEnvDto) || value === "kms",
+      defaultMessage: () =>
+        "SCVS_ARWEAVE_SIGNER must be kms when SCVS_ARWEAVE_MODE is irys and SCVS_ARWEAVE_NETWORK is mainnet — a mainnet wallet key never lives in process memory",
+    },
+  })
+  SCVS_ARWEAVE_SIGNER?: string;
+
+  @ValidateIf((env: OrchestratorSvcEnvDto) => archivesThroughIrys(env) && env.SCVS_ARWEAVE_SIGNER === "kms")
+  @IsNotEmpty({ message: "SCVS_ARWEAVE_KMS_KEY_ID is required when SCVS_ARWEAVE_SIGNER is kms and SCVS_ARWEAVE_MODE is irys" })
+  SCVS_ARWEAVE_KMS_KEY_ID?: string;
 
   @IsOptional() @IsString()
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY?: string;

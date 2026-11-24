@@ -25,6 +25,7 @@ function envWithEverythingSet(): NodeJS.ProcessEnv {
   env.SCVS_PUBLISHER_STORAGE = "s3";
   env.SCVS_ARWEAVE_MODE = "disabled";
   env.SCVS_ARWEAVE_NETWORK = "devnet";
+  env.SCVS_ARWEAVE_SIGNER = "kms";
   return env;
 }
 
