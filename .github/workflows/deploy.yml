@@ -459,10 +459,13 @@ jobs:
       # until then its leg is skipped, so a pipeline pin that already lists it still deploys everything else.
       - name: Check this environment runs ${{ matrix.service }}
         id: present
+        env:
+          TARGET_ENV: ${{ inputs.environment || 'dev' }}
+          SERVICE: ${{ matrix.service }}
         run: |
           set -euo pipefail
-          CONTRACT="/tmp/deploy-contracts/${{ inputs.environment || 'dev' }}/${{ matrix.service }}.json"
-          if [ "${{ matrix.service }}" = "arweave-funder-svc" ] && [ ! -f "$CONTRACT" ]; then
+          CONTRACT="/tmp/deploy-contracts/${TARGET_ENV}/${SERVICE}.json"
+          if [ "$SERVICE" = "arweave-funder-svc" ] && [ ! -f "$CONTRACT" ]; then
             echo "::notice::no deploy contract for arweave-funder-svc in this environment yet — skipping it"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
