@@ -83,7 +83,7 @@ test("every unit in METRIC_UNITS is count, seconds or eth, and only the funder's
     assert.ok(unit === "count" || unit === "seconds" || unit === "eth", `${name} has unit ${unit}`);
     if (unit === "eth") assert.match(name, /^arweave_funder_.*_eth$/);
   }
-  assert.equal(Object.keys(METRIC_UNITS).length, 34);
+  assert.equal(Object.keys(METRIC_UNITS).length, 33);
 });
 
 test("a dimension cannot shadow `value` and silently redirect the filter", () => {
