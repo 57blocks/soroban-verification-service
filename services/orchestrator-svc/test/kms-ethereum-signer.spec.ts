@@ -12,7 +12,6 @@ import {
 } from "../src/modules/publish/kms-ethereum-signer.js";
 
 const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
-// Derived, not written out: a literal key in the tree is indistinguishable from a leaked one.
 const PRIVATE_KEY = id("scvs kms-ethereum-signer spec key");
 const SPKI_PREFIX = "3056301006072a8648ce3d020106052b8104000a034200";
 const KEY_ID = "arn:aws:kms:ap-southeast-2:000000000000:key/test";

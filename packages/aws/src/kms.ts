@@ -6,6 +6,11 @@ export function createKmsClient(region?: string): KMSClient {
 
 export type KmsSendClient = Pick<KMSClient, "send">;
 
+/** The region a key ARN or alias ARN names; undefined for a bare key id or alias name. */
+export function kmsKeyRegion(keyId: string): string | undefined {
+  return /^arn:aws[a-z-]*:kms:([a-z0-9-]+):\d{12}:(?:key|alias)\//.exec(keyId)?.[1];
+}
+
 // DER SubjectPublicKeyInfo header for an uncompressed secp256k1 point: id-ecPublicKey, secp256k1, BIT STRING(66).
 const SECP256K1_SPKI_PREFIX = Buffer.from("3056301006072a8648ce3d020106052b8104000a034200", "hex");
 

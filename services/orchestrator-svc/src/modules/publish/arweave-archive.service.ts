@@ -22,7 +22,7 @@ import {
 } from "@scvs/storage-layout";
 import type { ResultStorage } from "@scvs/storage-layout";
 import { DetachedWork, IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
-import { createKmsClient } from "@scvs/aws";
+import { createKmsClient, kmsKeyRegion, type KmsSendClient } from "@scvs/aws";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
 import { KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsEthereumToken } from "./kms-ethereum-signer.js";
 import type { AppConfigService } from "../../config/configuration.js";
@@ -88,7 +88,6 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     private readonly reportArchiveUploads: ReportArchiveUploadsRepository,
   ) {}
 
-  // A missing grant or a wrong key type fails the boot, not the first upload hours later.
   async onModuleInit(): Promise<void> {
     const config = this.configService.get("arweave", { infer: true });
     if (config.mode !== "irys" || config.signer !== "kms") return;
@@ -96,14 +95,18 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     this.logger.log("arweave KMS signer ready", { address: signer.address, network: config.network });
   }
 
+  protected kmsClient(keyId: string): KmsSendClient {
+    const region = kmsKeyRegion(keyId) ?? this.configService.get("awsRegion", { infer: true });
+    // An alias or bare key id resolves only in the client's region; a guessed region fails as "not found".
+    if (!region) throw new Error("SCVS_ARWEAVE_KMS_KEY_ID is not a key ARN and AWS_REGION is unset — no region to find the key in");
+    return createKmsClient(region);
+  }
+
   private async getKmsSigner(): Promise<KmsEthereumSigner> {
     if (!this.kmsSigner) {
       const { kmsKeyId } = this.configService.get("arweave", { infer: true });
       if (!kmsKeyId) throw new Error("SCVS_ARWEAVE_KMS_KEY_ID is required when SCVS_ARWEAVE_SIGNER is kms");
-      this.kmsSigner = await KmsEthereumSigner.create(
-        createKmsClient(this.configService.get("awsRegion", { infer: true })),
-        kmsKeyId,
-      );
+      this.kmsSigner = await KmsEthereumSigner.create(this.kmsClient(kmsKeyId), kmsKeyId);
     }
     return this.kmsSigner;
   }
@@ -218,7 +221,15 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     const config = this.configService.get("arweave", { infer: true });
     if (config.mode !== "irys") return undefined;
 
-    const uploader = await this.getUploader();
+    let uploader: IrysUploader;
+    try {
+      uploader = await this.getUploader();
+    } catch (error) {
+      this.logger.error("findExistingUpload could not build the uploader — treating as indeterminate; the upload attempt reports it", {
+        error: error instanceof Error ? error : String(error),
+      });
+      return undefined;
+    }
     const graphqlUrl = `https://${config.network === "mainnet" ? "arweave" : "devnet"}.irys.xyz/graphql`;
     const tagName = kind === "report" ? "Report_Hash" : "Source_Hash";
     const query = `{

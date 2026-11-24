@@ -1690,7 +1690,7 @@ services:
         type: enum
         values: [kms, private-key]
         required: no
-        required_when: SCVS_ARWEAVE_NETWORK == mainnet
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_NETWORK == mainnet
         fail: boot
         source: literal
         tier: knob
@@ -1706,7 +1706,7 @@ services:
       SCVS_ARWEAVE_KMS_KEY_ID:
         type: string
         required: no
-        required_when: SCVS_ARWEAVE_SIGNER == kms
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER == kms
         fail: boot
         source: literal
         tier: knob
@@ -1715,14 +1715,16 @@ services:
         observable: presence
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          ARN (or alias ARN) of an ECC_SECG_P256K1 / SIGN_VERIFY KMS key; its Ethereum address is the
-          archiving wallet. The orchestrator's task role needs kms:GetPublicKey and kms:Sign on it, and
+          Key ARN of an ECC_SECG_P256K1 / SIGN_VERIFY KMS key; its Ethereum address is the archiving
+          wallet. An alias also resolves, but anyone allowed kms:UpdateAlias can repoint it at another
+          key, so deployments name the key ARN. A bare key id or alias name needs AWS_REGION; an ARN
+          carries its own region. The orchestrator's task role needs kms:GetPublicKey and kms:Sign on it, and
           boot fails if either is missing or the key is the wrong type. Not a secret: the key id grants
           nothing without those permissions.
       SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
         type: string
         required: no
-        required_when: SCVS_ARWEAVE_SIGNER == private-key
+        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER != kms
         fail: first-use
         secret: true
         source: secret
