@@ -24,7 +24,18 @@ export const METRIC_UNITS = {
   status_link_backlog: "count",
   status_link_blocked: "count",
   status_link_oldest_pending_seconds: "seconds",
-} as const satisfies Record<string, "count" | "seconds">;
+  arweave_funder_round_total: "count",
+  arweave_funder_halted: "count",
+  arweave_funder_fee_cap_reached: "count",
+  arweave_funder_daily_cap_reached: "count",
+  arweave_funder_approval_cap_reached: "count",
+  arweave_funder_approval_expires_in_seconds: "seconds",
+  // Balances in ETH (a float): CloudWatch alarms on thresholds, and wei overflows a double's exact range.
+  arweave_funder_chain_balance_eth: "eth",
+  arweave_funder_irys_balance_eth: "eth",
+  arweave_funder_approval_remaining_eth: "eth",
+  arweave_funder_topped_up_24h_eth: "eth",
+} as const satisfies Record<string, "count" | "seconds" | "eth">;
 
 export type MetricName = keyof typeof METRIC_UNITS;
 

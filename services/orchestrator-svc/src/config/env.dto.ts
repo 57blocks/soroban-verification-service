@@ -1,4 +1,4 @@
-import { arweaveModes, arweaveSigners, ResultStorageEnvDto } from "@scvs/config";
+import { arweaveModes, arweaveSigners, arweaveTokens, ResultStorageEnvDto } from "@scvs/config";
 import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUrl, Matches, ValidateBy, ValidateIf } from "class-validator";
 import { buildArchitectures } from "./configuration.js";
 
@@ -57,6 +57,11 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
 
   @IsOptional() @IsString()
   SCVS_ARWEAVE_RPC_URL?: string;
+
+  // getArweaveConfig maps an unrecognised token to ethereum, so a typo would pay in the wrong token without a word.
+  @IsOptional()
+  @IsIn(arweaveTokens, { message: `SCVS_ARWEAVE_TOKEN must be one of: ${arweaveTokens.join(", ")}` })
+  SCVS_ARWEAVE_TOKEN?: string;
 
   @ValidateIf((env: OrchestratorSvcEnvDto) => env.SCVS_ARWEAVE_SIGNER !== undefined || archivesToIrysMainnet(env))
   @IsIn(arweaveSigners, {

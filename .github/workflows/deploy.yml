@@ -416,7 +416,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [verification-svc, orchestrator-svc, query-svc]
+        service: [verification-svc, orchestrator-svc, query-svc, arweave-funder-svc]
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
       ECS_CLUSTER: ${{ fromJSON(needs.preflight.outputs.descriptor).cluster }}
@@ -455,8 +455,26 @@ jobs:
           name: deploy-contracts
           path: /tmp/deploy-contracts
 
+      # The funder arrives in an environment only once the ops repository gives it a contract and an ECS service;
+      # until then its leg is skipped, so a pipeline pin that already lists it still deploys everything else.
+      - name: Check this environment runs ${{ matrix.service }}
+        id: present
+        env:
+          TARGET_ENV: ${{ inputs.environment || 'dev' }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          CONTRACT="/tmp/deploy-contracts/${TARGET_ENV}/${SERVICE}.json"
+          if [ "$SERVICE" = "arweave-funder-svc" ] && [ ! -f "$CONTRACT" ]; then
+            echo "::notice::no deploy contract for arweave-funder-svc in this environment yet — skipping it"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Through `env:`, never interpolated: a quote in the descriptor would otherwise run as shell.
       - name: Write ${{ matrix.service }}'s configuration to Secrets Manager
+        if: steps.present.outputs.skip != 'true'
         env:
           DESCRIPTOR: ${{ needs.preflight.outputs.descriptor }}
         run: |
@@ -469,6 +487,7 @@ jobs:
             --descriptor @/tmp/ci-descriptor.json
 
       - name: Render ${{ matrix.service }}'s task definition
+        if: steps.present.outputs.skip != 'true'
         run: |
           set -euo pipefail
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
@@ -486,6 +505,7 @@ jobs:
 
       # Must run before register: a non-zero exit means the definition crosses the sandbox trust boundary.
       - name: Assert the rendered definition respects the trust boundary
+        if: steps.present.outputs.skip != 'true'
         run: |
           node eng-tools/check-taskdef-boundary.mjs \
             --env "${{ inputs.environment || 'dev' }}" \
@@ -494,6 +514,7 @@ jobs:
             /tmp/taskdef.json
 
       - name: Register the task definition
+        if: steps.present.outputs.skip != 'true'
         id: register
         run: |
           set -euo pipefail
@@ -504,6 +525,7 @@ jobs:
 
       # The ARN goes through the environment: rollback.yml passes service names positionally.
       - name: Roll ${{ matrix.service }} onto the registered revision
+        if: steps.present.outputs.skip != 'true'
         env:
           TASK_DEFINITION_ARN: ${{ steps.register.outputs.arn }}
         run: |
@@ -604,7 +626,11 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/config-reports
 
-          for SERVICE in verification-svc orchestrator-svc query-svc; do
+          for SERVICE in verification-svc orchestrator-svc query-svc arweave-funder-svc; do
+            if [ "$SERVICE" = "arweave-funder-svc" ] && [ ! -f "/tmp/deploy-contracts/${TARGET_ENV}/${SERVICE}.json" ]; then
+              echo "::notice::no deploy contract for arweave-funder-svc in ${TARGET_ENV} yet — not checking it"
+              continue
+            fi
             TASK_ARN=$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$SERVICE" \
               --desired-status RUNNING --region "$AWS_REGION" \
               --query 'taskArns[0]' --output text)

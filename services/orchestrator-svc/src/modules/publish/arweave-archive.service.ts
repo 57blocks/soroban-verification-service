@@ -1,7 +1,6 @@
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Uploader } from "@irys/upload";
-import { Ethereum } from "@irys/upload-ethereum";
 import {
   JobsRepository,
   ReportArchiveUploadsRepository,
@@ -24,7 +23,7 @@ import type { ResultStorage } from "@scvs/storage-layout";
 import { DetachedWork, IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
 import { createKmsClient, kmsKeyRegion, type KmsSendClient } from "@scvs/aws";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
-import { KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsEthereumToken } from "./kms-ethereum-signer.js";
+import { ARWEAVE_TOKENS, KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsIrysToken } from "./kms-ethereum-signer.js";
 import type { AppConfigService } from "../../config/configuration.js";
 
 type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
@@ -135,9 +134,9 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     if (config.signer === "kms") {
       const signer = await this.getKmsSigner();
       kmsAddress = signer.address;
-      builder = Uploader(kmsEthereumToken(signer)).withWallet(KMS_WALLET_PLACEHOLDER);
+      builder = Uploader(kmsIrysToken(signer, config.token)).withWallet(KMS_WALLET_PLACEHOLDER);
     } else {
-      builder = Uploader(Ethereum).withWallet(config.privateKey);
+      builder = Uploader(ARWEAVE_TOKENS[config.token]).withWallet(config.privateKey);
     }
     if (config.rpcUrl) builder = builder.withRpc(config.rpcUrl);
     builder = config.network === "mainnet" ? builder.mainnet() : builder.devnet();
@@ -145,7 +144,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     if (kmsAddress !== undefined && uploader.address !== kmsAddress) {
       throw new Error(`Irys uploader resolved address ${uploader.address}, not the KMS key's ${kmsAddress} — refusing to upload`);
     }
-    this.logger.log("arweave uploader ready", { signer: config.signer, address: uploader.address, network: config.network });
+    this.logger.log("arweave uploader ready", { signer: config.signer, address: uploader.address, network: config.network, token: config.token });
     return uploader;
   }
 

@@ -26,12 +26,14 @@ function envWithEverythingSet(): NodeJS.ProcessEnv {
   env.SCVS_ARWEAVE_MODE = "disabled";
   env.SCVS_ARWEAVE_NETWORK = "devnet";
   env.SCVS_ARWEAVE_SIGNER = "kms";
+  env.SCVS_ARWEAVE_TOKEN = "base-eth";
   return env;
 }
 
 describe("config contract report", () => {
-  it("declares a contract for exactly the three resident services", () => {
+  it("declares a contract for exactly the four resident services", () => {
     expect(Object.keys(ENV_CONTRACT).sort()).toEqual([
+      "arweave-funder-svc",
       "orchestrator-svc",
       "query-svc",
       "verification-svc",

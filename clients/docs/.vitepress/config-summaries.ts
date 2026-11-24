@@ -47,13 +47,15 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_ARWEAVE_MODE:
     "Whether verification reports are also archived to Arweave: `disabled`, `dry-run` (records a placeholder transaction id without uploading) or `irys` (real uploads through Irys). Startup rejects any other value.",
   SCVS_ARWEAVE_NETWORK:
-    "Irys network archives are uploaded to: `devnet` (free, not durable) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly.",
+    "Irys network archives are uploaded to, and that arweave-funder-svc funds: `devnet` (free, not durable) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly; the funder has no default.",
   SCVS_ARWEAVE_PAID_BY:
     "Address of the wallet whose Irys balance pays for uploads, through a balance approval it granted the signing address. Required with SCVS_ARWEAVE_SIGNER `kms`, because a KMS address cannot hold an Irys balance of its own, so the orchestrator does not start without it. With `private-key` it is optional, and unset the signing wallet pays from its own balance. It keeps the funds outside AWS and caps spending at the approval.",
   SCVS_ARWEAVE_RPC_URL:
-    "Ethereum RPC endpoint the archiving wallet signs Irys payments through. Needed on `mainnet`; `devnet` has a built-in endpoint.",
+    "RPC endpoint of the chain SCVS_ARWEAVE_TOKEN settles on, which the archiving wallet signs Irys payments through. Needed on `mainnet`; `devnet` has a built-in endpoint per token.",
   SCVS_ARWEAVE_SIGNER:
     "What signs Irys uploads: `kms` (an AWS KMS key, so the wallet key never enters the service's memory) or `private-key` (SCVS_ARWEAVE_WALLET_PRIVATE_KEY; the default, for local development). Archiving to Irys `mainnet` requires `kms`.",
+  SCVS_ARWEAVE_TOKEN:
+    "Which Irys token pays for uploads. It must match the token of the wallet that pays (arweave-funder-svc's SCVS_ARWEAVE_TOKEN when the funder pays): Irys balances and approvals are kept per token, so a mismatch leaves every upload unpaid. It also picks the built-in `devnet` RPC endpoint.",
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
     "Private key of the Ethereum wallet that pays for Irys uploads when SCVS_ARWEAVE_SIGNER is `private-key`. Inject it as a secret. Not accepted for Irys `mainnet`; use a KMS key there.",
   SCVS_BATCH_DEFAULT_ARCH:
@@ -130,6 +132,36 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
     "How often, in milliseconds, the reconciler checks environments that are still `composing`.",
   SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS:
     "Idle timeout, in milliseconds, of the load balancer or proxy in front of the service, used to check SCVS_KEEPALIVE_TIMEOUT_MS at startup. Set `0` when nothing fronts the server to skip the check.",
+  SCVS_FUNDER_APPROVAL_TTL_SECONDS:
+    "How long, in seconds, each Irys approval the funder grants lasts. It renews the approval in its last day, or when less than a tenth of it remains.",
+  SCVS_FUNDER_APPROVAL_WEI:
+    "Amount, in wei, of each Irys balance approval the funder grants the orchestrator's upload key. A new approval replaces the old one rather than adding to it.",
+  SCVS_FUNDER_APPROVAL_WINDOW_CAP_WEI:
+    "Most wei the funder may approve within one approval lifetime, which bounds what a stolen upload key can spend. Defaults to twice SCVS_FUNDER_APPROVAL_WEI and must be at least that amount.",
+  SCVS_FUNDER_APPROVED_ADDRESS:
+    "Ethereum address of the orchestrator's upload key, which the funder keeps an Irys balance approval in place for.",
+  SCVS_FUNDER_CHAIN_ID:
+    "Chain id every top-up transaction is signed for. The funder refuses to sign if its RPC endpoint reports a different chain.",
+  SCVS_FUNDER_DAILY_TOPUP_CAP_WEI:
+    "Most wei the funder deposits to Irys in any 24 hours. Must be at least SCVS_FUNDER_TOPUP_WEI.",
+  SCVS_FUNDER_DEPOSIT_ADDRESS:
+    "Irys's deposit address for this token and network. The funder stops rather than send a top-up if Irys reports a different one.",
+  SCVS_FUNDER_INTERVAL_MS:
+    "Milliseconds between the funder's rounds. Its health check fails once no round has completed for three intervals.",
+  SCVS_FUNDER_IRYS_LOW_WEI:
+    "Irys balance, in wei, below which the funder tops up its funding key.",
+  SCVS_FUNDER_KMS_KEY_ID:
+    "ARN of the AWS KMS key that signs the funder's transactions and approvals; its Ethereum address is where the funds are sent. It must be an `ECC_SECG_P256K1` signing key named by key ARN, not by alias.",
+  SCVS_FUNDER_MAX_FEE_PER_GAS_WEI:
+    "Highest fee per gas, in wei, a top-up transaction may offer. When the network asks for more, the funder waits for a later round.",
+  SCVS_FUNDER_RPC_URL:
+    "RPC endpoint of the chain the funder's token settles on, such as Base for `base-eth`.",
+  SCVS_FUNDER_STATE_BUCKET:
+    "S3 bucket that holds the funder's state object.",
+  SCVS_FUNDER_STATE_KEY:
+    "Object key of the funder's state within SCVS_FUNDER_STATE_BUCKET. Changing it starts the funder from empty state.",
+  SCVS_FUNDER_TOPUP_WEI:
+    "Wei the funder deposits to Irys in each top-up.",
   SCVS_HANDOFF_ROOT:
     "Directory the builder's two containers share: one writes the extracted source there and the other hands it to Docker. It must be a host bind mount at the same path in both, not a Docker volume.",
   SCVS_HEADERS_TIMEOUT_MS:
@@ -287,7 +319,7 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_WORKER_POLL_INTERVAL_MS:
     "How often, in milliseconds, the orchestrator looks for jobs ready to dispatch.",
   SERVICE_ENTRYPOINT:
-    "Which service the shared service image starts: `verification-svc`, `orchestrator-svc` or `query-svc`. A wrong value starts a different service that still reports healthy.",
+    "Which service the shared service image starts: `verification-svc`, `orchestrator-svc`, `query-svc` or `arweave-funder-svc`. A wrong value starts a different service that still reports healthy.",
   STELLAR_CLI_PATH:
     "Path to the `stellar` CLI binary. The service image ships one; set this only to use a binary elsewhere.",
   STELLAR_RPC_URL_MAINNET:

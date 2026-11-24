@@ -20,7 +20,8 @@ ENV POSTGRES_HOST=localhost \
 
 RUN pnpm --filter @scvs/verification-svc... \
          --filter @scvs/orchestrator-svc... \
-         --filter @scvs/query-svc... run build
+         --filter @scvs/query-svc... \
+         --filter @scvs/arweave-funder-svc... run build
 
 FROM node:24.22.3-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime-deps
 WORKDIR /app
@@ -42,6 +43,7 @@ COPY clients/sdk/package.json ./clients/sdk/package.json
 COPY services/verification-svc/package.json ./services/verification-svc/package.json
 COPY services/orchestrator-svc/package.json ./services/orchestrator-svc/package.json
 COPY services/query-svc/package.json ./services/query-svc/package.json
+COPY services/arweave-funder-svc/package.json ./services/arweave-funder-svc/package.json
 
 RUN corepack enable \
     && pnpm config set fetch-timeout 300000 \
@@ -52,7 +54,8 @@ RUN corepack enable \
          --filter soroban-verification-service... \
          --filter @scvs/verification-svc... \
          --filter @scvs/orchestrator-svc... \
-         --filter @scvs/query-svc...
+         --filter @scvs/query-svc... \
+         --filter @scvs/arweave-funder-svc...
 
 # pnpm never runs @prisma/engines' postinstall, so the CLI fetches its schema engine on first use; do it here, as root.
 RUN cd packages/db && ./node_modules/.bin/prisma --version >/dev/null
@@ -85,6 +88,7 @@ COPY --from=runtime-deps /app/clients/sdk/node_modules ./clients/sdk/node_module
 COPY --from=runtime-deps /app/services/verification-svc/node_modules ./services/verification-svc/node_modules
 COPY --from=runtime-deps /app/services/orchestrator-svc/node_modules ./services/orchestrator-svc/node_modules
 COPY --from=runtime-deps /app/services/query-svc/node_modules ./services/query-svc/node_modules
+COPY --from=runtime-deps /app/services/arweave-funder-svc/node_modules ./services/arweave-funder-svc/node_modules
 
 COPY --from=build /app/packages/aws/package.json ./packages/aws/package.json
 COPY --from=build /app/packages/aws/dist ./packages/aws/dist
@@ -106,6 +110,8 @@ COPY --from=build /app/services/orchestrator-svc/package.json ./services/orchest
 COPY --from=build /app/services/orchestrator-svc/dist ./services/orchestrator-svc/dist
 COPY --from=build /app/services/query-svc/package.json ./services/query-svc/package.json
 COPY --from=build /app/services/query-svc/dist ./services/query-svc/dist
+COPY --from=build /app/services/arweave-funder-svc/package.json ./services/arweave-funder-svc/package.json
+COPY --from=build /app/services/arweave-funder-svc/dist ./services/arweave-funder-svc/dist
 
 # db-migrate runs `prisma migrate` from these two packages and `tsx scripts/seed-tvl.ts` from /app.
 COPY --from=build /app/packages/db/package.json /app/packages/db/prisma.config.ts ./packages/db/
@@ -118,7 +124,7 @@ COPY --from=build /app/packages/db-query/dist ./packages/db-query/dist
 COPY --from=build /app/scripts/seed-tvl.ts ./scripts/seed-tvl.ts
 COPY --from=build /app/config/legal-documents.example.json ./config/legal-documents.example.json
 
-# One of: verification-svc | orchestrator-svc | query-svc
+# One of: verification-svc | orchestrator-svc | query-svc | arweave-funder-svc
 ENV SERVICE_ENTRYPOINT=verification-svc
 
 USER node

@@ -11,7 +11,7 @@ the configuration, the database, starting everything, and checking it works.
 
 | Image | Runs |
 | --- | --- |
-| `sv-service` | `verification-svc`, `orchestrator-svc`, `query-svc` and the database migrations |
+| `sv-service` | `verification-svc`, `orchestrator-svc`, `query-svc`, `arweave-funder-svc` and the database migrations |
 | `sv-web` | The console and this documentation |
 | `sv-builder` | Builds, one image per architecture |
 | `sv-composer` | Environment composition, `arm64` |

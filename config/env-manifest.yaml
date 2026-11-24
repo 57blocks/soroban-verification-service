@@ -1674,6 +1674,23 @@ services:
           that should produce durable archives must set this to `mainnet` explicitly — silently
           inheriting the dev-friendly default there produces non-durable devnet archives with no
           error (archive-and-recovery plan.md §2.2/§7/§8, 2026-08-05).
+      SCVS_ARWEAVE_TOKEN:
+        type: enum
+        values: [ethereum, base-eth]
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ethereum
+        observable: value
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          The Irys token uploads are paid in. Must match the paying wallet's token (arweave-funder-svc's
+          SCVS_ARWEAVE_TOKEN when the funder pays): Irys balances and approvals are per token, so a
+          mismatch boots healthy and every upload fails with insufficient_balance. Also picks the devnet
+          default RPC (Sepolia for `ethereum`, Base Sepolia for `base-eth`). Validated at boot by
+          OrchestratorSvcEnvDto, because getArweaveConfig maps an unrecognised value to `ethereum`.
       SCVS_ARWEAVE_RPC_URL:
         type: url
         required: no
@@ -1685,9 +1702,9 @@ services:
         default: ~
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          Ethereum RPC endpoint the archiving wallet signs through. devnet has a working default
-          (Sepolia's public RPC) baked into getArweaveConfig, so this is only ever set for a
-          mainnet deployment.
+          RPC endpoint of the chain SCVS_ARWEAVE_TOKEN settles on, which the archiving wallet signs
+          through. devnet has a working default per token (Sepolia, or Base Sepolia for `base-eth`)
+          baked into getArweaveConfig, so this is only ever set for a mainnet deployment.
       SCVS_ARWEAVE_SIGNER:
         type: enum
         values: [kms, private-key]
@@ -2124,6 +2141,270 @@ services:
       longer inherits result-storage: query-svc reads every verifier's results — including
       one this operator also runs — over the public Registry API, the same as any other TVL member,
       never from the private storage config orchestrator-svc writes through.
+
+  arweave-funder-svc:
+    kind: ecs-service
+    exposure: none — no ALB; loopback health check only
+    port: 5003
+    env_dto: services/arweave-funder-svc/src/config.ts
+    config_contract: true
+    inherits: []
+    variables:
+      NODE_ENV:
+        type: enum
+        values: [production, development, test]
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: development
+        observable: value
+        code: services/arweave-funder-svc/src/main.ts
+        note: Only `test` changes behaviour — the funder does not start its loop on import.
+      PORT:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 5003
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: The `/health` listener, bound to 127.0.0.1 for the container health check only.
+      AWS_REGION:
+        type: string
+        required: yes
+        fail: first-use
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: us-east-1
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          The region of the S3 client that holds the funder's state. Unset, it falls back to us-east-1
+          and every round fails on the state object. The KMS client takes its region from the key ARN.
+      SERVICE_ENTRYPOINT:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: verification-svc
+        dto_exempt: true
+        code: docker/service.Dockerfile (the container CMD, not TypeScript)
+        note: >-
+          Selects which service the ONE shared resident image starts; `arweave-funder-svc` here. Set
+          wrong, the task starts a different service than its task definition claims.
+      SCVS_ARWEAVE_NETWORK:
+        type: enum
+        values: [devnet, mainnet]
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        observable: value
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Which Irys network the funder tops up and approves on. No default, unlike orchestrator-svc's:
+          it must name the network the orchestrator uploads to.
+      SCVS_ARWEAVE_TOKEN:
+        type: enum
+        values: [ethereum, base-eth]
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        observable: value
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          The Irys token the funder deposits and approves in. Must equal orchestrator-svc's
+          SCVS_ARWEAVE_TOKEN: Irys balances and approvals are per token, so a mismatch leaves the
+          orchestrator's uploads unpaid.
+      SCVS_FUNDER_KMS_KEY_ID:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Key ARN of the funding key, an ECC_SECG_P256K1 / SIGN_VERIFY KMS key; its Ethereum address is
+          the one people send ETH to. An alias is refused, because it can be repointed. The task role
+          needs kms:GetPublicKey and kms:Sign on it. Not a secret.
+      SCVS_FUNDER_APPROVED_ADDRESS:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          The orchestrator upload key's address — the address of orchestrator-svc's
+          SCVS_ARWEAVE_KMS_KEY_ID. The funder keeps an Irys balance approval in place for it.
+      SCVS_FUNDER_RPC_URL:
+        type: url
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          JSON-RPC endpoint of the chain SCVS_ARWEAVE_TOKEN settles on (Base for `base-eth`). Each round
+          refuses to sign if the endpoint reports a chain other than SCVS_FUNDER_CHAIN_ID.
+      SCVS_FUNDER_CHAIN_ID:
+        type: number
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: The EIP-155 chain id every top-up is signed for (8453 Base, 84532 Base Sepolia).
+      SCVS_FUNDER_DEPOSIT_ADDRESS:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Irys's deposit address for this token and network, pinned. The funder halts rather than send
+          if Irys reports a different one.
+      SCVS_FUNDER_STATE_BUCKET:
+        type: string
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          S3 bucket holding the funder's state object (nonces, signed transactions, lease, approval
+          history), written with conditional writes. The task role needs s3:GetObject and s3:PutObject on
+          that object.
+      SCVS_FUNDER_STATE_KEY:
+        type: s3-key
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: arweave-funder/state.json
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Object key of the state within SCVS_FUNDER_STATE_BUCKET. Changing it starts from empty state,
+          which forgets the recorded nonces.
+      SCVS_FUNDER_INTERVAL_MS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 300000
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Delay between rounds. The lease is three intervals, and `/health` fails once no round has
+          completed for three intervals.
+      SCVS_FUNDER_IRYS_LOW_WEI:
+        type: number
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: A round tops up when the funding key's Irys balance is below this many wei.
+      SCVS_FUNDER_TOPUP_WEI:
+        type: number
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: Wei sent to the Irys deposit address per top-up.
+      SCVS_FUNDER_DAILY_TOPUP_CAP_WEI:
+        type: number
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Most wei topped up in any 24 hours; must be at least SCVS_FUNDER_TOPUP_WEI. A guard against the
+          funder's own bugs, not against whoever holds the task role.
+      SCVS_FUNDER_MAX_FEE_PER_GAS_WEI:
+        type: number
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Highest EIP-1559 maxFeePerGas a top-up or its replacement may carry. Above it the round skips
+          the top-up and reports arweave_funder_fee_cap_reached.
+      SCVS_FUNDER_APPROVAL_WEI:
+        type: number
+        required: yes
+        fail: boot
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: ~
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Amount of each Irys approval granted to SCVS_FUNDER_APPROVED_ADDRESS. An approval replaces the
+          previous one rather than adding to it.
+      SCVS_FUNDER_APPROVAL_TTL_SECONDS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 604800
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: How long each approval lasts; the funder renews it in its last day, or when under 10% remains.
+      SCVS_FUNDER_APPROVAL_WINDOW_CAP_WEI:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: twice SCVS_FUNDER_APPROVAL_WEI
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Most wei approved within any one TTL window; must be at least SCVS_FUNDER_APPROVAL_WEI. It bounds
+          what a stolen upload key can spend per window.
+    note: >-
+      Keeps the funding key's Irys balance topped up from the ETH sent to its address, and a short-lived,
+      capped Irys approval in place for orchestrator-svc's upload key. Plain Node, no NestJS. Inherits no
+      group: it has no database, no result storage and no public HTTP server, so none of `base`'s
+      server timeouts apply. Its only state is one S3 object.
 
   web:
     kind: ecs-service

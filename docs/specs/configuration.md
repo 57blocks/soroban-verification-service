@@ -52,8 +52,8 @@ Verified by: `eng-tools/assert-config-contract.mjs`, `packages/config/src/env-co
 
 ## 5. The web console's own routing
 
-`verification-svc`, `orchestrator-svc`, and `query-svc` build from one shared image
-(`docker/service.Dockerfile`); the console builds separately (`docker/web.Dockerfile`) and reads its
+`verification-svc`, `orchestrator-svc`, `query-svc`, and `arweave-funder-svc` build from one shared
+image (`docker/service.Dockerfile`); the console builds separately (`docker/web.Dockerfile`) and reads its
 API base URL from a build-time argument, `VITE_VERIFY_API_URL` (empty means same origin as the
 console itself). The reference `docker-compose.full-stack.yml` runs the three services and the
 console on four different ports. This project's own reference deployment additionally fronts all

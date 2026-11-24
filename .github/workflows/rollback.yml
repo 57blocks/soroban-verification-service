@@ -111,7 +111,7 @@ jobs:
           if [ "$TARGET" = "web" ]; then
             echo "names=web" >> "$GITHUB_OUTPUT"
           else
-            echo "names=verification-svc orchestrator-svc query-svc" >> "$GITHUB_OUTPUT"
+            echo "names=verification-svc orchestrator-svc query-svc arweave-funder-svc" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Resolve the digest for ${{ inputs.commit_sha }}
@@ -145,6 +145,11 @@ jobs:
           for SERVICE in $SERVICES; do
             FAMILY_KEY=$(echo "$SERVICE" | tr '-' '_')
             FAMILY=$(jq -r --arg k "$FAMILY_KEY" '.task_definition_families[$k] // empty' <<<"$CI_DESCRIPTOR_JSON")
+            if [ -z "$FAMILY" ] && [ "$SERVICE" = "arweave-funder-svc" ]; then
+              # An environment the funder has not reached yet; there is nothing of it to roll back.
+              echo "::notice::this environment has no arweave-funder-svc yet — not rolling it back"
+              continue
+            fi
             if [ -z "$FAMILY" ]; then
               echo "::error::this environment's descriptor names no task_definition_families entry for $SERVICE"
               exit 1
@@ -163,6 +168,11 @@ jobs:
               esac
             done
 
+            if [ -z "$MATCH" ] && [ "$SERVICE" = "arweave-funder-svc" ]; then
+              # A commit from before the funder's first deploy has no funder revision; leave the funder where it is.
+              echo "::notice::no arweave-funder-svc revision pins $DIGEST — leaving the funder on its current revision"
+              continue
+            fi
             if [ -z "$MATCH" ]; then
               echo "::error::no ACTIVE revision in $FAMILY pins digest $DIGEST — commit ${COMMIT_SHA} was never deployed to ${TARGET_ENV}, or its revision is no longer ACTIVE"
               exit 1
