@@ -46,6 +46,8 @@ const isTreePath = (v) =>
 function declaredPaths(node, trail = []) {
   const out = [];
   if (!node || typeof node !== "object") return out;
+  // An S3 object key names an object in a bucket, never a file in the image.
+  if (node.type === "s3-key") return out;
   for (const [key, value] of Object.entries(node)) {
     if (key === "default" && isTreePath(value)) {
       out.push({ value, where: `${trail.at(-1) ?? "?"}: default` });

@@ -1,12 +1,13 @@
 import { arrayify, hexlify, joinSignature } from "@ethersproject/bytes";
 import { hashMessage, id } from "@ethersproject/hash";
 import { SigningKey } from "@ethersproject/signing-key";
-import { computeAddress, recoverAddress } from "@ethersproject/transactions";
+import { keccak256 } from "@ethersproject/keccak256";
+import { computeAddress, parse, recoverAddress } from "@ethersproject/transactions";
 import type { KmsSendClient } from "@scvs/aws";
 import {
   KMS_WALLET_PLACEHOLDER,
   KmsEthereumSigner,
-  kmsEthereumToken,
+  kmsIrysToken,
   parseDerSignature,
   toEthereumSignature,
 } from "../src/modules/publish/kms-ethereum-signer.js";
@@ -121,10 +122,48 @@ describe("KmsEthereumSigner", () => {
   });
 });
 
-describe("kmsEthereumToken", () => {
+describe("KmsEthereumSigner.signTransaction", () => {
+  const TX = {
+    type: 2,
+    chainId: 84532,
+    nonce: 7,
+    to: "0x00000000000000000000000000000000000000aa",
+    value: 12345n.toString(),
+    gasLimit: 21000,
+    maxFeePerGas: 2_000_000_000,
+    maxPriorityFeePerGas: 1_000_000,
+    data: "0x",
+  };
+
+  it.each([false, true])("signs an EIP-1559 transfer that recovers to the KMS address (KMS high-s: %s)", async (highS) => {
+    const signer = await KmsEthereumSigner.create(fakeKms({ highS }), KEY_ID);
+    const { raw, hash } = await signer.signTransaction(TX);
+    const parsed = parse(raw);
+
+    expect(parsed.from?.toLowerCase()).toBe(signer.address);
+    expect(parsed.hash).toBe(hash);
+    expect(hash).toBe(keccak256(raw));
+    expect(parsed.type).toBe(2);
+    expect(parsed.chainId).toBe(84532);
+    expect(parsed.nonce).toBe(7);
+    expect(parsed.to?.toLowerCase()).toBe(TX.to);
+    expect(parsed.value.toString()).toBe("12345");
+    expect(BigInt(parsed.s ?? "0x0") <= N >> 1n).toBe(true);
+  });
+
+  it("matches a local wallet's signature byte for byte", async () => {
+    const signer = await KmsEthereumSigner.create(fakeKms(), KEY_ID);
+    const { raw } = await signer.signTransaction(TX);
+    const { serialize } = await import("@ethersproject/transactions");
+    const local = serialize(TX, new SigningKey(PRIVATE_KEY).signDigest(keccak256(serialize(TX))));
+    expect(raw).toBe(local);
+  });
+});
+
+describe.each(["ethereum", "base-eth"] as const)("kmsIrysToken(%s)", (tokenName) => {
   async function token() {
     const signer = await KmsEthereumSigner.create(fakeKms({ highS: true }), KEY_ID);
-    const Token = kmsEthereumToken(signer);
+    const Token = kmsIrysToken(signer, tokenName);
     const instance = new Token({ irys: {} as never, wallet: KMS_WALLET_PLACEHOLDER, providerUrl: "http://127.0.0.1:1" } as never);
     return { signer, instance };
   }
@@ -140,6 +179,11 @@ describe("kmsEthereumToken", () => {
     const data = new TextEncoder().encode("payload");
     const signature = await instance.sign(data);
     expect(await instance.verify(instance.getPublicKey(), data, signature)).toBe(true);
+  });
+
+  it("names the Irys token it pays in", async () => {
+    const { instance } = await token();
+    expect(instance.name).toBe(tokenName);
   });
 
   it("never builds a funding transaction", async () => {

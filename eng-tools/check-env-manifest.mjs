@@ -124,6 +124,17 @@ for (const dir of scanRoots) {
   }
 }
 
+// A service whose env_dto file also loads its configuration from an injected `env` object (for tests)
+// reads `env.NAME` rather than `process.env.NAME`; count those reads, but only in that file.
+for (const rel of new Set(services.map(([, svc]) => svc.env_dto).filter(Boolean))) {
+  const path = join(ROOT, rel);
+  if (!existsSync(path)) continue;
+  for (const [, name] of stripComments(readFileSync(path, "utf8")).matchAll(/(?<![.\w])env\.([A-Z][A-Z0-9_]*)/g)) {
+    if (!reads.has(name)) reads.set(name, new Set());
+    reads.get(name).add(rel);
+  }
+}
+
 const dtoFiles = [
   "packages/config/src/env.dto.ts",
   ...services.map(([, svc]) => svc.env_dto).filter(Boolean),

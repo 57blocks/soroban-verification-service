@@ -46,6 +46,7 @@ body:
         - builder
         - composer
         - query-svc
+        - arweave-funder-svc
         - clients/web
         - clients/docs
         - clients/sdk

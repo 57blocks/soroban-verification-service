@@ -37,6 +37,8 @@ services/             Independently deployable units, all NestJS
                         (docs/invariants.md rules 16, 18). One-shot, no HTTP
   query-svc/            Public multi-verifier aggregation over the Registry API of every Trusted
                         Verifiers List member, including one this operator also runs
+  arweave-funder-svc/   Tops up the Irys balance that pays for Arweave archiving and keeps a capped
+                        approval in place for orchestrator-svc's upload key (resident, no HTTP API)
 clients/              User/downstream-facing
   sdk/                  TypeScript query/aggregation SDK
   api-client/           @scvs/verify-api-client — the react-query submission client orval generates

@@ -4,3 +4,4 @@ export * from "./batch.js";
 export * from "./eventbridge.js";
 export * from "./sqs.js";
 export * from "./kms.js";
+export * from "./kms-ethereum.js";

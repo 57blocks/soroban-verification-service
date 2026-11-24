@@ -16,6 +16,7 @@
     "dev:verification-svc": "pnpm --filter @scvs/verification-svc run dev",
     "dev:orchestrator-svc": "pnpm --filter @scvs/orchestrator-svc run dev",
     "dev:query-svc": "pnpm --filter @scvs/query-svc run dev",
+    "dev:arweave-funder-svc": "pnpm --filter @scvs/arweave-funder-svc run dev",
     "dev:web": "pnpm --filter soroban-verify-web run dev -- --port 5173",
     "dev:docs": "pnpm --filter soroban-verify-docs run dev -- --port 5180",
     "db:migrate": "pnpm --filter @scvs/db --filter @scvs/db-query run prisma:deploy",

@@ -85,7 +85,9 @@ export function getStagingStorageConfig(): StagingStorageConfig {
 export type ArweaveConfig = {
   mode: "disabled" | "dry-run" | "irys";
   network: "mainnet" | "devnet";
-  /** The Ethereum L1 RPC the wallet signs through, not an Irys endpoint. */
+  /** The Irys token uploads are paid in. An approval is per token, so it must match the paying wallet's. */
+  token: ArweaveToken;
+  /** The chain RPC for `token` (Ethereum or Base), not an Irys endpoint. */
   rpcUrl?: string;
   signer: "kms" | "private-key";
   /** Read only when `signer` is `kms`. */
@@ -99,7 +101,14 @@ export type ArweaveConfig = {
   sourceArchiveEnabled: boolean;
 };
 
-const DEVNET_DEFAULT_RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
+export const arweaveTokens = ["ethereum", "base-eth"] as const;
+export type ArweaveToken = (typeof arweaveTokens)[number];
+
+// Irys devnet settles on these testnets; mainnet has no default, because a public endpoint is not one to rely on.
+const DEVNET_DEFAULT_RPC_URLS: Record<ArweaveToken, string> = {
+  ethereum: "https://ethereum-sepolia-rpc.publicnode.com",
+  "base-eth": "https://sepolia.base.org",
+};
 const DEFAULT_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
 
 export function getArweaveConfig(): ArweaveConfig {
@@ -112,10 +121,12 @@ export function getArweaveConfig(): ArweaveConfig {
         : "disabled";
   const network: ArweaveConfig["network"] =
     (process.env.SCVS_ARWEAVE_NETWORK || "devnet").toLowerCase() === "mainnet" ? "mainnet" : "devnet";
+  const token: ArweaveToken = (process.env.SCVS_ARWEAVE_TOKEN || "ethereum").toLowerCase() === "base-eth" ? "base-eth" : "ethereum";
   return {
     mode,
     network,
-    rpcUrl: process.env.SCVS_ARWEAVE_RPC_URL || (network === "devnet" ? DEVNET_DEFAULT_RPC_URL : undefined),
+    token,
+    rpcUrl: process.env.SCVS_ARWEAVE_RPC_URL || (network === "devnet" ? DEVNET_DEFAULT_RPC_URLS[token] : undefined),
     signer: (process.env.SCVS_ARWEAVE_SIGNER || "private-key").toLowerCase() === "kms" ? "kms" : "private-key",
     kmsKeyId: process.env.SCVS_ARWEAVE_KMS_KEY_ID || undefined,
     privateKey: process.env.SCVS_ARWEAVE_WALLET_PRIVATE_KEY,
