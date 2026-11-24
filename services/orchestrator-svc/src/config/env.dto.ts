@@ -79,7 +79,13 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsOptional() @IsString()
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY?: string;
 
-  @IsOptional()
+  // A KMS key's address cannot hold an Irys balance of its own: Irys credits a deposit to the on-chain sender, and
+  // only the orchestrator may sign with the key. So a KMS signer always uploads on another wallet's approval.
+  @ValidateIf(
+    (env: OrchestratorSvcEnvDto) =>
+      env.SCVS_ARWEAVE_PAID_BY !== undefined || (archivesThroughIrys(env) && env.SCVS_ARWEAVE_SIGNER === "kms"),
+  )
+  @IsNotEmpty({ message: "SCVS_ARWEAVE_PAID_BY is required when SCVS_ARWEAVE_SIGNER is kms and SCVS_ARWEAVE_MODE is irys" })
   @Matches(/^0x[0-9a-fA-F]{40}$/, { message: "SCVS_ARWEAVE_PAID_BY must be a 0x-prefixed 20-byte Ethereum address" })
   SCVS_ARWEAVE_PAID_BY?: string;
 
