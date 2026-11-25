@@ -1,6 +1,6 @@
 name: Build & deploy composer image
 
-run-name: ${{ github.event_name == 'workflow_dispatch' && 'Build & deploy composer image → dev + staging' || '' }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Build & deploy composer image → {0}', inputs.target_environments) || '' }}
 
 on:
   workflow_call:
@@ -18,6 +18,21 @@ on:
           image already exists, pushed by publish-images.yml, and is addressed by this commit.
         type: string
         required: true
+      environment:
+        description: >-
+          The GitHub Environment the copy runs under: its deploy role pushes the image into this
+          environment's composer repository, which every target's job definition then references.
+        type: string
+        required: false
+        default: dev
+      target_environments:
+        description: >-
+          Space-separated environments to register the composer job definition in, each under its own
+          GitHub Environment and deploy role. A target other than `environment` must be able to pull
+          from that environment's composer repository.
+        type: string
+        required: false
+        default: dev staging
     secrets:
       AWS_ACCOUNT_ID:
         description: >-
@@ -52,14 +67,28 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
-    environment: dev
+    environment: ${{ inputs.environment }}
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      SOURCE_ENVIRONMENT: ${{ inputs.environment }}
+      TARGET_ENVIRONMENTS: ${{ inputs.target_environments }}
     outputs:
       # Never a full image reference: the registry hostname embeds the account id, which GitHub strips from outputs.
       image_repo: ${{ steps.descriptor.outputs.ecr_composer }}
       image_digest: ${{ steps.build.outputs.digest }}
+      targets: ${{ steps.targets.outputs.json }}
     steps:
+      - name: Refuse a malformed target list
+        id: targets
+        run: |
+          set -euo pipefail
+          read -ra TARGETS <<<"$TARGET_ENVIRONMENTS"
+          [ "${#TARGETS[@]}" -gt 0 ] || { echo "::error::target_environments is empty"; exit 1; }
+          for ENV in "${TARGETS[@]}"; do
+            [[ "$ENV" =~ ^[a-z][a-z0-9-]*$ ]] || { echo "::error::target environment \"$ENV\" is not an environment name"; exit 1; }
+          done
+          echo "json=$(printf '%s\n' "${TARGETS[@]}" | jq -Rnc '[inputs]')" >> "$GITHUB_OUTPUT"
+
       - name: Mint a read token for the application repository
         id: source_token
         uses: 57blocks/soroban-verification-service/.github/actions/source-token@8c9481d8fd0a9d2461817d3c6ab616af916773de
@@ -94,10 +123,10 @@ jobs:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Read the CI descriptor (dev)
+      - name: Read the CI descriptor (${{ inputs.environment }})
         id: descriptor
         run: |
-          DESC=$(bash scripts/ci/load-ci-descriptor.sh dev 2,3)
+          DESC=$(bash scripts/ci/load-ci-descriptor.sh "$SOURCE_ENVIRONMENT" 2,3)
           echo "$DESC" > /tmp/ci-descriptor.json
           echo "ecr_composer=$(jq -r '.ecr.composer' <<<"$DESC")" >> "$GITHUB_OUTPUT"
 
@@ -143,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [dev, staging]
+        environment: ${{ fromJSON(needs.build-and-deploy.outputs.targets) }}
     steps:
       - name: Mint a read token for the application repository
         id: source_token

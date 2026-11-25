@@ -1,6 +1,6 @@
 name: Build & deploy builder image
 
-run-name: ${{ github.event_name == 'workflow_dispatch' && 'Build & deploy builder image → dev + staging (contract-gated)' || '' }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Build & deploy builder image → {0} (contract-gated)', inputs.target_environments) || '' }}
 
 on:
   workflow_call:
@@ -18,6 +18,20 @@ on:
           image already exists, pushed by publish-images.yml, and is addressed by this commit.
         type: string
         required: true
+      environment:
+        description: >-
+          The GitHub Environment the job runs under, and so whose deploy role it assumes. That role must
+          be able to push to every target's builder repository and register its job definitions.
+        type: string
+        required: false
+        default: dev
+      target_environments:
+        description: >-
+          Space-separated environments to copy the image into and register job definitions in, each
+          gated on its own orchestrator's contract version.
+        type: string
+        required: false
+        default: dev staging
     secrets:
       AWS_ACCOUNT_ID:
         description: >-
@@ -52,10 +66,20 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
-    environment: dev
+    environment: ${{ inputs.environment }}
     env:
       DEPLOY_ROLE_ARN: ${{ vars.DEPLOY_ROLE_ARN }}
+      TARGET_ENVIRONMENTS: ${{ inputs.target_environments }}
     steps:
+      - name: Refuse a malformed target list
+        run: |
+          set -euo pipefail
+          read -ra TARGETS <<<"$TARGET_ENVIRONMENTS"
+          [ "${#TARGETS[@]}" -gt 0 ] || { echo "::error::target_environments is empty"; exit 1; }
+          for ENV in "${TARGETS[@]}"; do
+            [[ "$ENV" =~ ^[a-z][a-z0-9-]*$ ]] || { echo "::error::target environment \"$ENV\" is not an environment name"; exit 1; }
+          done
+
       - name: Mint a read token for the application repository
         id: source_token
         uses: 57blocks/soroban-verification-service/.github/actions/source-token@8c9481d8fd0a9d2461817d3c6ab616af916773de
@@ -107,7 +131,8 @@ jobs:
           REGISTRY="${{ steps.ecr-login.outputs.registry }}"
           ARM64_TAGS=()
           AMD64_TAGS=()
-          for ENV in dev staging; do
+          read -ra TARGETS <<<"$TARGET_ENVIRONMENTS"
+          for ENV in "${TARGETS[@]}"; do
             DESC=$(bash scripts/ci/load-ci-descriptor.sh "$ENV" 2,3)
             echo "$DESC" > "/tmp/ci-descriptor.${ENV}.json"
             REPO=$(jq -r '.ecr.builder // "null"' <<<"$DESC")
@@ -184,7 +209,8 @@ jobs:
           echo "this image writes recipe.json contract $CONTRACT_VERSION"
           SKIPPED=()
           REGISTERED=()
-          for ENV in dev staging; do
+          read -ra TARGETS <<<"$TARGET_ENVIRONMENTS"
+          for ENV in "${TARGETS[@]}"; do
             DESC=$(cat "/tmp/ci-descriptor.${ENV}.json")
             SUPPORTED=$(bash scripts/ci/orchestrator-contract-version.sh read "$ENV")
             if [ "$SUPPORTED" = "none" ]; then
@@ -297,7 +323,7 @@ jobs:
                 --platform-capabilities EC2 \
                 --region "${{ env.AWS_REGION }}" \
                 --ecs-properties "$ECS_PROPERTIES" \
-                --tags Project=sv,Environment=$ENV,ManagedBy=github-actions,Purpose=scvs-real-verify-pipeline,CommitSha=${{ inputs.source_sha }},Architecture=$ARCH \
+                --tags "Project=sv,Environment=$ENV,ManagedBy=github-actions,Purpose=scvs-real-verify-pipeline,CommitSha=${{ inputs.source_sha }},Architecture=$ARCH" \
                 --query 'jobDefinitionArn' --output text)
               echo "Registered $FAMILY ($ARCH): $JOB_DEF_ARN"
             done
