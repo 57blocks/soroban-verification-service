@@ -194,9 +194,9 @@ services/             Independently deployable NestJS apps
                           a separate organisation's deployment, not part of any one verifier's own
                           (see the pipeline step below and the read-and-aggregate decision it
                           cites)
-  arweave-funder-svc/     Internal only, no ALB, plain Node (not NestJS): tops up the Irys balance that
-                          pays for Arweave archiving, signing with its own KMS key, and keeps a capped
-                          approval in place for orchestrator-svc's upload key
+  arweave-funder-svc/     Internal only, no ALB, plain Node (not NestJS): tops up the Turbo credits that
+                          pay for Arweave archiving, signing with its own KMS key, and keeps a capped
+                          share of them in place for orchestrator-svc's upload key
 clients/
   web/                    Vite + React + TanStack Router submission/results console
   docs/                   VitePress documentation site, served by the web image at /docs/

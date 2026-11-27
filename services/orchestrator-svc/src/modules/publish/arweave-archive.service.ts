@@ -1,6 +1,5 @@
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Uploader } from "@irys/upload";
 import {
   JobsRepository,
   ReportArchiveUploadsRepository,
@@ -23,11 +22,10 @@ import type { ResultStorage } from "@scvs/storage-layout";
 import { DetachedWork, IMAGE_TRUST_LEVELS, reportSha256FromUrl, ScvsLogger, ScvsMetrics, type LegacyCustody } from "@scvs/core";
 import { createKmsClient, kmsKeyRegion, type KmsSendClient } from "@scvs/aws";
 import { combineStatusLinkOutcomes, toStatusLinkOutcome } from "./status-link-outcome.util.js";
-import { ARWEAVE_TOKENS, KMS_WALLET_PLACEHOLDER, KmsEthereumSigner, kmsIrysToken } from "./kms-ethereum-signer.js";
+import { KmsEthereumSigner } from "./kms-ethereum-signer.js";
+import { buildTurboUploader, type ArchiveUploader } from "./turbo-uploader.js";
+import { ArweaveConfirmations, type ConfirmationState } from "./arweave-confirmation.js";
 import type { AppConfigService } from "../../config/configuration.js";
-
-type IrysUploader = Awaited<ReturnType<typeof Uploader>>;
-type IrysPrice = Awaited<ReturnType<IrysUploader["getPrice"]>>;
 
 // Must agree with storage-layout's readLegacyCustody: both read the same document.
 export function legacyCustodyFromReport(reportBytes: string): LegacyCustody | undefined {
@@ -46,14 +44,20 @@ export function legacyCustodyFromReport(reportBytes: string): LegacyCustody | un
 }
 
 type UploadOutcome =
-  | { ok: true; tx_id: string; archive_url: string }
+  | { ok: true; tx_id: string; archive_url: string; deadline_height?: number }
   | {
       ok: false;
-      reason: "arweave_disabled" | "insufficient_balance" | "irys_upload_failed";
+      reason: "arweave_disabled" | "insufficient_balance" | "upload_failed";
       detail: string;
     };
 
 type ArchivePayloadKind = "report" | "source";
+
+const GATEWAY_TIMEOUT_MS = 15_000;
+
+// An item with no deadline from the bundler (found already uploaded, or its receipt gave none) gets this many blocks
+// from when it is first checked: about 7 hours.
+const FOUND_UPLOAD_DEADLINE_BLOCKS = 200;
 
 type ArchiveTags = {
   wasmHash: string;
@@ -76,7 +80,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new ScvsLogger("arweave-archive");
   private readonly metrics = new ScvsMetrics("arweave-archive", { logger: this.logger });
   private readonly detached = new DetachedWork(this.logger);
-  private uploaderPromise: Promise<IrysUploader> | undefined;
+  private uploaderPromise: Promise<ArchiveUploader> | undefined;
   private kmsSigner: KmsEthereumSigner | undefined;
 
   constructor(
@@ -90,7 +94,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     const config = this.configService.get("arweave", { infer: true });
-    if (config.mode !== "irys" || config.signer !== "kms") return;
+    if (config.mode !== "turbo" || config.signer !== "kms") return;
     const signer = await this.getKmsSigner();
     this.logger.log("arweave KMS signer ready", { address: signer.address, network: config.network });
   }
@@ -115,7 +119,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     await this.detached.drain();
   }
 
-  private async getUploader(): Promise<IrysUploader> {
+  private async getUploader(): Promise<ArchiveUploader> {
     if (!this.uploaderPromise) {
       const promise = this.buildUploader();
       // A failed build (KMS unreachable, permission missing) must not stick: the next attempt retries it.
@@ -127,23 +131,13 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     return this.uploaderPromise;
   }
 
-  private async buildUploader(): Promise<IrysUploader> {
+  private async buildUploader(): Promise<ArchiveUploader> {
     const config = this.configService.get("arweave", { infer: true });
-    let builder;
-    let kmsAddress: string | undefined;
-    if (config.signer === "kms") {
-      const signer = await this.getKmsSigner();
-      kmsAddress = signer.address;
-      builder = Uploader(kmsIrysToken(signer, config.token)).withWallet(KMS_WALLET_PLACEHOLDER);
-    } else {
-      builder = Uploader(ARWEAVE_TOKENS[config.token]).withWallet(config.privateKey);
-    }
-    if (config.rpcUrl) builder = builder.withRpc(config.rpcUrl);
-    builder = config.network === "mainnet" ? builder.mainnet() : builder.devnet();
-    const uploader = await builder;
-    if (kmsAddress !== undefined && uploader.address !== kmsAddress) {
-      throw new Error(`Irys uploader resolved address ${uploader.address}, not the KMS key's ${kmsAddress} — refusing to upload`);
-    }
+    const uploader = buildTurboUploader({
+      signer: config.signer === "kms" ? { kms: await this.getKmsSigner() } : { privateKey: config.privateKey },
+      token: config.token,
+      endpoints: config.turbo,
+    });
     this.logger.log("arweave uploader ready", { signer: config.signer, address: uploader.address, network: config.network, token: config.token });
     return uploader;
   }
@@ -163,28 +157,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     ];
   }
 
-  private async signerShortfall(uploader: IrysUploader, price: IrysPrice): Promise<string | undefined> {
-    const balance = await uploader.getBalance();
-    if (!balance.lt(price)) return undefined;
-    return `Wallet balance is below the price of this upload (need ${price.toString()}, have ${balance.toString()}). Fund the wallet manually — this service never auto-funds.`;
-  }
-
-  // An approval caps what the signer may spend; it does not prove the payer still holds that much.
-  private async payerShortfall(uploader: IrysUploader, paidBy: string, price: IrysPrice): Promise<string | undefined> {
-    const [approval, payerBalance] = await Promise.all([
-      uploader.approval.getApprovedBalanceFrom(paidBy),
-      uploader.getBalance(paidBy),
-    ]);
-    if (price.gt(approval.amount)) {
-      return `${paidBy}'s approval for ${uploader.address} is below the price of this upload (need ${price.toString()}, approved ${approval.amount}). The paying wallet must renew it with createApproval — this service never approves itself.`;
-    }
-    if (payerBalance.lt(price)) {
-      return `Paying wallet ${paidBy} holds less than the price of this upload (need ${price.toString()}, have ${payerBalance.toString()}). Fund it manually — this service never auto-funds.`;
-    }
-    return undefined;
-  }
-
-  private async uploadToIrys(
+  private async uploadToTurbo(
     kind: ArchivePayloadKind,
     input: {
       wasmHash: string;
@@ -211,21 +184,26 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const uploader = await this.getUploader();
-      const tags = this.buildTags(kind, input);
-
-      const byteLength = typeof input.bytes === "string" ? Buffer.byteLength(input.bytes) : input.bytes.byteLength;
-      const { paidBy } = config;
-      const price = await uploader.getPrice(byteLength, { tags });
-      const shortfall = paidBy ? await this.payerShortfall(uploader, paidBy, price) : await this.signerShortfall(uploader, price);
-      if (shortfall) return { ok: false, reason: "insufficient_balance", detail: shortfall };
-
-      const body = typeof input.bytes === "string" ? input.bytes : Buffer.from(input.bytes);
-      const receipt = await uploader.upload(body, { tags, ...(paidBy ? { upload: { paidBy } } : {}) });
-      return { ok: true, tx_id: receipt.id, archive_url: this.gatewayUrlFor(receipt.id) };
+      const body = typeof input.bytes === "string" ? Buffer.from(input.bytes) : Buffer.from(input.bytes);
+      const result = await uploader.upload(body, this.buildTags(kind, input), config.paidBy);
+      if (result.ok) {
+        return {
+          ok: true,
+          tx_id: result.id,
+          archive_url: this.gatewayUrlFor(result.id),
+          ...(result.deadlineHeight !== undefined ? { deadline_height: result.deadlineHeight } : {}),
+        };
+      }
+      const payer = config.paidBy ?? uploader.address;
+      return {
+        ok: false,
+        reason: "insufficient_balance",
+        detail: `Turbo refused the upload for want of credits (HTTP 402): ${payer} holds or has shared too few with ${uploader.address}. The funder tops it up; this service never pays.`,
+      };
     } catch (error) {
       return {
         ok: false,
-        reason: "irys_upload_failed",
+        reason: "upload_failed",
         detail: error instanceof Error ? error.message : String(error),
       };
     }
@@ -236,9 +214,9 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     contentSha256: string,
   ): Promise<{ tx_id: string; archive_url: string } | undefined> {
     const config = this.configService.get("arweave", { infer: true });
-    if (config.mode !== "irys") return undefined;
+    if (config.mode !== "turbo") return undefined;
 
-    let uploader: IrysUploader;
+    let uploader: ArchiveUploader;
     try {
       uploader = await this.getUploader();
     } catch (error) {
@@ -247,22 +225,24 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       });
       return undefined;
     }
-    const graphqlUrl = `https://${config.network === "mainnet" ? "arweave" : "devnet"}.irys.xyz/graphql`;
-    const tagName = kind === "report" ? "Report_Hash" : "Source_Hash";
-    const query = `{
-      transactions(owners: ["${uploader.address}"], tags: [
-        {name: "App-Name", values: ["Stellar-Verifier"]},
-        {name: "${tagName}", values: ["${contentSha256}"]}
-      ]) {
-        edges { node { id } }
+    const graphqlUrl = `${config.gatewayUrl}/graphql`;
+    // Matched on the owner's key, not its address: gateways do not agree on how they index an Ethereum signer's address.
+    const query = `query ($tags: [TagFilter!]) {
+      transactions(first: 100, tags: $tags) {
+        edges { node { id owner { key } } }
       }
     }`;
+    const tags = [
+      { name: "App-Name", values: ["Stellar-Verifier"] },
+      { name: kind === "report" ? "Report_Hash" : "Source_Hash", values: [contentSha256] },
+    ];
 
     try {
       const response = await fetch(graphqlUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, variables: { tags } }),
+        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
       });
       if (!response.ok) {
         this.logger.error("findExistingUpload query returned a non-OK status — treating as indeterminate, not as no existing upload", {
@@ -271,7 +251,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
         return undefined;
       }
       const body = (await response.json()) as {
-        data?: { transactions?: { edges?: { node: { id: string } }[] } };
+        data?: { transactions?: { edges?: { node: { id: string; owner?: { key?: string } } }[] } };
         errors?: { message: string }[];
       };
       if (body.errors?.length) {
@@ -280,7 +260,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
         });
         return undefined;
       }
-      const txId = body.data?.transactions?.edges?.[0]?.node.id;
+      const txId = body.data?.transactions?.edges?.find((edge) => edge.node.owner?.key === uploader.ownerKey)?.node.id;
       return txId ? { tx_id: txId, archive_url: this.gatewayUrlFor(txId) } : undefined;
     } catch (error) {
       this.logger.error("findExistingUpload query failed — treating as no existing upload", {
@@ -364,6 +344,17 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (claim.status === "uploaded" && claim.txId) {
+      const settled = await this.settleConfirmation("report", jobId, reportSha256, claim.txId, claim.deadlineHeight);
+      if (settled === "confirmed") {
+        await this.recordArchivedReport({
+          jobId, storage, wasmHash, reportUrl, reportSha256, legacyCustody,
+          archiveUrl: this.gatewayUrlFor(claim.txId), txId: claim.txId,
+        });
+      }
+      return;
+    }
+
     if (!won) {
       const timeoutMs = this.configService.get("reportArchiveClaimTimeoutMs", { infer: true });
       const staleSince = Date.now() - Date.parse(claim.updatedAt);
@@ -381,6 +372,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
 
     const existingUpload = await this.findExistingUpload("report", reportSha256);
     if (existingUpload) {
+      if (await this.awaitsConfirmation("report", jobId, reportSha256, existingUpload.tx_id)) return;
       await this.markReportClaimDone(jobId, reportSha256, existingUpload.tx_id);
       await this.recordArchivedReport({
         jobId, storage, wasmHash, reportUrl, reportSha256, legacyCustody,
@@ -389,7 +381,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const upload = await this.uploadToIrys("report", { wasmHash, contentSha256: reportSha256, bytes: reportBytes, verifierId });
+    const upload = await this.uploadToTurbo("report", { wasmHash, contentSha256: reportSha256, bytes: reportBytes, verifierId });
     if (!upload.ok) {
       await this.reportArchiveUploads.releaseClaim(reportSha256);
       await this.jobs.recordArchiveOutcome(jobId, { archived: false });
@@ -397,11 +389,75 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (await this.awaitsConfirmation("report", jobId, reportSha256, upload.tx_id, upload.deadline_height)) return;
     await this.markReportClaimDone(jobId, reportSha256, upload.tx_id);
     await this.recordArchivedReport({
       jobId, storage, wasmHash, reportUrl, reportSha256, legacyCustody,
       archiveUrl: upload.archive_url, txId: upload.tx_id,
     });
+  }
+
+  private claims(kind: ArchivePayloadKind): ReportArchiveUploadsRepository | SourceArchiveUploadsRepository {
+    return kind === "report" ? this.reportArchiveUploads : this.sourceArchiveUploads;
+  }
+
+  /**
+   * On a network whose items reach Arweave, holds the claim at "uploaded" and leaves the job pending, so the recovery
+   * scan links it only once it is confirmed. False where nothing is waited for, and the caller links it at once.
+   */
+  private async awaitsConfirmation(kind: ArchivePayloadKind, jobId: string, sha256: string, txId: string, deadlineHeight?: number): Promise<boolean> {
+    const config = this.configService.get("arweave", { infer: true });
+    if (config.confirmations === 0) return false;
+    if (deadlineHeight === undefined) {
+      try {
+        deadlineHeight = (await new ArweaveConfirmations(config.gatewayUrl, config.confirmations).height()) + FOUND_UPLOAD_DEADLINE_BLOCKS;
+      } catch (error) {
+        this.logger.warn(`job ${jobId}: could not read Arweave's height for ${txId}; it waits for confirmation with no deadline`, {
+          error: error instanceof Error ? error : String(error),
+        });
+      }
+    }
+    if (!(await this.claims(kind).markUploaded(sha256, txId, deadlineHeight))) {
+      this.logger.warn(`job ${jobId}: ${kind}-archive claim for ${sha256} was reaped while this upload was still running — ${txId} is not tracked`);
+      return true;
+    }
+    this.logger.log(`job ${jobId}: ${kind} ${sha256} stored as ${txId}; linking it once it is confirmed on Arweave`, {
+      deadline_height: deadlineHeight,
+    });
+    return true;
+  }
+
+  /** Checks an uploaded item against a gateway; an item past its deadline is dropped so the next scan uploads it anew. */
+  private async settleConfirmation(
+    kind: ArchivePayloadKind,
+    jobId: string,
+    sha256: string,
+    txId: string,
+    deadlineHeight?: number,
+  ): Promise<ConfirmationState> {
+    const config = this.configService.get("arweave", { infer: true });
+    const confirmations = new ArweaveConfirmations(config.gatewayUrl, config.confirmations);
+    let state: ConfirmationState;
+    try {
+      if (deadlineHeight === undefined) {
+        deadlineHeight = (await confirmations.height()) + FOUND_UPLOAD_DEADLINE_BLOCKS;
+        await this.claims(kind).setDeadline(sha256, txId, deadlineHeight);
+      }
+      state = await confirmations.state(txId, deadlineHeight);
+    } catch (error) {
+      this.logger.warn(`job ${jobId}: could not check ${txId} on Arweave — trying again on the next scan`, {
+        error: error instanceof Error ? error : String(error),
+      });
+      return "pending";
+    }
+    if (state === "confirmed") {
+      await this.claims(kind).markConfirmed(sha256, txId);
+    } else if (state === "overdue") {
+      this.metrics.counter("arweave_upload_overdue_total", 1, { kind });
+      this.logger.error(`job ${jobId}: ${kind} ${sha256} (${txId}) is not on Arweave past its deadline height ${deadlineHeight} — uploading it again`);
+      await this.claims(kind).abandonUpload(sha256, txId);
+    }
+    return state;
   }
 
   private async markReportClaimDone(jobId: string, reportSha256: string, txId: string): Promise<void> {
@@ -494,8 +550,8 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private gatewayUrlFor(txId: string): string {
-    return `${this.configService.get("arweave", { infer: true }).gatewayUrl}/${txId}`;
+  private gatewayUrlFor(txId: string, gatewayUrl?: string): string {
+    return `${gatewayUrl ?? this.configService.get("arweave", { infer: true }).gatewayUrl}/${txId}`;
   }
 
   private async recordArchived(input: {
@@ -539,7 +595,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       const wrote = await appendArchiveReference(storage, wasmHash, {
         reportUrl,
         reportSha256,
-        archiveUrl: this.gatewayUrlFor(job.archivedTxId),
+        archiveUrl: this.gatewayUrlFor(job.archivedTxId, job.archivedGatewayUrl),
         legacyCustody,
       });
       outcomes.push(toStatusLinkOutcome(wrote, context("report archive")));
@@ -547,7 +603,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     if (job.sourceArchivedTxId) {
       const wrote = await appendVerifiedSourceCodeUri(storage, wasmHash, {
         reportUrl,
-        sourceCodeUri: { location: "arweave", url: this.gatewayUrlFor(job.sourceArchivedTxId) },
+        sourceCodeUri: { location: "arweave", url: this.gatewayUrlFor(job.sourceArchivedTxId, job.sourceArchivedGatewayUrl) },
         legacyCustody,
       });
       outcomes.push(toStatusLinkOutcome(wrote, context("source archive")));
@@ -594,6 +650,15 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (claim.status === "uploaded" && claim.txId) {
+      if ((await this.settleConfirmation("source", jobId, sourceSha256, claim.txId, claim.deadlineHeight)) === "confirmed") {
+        await this.recordArchived({
+          jobId, storage, wasmHash, reportUrl, archiveUrl: this.gatewayUrlFor(claim.txId), txId: claim.txId,
+        });
+      }
+      return;
+    }
+
     if (!won) {
       const timeoutMs = this.configService.get("sourceArchiveClaimTimeoutMs", { infer: true });
       const staleSince = Date.now() - Date.parse(claim.updatedAt);
@@ -610,6 +675,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
 
     const existingUpload = await this.findExistingUpload("source", sourceSha256);
     if (existingUpload) {
+      if (await this.awaitsConfirmation("source", jobId, sourceSha256, existingUpload.tx_id)) return;
       await this.markSourceClaimDone(jobId, sourceSha256, existingUpload.tx_id);
       await this.recordArchived({
         jobId, storage, wasmHash, reportUrl, archiveUrl: existingUpload.archive_url, txId: existingUpload.tx_id,
@@ -617,7 +683,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const upload = await this.uploadToIrys("source", {
+    const upload = await this.uploadToTurbo("source", {
       wasmHash,
       contentSha256: sourceSha256,
       bytes: sourceBytes,
@@ -631,6 +697,7 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (await this.awaitsConfirmation("source", jobId, sourceSha256, upload.tx_id, upload.deadline_height)) return;
     await this.markSourceClaimDone(jobId, sourceSha256, upload.tx_id);
     await this.recordArchived({
       jobId, storage, wasmHash, reportUrl, archiveUrl: upload.archive_url, txId: upload.tx_id,

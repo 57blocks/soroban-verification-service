@@ -56,13 +56,14 @@ async function main() {
     exit(2);
   }
   const publicRoot = requireEnv("SCVS_PUBLIC_RESULT_ROOT").replace(/\/+$/, "");
-  const gateway = (env.SCVS_ARWEAVE_GATEWAY_URL || "https://gateway.irys.xyz").replace(/\/+$/, "");
+  const defaultGateway = (env.SCVS_ARWEAVE_NETWORK || "devnet").toLowerCase() === "mainnet" ? "https://arweave.net" : "https://ar-io.dev";
+  const gateway = (env.SCVS_ARWEAVE_GATEWAY_URL || defaultGateway).replace(/\/+$/, "");
   const prisma = new PrismaClient();
 
   const jobs = await prisma.job.findMany({
     where: { publishedUpdatedAt: { not: null } },
     select: {
-      id: true, result: true, archivedTxId: true, sourceArchivedTxId: true, sourceFileName: true,
+      id: true, result: true, archivedTxId: true, archivedGatewayUrl: true, sourceArchivedTxId: true, sourceArchivedGatewayUrl: true, sourceFileName: true,
       verdict: true, statusLinkPendingSince: true, statusLinkBlockedReason: true,
     },
   });
@@ -87,8 +88,8 @@ async function main() {
 
     const present = linkUrls(entry);
     const owed = [];
-    if (job.archivedTxId && !present.has(`${gateway}/${job.archivedTxId}`)) owed.push("report archive");
-    if (job.sourceArchivedTxId && !present.has(`${gateway}/${job.sourceArchivedTxId}`)) owed.push("source archive");
+    if (job.archivedTxId && !present.has(`${job.archivedGatewayUrl ?? gateway}/${job.archivedTxId}`)) owed.push("report archive");
+    if (job.sourceArchivedTxId && !present.has(`${job.sourceArchivedGatewayUrl ?? gateway}/${job.sourceArchivedTxId}`)) owed.push("source archive");
     if (job.sourceFileName && !present.has(`${publicRoot}/sources/${job.sourceFileName}`)) owed.push("source uri");
     if (owed.length > 0 && !job.statusLinkPendingSince) {
       missingLinks.push({ jobId: job.id, wasmHash, owed });

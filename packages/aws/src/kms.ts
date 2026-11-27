@@ -1,7 +1,16 @@
 import { GetPublicKeyCommand, KMSClient, SignCommand } from "@aws-sdk/client-kms";
 
+const KMS_MAX_ATTEMPTS = 4;
+const KMS_CONNECTION_TIMEOUT_MS = 3_000;
+const KMS_REQUEST_TIMEOUT_MS = 5_000;
+
+/** Throttling and transient faults retry with backoff inside the SDK; a hung request fails instead of stalling its caller. */
 export function createKmsClient(region?: string): KMSClient {
-  return new KMSClient({ region: region || "us-east-1" });
+  return new KMSClient({
+    region: region || "us-east-1",
+    maxAttempts: KMS_MAX_ATTEMPTS,
+    requestHandler: { connectionTimeout: KMS_CONNECTION_TIMEOUT_MS, requestTimeout: KMS_REQUEST_TIMEOUT_MS },
+  });
 }
 
 export type KmsSendClient = Pick<KMSClient, "send">;

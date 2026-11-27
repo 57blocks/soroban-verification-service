@@ -48,10 +48,10 @@ beforeAll(async () => {
   process.env.SCVS_RESULT_ROOT = resultRoot;
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4999";
   // Not dry-run: its content-derived `tx_id` would make a double upload invisible.
-  process.env.SCVS_ARWEAVE_MODE = "irys";
+  process.env.SCVS_ARWEAVE_MODE = "turbo";
   process.env.SCVS_ARWEAVE_NETWORK = "devnet";
   process.env.SCVS_ARWEAVE_WALLET_PRIVATE_KEY = "0x" + "1".repeat(64);
-  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
+  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://arweave.net";
 
   moduleRef = await Test.createTestingModule({
     imports: [
@@ -160,26 +160,26 @@ async function createComparingJob(): Promise<JobRecord> {
 function internals(service: ArweaveArchiveService) {
   return service as unknown as {
     findExistingUpload: (kind: string, contentSha256: string) => Promise<{ tx_id: string; archive_url: string } | undefined>;
-    uploadToIrys: (kind: string, input: unknown) => Promise<unknown>;
+    uploadToTurbo: (kind: string, input: unknown) => Promise<unknown>;
   };
 }
 
 async function publishWithStubbedUpload(jobId: string): Promise<void> {
-  const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
+  const realUpload = internals(arweaveArchive).uploadToTurbo.bind(arweaveArchive);
   const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
   internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
     kind === "report" ? undefined : realFind(kind, contentSha256);
-  internals(arweaveArchive).uploadToIrys = async (kind, input) => {
+  internals(arweaveArchive).uploadToTurbo = async (kind, input) => {
     if (kind !== "report") return realUpload(kind, input);
     const txId = `real-upload-${randomUUID()}`;
-    return { ok: true, tx_id: txId, archive_url: `https://gateway.irys.xyz/${txId}` };
+    return { ok: true, tx_id: txId, archive_url: `https://arweave.net/${txId}` };
   };
 
   try {
     await publish.publishJobResult(jobId);
     await waitUntil(() => archiveSettled(jobId), "the initial publish's live backfill to settle");
   } finally {
-    internals(arweaveArchive).uploadToIrys = realUpload;
+    internals(arweaveArchive).uploadToTurbo = realUpload;
     internals(arweaveArchive).findExistingUpload = realFind;
   }
 }
@@ -189,16 +189,16 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     const job = await createComparingJob();
 
     let uploadCalls = 0;
-    const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
+    const realUpload = internals(arweaveArchive).uploadToTurbo.bind(arweaveArchive);
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
     internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
       kind === "report" ? undefined : realFind(kind, contentSha256);
-    internals(arweaveArchive).uploadToIrys = async (kind, input) => {
+    internals(arweaveArchive).uploadToTurbo = async (kind, input) => {
       if (kind !== "report") return realUpload(kind, input);
       uploadCalls += 1;
       await new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * 15));
       const txId = `real-upload-${randomUUID()}`;
-      return { ok: true, tx_id: txId, archive_url: `https://gateway.irys.xyz/${txId}` };
+      return { ok: true, tx_id: txId, archive_url: `https://arweave.net/${txId}` };
     };
 
     try {
@@ -213,7 +213,7 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
       // Settle window, so "exactly one" is not a race the `waitUntil` above happened to win.
       await new Promise((resolve) => setTimeout(resolve, 100));
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       internals(arweaveArchive).findExistingUpload = realFind;
     }
 
@@ -241,21 +241,21 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
       data: { status: "claimed", txId: null, updatedAt: new Date(Date.now() - 10 * 60_000) }, // past the 5-minute stale-claim timeout
     });
 
-    const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
+    const realUpload = internals(arweaveArchive).uploadToTurbo.bind(arweaveArchive);
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
     internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
       kind === "report" ? undefined : realFind(kind, contentSha256);
-    internals(arweaveArchive).uploadToIrys = async (kind, input) => {
+    internals(arweaveArchive).uploadToTurbo = async (kind, input) => {
       if (kind !== "report") return realUpload(kind, input);
       const txId = `real-upload-${randomUUID()}`;
-      return { ok: true, tx_id: txId, archive_url: `https://gateway.irys.xyz/${txId}` };
+      return { ok: true, tx_id: txId, archive_url: `https://arweave.net/${txId}` };
     };
 
     try {
       await arweaveArchive.retryPendingArchive(published);
       await waitUntil(() => archiveSettled(job.jobId), "the job to reclaim the stale claim and archive");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       internals(arweaveArchive).findExistingUpload = realFind;
     }
 
@@ -267,7 +267,7 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
     expect(claim?.txId).toBe(settled?.archivedTxId);
   });
 
-  it("a done claim short-circuits: retryPendingArchive reuses it without calling findExistingUpload or uploadToIrys", async () => {
+  it("a done claim short-circuits: retryPendingArchive reuses it without calling findExistingUpload or uploadToTurbo", async () => {
     const job = await createComparingJob();
     await publishWithStubbedUpload(job.jobId);
     const published = (await jobs.getJobById(job.jobId))!;
@@ -277,9 +277,9 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
 
     let uploadCalls = 0;
     let findCalls = 0;
-    const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
+    const realUpload = internals(arweaveArchive).uploadToTurbo.bind(arweaveArchive);
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
-    internals(arweaveArchive).uploadToIrys = async (kind, input) => {
+    internals(arweaveArchive).uploadToTurbo = async (kind, input) => {
       if (kind === "report") uploadCalls += 1;
       return realUpload(kind, input);
     };
@@ -292,7 +292,7 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
       await arweaveArchive.retryPendingArchive(published);
       await waitUntil(() => archiveSettled(job.jobId), "the done claim to be reused");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       internals(arweaveArchive).findExistingUpload = realFind;
     }
 
@@ -309,13 +309,13 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
   it("a failed upload releases its claim instead of leaving it stranded until the timeout", async () => {
     const job = await createComparingJob();
 
-    const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
+    const realUpload = internals(arweaveArchive).uploadToTurbo.bind(arweaveArchive);
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
     internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
       kind === "report" ? undefined : realFind(kind, contentSha256);
-    internals(arweaveArchive).uploadToIrys = async (kind, input) =>
+    internals(arweaveArchive).uploadToTurbo = async (kind, input) =>
       kind === "report"
-        ? { ok: false, reason: "irys_upload_failed", detail: "stub: simulated network failure" }
+        ? { ok: false, reason: "upload_failed", detail: "stub: simulated network failure" }
         : realUpload(kind, input);
 
     let reportSha256: string;
@@ -327,7 +327,7 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
       }, "the failed attempt to be recorded");
       reportSha256 = (await jobs.getJobById(job.jobId))!.result!.artifact_sha256!;
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       internals(arweaveArchive).findExistingUpload = realFind;
     }
     createdRows.reportArchiveUpload(reportSha256);
@@ -343,16 +343,16 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
   it("an upload that outlives its own reaped claim still records its txId, rather than throwing it away", async () => {
     const job = await createComparingJob();
 
-    const realUpload = internals(arweaveArchive).uploadToIrys.bind(arweaveArchive);
+    const realUpload = internals(arweaveArchive).uploadToTurbo.bind(arweaveArchive);
     const realFind = internals(arweaveArchive).findExistingUpload.bind(arweaveArchive);
     internals(arweaveArchive).findExistingUpload = async (kind, contentSha256) =>
       kind === "report" ? undefined : realFind(kind, contentSha256);
-    internals(arweaveArchive).uploadToIrys = async (kind, input) => {
+    internals(arweaveArchive).uploadToTurbo = async (kind, input) => {
       if (kind !== "report") return realUpload(kind, input);
       const sha = (input as { contentSha256: string }).contentSha256;
       await reportArchiveUploads.releaseClaim(sha);
       const txId = `paid-but-reaped-${randomUUID()}`;
-      return { ok: true, tx_id: txId, archive_url: `https://gateway.irys.xyz/${txId}` };
+      return { ok: true, tx_id: txId, archive_url: `https://arweave.net/${txId}` };
     };
 
     let reportSha256: string;
@@ -362,7 +362,7 @@ describe("report-archive concurrent dedup (report path's own claim, mirroring th
       createdRows.reportArchiveUpload(reportSha256);
       await waitUntil(() => archiveSettled(job.jobId), "the reaped-claim upload to still settle the job");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       internals(arweaveArchive).findExistingUpload = realFind;
     }
 

@@ -4,13 +4,15 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { SourceArchiveUploadModel as PrismaSourceArchiveUpload } from "../generated/prisma/models.js";
 
-export const sourceArchiveUploadStatuses = ["claimed", "done"] as const;
+export const sourceArchiveUploadStatuses = ["claimed", "uploaded", "done"] as const;
 export type SourceArchiveUploadStatus = (typeof sourceArchiveUploadStatuses)[number];
 
 export type SourceArchiveUploadRecord = {
   sourceSha256: string;
   status: SourceArchiveUploadStatus;
   txId?: string;
+  /** The Arweave height by which the bundler promised to have it on chain; unknown for an upload found, not made. */
+  deadlineHeight?: number;
   updatedAt: string;
 };
 
@@ -48,6 +50,39 @@ export class SourceArchiveUploadsRepository {
     return count > 0;
   }
 
+  /** Compare-and-set claimed → uploaded: the bundler holds the item, and it waits for confirmation on Arweave. */
+  async markUploaded(sourceSha256: string, txId: string, deadlineHeight?: number): Promise<boolean> {
+    const { count } = await this.prisma.sourceArchiveUpload.updateMany({
+      where: { sourceSha256, status: "claimed" satisfies SourceArchiveUploadStatus },
+      data: { status: "uploaded" satisfies SourceArchiveUploadStatus, txId, deadlineHeight: deadlineHeight ?? null },
+    });
+    return count > 0;
+  }
+
+  /** Gives an uploaded item with no deadline one, so an item that never lands is eventually uploaded again. */
+  async setDeadline(sourceSha256: string, txId: string, deadlineHeight: number): Promise<void> {
+    await this.prisma.sourceArchiveUpload.updateMany({
+      where: { sourceSha256, status: "uploaded" satisfies SourceArchiveUploadStatus, txId, deadlineHeight: null },
+      data: { deadlineHeight },
+    });
+  }
+
+  /** Compare-and-set uploaded → done once the item has enough confirmations. */
+  async markConfirmed(sourceSha256: string, txId: string): Promise<boolean> {
+    const { count } = await this.prisma.sourceArchiveUpload.updateMany({
+      where: { sourceSha256, status: "uploaded" satisfies SourceArchiveUploadStatus, txId },
+      data: { status: "done" satisfies SourceArchiveUploadStatus, confirmedAt: new Date() },
+    });
+    return count > 0;
+  }
+
+  /** Drops an upload the bundler failed to put on chain by its deadline, so the next attempt claims and uploads anew. */
+  async abandonUpload(sourceSha256: string, txId: string): Promise<void> {
+    await this.prisma.sourceArchiveUpload.deleteMany({
+      where: { sourceSha256, status: "uploaded" satisfies SourceArchiveUploadStatus, txId },
+    });
+  }
+
   async releaseClaim(sourceSha256: string): Promise<void> {
     await this.prisma.sourceArchiveUpload.deleteMany({
       where: { sourceSha256, status: "claimed" satisfies SourceArchiveUploadStatus },
@@ -67,6 +102,7 @@ function rowToRecord(row: PrismaSourceArchiveUpload): SourceArchiveUploadRecord 
     sourceSha256: row.sourceSha256,
     status: assertSourceArchiveUploadStatus(row.status),
     ...(row.txId ? { txId: row.txId } : {}),
+    ...(row.deadlineHeight !== null ? { deadlineHeight: row.deadlineHeight } : {}),
     updatedAt: row.updatedAt.toISOString(),
   };
 }

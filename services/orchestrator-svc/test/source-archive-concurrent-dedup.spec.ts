@@ -40,7 +40,7 @@ beforeAll(async () => {
   process.env.SCVS_RESULT_ROOT = resultRoot;
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4997/public";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
-  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
+  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://arweave.net";
   process.env.SCVS_SOURCE_ARCHIVE_ENABLED = "true";
 
   moduleRef = await Test.createTestingModule({
@@ -164,15 +164,15 @@ async function publishMainnetJob(opts: { sourceSha256: string; wasmHash: string 
 }
 
 describe("source-archive concurrent dedup", () => {
-  it("two jobs sharing one source_sha256, published back to back, produce exactly one Irys upload", async () => {
+  it("two jobs sharing one source_sha256, published back to back, produce exactly one Turbo upload", async () => {
     const sourceSha256 = createdRows.sourceArchiveUpload(randomUUID().replace(/-/g, "").padEnd(64, "0"));
 
     let sourceUploadCalls = 0;
     const internals = arweaveArchive as unknown as {
-      uploadToIrys: (kind: string, input: unknown) => Promise<unknown>;
+      uploadToTurbo: (kind: string, input: unknown) => Promise<unknown>;
     };
-    const realUpload = internals.uploadToIrys.bind(arweaveArchive);
-    internals.uploadToIrys = async (kind, input) => {
+    const realUpload = internals.uploadToTurbo.bind(arweaveArchive);
+    internals.uploadToTurbo = async (kind, input) => {
       if (kind === "source") sourceUploadCalls += 1;
       return realUpload(kind, input);
     };
@@ -200,7 +200,7 @@ describe("source-archive concurrent dedup", () => {
       expect(settledA?.sourceArchivedTxId).toBeDefined();
       expect(settledA?.sourceArchivedTxId).toBe(settledB?.sourceArchivedTxId);
     } finally {
-      internals.uploadToIrys = realUpload;
+      internals.uploadToTurbo = realUpload;
     }
   });
 
@@ -230,17 +230,17 @@ describe("source-archive concurrent dedup", () => {
 
     let sourceUploadCalls = 0;
     const internals = arweaveArchive as unknown as {
-      uploadToIrys: (kind: string, input: unknown) => Promise<unknown>;
+      uploadToTurbo: (kind: string, input: unknown) => Promise<unknown>;
       findExistingUpload: (kind: string, contentSha256: string) => Promise<{ tx_id: string; archive_url: string } | undefined>;
     };
-    const realUpload = internals.uploadToIrys.bind(arweaveArchive);
+    const realUpload = internals.uploadToTurbo.bind(arweaveArchive);
     const realFind = internals.findExistingUpload.bind(arweaveArchive);
-    internals.uploadToIrys = async (kind, input) => {
+    internals.uploadToTurbo = async (kind, input) => {
       if (kind === "source") sourceUploadCalls += 1;
       return realUpload(kind, input);
     };
     internals.findExistingUpload = async (kind, contentSha256) =>
-      kind === "source" ? { tx_id: "tx-preexisting", archive_url: "https://gateway.irys.xyz/tx-preexisting" } : realFind(kind, contentSha256);
+      kind === "source" ? { tx_id: "tx-preexisting", archive_url: "https://arweave.net/tx-preexisting" } : realFind(kind, contentSha256);
 
     try {
       const job = await publishMainnetJob({ sourceSha256, wasmHash: freshWasmHash() });
@@ -254,7 +254,7 @@ describe("source-archive concurrent dedup", () => {
       expect(claim?.status).toBe("done");
       expect(claim?.txId).toBe("tx-preexisting");
     } finally {
-      internals.uploadToIrys = realUpload;
+      internals.uploadToTurbo = realUpload;
       internals.findExistingUpload = realFind;
     }
   });
@@ -263,12 +263,12 @@ describe("source-archive concurrent dedup", () => {
     const sourceSha256 = createdRows.sourceArchiveUpload(randomUUID().replace(/-/g, "").padEnd(64, "0"));
 
     const internals = arweaveArchive as unknown as {
-      uploadToIrys: (kind: string, input: unknown) => Promise<unknown>;
+      uploadToTurbo: (kind: string, input: unknown) => Promise<unknown>;
     };
-    const realUpload = internals.uploadToIrys.bind(arweaveArchive);
-    internals.uploadToIrys = async (kind, input) =>
+    const realUpload = internals.uploadToTurbo.bind(arweaveArchive);
+    internals.uploadToTurbo = async (kind, input) =>
       kind === "source"
-        ? { ok: false, reason: "irys_upload_failed", detail: "stub: simulated network failure" }
+        ? { ok: false, reason: "upload_failed", detail: "stub: simulated network failure" }
         : realUpload(kind, input);
 
     try {
@@ -285,7 +285,7 @@ describe("source-archive concurrent dedup", () => {
       expect(settled?.sourceArchivedTxId).toBeUndefined();
       expect(settled?.sourceArchivePendingSince).toBeDefined();
     } finally {
-      internals.uploadToIrys = realUpload;
+      internals.uploadToTurbo = realUpload;
     }
   });
 });

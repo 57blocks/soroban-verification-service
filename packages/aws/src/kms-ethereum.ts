@@ -1,15 +1,15 @@
 import { arrayify, hexlify, joinSignature, type SignatureLike } from "@ethersproject/bytes";
 import { hashMessage } from "@ethersproject/hash";
 import { keccak256 } from "@ethersproject/keccak256";
-import { recoverPublicKey } from "@ethersproject/signing-key";
+import { recoverPublicKey, SigningKey } from "@ethersproject/signing-key";
 import { computeAddress, serialize, type UnsignedTransaction } from "@ethersproject/transactions";
 import { getSecp256k1PublicKey, signDigestWithKms, type KmsSendClient } from "./kms.js";
 
 const SECP256K1_N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const SECP256K1_HALF_N = SECP256K1_N >> 1n;
 
-// Irys's signature type for an Ethereum (secp256k1, EIP-191) data item.
-const IRYS_ETHEREUM_SIGNATURE_TYPE = 3;
+// ANS-104's signature type for an Ethereum (secp256k1, EIP-191) data item.
+const ETHEREUM_SIGNATURE_TYPE = 3;
 
 function readDerInteger(der: Uint8Array, offset: number): { value: bigint; next: number } {
   if (der[offset] !== 0x02) throw new Error("DER signature: expected an INTEGER");
@@ -34,7 +34,7 @@ export function parseDerSignature(der: Uint8Array): { r: bigint; s: bigint } {
 
 const toWord = (value: bigint): string => `0x${value.toString(16).padStart(64, "0")}`;
 
-/** r, s (normalised to low-s, which both Irys and EIP-2 require) and the recovery bit that recovers the key's own point. */
+/** r, s (normalised to low-s, which both ANS-104 verifiers and EIP-2 require) and the recovery bit that recovers the key's own point. */
 export function ethereumSignatureParts(
   digest: Uint8Array,
   der: Uint8Array,
@@ -50,19 +50,19 @@ export function ethereumSignatureParts(
   throw new Error("KMS signature does not recover to the key's public key");
 }
 
-/** 65-byte r ‖ s ‖ v with v = 27 | 28, as Irys's Ethereum signer produces. */
+/** 65-byte r ‖ s ‖ v with v = 27 | 28, as an Ethereum data-item signer produces. */
 export function toEthereumSignature(digest: Uint8Array, der: Uint8Array, publicKey: Uint8Array): Uint8Array {
   return arrayify(joinSignature(ethereumSignatureParts(digest, der, publicKey) as SignatureLike));
 }
 
 /**
- * A secp256k1 key held in AWS KMS, used as an Ethereum account. Signs Irys data items exactly as Irys's own
+ * A secp256k1 key held in AWS KMS, used as an Ethereum account. Signs ANS-104 data items exactly as the reference
  * EthereumSigner does (EIP-191), and — for the one caller allowed to move funds — EIP-1559 transactions.
  */
 export class KmsEthereumSigner {
   readonly ownerLength = 65;
   readonly signatureLength = 65;
-  readonly signatureType = IRYS_ETHEREUM_SIGNATURE_TYPE;
+  readonly signatureType = ETHEREUM_SIGNATURE_TYPE;
   readonly publicKey: Buffer;
   readonly address: string;
 
@@ -72,7 +72,7 @@ export class KmsEthereumSigner {
     publicKey: Uint8Array,
   ) {
     this.publicKey = Buffer.from(publicKey);
-    // Irys compares addresses lowercased; a checksummed one would never match.
+    // Turbo compares addresses lowercased; a checksummed one would never match.
     this.address = computeAddress(publicKey).toLowerCase();
   }
 
@@ -80,7 +80,7 @@ export class KmsEthereumSigner {
     return new KmsEthereumSigner(kms, keyId, await getSecp256k1PublicKey(kms, keyId));
   }
 
-  /** Irys data-item signature (EIP-191 personal message). */
+  /** Data-item signature (EIP-191 personal message). */
   async sign(message: Uint8Array): Promise<Uint8Array> {
     const digest = arrayify(hashMessage(message));
     const der = await signDigestWithKms(this.kms, this.keyId, digest);
@@ -93,5 +93,25 @@ export class KmsEthereumSigner {
     const der = await signDigestWithKms(this.kms, this.keyId, digest);
     const raw = serialize(tx, ethereumSignatureParts(digest, der, this.publicKey));
     return { raw, hash: keccak256(raw) };
+  }
+}
+
+/** The same data-item signer with the key in process memory: local development and the ar.io sandbox only. */
+export class PrivateKeyEthereumSigner {
+  readonly ownerLength = 65;
+  readonly signatureLength = 65;
+  readonly signatureType = ETHEREUM_SIGNATURE_TYPE;
+  readonly publicKey: Buffer;
+  readonly address: string;
+  private readonly key: SigningKey;
+
+  constructor(privateKey: string) {
+    this.key = new SigningKey(privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`);
+    this.publicKey = Buffer.from(arrayify(this.key.publicKey));
+    this.address = computeAddress(this.publicKey).toLowerCase();
+  }
+
+  async sign(message: Uint8Array): Promise<Uint8Array> {
+    return Buffer.from(arrayify(joinSignature(this.key.signDigest(hashMessage(message)))));
   }
 }

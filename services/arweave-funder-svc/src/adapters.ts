@@ -1,11 +1,19 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { classifyConditionalWriteError, getObjectTextVersioned, type KmsEthereumSigner, type S3Client } from "@scvs/aws";
-import { Uploader } from "@irys/upload";
-import { BaseEth, EthereumToken } from "@irys/upload-ethereum";
-import type { Chain, FunderState, Irys, StateStore } from "./funder.js";
+import {
+  classifyConditionalWriteError,
+  getObjectTextVersioned,
+  type KmsEthereumSigner,
+  type S3Client,
+  type TurboClient,
+  type TurboShare,
+  type TurboToken,
+} from "@scvs/aws";
+import type { Bundler, Chain, FunderState, Receipt, StateStore } from "./funder.js";
 import { STATE_SCHEMA } from "./funder.js";
 
 const RPC_TIMEOUT_MS = 15_000;
+const GAS_PRICE_ORACLE = "0x420000000000000000000000000000000000000F";
+const GET_L1_FEE_UPPER_BOUND = "0xf1c7a58b";
 
 /** The few Ethereum JSON-RPC calls a top-up needs, over plain fetch: no provider library holds state between rounds. */
 export class JsonRpcChain implements Chain {
@@ -59,16 +67,35 @@ export class JsonRpcChain implements Chain {
     try {
       await this.call<string>("eth_sendRawTransaction", [raw]);
     } catch (error) {
-      // Re-sending bytes the node already holds is the point of recording them first; that is not a failure.
-      if (error instanceof RpcError && /already known|known transaction|already imported/i.test(error.message)) return;
+      // Re-sending bytes the node already holds is the point of recording them first; that is not a failure. A spent
+      // nonce is not one either: the round's receipt and nonce checks decide whose transaction used it.
+      if (error instanceof RpcError && /already known|known transaction|already imported|nonce too low/i.test(error.message)) return;
       throw error;
     }
   }
 
-  async receipt(hash: string): Promise<{ status: 0 | 1 } | undefined> {
-    const receipt = await this.call<{ status: string } | null>("eth_getTransactionReceipt", [hash]);
+  async receipt(hash: string): Promise<Receipt | undefined> {
+    const receipt = await this.call<{ status: string; blockNumber: string; gasUsed: string; effectiveGasPrice: string; l1Fee?: string } | null>(
+      "eth_getTransactionReceipt",
+      [hash],
+    );
     if (!receipt) return undefined;
-    return { status: BigInt(receipt.status) === 1n ? 1 : 0 };
+    return {
+      status: BigInt(receipt.status) === 1n ? 1 : 0,
+      blockNumber: Number(BigInt(receipt.blockNumber)),
+      feeWei: BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice) + BigInt(receipt.l1Fee ?? "0x0"),
+    };
+  }
+
+  async safeBlock(): Promise<number> {
+    const block = await this.call<{ number: string } | null>("eth_getBlockByNumber", ["safe", false]);
+    if (!block) throw new Error("the RPC has no safe block");
+    return Number(BigInt(block.number));
+  }
+
+  async l1FeeUpperBound(txBytes: number): Promise<bigint> {
+    const data = `${GET_L1_FEE_UPPER_BOUND}${txBytes.toString(16).padStart(64, "0")}`;
+    return BigInt(await this.call<string>("eth_call", [{ to: GAS_PRICE_ORACLE, data }, "latest"]));
   }
 }
 
@@ -83,71 +110,70 @@ export class RpcError extends Error {
   }
 }
 
-// Stands in for the wallet the token constructor demands; nothing reads it, because the token never builds a transaction.
-const KMS_WALLET_PLACEHOLDER = "kms-signer-holds-no-private-key";
-const TOKENS = { ethereum: EthereumToken, "base-eth": BaseEth as typeof EthereumToken } as const;
-export type FunderToken = keyof typeof TOKENS;
+export type FunderToken = TurboToken;
 
-function kmsToken(signer: KmsEthereumSigner, token: FunderToken): typeof EthereumToken {
-  return class FunderKmsToken extends TOKENS[token] {
-    override getSigner() {
-      return signer as unknown as ReturnType<EthereumToken["getSigner"]>;
-    }
-    override getPublicKey(): Buffer {
-      return signer.publicKey;
-    }
-    override get address(): string {
-      return signer.address;
-    }
-    override async createTx(): Promise<never> {
-      throw new Error("the funder signs its own top-up transactions; it never lets the Irys SDK build one");
-    }
-  };
+type GivenShare = Pick<TurboShare, "approvedAddress" | "approvedWincAmount" | "usedWincAmount" | "expirationDate">;
+
+export function remainingShare(shares: GivenShare[], approvedAddress: string, nowMs: number): { amount: bigint; expiresAt?: number } {
+  let amount = 0n;
+  let expiresAt: number | undefined;
+  for (const share of shares) {
+    if (share.approvedAddress.toLowerCase() !== approvedAddress.toLowerCase()) continue;
+    const expiry = share.expirationDate ? Date.parse(share.expirationDate) : undefined;
+    if (expiry !== undefined && expiry <= nowMs) continue;
+    amount += BigInt(share.approvedWincAmount) - BigInt(share.usedWincAmount);
+    if (expiry !== undefined) expiresAt = Math.max(expiresAt ?? 0, Math.floor(expiry / 1000));
+  }
+  return { amount, ...(expiresAt !== undefined ? { expiresAt } : {}) };
 }
 
-type IrysUploader = Awaited<ReturnType<ReturnType<typeof Uploader>["build"]>>;
+/** The funding key's side of Turbo: it buys credits, shares them, and signs each share as a data item. */
+export class TurboFunderClient implements Bundler {
+  constructor(
+    private readonly turbo: TurboClient,
+    private readonly signer: KmsEthereumSigner,
+  ) {}
 
-export class IrysClient implements Irys {
-  private constructor(private readonly uploader: IrysUploader) {}
-
-  static async build(options: {
-    signer: KmsEthereumSigner;
-    token: FunderToken;
-    network: "devnet" | "mainnet";
-    rpcUrl: string;
-  }): Promise<IrysClient> {
-    let builder = Uploader(kmsToken(options.signer, options.token)).withWallet(KMS_WALLET_PLACEHOLDER).withRpc(options.rpcUrl);
-    builder = options.network === "mainnet" ? builder.mainnet() : builder.devnet();
-    const uploader = await builder;
-    if (uploader.address !== options.signer.address) {
-      throw new Error(`Irys resolved address ${uploader.address}, not the funding key's ${options.signer.address}`);
-    }
-    return new IrysClient(uploader);
+  depositAddress(): Promise<string> {
+    return this.turbo.depositAddress();
   }
 
-  async depositAddress(): Promise<string> {
-    return this.uploader.utils.getBundlerAddress(this.uploader.token);
+  balance(address: string): Promise<bigint> {
+    return this.turbo.balance(address);
   }
 
-  async balance(address: string): Promise<bigint> {
-    return BigInt((await this.uploader.getBalance(address)).toFixed(0));
+  async shared(approvedAddress: string): Promise<{ amount: bigint; expiresAt?: number }> {
+    return remainingShare(await this.turbo.sharesGivenBy(this.signer.address), approvedAddress, Date.now());
   }
 
-  async approval(approvedAddress: string): Promise<{ amount: bigint; expiresAt?: number }> {
-    const approval = (await this.uploader.approval.getApproval({ approvedAddress })) as { amount: string; expiresBy?: string };
-    const expiresAt = approval.expiresBy ? Math.floor(Date.parse(approval.expiresBy) / 1000) : undefined;
-    return { amount: BigInt(approval.amount), ...(expiresAt !== undefined && Number.isFinite(expiresAt) ? { expiresAt } : {}) };
+  shareCredits(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<string> {
+    return this.turbo.shareCredits(this.signer, approvedAddress, amount, expiresInSeconds);
   }
 
-  async createApproval(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<string> {
-    const receipt = await this.uploader.approval.createApproval({ approvedAddress, amount: amount.toString(), expiresInSeconds });
-    return receipt.id;
+  submitFundTransaction(hash: string): Promise<"credited" | "pending" | "rejected"> {
+    return this.turbo.submitFundTransaction(hash);
   }
+}
 
-  async submitFundTransaction(hash: string): Promise<"credited" | "pending"> {
-    const response = await this.uploader.funder.submitFundTransaction(hash);
-    return response.status === 200 ? "credited" : "pending";
+/**
+ * Schema 1 paid Irys. Its approvals are Irys amounts in wei and are dropped. Its transfers went to Irys's deposit
+ * address, so Turbo will never credit them: a mined one is settled as refused, and one still in flight stops the load,
+ * because which of the two services it pays cannot be decided here.
+ */
+function fromIrysState(parsed: Omit<FunderState, "schema">, bucket: string, key: string): FunderState {
+  const inFlight = parsed.txs.find((tx) => tx.status === "signed" || tx.status === "broadcast");
+  if (inFlight) {
+    throw new Error(
+      `state ${bucket}/${key} is an Irys-era state with top-up ${inFlight.hash} (nonce ${inFlight.nonce}) still ${inFlight.status}; settle it by hand before this funder runs`,
+    );
   }
+  const migratedAt = Math.floor(Date.now() / 1000);
+  return {
+    ...parsed,
+    schema: STATE_SCHEMA,
+    approvals: [],
+    txs: parsed.txs.map((tx) => (tx.status === "mined" ? { ...tx, status: "rejected", confirmedAt: migratedAt } : tx)),
+  };
 }
 
 /** The funder's whole state as one S3 object, written only with a precondition on the version it read. */
@@ -161,7 +187,8 @@ export class S3StateStore implements StateStore {
   async load(): Promise<{ state: FunderState | undefined; version: string | null }> {
     const object = await getObjectTextVersioned(this.s3, this.bucket, this.key);
     if (!object) return { state: undefined, version: null };
-    const state = JSON.parse(object.text) as FunderState;
+    const parsed = JSON.parse(object.text) as Omit<FunderState, "schema"> & { schema: number };
+    const state: FunderState = parsed.schema === 1 ? fromIrysState(parsed, this.bucket, this.key) : (parsed as FunderState);
     if (state.schema !== STATE_SCHEMA) throw new Error(`state ${this.bucket}/${this.key} has schema ${state.schema}, expected ${STATE_SCHEMA}`);
     return { state, version: object.version };
   }

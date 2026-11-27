@@ -91,6 +91,9 @@ model Job {
   // Non-null is the durable archive-pending flag; only a successful upload or the reconciliation scan clears it.
   archivePendingSince DateTime? @map("archive_pending_since")
   archivedTxId        String?   @map("archived_tx_id")
+  // Set only for a copy whose id resolves on another gateway than the configured one (an Irys upload); null is the
+  // configured gateway. Cleared whenever archived_tx_id changes.
+  archivedGatewayUrl  String?   @map("archived_gateway_url")
   archiveAttempts     Int       @default(0) @map("archive_attempts")
 
   sourcePublishPendingSince DateTime? @map("source_publish_pending_since")
@@ -99,6 +102,7 @@ model Job {
 
   sourceArchivePendingSince DateTime? @map("source_archive_pending_since")
   sourceArchivedTxId        String?   @map("source_archived_tx_id")
+  sourceArchivedGatewayUrl  String?   @map("source_archived_gateway_url")
   sourceArchiveAttempts     Int       @default(0) @map("source_archive_attempts")
 
   statusLinkPendingSince    DateTime? @map("status_link_pending_since")
@@ -186,10 +190,13 @@ model UploadJobReference {
 
 model SourceArchiveUpload {
   sourceSha256 String   @id @map("source_sha256")
-  // "claimed": the caller whose INSERT won owns the right to upload.
-  status       String   @default("claimed")
-  txId         String?  @map("tx_id")
-  createdAt    DateTime @default(now()) @map("created_at")
+  // "claimed": the caller whose INSERT won owns the right to upload. "uploaded": the bundler holds it, not yet
+  // confirmed on Arweave. "done": confirmed, or stored where no confirmation exists to wait for.
+  status         String    @default("claimed")
+  txId           String?   @map("tx_id")
+  deadlineHeight Int?      @map("deadline_height")
+  confirmedAt    DateTime? @map("confirmed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@index([status, updatedAt])
@@ -198,10 +205,13 @@ model SourceArchiveUpload {
 
 model ReportArchiveUpload {
   reportSha256 String   @id @map("report_sha256")
-  // "claimed": the caller whose INSERT won owns the right to upload.
-  status       String   @default("claimed")
-  txId         String?  @map("tx_id")
-  createdAt    DateTime @default(now()) @map("created_at")
+  // "claimed": the caller whose INSERT won owns the right to upload. "uploaded": the bundler holds it, not yet
+  // confirmed on Arweave. "done": confirmed, or stored where no confirmation exists to wait for.
+  status         String    @default("claimed")
+  txId           String?   @map("tx_id")
+  deadlineHeight Int?      @map("deadline_height")
+  confirmedAt    DateTime? @map("confirmed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@index([status, updatedAt])

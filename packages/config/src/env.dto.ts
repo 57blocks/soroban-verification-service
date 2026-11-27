@@ -2,7 +2,7 @@ import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, Matches, Valida
 
 const resultStorageKinds = ["filesystem", "s3", "r2"] as const;
 
-const arweaveModes = ["disabled", "dry-run", "dry_run", "irys"] as const;
+const arweaveModes = ["disabled", "dry-run", "dry_run", "turbo"] as const;
 
 const arweaveSigners = ["kms", "private-key"] as const;
 

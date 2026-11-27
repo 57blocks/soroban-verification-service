@@ -64,11 +64,12 @@ A failed job and a dry run publish nothing.
 
 ### Copies on Arweave
 
-If the operator turns on archiving, each published report is also uploaded to Arweave through Irys, a
-third-party upload service, and, where the operator enables it, each public source on `mainnet`. Each
-upload is tagged with the Wasm hash, the document's hash, its content type and the verifier's
+If the operator turns on archiving, each published report is also uploaded to Arweave through ArDrive
+Turbo, a third-party upload service, and, where the operator enables it, each public source on `mainnet`.
+Each upload is tagged with the Wasm hash, the document's hash, its content type and the verifier's
 identifier. A copy on Arweave's main network cannot be removed by anyone. The software's default target is
-Irys's development network, which does not keep data permanently; the operator chooses the network.
+the ar.io test sandbox, which keeps data for a few days and never posts it to Arweave; the operator
+chooses the network.
 
 ## Who can see a job
 

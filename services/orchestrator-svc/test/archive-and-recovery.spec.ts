@@ -51,7 +51,7 @@ beforeAll(async () => {
   process.env.SCVS_RESULT_ROOT = resultRoot;
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4998";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
-  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
+  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://arweave.net";
 
   moduleRef = await Test.createTestingModule({
     imports: [
@@ -307,7 +307,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   function internals(service: ArweaveArchiveService) {
     return service as unknown as {
       findExistingUpload: (reportSha256: string) => Promise<{ tx_id: string; archive_url: string } | undefined>;
-      uploadToIrys: (input: unknown) => Promise<unknown>;
+      uploadToTurbo: (input: unknown) => Promise<unknown>;
       backfill: (...args: never[]) => Promise<unknown>;
     };
   }
@@ -338,14 +338,14 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   it("a live attempt whose report content was already archived by another job reuses that upload instead of paying again", async () => {
     const job = await createVerifiedJob();
     const real = internals(arweaveArchive).findExistingUpload;
-    let uploadToIrysCalls = 0;
-    const realUpload = internals(arweaveArchive).uploadToIrys;
+    let uploadToTurboCalls = 0;
+    const realUpload = internals(arweaveArchive).uploadToTurbo;
     internals(arweaveArchive).findExistingUpload = async () => ({
       tx_id: "tx-from-another-job",
-      archive_url: "https://gateway.irys.xyz/tx-from-another-job",
+      archive_url: "https://arweave.net/tx-from-another-job",
     });
-    internals(arweaveArchive).uploadToIrys = async (input: unknown) => {
-      uploadToIrysCalls += 1;
+    internals(arweaveArchive).uploadToTurbo = async (input: unknown) => {
+      uploadToTurboCalls += 1;
       return realUpload.call(arweaveArchive, input);
     };
 
@@ -354,16 +354,16 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       await waitUntil(() => archiveSettled(job.jobId), "the live backfill to settle");
     } finally {
       internals(arweaveArchive).findExistingUpload = real;
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
     }
 
-    expect(uploadToIrysCalls).toBe(0);
+    expect(uploadToTurboCalls).toBe(0);
     const reloaded = await jobs.getJobById(job.jobId);
     expect(reloaded?.archivePendingSince).toBeUndefined();
     expect(reloaded?.archivedTxId).toBe("tx-from-another-job");
   });
 
-  it("the retry path (retryPendingArchive) reuses this report's own claim, and skips both findExistingUpload and uploadToIrys", async () => {
+  it("the retry path (retryPendingArchive) reuses this report's own claim, and skips both findExistingUpload and uploadToTurbo", async () => {
     const job = await createVerifiedJob();
     await publish.publishJobResult(job.jobId);
     await waitUntil(() => archiveSettled(job.jobId), "the initial publish's backfill to settle");
@@ -372,27 +372,27 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     expect(firstTxId).toMatch(/^dryrun-/);
     await jobs.updateJob(job.jobId, { archivePendingSince: new Date() });
 
-    let uploadToIrysCalls = 0;
+    let uploadToTurboCalls = 0;
     let findExistingUploadCalls = 0;
-    const realUpload = internals(arweaveArchive).uploadToIrys;
+    const realUpload = internals(arweaveArchive).uploadToTurbo;
     const realFind = internals(arweaveArchive).findExistingUpload;
-    internals(arweaveArchive).uploadToIrys = async (input: unknown) => {
-      uploadToIrysCalls += 1;
+    internals(arweaveArchive).uploadToTurbo = async (input: unknown) => {
+      uploadToTurboCalls += 1;
       return realUpload.call(arweaveArchive, input);
     };
     internals(arweaveArchive).findExistingUpload = async (...args: unknown[]) => {
       findExistingUploadCalls += 1;
-      return { tx_id: "tx-should-never-be-used", archive_url: "https://gateway.irys.xyz/tx-should-never-be-used" };
+      return { tx_id: "tx-should-never-be-used", archive_url: "https://arweave.net/tx-should-never-be-used" };
     };
 
     try {
       await arweaveArchive.retryPendingArchive(published);
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       internals(arweaveArchive).findExistingUpload = realFind;
     }
 
-    expect(uploadToIrysCalls).toBe(0);
+    expect(uploadToTurboCalls).toBe(0);
     expect(findExistingUploadCalls).toBe(0);
     const reloaded = await jobs.getJobById(job.jobId);
     expect(reloaded?.archivePendingSince).toBeUndefined();
@@ -402,10 +402,10 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   it("kill-and-recover: a failed live attempt leaves archivePendingSince set, and a later retry completes it", async () => {
     const job = await createVerifiedJob();
 
-    const realUpload = internals(arweaveArchive).uploadToIrys;
-    internals(arweaveArchive).uploadToIrys = async () => ({
+    const realUpload = internals(arweaveArchive).uploadToTurbo;
+    internals(arweaveArchive).uploadToTurbo = async () => ({
       ok: false,
-      reason: "irys_upload_failed",
+      reason: "upload_failed",
       detail: "stub: simulated crash",
     });
 
@@ -413,7 +413,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       await publish.publishJobResult(job.jobId);
       await waitUntil(() => archiveAttempted(job.jobId), "the failed attempt to be recorded");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
     }
 
     const afterFailedAttempt = await jobs.getJobById(job.jobId);
@@ -433,15 +433,15 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     const wasmHash = `${"8".repeat(63)}c`;
     const job = await createJob({ matched: true, wasmHash });
     let uploadAttempts = 0;
-    const realUpload = internals(arweaveArchive).uploadToIrys;
-    internals(arweaveArchive).uploadToIrys = async () => {
+    const realUpload = internals(arweaveArchive).uploadToTurbo;
+    internals(arweaveArchive).uploadToTurbo = async () => {
       uploadAttempts += 1;
       return uploadAttempts === 1
-        ? { ok: false, reason: "irys_upload_failed", detail: "controlled first-attempt failure" }
+        ? { ok: false, reason: "upload_failed", detail: "controlled first-attempt failure" }
         : {
             ok: true,
             tx_id: "tx-pub-12-recovered",
-            archive_url: "https://gateway.irys.xyz/tx-pub-12-recovered",
+            archive_url: "https://arweave.net/tx-pub-12-recovered",
           };
     };
 
@@ -457,7 +457,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       initialUpdatedAt = afterFailure.publishedUpdatedAt!;
       initialUrls = await archiveUrlsFor(wasmHash);
       expect(initialUrls).toHaveLength(1);
-      expect(initialUrls.some((url) => url.startsWith("https://gateway.irys.xyz/"))).toBe(false);
+      expect(initialUrls.some((url) => url.startsWith("https://arweave.net/"))).toBe(false);
 
       const initialMs = new Date(initialUpdatedAt).getTime();
       await waitUntil(async () => Date.now() > initialMs, "the next publication-update millisecond");
@@ -465,7 +465,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       await scheduler.recoverPendingArchives();
       await waitUntil(() => archiveSettled(job.jobId), "the recovered archive to settle");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
     }
 
     expect(uploadAttempts).toBe(2);
@@ -476,7 +476,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     const recoveredUrls = await archiveUrlsFor(wasmHash);
     expect(recoveredUrls).toEqual([
       initialUrls![0],
-      "https://gateway.irys.xyz/tx-pub-12-recovered",
+      "https://arweave.net/tx-pub-12-recovered",
     ]);
 
     const redelivered = await jobs.listPublished({
@@ -498,17 +498,17 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
   it("regression (2026-08-07, F2): a second recovery tick does not re-dispatch a job whose retry from the first tick is still in flight", async () => {
     const job = await createVerifiedJob();
 
-    const realUpload = internals(arweaveArchive).uploadToIrys;
-    internals(arweaveArchive).uploadToIrys = async () => ({
+    const realUpload = internals(arweaveArchive).uploadToTurbo;
+    internals(arweaveArchive).uploadToTurbo = async () => ({
       ok: false,
-      reason: "irys_upload_failed",
+      reason: "upload_failed",
       detail: "stub: simulated crash",
     });
     try {
       await publish.publishJobResult(job.jobId);
       await waitUntil(() => archiveAttempted(job.jobId), "the failed live attempt to be recorded");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
     }
     const pending = await jobs.getJobById(job.jobId);
     expect(pending?.archivePendingSince).toBeDefined();
@@ -520,16 +520,16 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     const uploadGate = new Promise<void>((resolve) => {
       releaseUpload = resolve;
     });
-    internals(arweaveArchive).uploadToIrys = async () => {
+    internals(arweaveArchive).uploadToTurbo = async () => {
       uploadCalls += 1;
       await uploadGate;
-      return { ok: true, tx_id: "tx-only-once", archive_url: "https://gateway.irys.xyz/tx-only-once" };
+      return { ok: true, tx_id: "tx-only-once", archive_url: "https://arweave.net/tx-only-once" };
     };
 
     try {
       await scheduler.recoverPendingArchives();
       await scheduler.recoverPendingArchives();
-      await waitUntil(() => Promise.resolve(uploadCalls >= 1), "the first tick's dispatch to reach uploadToIrys");
+      await waitUntil(() => Promise.resolve(uploadCalls >= 1), "the first tick's dispatch to reach uploadToTurbo");
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(uploadCalls).toBe(1);
 
@@ -537,7 +537,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       await waitUntil(() => archiveSettled(job.jobId), "the single in-flight upload to settle");
     } finally {
       internals(arweaveArchive).findExistingUpload = realFind;
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
       releaseUpload?.();
     }
 
@@ -547,10 +547,10 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
 
   it("never blocks publish: a permanently failing archive still lets the job reach published", async () => {
     const job = await createVerifiedJob();
-    const realUpload = internals(arweaveArchive).uploadToIrys;
-    internals(arweaveArchive).uploadToIrys = async () => ({
+    const realUpload = internals(arweaveArchive).uploadToTurbo;
+    internals(arweaveArchive).uploadToTurbo = async () => ({
       ok: false,
-      reason: "irys_upload_failed",
+      reason: "upload_failed",
       detail: "stub: permanently broken",
     });
 
@@ -558,7 +558,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
       await publish.publishJobResult(job.jobId);
       await waitUntil(() => archiveAttempted(job.jobId), "the doomed attempt to be recorded");
     } finally {
-      internals(arweaveArchive).uploadToIrys = realUpload;
+      internals(arweaveArchive).uploadToTurbo = realUpload;
     }
 
     const reloaded = await jobs.getJobById(job.jobId);
@@ -571,7 +571,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     await waitUntil(() => archiveSettled(job.jobId), "the archive URL to be appended");
 
     const urls = await archiveUrlsFor(WASM_HASH);
-    expect(urls.some((url) => url.startsWith("https://gateway.irys.xyz/"))).toBe(true);
+    expect(urls.some((url) => url.startsWith("https://arweave.net/"))).toBe(true);
     expect(urls.some((url) => url.startsWith("ar://"))).toBe(false);
   });
 
@@ -601,7 +601,7 @@ describe("ArweaveArchiveService — duplicate-content guard runs on every attemp
     expect((await jobs.getJobById(job.jobId))?.status).toBe("published");
 
     const urls = await archiveUrlsFor(WASM_HASH);
-    const archiveUrls = urls.filter((url) => url.startsWith("https://gateway.irys.xyz/"));
+    const archiveUrls = urls.filter((url) => url.startsWith("https://arweave.net/"));
 
     expect(archiveUrls.length).toBeLessThanOrEqual(1);
     expect(urls.length).toBeLessThanOrEqual(2);
@@ -662,5 +662,26 @@ describe("archive_backlog gauge (O4)", () => {
     const archiveBacklogCalls = gaugeCalls.filter((call) => call.name === "archive_backlog");
     expect(archiveBacklogCalls).toHaveLength(1);
     expect(archiveBacklogCalls[0].value).toBe(0);
+  });
+});
+
+describe("a copy archived on an earlier service's gateway", () => {
+  it("is relinked on the gateway recorded for it, and a new copy drops that gateway", async () => {
+    const wasmHash = `${"8".repeat(63)}d`;
+    const job = await createJob({ matched: true, wasmHash });
+    await publish.publishJobResult(job.jobId);
+    await waitUntil(() => archiveSettled(job.jobId), "the first archive to settle");
+
+    await prisma.job.update({
+      where: { id: job.jobId },
+      data: { archivedTxId: "irys-era-id", archivedGatewayUrl: "https://gateway.irys.xyz" },
+    });
+    await arweaveArchive.retryPendingStatusLinks((await jobs.getJobById(job.jobId))!);
+    expect(await archiveUrlsFor(wasmHash)).toContain("https://gateway.irys.xyz/irys-era-id");
+
+    await jobs.recordArchiveOutcome(job.jobId, { archived: true, txId: "turbo-id", statusLink: { state: "complete", advancePublished: false } });
+    const rearchived = await jobs.getJobById(job.jobId);
+    expect(rearchived?.archivedTxId).toBe("turbo-id");
+    expect(rearchived?.archivedGatewayUrl).toBeUndefined();
   });
 });

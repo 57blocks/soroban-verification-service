@@ -8,11 +8,19 @@ const SPKI_PREFIX = "3056301006072a8648ce3d020106052b8104000a034200";
 const KEY_ARN = "arn:aws:kms:ap-southeast-2:000000000000:key/11111111-2222-3333-4444-555555555555";
 const PUBLIC_KEY = new SigningKey(id("scvs arweave-kms-wiring spec key")).publicKey;
 
-type Arweave = { mode: string; network: string; signer: string; kmsKeyId?: string; paidBy?: string; rpcUrl?: string; gatewayUrl: string };
+type Arweave = { mode: string; network: string; signer: string; kmsKeyId?: string; paidBy?: string; gatewayUrl: string };
 
 function configWith(arweave: Partial<Arweave>, awsRegion: string | null = "ap-southeast-2"): AppConfigService {
   const values: Record<string, unknown> = {
-    arweave: { mode: "irys", network: "devnet", signer: "kms", kmsKeyId: KEY_ARN, gatewayUrl: "https://gateway.irys.xyz", ...arweave },
+    arweave: {
+      mode: "turbo",
+      network: "devnet",
+      signer: "kms",
+      kmsKeyId: KEY_ARN,
+      gatewayUrl: "https://ar-io.dev",
+      turbo: { uploadUrl: "http://127.0.0.1:1", paymentUrl: "http://127.0.0.1:1" },
+      ...arweave,
+    },
     awsRegion: awsRegion ?? undefined,
   };
   return { get: (key: string) => values[key] } as unknown as AppConfigService;
@@ -75,7 +83,7 @@ describe("ArweaveArchiveService with the KMS signer", () => {
 
   it.each([
     ["the private-key signer", { signer: "private-key" }],
-    ["archiving that is not irys", { mode: "dry-run" }],
+    ["archiving that is not turbo", { mode: "dry-run" }],
   ])("never touches KMS for %s", async (_label, arweave) => {
     const kms = new FakeKms("ok");
     const service = new TestableArchive(configWith(arweave), kms);
@@ -118,31 +126,19 @@ describe("kmsClient region", () => {
   });
 });
 
-const big = (value: number | string) => {
-  const n = BigInt(value);
-  const of = (other: unknown) => BigInt(String(other));
-  return { lt: (o: unknown) => n < of(o), gt: (o: unknown) => n > of(o), toString: () => n.toString() };
-};
-
 const PAYER = "0x00000000000000000000000000000000000000aa";
 const SIGNER_ADDRESS = "0x00000000000000000000000000000000000000bb";
 
-function fakeUploader(funds: { price: number; signer?: number; payer?: number; approved?: number }) {
-  const uploads: { tags: unknown; upload?: { paidBy?: string } }[] = [];
-  const balanceQueries: (string | undefined)[] = [];
+function fakeUploader(answer: "stored" | "insufficient_credits" | Error) {
+  const uploads: { tags: unknown; paidBy?: string }[] = [];
   return {
     uploads,
-    balanceQueries,
     address: SIGNER_ADDRESS,
-    getPrice: async () => big(funds.price),
-    getBalance: async (address?: string) => {
-      balanceQueries.push(address);
-      return big(address === undefined ? (funds.signer ?? 0) : (funds.payer ?? 0));
-    },
-    approval: { getApprovedBalanceFrom: async (payer: string) => ({ amount: payer === PAYER ? String(funds.approved ?? 0) : "0" }) },
-    upload: async (_body: unknown, opts: { tags: unknown; upload?: { paidBy?: string } }) => {
-      uploads.push(opts);
-      return { id: "irys-tx-1" };
+    ownerKey: "our-owner-key",
+    upload: async (_data: Buffer, tags: unknown, paidBy?: string) => {
+      uploads.push({ tags, paidBy });
+      if (answer instanceof Error) throw answer;
+      return answer === "stored" ? { ok: true as const, id: "turbo-item-1" } : { ok: false as const, reason: answer };
     },
   };
 }
@@ -152,41 +148,85 @@ function archiveWith(paidBy: string | undefined, uploader: ReturnType<typeof fak
   (service as unknown as { getUploader: () => Promise<unknown> }).getUploader = async () => uploader;
   const upload = () =>
     (service as unknown as {
-      uploadToIrys(kind: "report", input: Record<string, unknown>): Promise<{ ok: boolean; reason?: string; detail?: string; tx_id?: string }>;
-    }).uploadToIrys("report", { wasmHash: "w", contentSha256: "c".repeat(64), bytes: "{}", verifierId: "v" });
+      uploadToTurbo(kind: "report", input: Record<string, unknown>): Promise<{ ok: boolean; reason?: string; detail?: string; tx_id?: string; archive_url?: string }>;
+    }).uploadToTurbo("report", { wasmHash: "w", contentSha256: "c".repeat(64), bytes: "{}", verifierId: "v" });
   return { upload };
 }
 
-describe("uploading paid through another wallet's approval", () => {
-  it("charges the payer and checks its approval, not the signer's balance", async () => {
-    const uploader = fakeUploader({ price: 10, signer: 0, payer: 100, approved: 50 });
+describe("uploading on credits another wallet shared", () => {
+  it("bills the payer, without checking any balance first", async () => {
+    const uploader = fakeUploader("stored");
 
-    await expect(archiveWith(PAYER, uploader).upload()).resolves.toMatchObject({ ok: true, tx_id: "irys-tx-1" });
+    await expect(archiveWith(PAYER, uploader).upload()).resolves.toMatchObject({
+      ok: true,
+      tx_id: "turbo-item-1",
+      archive_url: "https://ar-io.dev/turbo-item-1",
+    });
 
-    expect(uploader.uploads[0]?.upload).toEqual({ paidBy: PAYER });
-    expect(uploader.balanceQueries).toEqual([PAYER]);
+    expect(uploader.uploads).toEqual([{ tags: expect.arrayContaining([{ name: "Report_Hash", value: "c".repeat(64) }]), paidBy: PAYER }]);
   });
 
-  it("stops when the approval no longer covers the upload", async () => {
-    const uploader = fakeUploader({ price: 10, payer: 100, approved: 9 });
-    const outcome = await archiveWith(PAYER, uploader).upload();
+  it("reports a 402 as insufficient balance, naming the payer", async () => {
+    const outcome = await archiveWith(PAYER, fakeUploader("insufficient_credits")).upload();
     expect(outcome).toMatchObject({ ok: false, reason: "insufficient_balance" });
-    expect(outcome.detail).toMatch(/approval .* is below the price .* renew it with createApproval/);
-    expect(uploader.uploads).toHaveLength(0);
+    expect(outcome.detail).toMatch(new RegExp(`${PAYER} holds or has shared too few with ${SIGNER_ADDRESS}`));
   });
 
-  it("stops when the payer itself holds less than the approval allows", async () => {
-    const uploader = fakeUploader({ price: 10, payer: 5, approved: 50 });
-    const outcome = await archiveWith(PAYER, uploader).upload();
-    expect(outcome).toMatchObject({ ok: false, reason: "insufficient_balance" });
-    expect(outcome.detail).toMatch(/Paying wallet .* holds less than the price/);
-    expect(uploader.uploads).toHaveLength(0);
+  it("reports any other failure as a failed upload", async () => {
+    const outcome = await archiveWith(PAYER, fakeUploader(new Error("socket hang up"))).upload();
+    expect(outcome).toMatchObject({ ok: false, reason: "upload_failed", detail: "socket hang up" });
   });
 
-  it("without a payer, the signer pays from its own balance as before", async () => {
-    const uploader = fakeUploader({ price: 10, signer: 20 });
+  it("without a payer, the signer is billed", async () => {
+    const uploader = fakeUploader("stored");
     await expect(archiveWith(undefined, uploader).upload()).resolves.toMatchObject({ ok: true });
-    expect(uploader.uploads[0]?.upload).toBeUndefined();
-    expect(uploader.balanceQueries).toEqual([undefined]);
+    expect(uploader.uploads[0]?.paidBy).toBeUndefined();
+  });
+});
+
+describe("finding an item this verifier already uploaded", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("matches on the owner's key, so an item someone else tagged the same way is not taken for ours", async () => {
+    const seen: { query: string; variables: unknown }[] = [];
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        data: {
+          transactions: {
+            edges: [
+              { node: { id: "someone-elses", owner: { key: "their-owner-key" } } },
+              { node: { id: "ours", owner: { key: "our-owner-key" } } },
+            ],
+          },
+        },
+      });
+    }) as typeof fetch;
+    const service = new ArweaveArchiveService(configWith({}), {} as never, {} as never, {} as never);
+    (service as unknown as { getUploader: () => Promise<unknown> }).getUploader = async () => fakeUploader("stored");
+    const found = await (service as unknown as {
+      findExistingUpload(kind: "report", sha: string): Promise<{ tx_id: string } | undefined>;
+    }).findExistingUpload("report", "c".repeat(64));
+    expect(found?.tx_id).toBe("ours");
+    expect(seen[0]?.variables).toEqual({
+      tags: [
+        { name: "App-Name", values: ["Stellar-Verifier"] },
+        { name: "Report_Hash", values: ["c".repeat(64)] },
+      ],
+    });
+  });
+
+  it("finds nothing when only others' items carry the tags", async () => {
+    globalThis.fetch = (async () =>
+      Response.json({ data: { transactions: { edges: [{ node: { id: "someone-elses", owner: { key: "their-owner-key" } } }] } } })) as typeof fetch;
+    const service = new ArweaveArchiveService(configWith({}), {} as never, {} as never, {} as never);
+    (service as unknown as { getUploader: () => Promise<unknown> }).getUploader = async () => fakeUploader("stored");
+    const found = await (service as unknown as {
+      findExistingUpload(kind: "report", sha: string): Promise<unknown>;
+    }).findExistingUpload("report", "c".repeat(64));
+    expect(found).toBeUndefined();
   });
 });

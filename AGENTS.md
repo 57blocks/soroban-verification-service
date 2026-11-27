@@ -18,6 +18,7 @@ the whole tree — every row below is under a few KB.
 | Read a published result with no client | [`clients/docs/src/integrators/read-the-result-tree.md`](clients/docs/src/integrators/read-the-result-tree.md) |
 | Stand up your own verifier | [`clients/docs/src/self-hosting/`](clients/docs/src/self-hosting/) |
 | Know what review actually checks | [`CODE_REVIEW.md`](CODE_REVIEW.md) |
+| Answer an Arweave archiving or funder alarm | [`docs/runbooks/arweave-archiving.md`](docs/runbooks/arweave-archiving.md) |
 | Report a vulnerability, or understand the trust model | [`SECURITY.md`](SECURITY.md) |
 | Know the wire format other software depends on | [`docs/results-sep/README.md`](docs/results-sep/README.md) |
 

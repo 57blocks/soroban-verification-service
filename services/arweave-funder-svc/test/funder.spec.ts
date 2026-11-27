@@ -1,9 +1,10 @@
-import { FunderRound, type Chain, type FunderSettings, type FunderState, type FundTx, type Irys, type StateStore, type TxSigner } from "../src/funder.js";
+import { FunderRound, type Bundler, type Chain, type FunderSettings, type FunderState, type FundTx, type StateStore, type TxSigner } from "../src/funder.js";
 
 const FUNDER = "0x00000000000000000000000000000000000000f0";
 const DEPOSIT = "0x00000000000000000000000000000000000000d0";
 const UPLOADER = "0x00000000000000000000000000000000000000a0";
 const ETH = 10n ** 18n;
+const CREDIT = 10n ** 12n;
 const GWEI = 10n ** 9n;
 const T0 = 1_800_000_000;
 
@@ -11,16 +12,18 @@ const SETTINGS: FunderSettings = {
   chainId: 84532,
   depositAddress: DEPOSIT,
   approvedAddress: UPLOADER,
-  irysLowWei: ETH / 10n,
+  creditsLowWinc: CREDIT / 10n,
   topUpWei: ETH / 5n,
   dailyTopUpCapWei: ETH / 2n,
   maxFeePerGasWei: 10n * GWEI,
   maxGasLimit: 60_000n,
   stuckAfterSeconds: 900,
-  approvalWei: ETH / 20n,
-  approvalTtlSeconds: 7 * 86_400,
-  approvalRenewBeforeSeconds: 86_400,
-  approvalWindowCapWei: ETH / 10n,
+  maxReplacements: 5,
+  l1DataFee: true,
+  shareWinc: CREDIT / 20n,
+  shareTtlSeconds: 7 * 86_400,
+  shareRenewBeforeSeconds: 86_400,
+  shareWindowCapWinc: CREDIT / 10n,
   leaseSeconds: 900,
   holder: "me",
 };
@@ -31,7 +34,10 @@ class FakeChain implements Chain {
   wei = 5n * ETH;
   fee = { maxFeePerGas: 2n * GWEI, maxPriorityFeePerGas: GWEI / 1000n };
   sent: string[] = [];
-  receipts = new Map<string, 0 | 1>();
+  receipts = new Map<string, { status: 0 | 1; blockNumber: number; feeWei: bigint }>();
+  height = 100;
+  safe = 0;
+  l1Fee = 0n;
   async chainId() {
     return this.id;
   }
@@ -55,37 +61,47 @@ class FakeChain implements Chain {
     this.sent.push(raw);
   }
   async receipt(hash: string) {
-    const status = this.receipts.get(hash);
-    return status === undefined ? undefined : { status };
+    return this.receipts.get(hash);
+  }
+  async safeBlock() {
+    return this.safe;
+  }
+  async l1FeeUpperBound() {
+    return this.l1Fee;
   }
   mine(hash: string, status: 0 | 1 = 1) {
-    this.receipts.set(hash, status);
+    this.height += 1;
+    this.receipts.set(hash, { status, blockNumber: this.height, feeWei: 21_000n * GWEI });
     this.latest += 1;
+  }
+  reorg(hash: string) {
+    this.receipts.delete(hash);
+    this.latest -= 1;
   }
 }
 
-class FakeIrys implements Irys {
+class FakeTurbo implements Bundler {
   deposit = DEPOSIT;
-  irysBalance = 0n;
-  approvalAmount = 0n;
-  approvalExpiresAt: number | undefined;
+  credits = 0n;
+  sharedAmount = 0n;
+  sharedExpiresAt: number | undefined;
   approvals: { amount: bigint; ttl: number }[] = [];
   submitted: string[] = [];
-  credit: "credited" | "pending" = "credited";
+  credit: "credited" | "pending" | "rejected" = "credited";
   async depositAddress() {
     return this.deposit;
   }
   async balance() {
-    return this.irysBalance;
+    return this.credits;
   }
-  async approval() {
-    return { amount: this.approvalAmount, ...(this.approvalExpiresAt === undefined ? {} : { expiresAt: this.approvalExpiresAt }) };
+  async shared() {
+    return { amount: this.sharedAmount, ...(this.sharedExpiresAt === undefined ? {} : { expiresAt: this.sharedExpiresAt }) };
   }
-  async createApproval(_approved: string, amount: bigint, ttl: number) {
+  async shareCredits(_approved: string, amount: bigint, ttl: number) {
     this.approvals.push({ amount, ttl });
-    this.approvalAmount = amount;
-    this.approvalExpiresAt = clock.now + ttl;
-    return `approval-${this.approvals.length}`;
+    this.sharedAmount += amount;
+    this.sharedExpiresAt = Math.max(this.sharedExpiresAt ?? 0, clock.now + ttl);
+    return `share-${this.approvals.length}`;
   }
   async submitFundTransaction(hash: string) {
     this.submitted.push(hash);
@@ -130,7 +146,7 @@ const clock = { now: T0 };
 
 function setup(overrides: Partial<FunderSettings> = {}) {
   const chain = new FakeChain();
-  const irys = new FakeIrys();
+  const bundler = new FakeTurbo();
   const store = new FakeStore();
   const signer = new FakeSigner();
   const events: { level: string; msg: string }[] = [];
@@ -140,14 +156,14 @@ function setup(overrides: Partial<FunderSettings> = {}) {
       { ...SETTINGS, ...overrides, holder },
       {
         chain,
-        irys,
+        bundler,
         store,
         signer,
         telemetry: { gauge: (n, v) => gauges.set(n, v), event: (level, msg) => events.push({ level, msg }) },
         now: () => clock.now * 1000,
       },
     ).run();
-  return { chain, irys, store, signer, events, gauges, round };
+  return { chain, bundler, store, signer, events, gauges, round };
 }
 
 const txs = (store: FakeStore): FundTx[] => store.state?.txs ?? [];
@@ -158,7 +174,7 @@ beforeEach(() => {
 
 describe("topping up", () => {
   it("records the signed transaction before broadcasting it, then credits it once mined", async () => {
-    const { chain, irys, store, round } = setup();
+    const { chain, bundler, store, round } = setup();
 
     await expect(round()).resolves.toBe("done");
     expect(chain.sent).toEqual(["0xraw0"]);
@@ -168,35 +184,73 @@ describe("topping up", () => {
     chain.mine("0xhash0");
     clock.now += 300;
     await round();
-    expect(irys.submitted).toEqual(["0xhash0"]);
+    expect(bundler.submitted).toEqual(["0xhash0"]);
     expect(txs(store)[0]?.status).toBe("credited");
   });
 
-  it("does nothing while the Irys balance is above the low-water mark", async () => {
-    const { chain, irys, round } = setup();
-    irys.irysBalance = ETH;
+  it("does nothing while the Turbo credits are above the low-water mark", async () => {
+    const { chain, bundler, round } = setup();
+    bundler.credits = CREDIT;
     await round();
     expect(chain.sent).toEqual([]);
   });
 
   it("keeps retrying the credit with the same hash, and never sends a second transfer for it", async () => {
-    const { chain, irys, store, round } = setup();
+    const { chain, bundler, store, round } = setup();
     await round();
     chain.mine("0xhash0");
-    irys.credit = "pending";
+    bundler.credit = "pending";
     for (let i = 0; i < 3; i += 1) {
       clock.now += 300;
       await round();
     }
-    expect(irys.submitted).toEqual(["0xhash0", "0xhash0", "0xhash0"]);
+    expect(bundler.submitted).toEqual(["0xhash0", "0xhash0", "0xhash0"]);
     expect(chain.sent).toEqual(["0xraw0"]);
     expect(txs(store)[0]?.status).toBe("mined");
+  });
+
+  it("keeps offering a refused deposit to Turbo while its block is not yet safe, and takes a later credit", async () => {
+    const { chain, bundler, store, gauges, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credit = "rejected";
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.status).toBe("rejected");
+    expect(gauges.get("arweave_funder_credit_rejected")).toBe(0);
+    bundler.credit = "credited";
+    bundler.credits = CREDIT;
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.status).toBe("credited");
+    expect(bundler.submitted).toEqual(["0xhash0", "0xhash0"]);
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+
+  it("settles a deposit Turbo still refuses once its block is safe, reports it, and counts it against the daily cap", async () => {
+    const { chain, bundler, store, gauges, round } = setup({ dailyTopUpCapWei: ETH / 4n });
+    await round();
+    chain.mine("0xhash0");
+    bundler.credit = "rejected";
+    clock.now += 300;
+    await round();
+    chain.safe = 101;
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]).toMatchObject({ status: "rejected", confirmedAt: clock.now });
+    expect(gauges.get("arweave_funder_credit_rejected")).toBe(1);
+    clock.now += 300;
+    await round();
+    expect(gauges.get("arweave_funder_credit_rejected")).toBe(0);
+    expect(bundler.submitted).toEqual(["0xhash0"]);
+    expect(chain.sent).toEqual(["0xraw0"]);
+    expect(gauges.get("arweave_funder_daily_cap_reached")).toBe(1);
   });
 
   it("re-sends the recorded bytes when it stopped between signing and broadcasting", async () => {
     const { chain, store, round, signer } = setup();
     store.state = {
-      schema: 1,
+      schema: 2,
       nextNonce: 1,
       txs: [{ nonce: 0, hash: "0xh", raw: "0xrecorded", value: "1", maxFeePerGas: "1", maxPriorityFeePerGas: "1", status: "signed", createdAt: T0, updatedAt: T0 }],
       approvals: [],
@@ -208,12 +262,12 @@ describe("topping up", () => {
   });
 
   it("stops at the daily cap", async () => {
-    const { chain, irys, gauges, round } = setup({ dailyTopUpCapWei: ETH / 4n });
+    const { chain, bundler, gauges, round } = setup({ dailyTopUpCapWei: ETH / 4n });
     await round();
     chain.mine("0xhash0");
     clock.now += 300;
     await round();
-    irys.irysBalance = 0n;
+    bundler.credits = 0n;
     clock.now += 300;
     await round();
     expect(chain.sent).toEqual(["0xraw0"]);
@@ -235,12 +289,13 @@ describe("topping up", () => {
     expect(chain.sent).toEqual([]);
   });
 
-  it("reports an empty funding address as empty, and still keeps the approval in place", async () => {
-    const { chain, irys, round } = setup();
+  it("reports an empty funding address as empty, and still keeps the share in place", async () => {
+    const { chain, bundler, round } = setup();
+    bundler.credits = CREDIT / 20n;
     chain.wei = 0n;
     await expect(round()).resolves.toBe("done");
     expect(chain.sent).toEqual([]);
-    expect(irys.approvals).toHaveLength(1);
+    expect(bundler.approvals).toHaveLength(1);
   });
 
   it("estimates the transfer's gas without its value", async () => {
@@ -249,13 +304,14 @@ describe("topping up", () => {
     expect(chain.estimates).toEqual([0n]);
   });
 
-  it("still renews the approval when the top-up fails, then reports the failure", async () => {
-    const { chain, irys, round } = setup();
+  it("still renews the share when the top-up fails, then reports the failure", async () => {
+    const { chain, bundler, round } = setup();
+    bundler.credits = CREDIT / 20n;
     chain.fees = async () => {
       throw new Error("RPC down");
     };
     await expect(round()).rejects.toThrow(/RPC down/);
-    expect(irys.approvals).toHaveLength(1);
+    expect(bundler.approvals).toHaveLength(1);
   });
 
   it("refuses to sign for a different chain", async () => {
@@ -267,21 +323,21 @@ describe("topping up", () => {
 });
 
 describe("halting", () => {
-  it("halts, and stays halted, when Irys reports a deposit address other than the configured one", async () => {
-    const { chain, irys, store, round } = setup();
-    irys.deposit = "0x00000000000000000000000000000000000000ee";
+  it("halts, and stays halted, when Turbo reports a deposit address other than the configured one", async () => {
+    const { chain, bundler, store, round } = setup();
+    bundler.deposit = "0x00000000000000000000000000000000000000ee";
     await expect(round()).resolves.toBe("halted");
     expect(store.state?.halted?.reason).toMatch(/deposit address/);
-    irys.deposit = DEPOSIT;
+    bundler.deposit = DEPOSIT;
     await expect(round()).resolves.toBe("halted");
     expect(chain.sent).toEqual([]);
   });
 
   it("halts when the chain shows a transfer this funder did not record", async () => {
-    const { chain, irys, store, round, gauges } = setup();
+    const { chain, bundler, store, round, gauges } = setup();
     await round();
     chain.mine("0xhash0");
-    irys.irysBalance = ETH;
+    bundler.credits = CREDIT;
     clock.now += 300;
     await round();
     chain.latest += 1; // someone used the key outside this code
@@ -305,7 +361,7 @@ describe("halting", () => {
 
 describe("stuck transactions", () => {
   it("replaces a stuck top-up with the same nonce and fees raised by at least 12.5%", async () => {
-    const { chain, irys, signer, store, round } = setup();
+    const { chain, bundler, signer, store, round } = setup();
     await round();
     clock.now += 901;
     await round();
@@ -314,10 +370,25 @@ describe("stuck transactions", () => {
     expect(chain.sent).toEqual(["0xraw0", "0xraw1"]);
 
     chain.mine("0xhash1");
-    irys.irysBalance = ETH;
+    bundler.credits = CREDIT;
     clock.now += 60;
     await round();
     expect(txs(store).map((t) => t.status)).toEqual(["dropped", "credited"]);
+  });
+
+  it("stops re-pricing after the last allowed replacement, keeps watching, and raises tx_stuck", async () => {
+    const { chain, gauges, round } = setup({ maxReplacements: 2 });
+    await round();
+    for (let i = 0; i < 4; i += 1) {
+      clock.now += 901;
+      await round();
+    }
+    expect(chain.sent).toEqual(["0xraw0", "0xraw1", "0xraw2"]);
+    expect(gauges.get("arweave_funder_tx_stuck")).toBe(1);
+    chain.mine("0xhash2");
+    clock.now += 60;
+    await round();
+    expect(gauges.get("arweave_funder_tx_stuck")).toBe(0);
   });
 
   it("leaves a stuck top-up alone when replacing it would exceed the fee cap", async () => {
@@ -330,38 +401,263 @@ describe("stuck transactions", () => {
   });
 });
 
-describe("the upload key's approval", () => {
-  it("creates one when there is none, for the configured amount and lifetime", async () => {
-    const { irys, round } = setup();
-    irys.irysBalance = ETH;
+describe("after a top-up lands", () => {
+  it("records what it cost, and stops rechecking it once its block is safe", async () => {
+    const { chain, store, gauges, round } = setup();
     await round();
-    expect(irys.approvals).toEqual([{ amount: ETH / 20n, ttl: 7 * 86_400 }]);
+    chain.mine("0xhash0");
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]).toMatchObject({ status: "credited", blockNumber: 101, feeWei: (21_000n * GWEI).toString() });
+    expect(txs(store)[0]?.confirmedAt).toBeUndefined();
+    expect(gauges.get("arweave_funder_fees_24h_eth")).toBeCloseTo(21_000 / 1e9);
+    chain.safe = 101;
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.confirmedAt).toBe(clock.now);
+    chain.receipts.clear();
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.status).toBe("credited");
+  });
+
+  it("re-sends the same bytes when its block is reorganised away before Turbo credits it", async () => {
+    const { chain, bundler, store, signer, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credit = "pending";
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.status).toBe("mined");
+    chain.reorg("0xhash0");
+    clock.now += 60;
+    await round();
+    expect(chain.sent).toEqual(["0xraw0"]);
+    clock.now += 300;
+    await round();
+    expect(chain.sent).toEqual(["0xraw0", "0xraw0"]);
+    expect(signer.signed).toHaveLength(1);
+    expect(txs(store)[0]).toMatchObject({ status: "broadcast" });
+    expect(txs(store)[0]?.blockNumber).toBeUndefined();
+  });
+
+  it("halts, and never re-sends, when a credited top-up's block is reorganised away", async () => {
+    const { chain, bundler, store, gauges, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credits = CREDIT;
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.status).toBe("credited");
+    chain.reorg("0xhash0");
+    clock.now += 60;
+    await round();
+    expect(txs(store)[0]?.status).toBe("credited");
+    clock.now += 300;
+    await round();
+    expect(txs(store)[0]?.status).toBe("reorged");
+    expect(gauges.get("arweave_funder_reorged")).toBe(1);
+    expect(store.state?.halted?.reason).toMatch(/credited by Turbo, then reorganised out of the chain/);
+    clock.now += 300;
+    await expect(round()).resolves.toBe("halted");
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+});
+
+describe("a receipt a lagging RPC backend has not seen", () => {
+  it("is not a reorg while the chain's nonce still covers the transaction", async () => {
+    const { chain, bundler, store, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credits = CREDIT;
+    clock.now += 300;
+    await round();
+    chain.receipts.delete("0xhash0");
+    for (let i = 0; i < 3; i += 1) {
+      clock.now += 300;
+      await expect(round()).resolves.toBe("done");
+    }
+    expect(txs(store)[0]?.status).toBe("credited");
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+
+  it("is not a reorg when it reappears within the grace period", async () => {
+    const { chain, bundler, store, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credits = CREDIT;
+    clock.now += 300;
+    await round();
+    const receipt = chain.receipts.get("0xhash0")!;
+    chain.reorg("0xhash0");
+    clock.now += 60;
+    await round();
+    chain.receipts.set("0xhash0", receipt);
+    chain.latest += 1;
+    clock.now += 300;
+    await expect(round()).resolves.toBe("done");
+    expect(txs(store)[0]).toMatchObject({ status: "credited" });
+    expect(txs(store)[0]?.receiptMissingSince).toBeUndefined();
+  });
+});
+
+describe("sharing with the upload key", () => {
+  it("waits for a top-up instead of failing the round when the spendable credits cannot cover a share", async () => {
+    const { bundler, gauges, round } = setup();
+    bundler.credits = CREDIT / 40n;
+    await expect(round()).resolves.toBe("done");
+    expect(bundler.approvals).toEqual([]);
+    expect(gauges.get("arweave_funder_share_unfunded")).toBe(1);
+  });
+});
+
+describe("a replacement whose nonce is already spent", () => {
+  it("settles the group from the receipt it has instead of failing every round on the broadcast", async () => {
+    const { chain, bundler, store, signer, round } = setup();
+    await round();
+    clock.now += 901;
+    const send = chain.send.bind(chain);
+    chain.send = async (raw: string) => {
+      if (raw === "0xraw1") {
+        chain.mine("0xhash0");
+        throw new Error("eth_sendRawTransaction: nonce too low (-32000)");
+      }
+      return send(raw);
+    };
+    await expect(round()).resolves.toBe("done");
+    expect(signer.signed.map((t) => t.nonce)).toEqual([0, 0]);
+    bundler.credits = CREDIT;
+    clock.now += 300;
+    await expect(round()).resolves.toBe("done");
+    expect(txs(store).map((t) => t.status)).toEqual(["credited", "dropped"]);
+  });
+
+  it("keeps the round going, share renewal included, when a signed top-up cannot be broadcast", async () => {
+    const { chain, bundler, store, round } = setup();
+    store.state = {
+      schema: 2,
+      nextNonce: 1,
+      txs: [{ nonce: 0, hash: "0xh", raw: "0xstale", value: "1", maxFeePerGas: "1", maxPriorityFeePerGas: "1", status: "signed", createdAt: T0, updatedAt: T0 }],
+      approvals: [],
+    };
+    chain.send = async () => {
+      throw new Error("eth_sendRawTransaction: replacement transaction underpriced (-32000)");
+    };
+    bundler.credits = CREDIT / 20n;
+    await expect(round()).resolves.toBe("done");
+    expect(txs(store)[0]?.status).toBe("signed");
+    expect(bundler.approvals).toHaveLength(1);
+  });
+});
+
+describe("a reorganisation that lands a different transaction of the same nonce", () => {
+  it("takes the replacement as the landed top-up and offers its hash to Turbo", async () => {
+    const { chain, bundler, store, round } = setup();
+    await round();
+    clock.now += 901;
+    await round();
+    chain.mine("0xhash0");
+    bundler.credit = "pending";
+    clock.now += 60;
+    await round();
+    expect(txs(store).map((t) => t.status)).toEqual(["mined", "dropped"]);
+    chain.receipts.delete("0xhash0");
+    chain.receipts.set("0xhash1", { status: 1, blockNumber: 102, feeWei: 1n });
+    bundler.credit = "credited";
+    bundler.credits = CREDIT;
+    clock.now += 60;
+    await round();
+    expect(txs(store).map((t) => t.status)).toEqual(["dropped", "credited"]);
+    expect(bundler.submitted.at(-1)).toBe("0xhash1");
+  });
+
+  it("halts when Turbo had already credited the transaction the chain replaced", async () => {
+    const { chain, bundler, store, round } = setup();
+    await round();
+    clock.now += 901;
+    await round();
+    chain.mine("0xhash0");
+    bundler.credits = CREDIT;
+    clock.now += 60;
+    await round();
+    expect(txs(store)[0]?.status).toBe("credited");
+    chain.receipts.delete("0xhash0");
+    chain.receipts.set("0xhash1", { status: 1, blockNumber: 102, feeWei: 1n });
+    clock.now += 60;
+    await expect(round()).resolves.toBe("halted");
+    expect(store.state?.halted?.reason).toMatch(/credited by Turbo, then replaced on chain by 0xhash1/);
+  });
+});
+
+describe("Turbo not answering for a mined top-up", () => {
+  it("does not stop the round from sharing credits", async () => {
+    const { chain, bundler, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.submitFundTransaction = async () => {
+      throw new Error("submit fund transaction: Turbo answered HTTP 500");
+    };
+    bundler.credits = CREDIT / 20n;
+    clock.now += 300;
+    await expect(round()).resolves.toBe("done");
+    expect(bundler.approvals).toHaveLength(1);
+  });
+});
+
+describe("Base's L1 data fee", () => {
+  it("does not top up when the wallet covers the transfer and its L2 gas but not the L1 fee as well", async () => {
+    const { chain, round } = setup();
+    chain.l1Fee = GWEI * 1000n;
+    chain.wei = ETH / 5n + 21_000n * 2n * GWEI + GWEI * 1000n;
+    await round();
+    expect(chain.sent).toEqual([]);
+    chain.wei = ETH / 5n + 21_000n * 2n * GWEI + GWEI * 1500n;
+    clock.now += 300;
+    await round();
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+
+  it("ignores it on a chain that charges none", async () => {
+    const { chain, round } = setup({ l1DataFee: false });
+    chain.l1Fee = ETH;
+    chain.wei = ETH / 5n + 21_000n * 2n * GWEI;
+    await round();
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+});
+
+describe("credits shared with the upload key", () => {
+  it("creates one when there is none, for the configured amount and lifetime", async () => {
+    const { bundler, round } = setup();
+    bundler.credits = CREDIT;
+    await round();
+    expect(bundler.approvals).toEqual([{ amount: CREDIT / 20n, ttl: 7 * 86_400 }]);
   });
 
   it("renews it a day before it expires", async () => {
-    const { irys, round } = setup();
-    irys.irysBalance = ETH;
+    const { bundler, round } = setup();
+    bundler.credits = CREDIT;
     await round();
     clock.now += 6 * 86_400 - 60;
     await round();
-    expect(irys.approvals).toHaveLength(1);
+    expect(bundler.approvals).toHaveLength(1);
     clock.now += 120;
     await round();
-    expect(irys.approvals).toHaveLength(2);
+    expect(bundler.approvals).toHaveLength(2);
   });
 
   it("renews early once when it runs low, and refuses a second early renewal in the same window", async () => {
-    const { irys, gauges, round } = setup();
-    irys.irysBalance = ETH;
+    const { bundler, gauges, round } = setup();
+    bundler.credits = CREDIT;
     await round();
-    irys.approvalAmount = 1n; // spent within hours
+    bundler.sharedAmount = 1n; // spent within hours
     clock.now += 3600;
     await round();
-    expect(irys.approvals).toHaveLength(2);
-    irys.approvalAmount = 1n;
+    expect(bundler.approvals).toHaveLength(2);
+    bundler.sharedAmount = 1n;
     clock.now += 3600;
     await round();
-    expect(irys.approvals).toHaveLength(2);
+    expect(bundler.approvals).toHaveLength(2);
     expect(gauges.get("arweave_funder_approval_cap_reached")).toBe(1);
   });
 });
@@ -369,7 +665,7 @@ describe("the upload key's approval", () => {
 describe("one funder at a time", () => {
   it("skips the round while another holder's lease is live, and takes over once it lapses", async () => {
     const { chain, store, round } = setup();
-    store.state = { schema: 1, nextNonce: 0, txs: [], approvals: [], lease: { holder: "other", until: T0 + 100 } };
+    store.state = { schema: 2, nextNonce: 0, txs: [], approvals: [], lease: { holder: "other", until: T0 + 100 } };
     store.version = 1;
     await expect(round()).resolves.toBe("lease-held");
     expect(chain.sent).toEqual([]);

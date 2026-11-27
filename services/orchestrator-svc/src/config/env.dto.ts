@@ -2,9 +2,9 @@ import { arweaveModes, arweaveSigners, arweaveTokens, ResultStorageEnvDto } from
 import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUrl, Matches, ValidateBy, ValidateIf } from "class-validator";
 import { buildArchitectures } from "./configuration.js";
 
-const archivesThroughIrys = (env: OrchestratorSvcEnvDto) => (env.SCVS_ARWEAVE_MODE || "").toLowerCase() === "irys";
-const archivesToIrysMainnet = (env: OrchestratorSvcEnvDto) =>
-  archivesThroughIrys(env) && (env.SCVS_ARWEAVE_NETWORK || "").toLowerCase() === "mainnet";
+const archivesThroughTurbo = (env: OrchestratorSvcEnvDto) => (env.SCVS_ARWEAVE_MODE || "").toLowerCase() === "turbo";
+const archivesToMainnet = (env: OrchestratorSvcEnvDto) =>
+  archivesThroughTurbo(env) && (env.SCVS_ARWEAVE_NETWORK || "").toLowerCase() === "mainnet";
 
 export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsNotEmpty({
@@ -55,48 +55,48 @@ export class OrchestratorSvcEnvDto extends ResultStorageEnvDto {
   @IsIn(["mainnet", "devnet"], { message: "SCVS_ARWEAVE_NETWORK must be mainnet or devnet" })
   SCVS_ARWEAVE_NETWORK?: string;
 
-  @IsOptional() @IsString()
-  SCVS_ARWEAVE_RPC_URL?: string;
-
-  // getArweaveConfig maps an unrecognised token to ethereum, so a typo would pay in the wrong token without a word.
+  // getArweaveConfig maps an unrecognised token to ethereum, so a typo would bill the wrong token without a word.
   @IsOptional()
   @IsIn(arweaveTokens, { message: `SCVS_ARWEAVE_TOKEN must be one of: ${arweaveTokens.join(", ")}` })
   SCVS_ARWEAVE_TOKEN?: string;
 
-  @ValidateIf((env: OrchestratorSvcEnvDto) => env.SCVS_ARWEAVE_SIGNER !== undefined || archivesToIrysMainnet(env))
+  @ValidateIf((env: OrchestratorSvcEnvDto) => env.SCVS_ARWEAVE_SIGNER !== undefined || archivesToMainnet(env))
   @IsIn(arweaveSigners, {
-    message: `SCVS_ARWEAVE_SIGNER must be one of: ${arweaveSigners.join(", ")}, and must be set to kms when archiving to Irys mainnet`,
+    message: `SCVS_ARWEAVE_SIGNER must be one of: ${arweaveSigners.join(", ")}, and must be set to kms when archiving to mainnet`,
   })
   @ValidateBy({
-    name: "kmsOnIrysMainnet",
+    name: "kmsOnMainnet",
     validator: {
-      validate: (value, args) => !archivesToIrysMainnet(args?.object as OrchestratorSvcEnvDto) || value === "kms",
+      validate: (value, args) => !archivesToMainnet(args?.object as OrchestratorSvcEnvDto) || value === "kms",
       defaultMessage: () =>
-        "SCVS_ARWEAVE_SIGNER must be kms when SCVS_ARWEAVE_MODE is irys and SCVS_ARWEAVE_NETWORK is mainnet — a mainnet wallet key never lives in process memory",
+        "SCVS_ARWEAVE_SIGNER must be kms when SCVS_ARWEAVE_MODE is turbo and SCVS_ARWEAVE_NETWORK is mainnet — a mainnet wallet key never lives in process memory",
     },
   })
   SCVS_ARWEAVE_SIGNER?: string;
 
-  @ValidateIf((env: OrchestratorSvcEnvDto) => archivesThroughIrys(env) && env.SCVS_ARWEAVE_SIGNER === "kms")
-  @IsNotEmpty({ message: "SCVS_ARWEAVE_KMS_KEY_ID is required when SCVS_ARWEAVE_SIGNER is kms and SCVS_ARWEAVE_MODE is irys" })
+  @ValidateIf((env: OrchestratorSvcEnvDto) => archivesThroughTurbo(env) && env.SCVS_ARWEAVE_SIGNER === "kms")
+  @IsNotEmpty({ message: "SCVS_ARWEAVE_KMS_KEY_ID is required when SCVS_ARWEAVE_SIGNER is kms and SCVS_ARWEAVE_MODE is turbo" })
   SCVS_ARWEAVE_KMS_KEY_ID?: string;
 
   @IsOptional() @IsString()
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY?: string;
 
-  // A KMS key's address cannot hold an Irys balance of its own: Irys credits a deposit to the on-chain sender, and
-  // only the orchestrator may sign with the key. So a KMS signer always uploads on another wallet's approval.
+  // A KMS key's address cannot hold Turbo credits of its own: Turbo credits a deposit to the on-chain sender, and
+  // only the orchestrator may sign with the key. So a KMS signer always uploads on credits another wallet shared.
   @ValidateIf(
     (env: OrchestratorSvcEnvDto) =>
-      env.SCVS_ARWEAVE_PAID_BY !== undefined || (archivesThroughIrys(env) && env.SCVS_ARWEAVE_SIGNER === "kms"),
+      env.SCVS_ARWEAVE_PAID_BY !== undefined || (archivesThroughTurbo(env) && env.SCVS_ARWEAVE_SIGNER === "kms"),
   )
-  @IsNotEmpty({ message: "SCVS_ARWEAVE_PAID_BY is required when SCVS_ARWEAVE_SIGNER is kms and SCVS_ARWEAVE_MODE is irys" })
+  @IsNotEmpty({ message: "SCVS_ARWEAVE_PAID_BY is required when SCVS_ARWEAVE_SIGNER is kms and SCVS_ARWEAVE_MODE is turbo" })
   @Matches(/^0x[0-9a-fA-F]{40}$/, { message: "SCVS_ARWEAVE_PAID_BY must be a 0x-prefixed 20-byte Ethereum address" })
   SCVS_ARWEAVE_PAID_BY?: string;
 
   @IsOptional()
   @IsUrl({ require_tld: false }, { message: "SCVS_ARWEAVE_GATEWAY_URL must be a URL" })
   SCVS_ARWEAVE_GATEWAY_URL?: string;
+
+  @IsOptional() @Matches(/^\d+$/, { message: "SCVS_ARWEAVE_CONFIRMATIONS must be a non-negative integer" })
+  SCVS_ARWEAVE_CONFIRMATIONS?: string;
 
   @IsOptional() @IsString()
   SCVS_POLICY_ACCEPTED_TRUST_LEVELS?: string;
