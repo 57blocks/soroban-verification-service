@@ -144,6 +144,7 @@ export class JobsRepository {
       dryRun?: boolean;
       visibility?: "public" | "private";
       sourceSha256?: string;
+      sourcePossessionProven?: boolean;
     } = {},
   ): Promise<JobRecord | undefined> {
     const targetFilters = targetOrFilters(target);
@@ -162,6 +163,10 @@ export class JobsRepository {
           ...(options.sourceSha256 === undefined
             ? []
             : [{ sourceRef: { path: ["source_sha256"], equals: options.sourceSha256 } }]),
+          // An upload is proven at submit by its secret; a source_uri job only once it has attached to a rebuild.
+          ...(options.sourcePossessionProven
+            ? [{ OR: [{ sourceRef: { path: ["type"], equals: "private_tarball" } }, { rebuildId: { not: null } }] }]
+            : []),
         ],
         OR: targetFilters,
       },

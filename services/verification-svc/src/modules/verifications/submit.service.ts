@@ -408,7 +408,8 @@ export class SubmitService {
         detail: `This upload was already submitted as ${upload.visibility}; upload the archive again to submit it as ${visibility}.`,
       };
     }
-    if (upload.sourceSha256 && upload.sourceSha256 !== claimedSha256) {
+    // An upload with no recorded hash proves nothing about the bytes, so it is refused like a mismatch.
+    if (upload.sourceSha256 !== claimedSha256) {
       return {
         ok: false,
         statusCode: 400,
@@ -484,6 +485,7 @@ export class SubmitService {
     dryRun: boolean;
     visibility: "public" | "private";
     sourceSha256: string;
+    sourcePossessionProven: true;
   } {
     const staleMs = this.configService.get("activeJobDedupStaleMs", {
       infer: true,
@@ -493,6 +495,8 @@ export class SubmitService {
       dryRun,
       visibility: declaredVisibility(manifest),
       sourceSha256: manifest.source_sha256,
+      // A job that has not shown it holds the source must not absorb a submission that can.
+      sourcePossessionProven: true,
     };
   }
 

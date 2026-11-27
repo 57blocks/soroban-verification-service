@@ -81,6 +81,30 @@ describe("POST /api/verification/v1/verifications upload cross-check (S27)", () 
     await uploadsRepository.deleteUpload(uploadId);
   });
 
+  it("rejects an upload that has no recorded hash, whatever hash the manifest claims", async () => {
+    const { uploadId, sourceSha256 } = await seedUpload();
+    await prisma.upload.update({ where: { id: uploadId }, data: { sourceSha256: null } });
+
+    const res = await request(server)
+      .post("/api/verification/v1/verifications")
+      .send({
+        target: target(),
+        upload_secret: SECRET,
+        manifest: {
+          schema: "stellar-submitted-source-verification-manifest-v1",
+          source_sha256: sourceSha256,
+          upload_id: uploadId,
+        },
+      });
+    createdRows.job(res.body?.job_id);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("source_hash_mismatch");
+    expect(res.body.job_id).toBeUndefined();
+
+    await uploadsRepository.deleteUpload(uploadId);
+  });
+
   it("accepts a manifest whose source_sha256 matches the upload's own computed hash", async () => {
     const { uploadId, sourceSha256 } = await seedUpload();
     createdRows.upload(uploadId);

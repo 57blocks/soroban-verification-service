@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "../client.js";
 import { JobsRepository } from "../jobs.repo.js";
 
@@ -43,6 +44,26 @@ export class CreatedRows {
   reportArchiveUpload<T extends string | undefined>(reportSha256: T): T {
     if (reportSha256) this.reportArchiveUploadKeys.add(reportSha256);
     return reportSha256;
+  }
+
+  /** Puts a job where `prepare()` leaves one that has proven it holds its source: attached to a rebuild of it. */
+  async attachJobToNewRebuild(prisma: PrismaClient, jobId: string): Promise<string> {
+    const { sourceRef } = await prisma.job.findUniqueOrThrow({ where: { id: jobId }, select: { sourceRef: true } });
+    const rebuildId = this.rebuild(randomUUID());
+    await prisma.rebuild.create({
+      data: {
+        id: rebuildId,
+        idempotencyKey: randomUUID(),
+        sourceRef: sourceRef as object,
+        buildOptions: {},
+        imageDigest: `sha256:${"0".repeat(64)}`,
+        buildMode: "verify",
+        mechanismReason: "on_chain_recipe_in_trusted_image",
+        status: "pending",
+      },
+    });
+    await prisma.job.update({ where: { id: jobId }, data: { rebuildId } });
+    return rebuildId;
   }
 
   /** Jobs first: `Job.rebuildId` references `Rebuild.id` with no cascade. */
