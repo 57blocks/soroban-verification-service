@@ -2,13 +2,13 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-expected_wasm="8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c"
-expected_source="cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d"
-cliver="27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4"
-rsver="1.97.1"
-rustup_toolchain="1.97.1-aarch64-unknown-linux-gnu"
+expected_wasm="25fc306065cbb9b05461db78ec259802cb916053ba5b3ab911b0a72dd1a81439"
+expected_source="0cf8b099723e5060d298d5c7c45dd92f3727dbf0c09cb39c83286f8295cbd369"
+cliver="28.1.0#c0f4d0da891bbf214c08b8c5035ae6db80e9a3bd"
+rsver="1.99.0"
+rustup_toolchain="1.99.0-aarch64-unknown-linux-gnu"
 image="scvs-composed:template-gate-v3"
-source_url="https://api.github.com/repos/reflector-network/reflector-contract/tarball/42f3116b0c5ea335181508c926e5ec48d67af419"
+source_url="https://api.github.com/repos/reflector-network/reflector-contract/tarball/6fece3b6efab3c855e920c450e3a2822f14df405"
 work_root="$(mktemp -d /tmp/scvs-reflector-rebuild.XXXXXX)"
 
 cleanup() {

@@ -10,8 +10,8 @@ import {
 import type { AggregatedWasmStatus } from "../../support/types.js";
 
 const FIXTURE_ID = "F-MAINNET-READ-ONLY";
-const EXPECTED_CLIVER = "27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4";
-const EXPECTED_RSVER = "1.97.1";
+const EXPECTED_CLIVER = "28.1.0#c0f4d0da891bbf214c08b8c5035ae6db80e9a3bd";
+const EXPECTED_RSVER = "1.99.0";
 
 caseBlock(
   {

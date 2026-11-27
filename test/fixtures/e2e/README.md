@@ -219,10 +219,12 @@ it locally, confirms the source tag still resolves to the recorded commit, and d
 copy of that commit. The mainnet contract-list cursor repeated a page during preparation, so
 `registry.yaml` names this limitation and does not describe the check as a complete mainnet scan.
 
-Reflector Pulse is a ready public `F-LEG-1-MAINNET` fixture. The fixed source archive and recorded
-recipe rebuilt to the observed mainnet Wasm hash in the verifier's composed Stellar CLI 27.0.0 / Rust
-1.97.1 image; rerun `validate-mainnet-reflector-rebuild.sh` to repeat that evidence. The same contract
-also supplies the recipe-free `F-MAINNET-READ-ONLY` view for non-mutating `E2E-NET-01` rows. Mainnet
+Reflector Pulse is a ready public `F-LEG-1-MAINNET` fixture, now at its v7.1.0 release (Stellar CLI
+28.1.0 / Rust 1.99.0). v6.0.1's source and recipe rebuilt to its mainnet Wasm in the verifier's
+composed image; `validate-mainnet-reflector-rebuild.sh` now targets v7.1.0 and has yet to be rerun
+for it (see `registry.yaml`). The contract is upgradable: when its owner upgrades it, NET-01 and
+SUB-01/mainnet fail on the hash until this fixture follows the new release. The same contract also
+supplies the recipe-free `F-MAINNET-READ-ONLY` view for non-mutating `E2E-NET-01` rows. Mainnet
 F-58 and F-UPG remain explicit blockers; preparing those by deployment requires an approved funded
 mainnet signer.
 

@@ -41,9 +41,10 @@ caseBlock(
       async () => {
         const mirror = fixtures.mirrored_source!;
 
+        // Declared public: a report names the source_uri of a public source only, and the URL is what this row checks.
         const { verdict, firstReport, secondReport } = await runPair(
-          await submissionFor("F-LEG-1", { source_uri: mirror.url_a, source_sha256: mirror.sha256 }),
-          await submissionFor("F-LEG-1", { source_uri: mirror.url_b, source_sha256: mirror.sha256 })
+          await submissionFor("F-LEG-1", { source_uri: mirror.url_a, source_sha256: mirror.sha256, is_public: true }),
+          await submissionFor("F-LEG-1", { source_uri: mirror.url_b, source_sha256: mirror.sha256, is_public: true })
         );
 
         expectNoSecondBuild(verdict);

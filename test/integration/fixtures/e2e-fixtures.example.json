@@ -9,7 +9,7 @@
       "note": "public mainnet target for E2E-NET-01/read_only_mainnet only; no source or recipe fields means it cannot be submitted",
       "network": "mainnet",
       "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
-      "wasm_hash": "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c"
+      "wasm_hash": "25fc306065cbb9b05461db78ec259802cb916053ba5b3ab911b0a72dd1a81439"
     },
     "F-LEG-1-MAINNET": {
       "id": "F-LEG-1-MAINNET",
