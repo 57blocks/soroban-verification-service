@@ -40,24 +40,24 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
     "How often, in milliseconds, the orchestrator retries pending Arweave archive uploads. Archiving has no attempt limit; a stuck archive is retried until it succeeds.",
   SCVS_ARTIFACT_DIR:
     "Writable scratch directory for temporary working files, such as `stellar` CLI working directories and the builder's and composer's per-job scratch space.",
+  SCVS_ARWEAVE_CONFIRMATIONS:
+    "Arweave blocks an archived item must sit under, as SCVS_ARWEAVE_GATEWAY_URL reports it, before its link is written. Defaults to 15 with `turbo` on `mainnet` and 0 otherwise. An item still not on chain past the deadline height Turbo gave is uploaded again.",
   SCVS_ARWEAVE_GATEWAY_URL:
-    "Arweave gateway base URL used to build links to archived reports and sources. Devnet uploads are reachable only through the Irys gateway, whatever this is set to.",
+    "Arweave gateway base URL used to build links to archived reports and sources, and to check that an uploaded item is on chain. Defaults to `https://arweave.net` on `mainnet` and `https://ar-io.dev` on `devnet`, whose items are served only by the sandbox gateway and only for a few days.",
   SCVS_ARWEAVE_KMS_KEY_ID:
-    "ARN of the AWS KMS key that signs Irys uploads when SCVS_ARWEAVE_SIGNER is `kms`. It must be an `ECC_SECG_P256K1` signing key; its Ethereum address is the archiving wallet. The orchestrator needs `kms:GetPublicKey` and `kms:Sign` on it, or it does not start.",
+    "ARN of the AWS KMS key that signs archived data items when SCVS_ARWEAVE_SIGNER is `kms`. It must be an `ECC_SECG_P256K1` signing key; its Ethereum address is the archiving wallet. The orchestrator needs `kms:GetPublicKey` and `kms:Sign` on it, or it does not start.",
   SCVS_ARWEAVE_MODE:
-    "Whether verification reports are also archived to Arweave: `disabled`, `dry-run` (records a placeholder transaction id without uploading) or `irys` (real uploads through Irys). Startup rejects any other value.",
+    "Whether verification reports are also archived to Arweave: `disabled`, `dry-run` (records a placeholder transaction id without uploading) or `turbo` (real uploads through ArDrive Turbo, paid from Turbo credits). Startup rejects any other value.",
   SCVS_ARWEAVE_NETWORK:
-    "Irys network archives are uploaded to, and that arweave-funder-svc funds: `devnet` (free, not durable) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly; the funder has no default.",
+    "Turbo network archives are uploaded to, and that arweave-funder-svc buys credits on: `devnet` (the ar.io sandbox: test tokens, items purged after a few days and never posted to Arweave) or `mainnet` (paid, permanent). A deployment that needs durable archives must set `mainnet` explicitly; the funder has no default.",
   SCVS_ARWEAVE_PAID_BY:
-    "Address of the wallet whose Irys balance pays for uploads, through a balance approval it granted the signing address. Required with SCVS_ARWEAVE_SIGNER `kms`, because a KMS address cannot hold an Irys balance of its own, so the orchestrator does not start without it. With `private-key` it is optional, and unset the signing wallet pays from its own balance. It keeps the funds outside AWS and caps spending at the approval.",
-  SCVS_ARWEAVE_RPC_URL:
-    "RPC endpoint of the chain SCVS_ARWEAVE_TOKEN settles on, which the archiving wallet signs Irys payments through. Needed on `mainnet`; `devnet` has a built-in endpoint per token.",
+    "Address of the wallet whose Turbo credits pay for uploads, through a share of credits it gave the signing address. Required with SCVS_ARWEAVE_SIGNER `kms`, because a KMS address cannot hold credits of its own, so the orchestrator does not start without it. With `private-key` it is optional, and unset the signing wallet pays from its own credits. It keeps the funds outside the upload key and caps spending at the share.",
   SCVS_ARWEAVE_SIGNER:
-    "What signs Irys uploads: `kms` (an AWS KMS key, so the wallet key never enters the service's memory) or `private-key` (SCVS_ARWEAVE_WALLET_PRIVATE_KEY; the default, for local development). Archiving to Irys `mainnet` requires `kms`.",
+    "What signs archived data items: `kms` (an AWS KMS key, so the wallet key never enters the service's memory) or `private-key` (SCVS_ARWEAVE_WALLET_PRIVATE_KEY; the default, for local development). Archiving to `mainnet` requires `kms`.",
   SCVS_ARWEAVE_TOKEN:
-    "Which Irys token pays for uploads. It must match the token of the wallet that pays (arweave-funder-svc's SCVS_ARWEAVE_TOKEN when the funder pays): Irys balances and approvals are kept per token, so a mismatch leaves every upload unpaid. It also picks the built-in `devnet` RPC endpoint.",
+    "The Turbo token the signer is built for. Every value signs with an Ethereum key and bills the same address; it should match arweave-funder-svc's SCVS_ARWEAVE_TOKEN so the two services' logs agree.",
   SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
-    "Private key of the Ethereum wallet that pays for Irys uploads when SCVS_ARWEAVE_SIGNER is `private-key`. Inject it as a secret. Not accepted for Irys `mainnet`; use a KMS key there.",
+    "Private key of the Ethereum wallet that signs uploads when SCVS_ARWEAVE_SIGNER is `private-key`. Inject it as a secret. Not accepted on `mainnet`; use a KMS key there.",
   SCVS_BATCH_DEFAULT_ARCH:
     "Which builder queue (`arm64` or `amd64`) runs a build image published for both architectures, or one whose architecture cannot be determined. Single-architecture images always go to the matching queue.",
   SCVS_BATCH_JOB_DEFINITION_ARN_AMD64:
@@ -132,36 +132,38 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
     "How often, in milliseconds, the reconciler checks environments that are still `composing`.",
   SCVS_FRONTING_PROXY_IDLE_TIMEOUT_MS:
     "Idle timeout, in milliseconds, of the load balancer or proxy in front of the service, used to check SCVS_KEEPALIVE_TIMEOUT_MS at startup. Set `0` when nothing fronts the server to skip the check.",
-  SCVS_FUNDER_APPROVAL_TTL_SECONDS:
-    "How long, in seconds, each Irys approval the funder grants lasts. It renews the approval in its last day, or when less than a tenth of it remains.",
-  SCVS_FUNDER_APPROVAL_WEI:
-    "Amount, in wei, of each Irys balance approval the funder grants the orchestrator's upload key. A new approval replaces the old one rather than adding to it.",
-  SCVS_FUNDER_APPROVAL_WINDOW_CAP_WEI:
-    "Most wei the funder may approve within one approval lifetime, which bounds what a stolen upload key can spend. Defaults to twice SCVS_FUNDER_APPROVAL_WEI and must be at least that amount.",
   SCVS_FUNDER_APPROVED_ADDRESS:
-    "Ethereum address of the orchestrator's upload key, which the funder keeps an Irys balance approval in place for.",
+    "Ethereum address of the orchestrator's upload key, which the funder keeps a share of its Turbo credits in place for.",
   SCVS_FUNDER_CHAIN_ID:
     "Chain id every top-up transaction is signed for. The funder refuses to sign if its RPC endpoint reports a different chain.",
+  SCVS_FUNDER_CREDITS_LOW_WINC:
+    "Spendable Turbo credits, in winc, below which the funder tops up its funding key.",
   SCVS_FUNDER_DAILY_TOPUP_CAP_WEI:
-    "Most wei the funder deposits to Irys in any 24 hours. Must be at least SCVS_FUNDER_TOPUP_WEI.",
+    "Most wei the funder deposits to Turbo in any 24 hours. Must be at least SCVS_FUNDER_TOPUP_WEI.",
   SCVS_FUNDER_DEPOSIT_ADDRESS:
-    "Irys's deposit address for this token and network. The funder stops rather than send a top-up if Irys reports a different one.",
+    "Turbo's deposit address for this token and network. The funder stops rather than send a top-up if Turbo reports a different one.",
   SCVS_FUNDER_INTERVAL_MS:
     "Milliseconds between the funder's rounds. Its health check fails once no round has completed for three intervals.",
-  SCVS_FUNDER_IRYS_LOW_WEI:
-    "Irys balance, in wei, below which the funder tops up its funding key.",
   SCVS_FUNDER_KMS_KEY_ID:
-    "ARN of the AWS KMS key that signs the funder's transactions and approvals; its Ethereum address is where the funds are sent. It must be an `ECC_SECG_P256K1` signing key named by key ARN, not by alias.",
+    "ARN of the AWS KMS key that signs the funder's transactions and credit shares; its Ethereum address is where the funds are sent. It must be an `ECC_SECG_P256K1` signing key named by key ARN, not by alias.",
   SCVS_FUNDER_MAX_FEE_PER_GAS_WEI:
     "Highest fee per gas, in wei, a top-up transaction may offer. When the network asks for more, the funder waits for a later round.",
+  SCVS_FUNDER_MAX_REPLACEMENTS:
+    "How many times the funder re-prices a stuck top-up. Past it the funder only watches that transaction and reports it as stuck.",
   SCVS_FUNDER_RPC_URL:
     "RPC endpoint of the chain the funder's token settles on, such as Base for `base-eth`.",
+  SCVS_FUNDER_SHARE_TTL_SECONDS:
+    "How long, in seconds, each credit share lasts. The funder grants another once the last live one is in its final day, or when under a tenth of a share remains.",
+  SCVS_FUNDER_SHARE_WINC:
+    "Winc in each credit share the funder gives the orchestrator's upload key. A new share adds to those still live rather than replacing them.",
+  SCVS_FUNDER_SHARE_WINDOW_CAP_WINC:
+    "Most winc the funder may share within one share lifetime, which bounds what a stolen upload key can spend. Defaults to twice SCVS_FUNDER_SHARE_WINC and must be at least that amount.",
   SCVS_FUNDER_STATE_BUCKET:
     "S3 bucket that holds the funder's state object.",
   SCVS_FUNDER_STATE_KEY:
     "Object key of the funder's state within SCVS_FUNDER_STATE_BUCKET. Changing it starts the funder from empty state.",
   SCVS_FUNDER_TOPUP_WEI:
-    "Wei the funder deposits to Irys in each top-up.",
+    "Wei the funder deposits to Turbo in each top-up. Credits cannot be withdrawn, so size it to a week or two of uploads.",
   SCVS_HANDOFF_ROOT:
     "Directory the builder's two containers share: one writes the extracted source there and the other hands it to Docker. It must be a host bind mount at the same path in both, not a Docker volume.",
   SCVS_HEADERS_TIMEOUT_MS:
@@ -277,7 +279,7 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_SOURCE_ARCHIVE_CLAIM_TIMEOUT_MS:
     "How long, in milliseconds, a claimed source archive upload may stay unfinished before another worker treats it as abandoned and takes it over. Keep it longer than a normal upload takes.",
   SCVS_SOURCE_ARCHIVE_ENABLED:
-    "Set `true` to also archive published public mainnet source code to Arweave, alongside the report archive. Requires SCVS_ARWEAVE_MODE `irys`.",
+    "Set `true` to also archive published public mainnet source code to Arweave, alongside the report archive. Requires SCVS_ARWEAVE_MODE `turbo`.",
   SCVS_SOURCE_FETCH_TIMEOUT_MS:
     "Time limit, in milliseconds, for the builder to download a job's source archive.",
   SCVS_STAGING_SWEEP_JOB_AGE_CEILING_MS:

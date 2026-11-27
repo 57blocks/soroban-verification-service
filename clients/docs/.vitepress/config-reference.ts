@@ -45,7 +45,7 @@ const SERVICES: Record<string, { title: string; about: string }> = {
   "query-svc": { title: "query-svc", about: "The aggregator and its Query API." },
   "arweave-funder-svc": {
     title: "arweave-funder-svc",
-    about: "Keeps the Irys balance that pays for Arweave archiving topped up, and approves the orchestrator to spend it. Not exposed publicly.",
+    about: "Keeps the Turbo credits that pay for Arweave archiving topped up, and shares them with the orchestrator's upload key. Not exposed publicly.",
   },
   web: { title: "web", about: "The console and this documentation. These values are fixed when the image is built." },
   builder: { title: "builder", about: "Runs each rebuild in its sandbox, as a batch job." },
