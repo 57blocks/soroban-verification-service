@@ -39,7 +39,7 @@ export class ResponseTooLargeError extends Error {
 
 /**
  * Every range that is not the public internet: private, shared, loopback, link-local, documentation, multicast.
- * The same ranges as the builder's egress proxy.
+ * The same ranges as the builder's egress proxy, except NAT64's well-known prefix (NAT64_WELL_KNOWN below).
  */
 const BLOCKED_IPV4: readonly (readonly [string, number])[] = [
   ["0.0.0.0", 8], // "this host"
@@ -64,7 +64,7 @@ const BLOCKED_IPV6: readonly (readonly [string, number])[] = [
   // IPv4-compatible ::/96 (which also holds :: and ::1) and IPv4-mapped ::ffff:0:0/96.
   ["::", 96],
   ["::ffff:0:0", 96],
-  ["64:ff9b::", 96], // NAT64, which reaches IPv4 addresses
+  // NAT64's local-use prefix: where the IPv4 address sits in it is the operator's choice, so it cannot be read out.
   ["64:ff9b:1::", 48],
   ["100::", 64],
   ["2001::", 23], // incl. Teredo
@@ -161,10 +161,21 @@ function isBlockedIpv4(host: string): boolean {
   return BLOCKED_IPV4.some(([network, prefix]) => sharesPrefix(octets, network.split(".").map(Number), prefix, 8));
 }
 
+/**
+ * NAT64's well-known prefix, 64:ff9b::/96 (RFC 6052). DNS64 answers an IPv4-only name with its public address
+ * and that address under this prefix, and a lookup is refused if any address is, so the range cannot be refused
+ * whole. The address reaches the IPv4 address in its low 32 bits, and is judged as that address.
+ */
+const NAT64_WELL_KNOWN: readonly number[] = [0x64, 0xff9b, 0, 0, 0, 0];
+
 function isBlockedIpv6(host: string): boolean {
   const groups = ipv6Groups(host);
   // Anything with a colon that does not parse is refused rather than let through.
   if (groups === undefined) return true;
+  if (NAT64_WELL_KNOWN.every((group, index) => groups[index] === group)) {
+    const [high, low] = groups.slice(6);
+    return isBlockedIpv4([high >> 8, high & 0xff, low >> 8, low & 0xff].join("."));
+  }
   return BLOCKED_IPV6.some(([network, prefix]) => sharesPrefix(groups, ipv6Groups(network)!, prefix, 16));
 }
 

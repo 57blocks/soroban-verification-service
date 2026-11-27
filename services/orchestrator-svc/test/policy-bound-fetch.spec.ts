@@ -319,6 +319,22 @@ describe("pinningLookup — the DNS-rebinding answer", () => {
     }
   });
 
+  it("accepts what DNS64 answers for an IPv4-only name: its public address and that address under 64:ff9b::/96", async () => {
+    const addresses = [
+      { address: "140.82.112.3", family: 4 },
+      { address: "64:ff9b::8c52:7003", family: 6 },
+    ];
+    const { error } = await invoke(pinningLookup(POLICY, resolverReturning(addresses)), { all: true });
+    expect(error).toBeNull();
+  });
+
+  it("refuses a NAT64 address that reaches a private IPv4 address", async () => {
+    for (const address of ["64:ff9b::a9fe:a9fe", "64:ff9b::a00:1", "64:ff9b:1::8c52:7003"]) {
+      const { error } = await invoke(pinningLookup(POLICY, resolverReturning([{ address, family: 6 }])));
+      expect(error).toBeInstanceOf(FetchPolicyError);
+    }
+  });
+
   it("hands back exactly the addresses it validated — the pin", async () => {
     const addresses = [
       { address: "93.184.216.34", family: 4 },
