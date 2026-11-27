@@ -359,9 +359,12 @@ async function fetchPolicy(): Promise<void> {
     assert.throws(() => checkUrl(permissive, `https://${host}/latest/meta-data/`), FetchPolicyError,
       `${host} should be refused as an IPv4-mapped or expanded private literal`);
   }
-  assert.doesNotThrow(() =>
-    checkUrl(normalizePolicy({ allowedOrigins: [] }), "https://[::ffff:8.8.8.8]/x.json"),
-  );
+  // An address carrying an IPv4 address is refused whole, a public one included: the plain spelling is what passes.
+  for (const host of ["[::ffff:8.8.8.8]", "[::8.8.8.8]", "[64:ff9b::808:808]"]) {
+    assert.throws(() => checkUrl(normalizePolicy({ allowedOrigins: [] }), `https://${host}/x.json`), FetchPolicyError,
+      `${host} should be refused as an IPv4-carrying literal`);
+  }
+  assert.doesNotThrow(() => checkUrl(normalizePolicy({ allowedOrigins: [] }), "https://8.8.8.8/x.json"));
 
   assert.doesNotThrow(() =>
     checkUrl(normalizePolicy({ allowedOrigins: [], blockPrivateRanges: false }), "https://127.0.0.1/x.json"),

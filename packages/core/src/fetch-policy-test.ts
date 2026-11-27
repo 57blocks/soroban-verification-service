@@ -21,6 +21,17 @@ function main(): void {
     "172.20.0.1",
     "169.254.169.254",
     "100.64.0.1",
+    "0.0.0.0",
+    "192.0.0.8",
+    "192.0.2.1",
+    "192.88.99.1",
+    "198.18.0.1",
+    "198.19.255.255",
+    "198.51.100.1",
+    "203.0.113.1",
+    "224.0.0.1",
+    "240.0.0.1",
+    "255.255.255.255",
     "localhost",
   ]) {
     assert.throws(
@@ -29,9 +40,67 @@ function main(): void {
       `${host} must be refused`,
     );
   }
-  assert.doesNotThrow(() => checkUrl(normalizePolicy(), "https://93.184.216.34/x"));
+  for (const host of ["93.184.216.34", "100.63.255.255", "100.128.0.1", "172.15.0.1", "172.32.0.1", "198.17.0.1", "198.20.0.1", "223.255.255.255"]) {
+    assert.doesNotThrow(() => checkUrl(normalizePolicy(), `https://${host}/x`), `${host} must be allowed`);
+  }
+  assert.equal(isBlockedIpLiteral("999.1.1.1"), true);
 
   assert.equal(isBlockedIpLiteral("attacker-controlled.example.com"), false);
+
+  // IPv6: URL literals (which WHATWG URL rewrites to hex) and resolved addresses take the same check.
+  for (const host of [
+    "[::]",
+    "[::1]",
+    "[0:0:0:0:0:0:0:1]",
+    "[fe80::1]",
+    "[fd00::1]",
+    "[::ffff:10.0.0.1]",
+    "[::ffff:169.254.169.254]",
+    "[::ffff:93.184.216.34]",
+    "[::169.254.169.254]",
+    "[::a9fe:a9fe]",
+    "[0:0:0:0:0:0:a9fe:a9fe]",
+    "[::5db8:d822]",
+  ]) {
+    assert.throws(
+      () => checkUrl(normalizePolicy(), `https://${host}/x`),
+      FetchPolicyError,
+      `${host} must be refused`,
+    );
+  }
+  for (const address of [
+    "::a9fe:a9fe",
+    "::ffff:a00:1",
+    "::169.254.169.254",
+    "fe80::1%eth0",
+    "1::2::3",
+    "::g",
+    "64:ff9b::a9fe:a9fe",
+    "64:ff9b:1::1",
+    "100::1",
+    "2001::1",
+    "2001:1ff::1",
+    "2001:db8::1",
+    "2002:a9fe:a9fe::1",
+    "fec0::1",
+    "ff02::1",
+  ]) {
+    assert.equal(isBlockedIpLiteral(address), true, `${address} must be refused`);
+  }
+  for (const address of [
+    "2606:2800:220:1:248:1893:25c8:1946",
+    "::1:0:0:0",
+    "64::1",
+    "64:ff9b:2::1",
+    "100:0:0:1::1",
+    "2001:200::1",
+    "2001:4860:4860::8888",
+    "2003::1",
+    "fe00::1",
+  ]) {
+    assert.equal(isBlockedIpLiteral(address), false, `${address} must be allowed`);
+  }
+  assert.doesNotThrow(() => checkUrl(normalizePolicy(), "https://[2606:2800:220:1:248:1893:25c8:1946]/x"));
 
   const origins = originsFromVerifiers([
     { url: "https://a.example.com/root", manifest_url: "https://a.example.com/m.json" },
