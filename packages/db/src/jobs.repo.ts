@@ -144,6 +144,8 @@ export class JobsRepository {
       dryRun?: boolean;
       visibility?: "public" | "private";
       sourceSha256?: string;
+      sourcePossessionProven?: boolean;
+      buildOptions?: { bldopt: string[]; bldarg: string[] };
     } = {},
   ): Promise<JobRecord | undefined> {
     const targetFilters = targetOrFilters(target);
@@ -162,6 +164,17 @@ export class JobsRepository {
           ...(options.sourceSha256 === undefined
             ? []
             : [{ sourceRef: { path: ["source_sha256"], equals: options.sourceSha256 } }]),
+          // An upload is proven at submit by its secret; a source_uri job only once it has attached to a rebuild.
+          ...(options.sourcePossessionProven
+            ? [{ OR: [{ sourceRef: { path: ["type"], equals: "private_tarball" } }, { rebuildId: { not: null } }] }]
+            : []),
+          // By key, never the whole column: attaching to a rebuild adds `metadata_replay` to it.
+          ...(options.buildOptions === undefined
+            ? []
+            : [
+                { buildOptions: { path: ["bldopt"], equals: options.buildOptions.bldopt } },
+                { buildOptions: { path: ["bldarg"], equals: options.buildOptions.bldarg } },
+              ]),
         ],
         OR: targetFilters,
       },

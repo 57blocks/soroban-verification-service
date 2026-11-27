@@ -52,8 +52,9 @@ for (const [network, prefix] of [
   NOT_PUBLIC.addSubnet(network, prefix, "ipv4");
 }
 for (const [network, prefix] of [
-  // An IPv4-mapped address (::ffff:a.b.c.d) is checked against the IPv4 ranges above by BlockList itself.
-  ["::", 127],
+  // IPv4-compatible ::a.b.c.d is refused whole, rather than trusting the IPv4 ranges above to see through it.
+  // It also holds :: and ::1. IPv4-mapped is in IPV4_MAPPED below.
+  ["::", 96],
   ["64:ff9b::", 96],
   ["64:ff9b:1::", 48],
   ["100::", 64],
@@ -68,9 +69,17 @@ for (const [network, prefix] of [
   NOT_PUBLIC.addSubnet(network, prefix, "ipv6");
 }
 
+/**
+ * IPv4-mapped ::ffff:a.b.c.d is refused whole when it is resolved as IPv6. It cannot go in NOT_PUBLIC: BlockList
+ * treats an IPv4 address and its mapped form as one address, so that subnet would refuse every IPv4 address.
+ */
+const IPV4_MAPPED = new BlockList();
+IPV4_MAPPED.addSubnet("::ffff:0:0", 96, "ipv6");
+
 export function isPublicAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 0) return false;
+  if (family === 6 && IPV4_MAPPED.check(address, "ipv6")) return false;
   return !NOT_PUBLIC.check(address, family === 4 ? "ipv4" : "ipv6");
 }
 

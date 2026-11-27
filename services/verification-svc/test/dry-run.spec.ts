@@ -94,6 +94,7 @@ describe("dry_run", () => {
 
     const dry = await submit({ ...sameTarget(), dry_run: true });
     expect(dry.status).toBe(202);
+    await createdRows.attachJobToNewRebuild(prisma, dry.body.job_id);
 
     const real = await submit(sameTarget());
     expect(real.status).toBe(202);

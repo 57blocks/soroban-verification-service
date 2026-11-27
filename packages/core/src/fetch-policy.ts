@@ -37,14 +37,43 @@ export class ResponseTooLargeError extends Error {
   }
 }
 
-const BLOCKED_IPV4 = [
-  /^127\./, // loopback
-  /^10\./, // RFC1918
-  /^192\.168\./, // RFC1918
-  /^172\.(1[6-9]|2\d|3[01])\./, // RFC1918
-  /^169\.254\./, // link-local, incl. cloud instance metadata
-  /^0\./, // "this host"
-  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // carrier-grade NAT
+/**
+ * Every range that is not the public internet: private, shared, loopback, link-local, documentation, multicast.
+ * The same ranges as the builder's egress proxy, except NAT64's well-known prefix (NAT64_WELL_KNOWN below).
+ */
+const BLOCKED_IPV4: readonly (readonly [string, number])[] = [
+  ["0.0.0.0", 8], // "this host"
+  ["10.0.0.0", 8], // RFC1918
+  ["100.64.0.0", 10], // carrier-grade NAT
+  ["127.0.0.0", 8], // loopback
+  ["169.254.0.0", 16], // link-local, incl. cloud instance metadata
+  ["172.16.0.0", 12], // RFC1918
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.88.99.0", 24],
+  ["192.168.0.0", 16], // RFC1918
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4], // multicast
+  ["240.0.0.0", 4], // reserved, incl. broadcast
+];
+
+const BLOCKED_IPV6: readonly (readonly [string, number])[] = [
+  // An address carrying an IPv4 address in its low 32 bits is refused whole, whatever that IPv4 address is:
+  // IPv4-compatible ::/96 (which also holds :: and ::1) and IPv4-mapped ::ffff:0:0/96.
+  ["::", 96],
+  ["::ffff:0:0", 96],
+  // NAT64's local-use prefix: where the IPv4 address sits in it is the operator's choice, so it cannot be read out.
+  ["64:ff9b:1::", 48],
+  ["100::", 64],
+  ["2001::", 23], // incl. Teredo
+  ["2001:db8::", 32],
+  ["2002::", 16], // 6to4
+  ["fc00::", 7], // unique-local
+  ["fe80::", 10], // link-local
+  ["fec0::", 10], // site-local
+  ["ff00::", 8], // multicast
 ];
 
 export function normalizePolicy(input: FetchPolicyInput = {}): FetchPolicy {
@@ -120,30 +149,75 @@ export function checkUrl(policy: FetchPolicy, url: string): URL {
 export function isBlockedIpLiteral(hostname: string): boolean {
   const host = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
   if (host.includes(":")) return isBlockedIpv6(host);
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return BLOCKED_IPV4.some((range) => range.test(host));
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return isBlockedIpv4(host);
   const lower = host.toLowerCase().replace(/\.$/, "");
   return lower === "localhost" || lower.endsWith(".localhost");
 }
 
-function isBlockedIpv6(host: string): boolean {
-  const lower = host.toLowerCase();
-  if (lower === "::1" || lower === "::") return true;
-  if (/^fe[89ab][0-9a-f]:/.test(lower)) return true; // link-local fe80::/10
-  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true; // unique-local fc00::/7
-  const mapped = mappedIpv4(lower);
-  return mapped !== undefined && BLOCKED_IPV4.some((range) => range.test(mapped));
+function isBlockedIpv4(host: string): boolean {
+  const octets = host.split(".").map(Number);
+  // Not an address at all, so refused rather than let through.
+  if (octets.some((octet) => octet > 255)) return true;
+  return BLOCKED_IPV4.some(([network, prefix]) => sharesPrefix(octets, network.split(".").map(Number), prefix, 8));
 }
 
-/** WHATWG URL rewrites `::ffff:169.254.169.254` to `::ffff:a9fe:a9fe`, so both spellings are checked. */
-function mappedIpv4(lower: string): string | undefined {
-  const dotted = /^(?:0*:)*0*:ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(lower);
-  if (dotted) return dotted[1];
+/**
+ * NAT64's well-known prefix, 64:ff9b::/96 (RFC 6052). DNS64 answers an IPv4-only name with its public address
+ * and that address under this prefix, and a lookup is refused if any address is, so the range cannot be refused
+ * whole. The address reaches the IPv4 address in its low 32 bits, and is judged as that address.
+ */
+const NAT64_WELL_KNOWN: readonly number[] = [0x64, 0xff9b, 0, 0, 0, 0];
 
-  const hex = /^(?:0*:)*0*:ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(lower);
-  if (!hex) return undefined;
-  const high = Number.parseInt(hex[1], 16);
-  const low = Number.parseInt(hex[2], 16);
-  return [high >> 8, high & 0xff, low >> 8, low & 0xff].join(".");
+function isBlockedIpv6(host: string): boolean {
+  const groups = ipv6Groups(host);
+  // Anything with a colon that does not parse is refused rather than let through.
+  if (groups === undefined) return true;
+  if (NAT64_WELL_KNOWN.every((group, index) => groups[index] === group)) {
+    const [high, low] = groups.slice(6);
+    return isBlockedIpv4([high >> 8, high & 0xff, low >> 8, low & 0xff].join("."));
+  }
+  return BLOCKED_IPV6.some(([network, prefix]) => sharesPrefix(groups, ipv6Groups(network)!, prefix, 16));
+}
+
+/** Whether two addresses, as equal-width parts, agree on their first `prefix` bits. */
+function sharesPrefix(address: readonly number[], network: readonly number[], prefix: number, width: number): boolean {
+  for (let index = 0, remaining = prefix; remaining > 0; index += 1, remaining -= width) {
+    const ignored = Math.max(width - remaining, 0);
+    if (address[index] >> ignored !== network[index] >> ignored) return false;
+  }
+  return true;
+}
+
+/** The eight 16-bit groups of an IPv6 address, in any spelling: `::` shorthand, a dotted IPv4 tail, a zone id. */
+function ipv6Groups(host: string): number[] | undefined {
+  let text = host.toLowerCase();
+  const zone = text.indexOf("%");
+  if (zone !== -1) text = text.slice(0, zone);
+
+  const dotted = /^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (dotted) {
+    const octets = dotted.slice(2).map(Number);
+    if (octets.some((octet) => octet > 255)) return undefined;
+    const high = ((octets[0] << 8) | octets[1]).toString(16);
+    const low = ((octets[2] << 8) | octets[3]).toString(16);
+    text = `${dotted[1]}${high}:${low}`;
+  }
+
+  const halves = text.split("::");
+  if (halves.length > 2) return undefined;
+  const parse = (part: string): number[] | undefined => {
+    if (part === "") return [];
+    const groups = part.split(":");
+    if (!groups.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return undefined;
+    return groups.map((group) => Number.parseInt(group, 16));
+  };
+  const head = parse(halves[0]);
+  const tail = halves.length === 2 ? parse(halves[1]) : [];
+  if (head === undefined || tail === undefined) return undefined;
+  if (halves.length === 1) return head.length === 8 ? head : undefined;
+  const missing = 8 - head.length - tail.length;
+  if (missing < 1) return undefined;
+  return [...head, ...new Array<number>(missing).fill(0), ...tail];
 }
 
 export function createGuardedFetch(policy: FetchPolicy, impl: typeof fetch): typeof fetch {

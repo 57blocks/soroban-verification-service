@@ -60,7 +60,13 @@ function submission(options: { isPublic?: boolean } = {}) {
     body: { target, manifest },
     async createPriorJob(
       priorTarget = target,
-      overrides: { visibility?: "public" | "private"; sourceSha256?: string } = {},
+      overrides: {
+        visibility?: "public" | "private";
+        sourceSha256?: string;
+        proven?: boolean;
+        bldopt?: string[];
+        bldarg?: string[];
+      } = {},
     ): Promise<string> {
       const jobId = createdRows.job(randomUUID());
       const sourceRef: SourceReference = {
@@ -75,9 +81,10 @@ function submission(options: { isPublic?: boolean } = {}) {
         target: priorTarget,
         verificationMode: "submitted",
         sourceRef,
-        buildOptions: { bldopt: [], bldarg: [] },
+        buildOptions: { bldopt: overrides.bldopt ?? [], bldarg: overrides.bldarg ?? [] },
         manifest: { ...manifest, target: priorTarget } as never,
       });
+      if (overrides.proven ?? true) await createdRows.attachJobToNewRebuild(prisma, jobId);
       return jobId;
     },
   };
@@ -247,6 +254,73 @@ describe("POST /api/verification/v1/verifications job creation and target dedup"
     const res = await submit(fixture.body);
 
     expect(res.body).toMatchObject({ status: "queued", job_id: jobId });
+  });
+
+  it("does not answer a submission with a source_uri job that has not yet proven it holds the source", async () => {
+    for (const jobStatus of ["queued", "preparing"] as const) {
+      const fixture = submission();
+      const decoyJobId = await fixture.createPriorJob(fixture.target, { proven: false });
+      if (jobStatus !== "queued") await jobsRepository.advanceJob(decoyJobId, "queued", jobStatus);
+
+      const res = await submit(fixture.body);
+
+      expect(res.status).toBe(202);
+      expect(res.body.job_id).not.toBe(decoyJobId);
+      const created = await jobsRepository.getJobById(res.body.job_id);
+      expect(created?.target.contract_id).toBe(fixture.target.contract_id);
+      expect((await jobsRepository.getJobById(decoyJobId))?.status).toBe(jobStatus);
+    }
+  });
+
+  it("reuses a source_uri job once it has attached to a rebuild", async () => {
+    const fixture = submission();
+    const jobId = await fixture.createPriorJob(fixture.target, { proven: false });
+    await jobsRepository.advanceJob(jobId, "queued", "preparing");
+
+    const before = await submit(fixture.body);
+    expect(before.body.job_id).not.toBe(jobId);
+
+    await createdRows.attachJobToNewRebuild(prisma, jobId);
+    await jobsRepository.advanceJob(jobId, "preparing", "building");
+    await jobsRepository.advanceJob(before.body.job_id, "queued", "failed", {
+      failureReason: "source_unreachable",
+      error: "source_fetch_failed",
+      progress: undefined,
+    });
+
+    const after = await submit(fixture.body);
+    expect(after.body).toMatchObject({ status: "queued", job_id: jobId });
+  });
+
+  it("does not answer a submission with a proven job that builds the same source with other options", async () => {
+    for (const other of [{ bldopt: ["--features=backdoor"] }, { bldarg: ["contract", "build", "--release"] }]) {
+      const fixture = submission();
+      const decoyJobId = await fixture.createPriorJob(fixture.target, other);
+      await jobsRepository.advanceJob(decoyJobId, "queued", "building");
+
+      const res = await submit(fixture.body);
+
+      expect(res.status).toBe(202);
+      expect(res.body.job_id).not.toBe(decoyJobId);
+      const created = await jobsRepository.getJobById(res.body.job_id);
+      expect(created?.buildOptions).toMatchObject({ bldopt: [], bldarg: [] });
+    }
+  });
+
+  it("reuses a job declaring the same options, whatever attaching to a rebuild added to them", async () => {
+    const fixture = submission();
+    const bldopt = ["--package=token", "--features=mainnet"];
+    const jobId = await fixture.createPriorJob(fixture.target, { bldopt });
+    await jobsRepository.advanceJob(jobId, "queued", "building", {
+      buildOptions: { bldopt, bldarg: [], metadata_replay: ["rsver=1.90.0"] },
+    });
+
+    const same = await submit({ ...fixture.body, manifest: { ...fixture.manifest, bldopt } });
+    expect(same.body).toMatchObject({ status: "queued", job_id: jobId });
+
+    const reordered = await submit({ ...fixture.body, manifest: { ...fixture.manifest, bldopt: [...bldopt].reverse() } });
+    expect(reordered.status).toBe(202);
+    expect(reordered.body.job_id).not.toBe(jobId);
   });
 
   it("does not answer a submission with an in-flight job built from a different source archive", async () => {

@@ -233,10 +233,23 @@ next. Override any setting with the `policy` option.
 | --- | --- | --- |
 | `allowedSchemes` | `["https:"]` | The base URL's scheme |
 | `allowedOrigins` | The origins the list names | The base URL's origin |
-| `blockPrivateRanges` | `true`: loopback, private and link-local addresses, and `localhost`, are refused | `false` |
+| `blockPrivateRanges` | `true`: every address that is not on the public internet is refused, and so is `localhost`. See below | `false` |
 | `followRedirects` | `false`: a redirect fails the request | `false` |
 | `maxResponseBytes` | 1 MiB, counted as the body arrives | 1 MiB |
 | `timeoutMs` | 5000, and the request is cancelled | 5000 |
+
+With `blockPrivateRanges`, a URL whose host is one of these addresses is refused. The check reads the
+URL only: a host name is not resolved.
+
+- IPv4: loopback, private, carrier-grade NAT, link-local, documentation, benchmarking, multicast and
+  reserved ranges.
+- IPv6: loopback, unique-local, link-local, site-local, documentation, multicast, 6to4 and Teredo.
+- Any IPv4-mapped or IPv4-compatible IPv6 address, such as `[::ffff:8.8.8.8]`, even when the IPv4
+  address inside it is public. Use the IPv4 address itself.
+- An IPv6 literal that does not parse.
+
+A NAT64 address under `64:ff9b::/96` is judged as the IPv4 address it reaches, so a network with DNS64
+works. Addresses under NAT64's local-use prefix, `64:ff9b:1::/48`, are refused.
 
 When redirects are allowed, the final URL is checked again. To read a verifier on your own machine,
 relax both settings by name:
