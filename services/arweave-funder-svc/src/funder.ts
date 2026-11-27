@@ -15,6 +15,8 @@ const DAY_SECONDS = 86_400;
 const APPROVAL_HISTORY_SECONDS = 30 * DAY_SECONDS;
 const SETTLED_HISTORY_SECONDS = 30 * DAY_SECONDS;
 const RECEIPT_GRACE_SECONDS = 180;
+// A landed top-up's receipt missing while its nonce stays spent is a lagging backend for seconds, not half an hour.
+const SPENT_NONCE_GRACE_SECONDS = 30 * 60;
 const PLAIN_TRANSFER_GAS = 21_000n;
 // A signed EIP-1559 value transfer with empty data is about 115 bytes; the L1 fee is quoted for this many.
 const TOP_UP_TX_BYTES = 150;
@@ -51,7 +53,7 @@ export type FunderState = {
   /** The next nonce this funder will use. The chain's nonce must never pass it. */
   nextNonce: number;
   lease?: { holder: string; until: number };
-  halted?: { reason: string; at: number };
+  halted?: { reason: string; at: number; hash?: string };
   txs: FundTx[];
   /** Credit shares granted to the upload key, in winc. */
   approvals: { at: number; amount: string }[];
@@ -129,6 +131,9 @@ export type RoundOutcome = "lease-held" | "conflict" | "halted" | "done";
 
 class Conflict extends Error {}
 
+/** The bundler answered that it made no share; any other failure may have made one. */
+export class ShareRefused extends Error {}
+
 const WEI_PER_ETH = 10n ** 18n;
 const WINC_PER_CREDIT = 10n ** 12n;
 const toEth = (wei: bigint): number => Number(wei) / Number(WEI_PER_ETH);
@@ -184,6 +189,10 @@ export class FunderRound {
 
     if (this.state.halted) {
       telemetry.gauge("arweave_funder_halted", 1);
+      // Held for as long as the halt that raised them, so their alarms do not clear while nothing is signed.
+      const cause = this.state.txs.find((tx) => tx.hash === this.state.halted!.hash);
+      telemetry.gauge("arweave_funder_credit_rejected", cause?.status === "rejected" ? 1 : 0);
+      telemetry.gauge("arweave_funder_reorged", cause?.status === "reorged" ? 1 : 0);
       telemetry.event("error", "arweave funder is halted; clear `halted` in its state object once the cause is understood", this.state.halted);
       await this.reportBalances();
       return "halted";
@@ -232,8 +241,8 @@ export class FunderRound {
     this.version = version;
   }
 
-  private async halt(reason: string): Promise<"halted"> {
-    this.state.halted = { reason, at: this.now() };
+  private async halt(reason: string, hash?: string): Promise<"halted"> {
+    this.state.halted = { reason, at: this.now(), ...(hash ? { hash } : {}) };
     this.deps.telemetry.gauge("arweave_funder_halted", 1);
     this.deps.telemetry.event("error", `arweave funder halted: ${reason}`);
     await this.save();
@@ -322,15 +331,19 @@ export class FunderRound {
     const { chain, telemetry } = this.deps;
     const watched = this.state.txs.filter((tx) => tx.blockNumber !== undefined && tx.confirmedAt === undefined && tx.status !== "reorged");
     telemetry.gauge("arweave_funder_reorged", 0);
-    let finallyRejected = false;
+    telemetry.gauge("arweave_funder_credit_rejected", 0);
     if (watched.length > 0) {
       const safe = await chain.safeBlock();
       for (const tx of watched) {
         const receipt = await chain.receipt(tx.hash);
         if (!receipt && latest > tx.nonce) {
-          delete tx.receiptMissingSince;
-          if ((await this.adoptReplacement(tx)) === "halted") return "halted";
-          continue;
+          tx.receiptMissingSince ??= this.now();
+          const adopted = await this.adoptReplacement(tx);
+          if (adopted === "halted") return "halted";
+          if (adopted === "adopted") continue;
+          // Spent nonce, no receipt for any transaction this funder signed: past the grace, someone else's spent it.
+          if (this.now() - tx.receiptMissingSince < SPENT_NONCE_GRACE_SECONDS) continue;
+          return this.halt(`nonce ${tx.nonce} was consumed by a transaction this funder did not record, after top-up ${tx.hash} landed`, tx.hash);
         }
         if (receipt) {
           delete tx.receiptMissingSince;
@@ -338,8 +351,9 @@ export class FunderRound {
           if (receipt.blockNumber <= safe) {
             tx.confirmedAt = this.now();
             if (tx.status === "rejected") {
-              finallyRejected = true;
-              telemetry.event("error", "arweave funder: Turbo still refuses a top-up whose block is now safe", { hash: tx.hash, nonce: tx.nonce, value_wei: tx.value });
+              // Signing on would repeat whatever made Turbo refuse it, up to the daily cap every day.
+              telemetry.gauge("arweave_funder_credit_rejected", 1);
+              return this.halt(`Turbo refuses top-up ${tx.hash} (nonce ${tx.nonce}, ${tx.value} wei), whose block is now safe`, tx.hash);
             }
           }
           continue;
@@ -350,7 +364,6 @@ export class FunderRound {
       }
       await this.save();
     }
-    telemetry.gauge("arweave_funder_credit_rejected", finallyRejected ? 1 : 0);
     return "ok";
   }
 
@@ -359,7 +372,7 @@ export class FunderRound {
    * place after a reorganisation. Before Turbo credited it, the replacement takes over as the landed top-up; after,
    * the funder halts, because Turbo credited a transfer the chain no longer holds.
    */
-  private async adoptReplacement(tx: FundTx): Promise<"halted" | "ok"> {
+  private async adoptReplacement(tx: FundTx): Promise<"halted" | "adopted" | "none"> {
     for (const sibling of this.groups().get(tx.nonce)!) {
       if (sibling === tx || sibling.status !== "dropped") continue;
       const receipt = await this.deps.chain.receipt(sibling.hash);
@@ -368,11 +381,12 @@ export class FunderRound {
         const settledAs = tx.status === "credited" ? "credited by Turbo" : "refused by Turbo";
         this.mark(tx, "reorged");
         this.deps.telemetry.gauge("arweave_funder_reorged", 1);
-        return this.halt(`top-up ${tx.hash} (nonce ${tx.nonce}) was ${settledAs}, then replaced on chain by ${sibling.hash}`);
+        return this.halt(`top-up ${tx.hash} (nonce ${tx.nonce}) was ${settledAs}, then replaced on chain by ${sibling.hash}`, tx.hash);
       }
       delete tx.blockNumber;
       delete tx.minedAt;
       delete tx.feeWei;
+      delete tx.receiptMissingSince;
       this.mark(tx, "dropped");
       this.mark(sibling, receipt.status === 1 ? "mined" : "failed");
       this.recordLanding(sibling, receipt);
@@ -381,9 +395,9 @@ export class FunderRound {
         now: sibling.hash,
         nonce: tx.nonce,
       });
-      return "ok";
+      return "adopted";
     }
-    return "ok";
+    return "none";
   }
 
   private async dropReorged(tx: FundTx): Promise<"halted" | "ok"> {
@@ -405,7 +419,7 @@ export class FunderRound {
     const settledAs = tx.status === "credited" ? "credited by Turbo" : "refused by Turbo";
     this.mark(tx, "reorged");
     telemetry.gauge("arweave_funder_reorged", 1);
-    return this.halt(`top-up ${tx.hash} (nonce ${tx.nonce}) was ${settledAs}, then reorganised out of the chain`);
+    return this.halt(`top-up ${tx.hash} (nonce ${tx.nonce}) was ${settledAs}, then reorganised out of the chain`, tx.hash);
   }
 
   /** Same nonce, same recipient and value, fees raised by at least the 12.5% a node requires to accept a replacement. */
@@ -615,9 +629,21 @@ export class FunderRound {
       return;
     }
     telemetry.gauge("arweave_funder_share_unfunded", 0);
-    const id = await bundler.shareCredits(s.approvedAddress, s.shareWinc, s.shareTtlSeconds);
-    this.state.approvals.push({ at: now, amount: s.shareWinc.toString() });
+    // Recorded before Turbo is asked, as a transaction is before it is sent: a share whose answer is lost still counts
+    // against the window. Only an answer that says no share was made takes the record back.
+    const record = { at: now, amount: s.shareWinc.toString() };
+    this.state.approvals.push(record);
     await this.save();
+    let id: string;
+    try {
+      id = await bundler.shareCredits(s.approvedAddress, s.shareWinc, s.shareTtlSeconds);
+    } catch (error) {
+      if (error instanceof ShareRefused) {
+        this.state.approvals = this.state.approvals.filter((a) => a !== record);
+        await this.save();
+      }
+      throw error;
+    }
     telemetry.event("info", "arweave funder: credits shared with the upload key", {
       approved: s.approvedAddress,
       amount_winc: s.shareWinc.toString(),

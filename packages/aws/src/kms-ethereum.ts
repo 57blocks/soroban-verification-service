@@ -72,7 +72,7 @@ export class KmsEthereumSigner {
     publicKey: Uint8Array,
   ) {
     this.publicKey = Buffer.from(publicKey);
-    // Turbo compares addresses lowercased; a checksummed one would never match.
+    // Lowercase for comparisons and RPC calls; TurboClient puts every address it sends in checksum case.
     this.address = computeAddress(publicKey).toLowerCase();
   }
 

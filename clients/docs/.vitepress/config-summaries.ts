@@ -135,7 +135,7 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_FUNDER_APPROVED_ADDRESS:
     "Ethereum address of the orchestrator's upload key, which the funder keeps a share of its Turbo credits in place for.",
   SCVS_FUNDER_CHAIN_ID:
-    "Chain id every top-up transaction is signed for. The funder refuses to sign if its RPC endpoint reports a different chain.",
+    "Chain id every top-up transaction is signed for: 8453 (Base) for `mainnet`, 84532 (Base Sepolia) for `devnet` with `base-eth`. Startup refuses a chain that does not match SCVS_ARWEAVE_NETWORK and SCVS_ARWEAVE_TOKEN, and the funder refuses to sign if its RPC endpoint reports a different chain.",
   SCVS_FUNDER_CREDITS_LOW_WINC:
     "Spendable Turbo credits, in winc, below which the funder tops up its funding key.",
   SCVS_FUNDER_DAILY_TOPUP_CAP_WEI:

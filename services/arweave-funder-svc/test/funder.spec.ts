@@ -1,4 +1,4 @@
-import { FunderRound, type Bundler, type Chain, type FunderSettings, type FunderState, type FundTx, type StateStore, type TxSigner } from "../src/funder.js";
+import { FunderRound, ShareRefused, type Bundler, type Chain, type FunderSettings, type FunderState, type FundTx, type StateStore, type TxSigner } from "../src/funder.js";
 
 const FUNDER = "0x00000000000000000000000000000000000000f0";
 const DEPOSIT = "0x00000000000000000000000000000000000000d0";
@@ -227,7 +227,30 @@ describe("topping up", () => {
     expect(chain.sent).toEqual(["0xraw0"]);
   });
 
-  it("settles a deposit Turbo still refuses once its block is safe, reports it, and counts it against the daily cap", async () => {
+  it("halts once Turbo still refuses a deposit whose block is safe, and holds the alarm for as long as it is halted", async () => {
+    const { chain, bundler, store, gauges, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credit = "rejected";
+    clock.now += 300;
+    await round();
+    chain.safe = 101;
+    clock.now += 300;
+    await expect(round()).resolves.toBe("halted");
+    expect(txs(store)[0]).toMatchObject({ status: "rejected", confirmedAt: clock.now });
+    expect(store.state?.halted).toMatchObject({ hash: "0xhash0" });
+    expect(store.state?.halted?.reason).toMatch(/Turbo refuses top-up 0xhash0 .* whose block is now safe/);
+    expect(gauges.get("arweave_funder_credit_rejected")).toBe(1);
+    for (let i = 0; i < 3; i += 1) {
+      clock.now += 300;
+      await expect(round()).resolves.toBe("halted");
+      expect(gauges.get("arweave_funder_credit_rejected")).toBe(1);
+    }
+    expect(bundler.submitted).toEqual(["0xhash0"]);
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+
+  it("counts a refused deposit against the daily cap once the halt is cleared", async () => {
     const { chain, bundler, store, gauges, round } = setup({ dailyTopUpCapWei: ETH / 4n });
     await round();
     chain.mine("0xhash0");
@@ -237,12 +260,10 @@ describe("topping up", () => {
     chain.safe = 101;
     clock.now += 300;
     await round();
-    expect(txs(store)[0]).toMatchObject({ status: "rejected", confirmedAt: clock.now });
-    expect(gauges.get("arweave_funder_credit_rejected")).toBe(1);
+    delete store.state!.halted;
     clock.now += 300;
-    await round();
+    await expect(round()).resolves.toBe("done");
     expect(gauges.get("arweave_funder_credit_rejected")).toBe(0);
-    expect(bundler.submitted).toEqual(["0xhash0"]);
     expect(chain.sent).toEqual(["0xraw0"]);
     expect(gauges.get("arweave_funder_daily_cap_reached")).toBe(1);
   });
@@ -481,6 +502,22 @@ describe("a receipt a lagging RPC backend has not seen", () => {
     expect(chain.sent).toEqual(["0xraw0"]);
   });
 
+  it("halts once no transaction it signed has a receipt for a spent nonce, long past any backend's lag", async () => {
+    const { chain, bundler, store, round } = setup();
+    await round();
+    chain.mine("0xhash0");
+    bundler.credits = CREDIT;
+    clock.now += 300;
+    await round();
+    chain.receipts.delete("0xhash0");
+    clock.now += 300;
+    await expect(round()).resolves.toBe("done");
+    clock.now += 30 * 60;
+    await expect(round()).resolves.toBe("halted");
+    expect(store.state?.halted?.reason).toMatch(/nonce 0 was consumed by a transaction this funder did not record, after top-up 0xhash0 landed/);
+    expect(chain.sent).toEqual(["0xraw0"]);
+  });
+
   it("is not a reorg when it reappears within the grace period", async () => {
     const { chain, bundler, store, round } = setup();
     await round();
@@ -502,6 +539,27 @@ describe("a receipt a lagging RPC backend has not seen", () => {
 });
 
 describe("sharing with the upload key", () => {
+  it("records a share before asking Turbo, and keeps it counted when the answer is lost", async () => {
+    const { bundler, store, round } = setup();
+    bundler.credits = CREDIT;
+    bundler.shareCredits = async () => {
+      throw new Error("share credits: request timed out");
+    };
+    await expect(round()).rejects.toThrow(/timed out/);
+    expect(store.state?.approvals).toEqual([{ at: T0, amount: (CREDIT / 20n).toString() }]);
+  });
+
+  it("takes the record back when Turbo answers that it made no share", async () => {
+    const { bundler, store, round } = setup();
+    bundler.credits = CREDIT;
+    bundler.shareCredits = async () => {
+      throw new ShareRefused("share credits: Turbo answered HTTP 400");
+    };
+    await expect(round()).rejects.toThrow(/HTTP 400/);
+    expect(store.state?.approvals).toEqual([]);
+  });
+
+
   it("waits for a top-up instead of failing the round when the spendable credits cannot cover a share", async () => {
     const { bundler, gauges, round } = setup();
     bundler.credits = CREDIT / 40n;

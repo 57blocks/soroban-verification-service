@@ -31,7 +31,7 @@ describe("funder configuration", () => {
   });
 
   it("points mainnet at Turbo's production services", () => {
-    expect(loadFunderConfig({ ...ENV, SCVS_ARWEAVE_NETWORK: "mainnet" }).turbo).toEqual({
+    expect(loadFunderConfig({ ...ENV, SCVS_ARWEAVE_NETWORK: "mainnet", SCVS_FUNDER_CHAIN_ID: "8453" }).turbo).toEqual({
       uploadUrl: "https://upload.ardrive.io",
       paymentUrl: "https://payment.ardrive.io",
     });
@@ -43,6 +43,9 @@ describe("funder configuration", () => {
     ["a missing deposit address", { SCVS_FUNDER_DEPOSIT_ADDRESS: undefined }, /SCVS_FUNDER_DEPOSIT_ADDRESS/],
     ["a daily cap below one top-up", { SCVS_FUNDER_DAILY_TOPUP_CAP_WEI: "1" }, /must be at least SCVS_FUNDER_TOPUP_WEI/],
     ["a window cap below one share", { SCVS_FUNDER_SHARE_WINDOW_CAP_WINC: "1" }, /must be at least SCVS_FUNDER_SHARE_WINC/],
+    ["mainnet credits bought on a testnet", { SCVS_ARWEAVE_NETWORK: "mainnet" }, /SCVS_FUNDER_CHAIN_ID must be 8453 for SCVS_ARWEAVE_TOKEN base-eth on SCVS_ARWEAVE_NETWORK mainnet/],
+    ["sandbox credits bought with real ETH", { SCVS_FUNDER_CHAIN_ID: "8453" }, /SCVS_FUNDER_CHAIN_ID must be 84532 for SCVS_ARWEAVE_TOKEN base-eth on SCVS_ARWEAVE_NETWORK devnet/],
+    ["a chain of the other token", { SCVS_ARWEAVE_TOKEN: "ethereum" }, /SCVS_FUNDER_CHAIN_ID must be 11155111 or 17000/],
     ["a fractional amount", { SCVS_FUNDER_TOPUP_WEI: "0.5" }, /SCVS_FUNDER_TOPUP_WEI must be a positive integer number of wei/],
   ])("rejects %s", (_label, change, message) => {
     expect(() => loadFunderConfig({ ...ENV, ...change })).toThrow(message);

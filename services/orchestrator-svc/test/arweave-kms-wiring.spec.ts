@@ -229,4 +229,40 @@ describe("finding an item this verifier already uploaded", () => {
     }).findExistingUpload("report", "c".repeat(64));
     expect(found).toBeUndefined();
   });
+
+  it("reads further pages when others' items fill the first one", async () => {
+    const afters: unknown[] = [];
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      const { variables } = JSON.parse(String(init?.body)) as { variables: { after?: string } };
+      afters.push(variables.after);
+      const page = variables.after === undefined
+        ? { pageInfo: { hasNextPage: true }, edges: [{ cursor: "c1", node: { id: "someone-elses", owner: { key: "their-owner-key" } } }] }
+        : { pageInfo: { hasNextPage: false }, edges: [{ cursor: "c2", node: { id: "ours", owner: { key: "our-owner-key" } } }] };
+      return Response.json({ data: { transactions: page } });
+    }) as typeof fetch;
+    const service = new ArweaveArchiveService(configWith({}), {} as never, {} as never, {} as never);
+    (service as unknown as { getUploader: () => Promise<unknown> }).getUploader = async () => fakeUploader("stored");
+    const found = await (service as unknown as {
+      findExistingUpload(kind: "report", sha: string): Promise<{ tx_id: string } | undefined>;
+    }).findExistingUpload("report", "c".repeat(64));
+    expect(found?.tx_id).toBe("ours");
+    expect(afters).toEqual([undefined, "c1"]);
+  });
+
+  it("stops at its page limit rather than follow others' items without end", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return Response.json({
+        data: { transactions: { pageInfo: { hasNextPage: true }, edges: [{ cursor: `c${calls}`, node: { id: "someone-elses", owner: { key: "their-owner-key" } } }] } },
+      });
+    }) as typeof fetch;
+    const service = new ArweaveArchiveService(configWith({}), {} as never, {} as never, {} as never);
+    (service as unknown as { getUploader: () => Promise<unknown> }).getUploader = async () => fakeUploader("stored");
+    const found = await (service as unknown as {
+      findExistingUpload(kind: "report", sha: string): Promise<unknown>;
+    }).findExistingUpload("report", "c".repeat(64));
+    expect(found).toBeUndefined();
+    expect(calls).toBe(10);
+  });
 });

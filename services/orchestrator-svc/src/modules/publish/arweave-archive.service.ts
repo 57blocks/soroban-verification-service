@@ -54,6 +54,8 @@ type UploadOutcome =
 type ArchivePayloadKind = "report" | "source";
 
 const GATEWAY_TIMEOUT_MS = 15_000;
+// 1000 items: far past any legitimate count of copies of one hash, short of a page loop an adversary could drag on.
+const EXISTING_UPLOAD_MAX_PAGES = 10;
 
 // An item with no deadline from the bundler (found already uploaded, or its receipt gave none) gets this many blocks
 // from when it is first checked: about 7 hours.
@@ -227,9 +229,11 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     }
     const graphqlUrl = `${config.gatewayUrl}/graphql`;
     // Matched on the owner's key, not its address: gateways do not agree on how they index an Ethereum signer's address.
-    const query = `query ($tags: [TagFilter!]) {
-      transactions(first: 100, tags: $tags) {
-        edges { node { id owner { key } } }
+    // The tags are public, so anyone's items can carry them too; pages are read until ours turns up or they run out.
+    const query = `query ($tags: [TagFilter!], $after: String) {
+      transactions(first: 100, tags: $tags, after: $after) {
+        pageInfo { hasNextPage }
+        edges { cursor node { id owner { key } } }
       }
     }`;
     const tags = [
@@ -238,30 +242,47 @@ export class ArweaveArchiveService implements OnModuleInit, OnModuleDestroy {
     ];
 
     try {
-      const response = await fetch(graphqlUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query, variables: { tags } }),
-        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+      let after: string | undefined;
+      for (let page = 0; page < EXISTING_UPLOAD_MAX_PAGES; page++) {
+        const response = await fetch(graphqlUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ query, variables: { tags, after } }),
+          signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+          this.logger.error("findExistingUpload query returned a non-OK status — treating as indeterminate, not as no existing upload", {
+            status: response.status,
+          });
+          return undefined;
+        }
+        const body = (await response.json()) as {
+          data?: {
+            transactions?: {
+              pageInfo?: { hasNextPage?: boolean };
+              edges?: { cursor?: string; node: { id: string; owner?: { key?: string } } }[];
+            };
+          };
+          errors?: { message: string }[];
+        };
+        if (body.errors?.length) {
+          this.logger.error("findExistingUpload query returned GraphQL errors — treating as indeterminate, not as no existing upload", {
+            errors: body.errors.map((e) => e.message).join("; "),
+          });
+          return undefined;
+        }
+        const edges = body.data?.transactions?.edges ?? [];
+        const txId = edges.find((edge) => edge.node.owner?.key === uploader.ownerKey)?.node.id;
+        if (txId) return { tx_id: txId, archive_url: this.gatewayUrlFor(txId) };
+        after = edges.at(-1)?.cursor;
+        if (!body.data?.transactions?.pageInfo?.hasNextPage || !after) return undefined;
+      }
+      this.logger.warn("findExistingUpload read its page limit without finding this service's item — treating as no existing upload", {
+        kind,
+        content_sha256: contentSha256,
+        pages: EXISTING_UPLOAD_MAX_PAGES,
       });
-      if (!response.ok) {
-        this.logger.error("findExistingUpload query returned a non-OK status — treating as indeterminate, not as no existing upload", {
-          status: response.status,
-        });
-        return undefined;
-      }
-      const body = (await response.json()) as {
-        data?: { transactions?: { edges?: { node: { id: string; owner?: { key?: string } } }[] } };
-        errors?: { message: string }[];
-      };
-      if (body.errors?.length) {
-        this.logger.error("findExistingUpload query returned GraphQL errors — treating as indeterminate, not as no existing upload", {
-          errors: body.errors.map((e) => e.message).join("; "),
-        });
-        return undefined;
-      }
-      const txId = body.data?.transactions?.edges?.find((edge) => edge.node.owner?.key === uploader.ownerKey)?.node.id;
-      return txId ? { tx_id: txId, archive_url: this.gatewayUrlFor(txId) } : undefined;
+      return undefined;
     } catch (error) {
       this.logger.error("findExistingUpload query failed — treating as no existing upload", {
         error: error instanceof Error ? error : String(error),

@@ -6,10 +6,11 @@ import {
   type S3Client,
   type TurboClient,
   type TurboShare,
+  TurboHttpError,
   type TurboToken,
 } from "@scvs/aws";
 import type { Bundler, Chain, FunderState, Receipt, StateStore } from "./funder.js";
-import { STATE_SCHEMA } from "./funder.js";
+import { ShareRefused, STATE_SCHEMA } from "./funder.js";
 
 const RPC_TIMEOUT_MS = 15_000;
 const GAS_PRICE_ORACLE = "0x420000000000000000000000000000000000000F";
@@ -146,8 +147,14 @@ export class TurboFunderClient implements Bundler {
     return remainingShare(await this.turbo.sharesGivenBy(this.signer.address), approvedAddress, Date.now());
   }
 
-  shareCredits(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<string> {
-    return this.turbo.shareCredits(this.signer, approvedAddress, amount, expiresInSeconds);
+  async shareCredits(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<string> {
+    try {
+      return await this.turbo.shareCredits(this.signer, approvedAddress, amount, expiresInSeconds);
+    } catch (error) {
+      // A 4xx is Turbo turning the share down; a 5xx or a lost answer may come after the share was made.
+      if (error instanceof TurboHttpError && error.status >= 400 && error.status < 500) throw new ShareRefused(error.message);
+      throw error;
+    }
   }
 
   submitFundTransaction(hash: string): Promise<"credited" | "pending" | "rejected"> {

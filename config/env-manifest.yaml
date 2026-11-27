@@ -2265,7 +2265,10 @@ services:
         inject: ecs-secrets
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
-        note: The EIP-155 chain id every top-up is signed for (8453 Base, 84532 Base Sepolia).
+        note: >-
+          The EIP-155 chain id every top-up is signed for (8453 Base, 84532 Base Sepolia). Boot requires it
+          to match SCVS_ARWEAVE_NETWORK and SCVS_ARWEAVE_TOKEN: a mainnet chain for mainnet credits, a
+          testnet chain for the sandbox's.
       SCVS_FUNDER_DEPOSIT_ADDRESS:
         type: string
         required: yes

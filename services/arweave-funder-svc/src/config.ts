@@ -9,6 +9,13 @@ const KEY_ARN = /^arn:aws[a-z-]*:kms:[a-z0-9-]+:\d{12}:key\/[0-9a-f-]+$/;
 const WEI = /^[1-9]\d*$/;
 const WINC = WEI;
 const tokens = ["ethereum", "base-eth"] as const;
+// Mainnet credits are bought with real ETH and the sandbox's with testnet ETH; a mismatch sends real funds to the sandbox.
+const CHAINS: Record<string, number[]> = {
+  "mainnet/ethereum": [1],
+  "mainnet/base-eth": [8453],
+  "devnet/ethereum": [11155111, 17000],
+  "devnet/base-eth": [84532],
+};
 
 const positiveWei = (name: string) => Matches(WEI, { message: `${name} must be a positive integer number of wei` });
 const positiveWinc = (name: string) => Matches(WINC, { message: `${name} must be a positive integer number of winc` });
@@ -40,6 +47,21 @@ export class ArweaveFunderEnvDto {
   SCVS_FUNDER_RPC_URL!: string;
 
   @Matches(/^[1-9]\d*$/, { message: "SCVS_FUNDER_CHAIN_ID must be a positive integer" })
+  @ValidateBy({
+    name: "chainMatchesNetwork",
+    validator: {
+      validate: (value, args) => {
+        const env = args?.object as ArweaveFunderEnvDto;
+        const chains = CHAINS[`${env.SCVS_ARWEAVE_NETWORK}/${env.SCVS_ARWEAVE_TOKEN}`];
+        return chains === undefined || chains.includes(Number(value));
+      },
+      defaultMessage: (args) => {
+        const env = args?.object as ArweaveFunderEnvDto;
+        const chains = CHAINS[`${env.SCVS_ARWEAVE_NETWORK}/${env.SCVS_ARWEAVE_TOKEN}`] ?? [];
+        return `SCVS_FUNDER_CHAIN_ID must be ${chains.join(" or ")} for SCVS_ARWEAVE_TOKEN ${env.SCVS_ARWEAVE_TOKEN} on SCVS_ARWEAVE_NETWORK ${env.SCVS_ARWEAVE_NETWORK}`;
+      },
+    },
+  })
   SCVS_FUNDER_CHAIN_ID!: string;
 
   @Matches(ADDRESS, { message: "SCVS_FUNDER_DEPOSIT_ADDRESS must be Turbo's 0x-prefixed deposit address for this token and network" })

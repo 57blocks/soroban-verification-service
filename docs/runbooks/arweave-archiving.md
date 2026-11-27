@@ -7,9 +7,10 @@ back whole, while the funder is stopped (`desired_count` 0), so no round holds i
 ## The funder halted (`halted`)
 
 The funder signs nothing until `halted` is removed from its state object. The reason in that field says
-which of three things happened.
+which of four things happened; `halted.hash`, when present, names the top-up it is about.
 
-1. **"unexpected outflow" or "nonce N was consumed by a transaction this funder did not record".** The
+1. **"unexpected outflow" or "nonce N was consumed by a transaction this funder did not record"** (with or
+   without "after top-up … landed"). The
    funding key signed something this code did not. List the funding address's transactions on a block
    explorer and match each nonce against `txs` in the state. Any nonce the state does not hold is a
    transaction someone else signed. Treat it as a compromise until shown otherwise: deny `kms:Sign` in
@@ -22,6 +23,7 @@ which of three things happened.
    hash up again: if the network included it in a later block, mark that transaction `credited` with its
    new `blockNumber`; if it is gone for good, its nonce is free again and `nextNonce` must be set back to
    the chain's nonce. Then remove `halted`.
+4. **"Turbo refuses top-up … whose block is now safe"** (also raises `credit_rejected`). See below.
 
 ## The funder will not start: "Irys-era state … still signed/broadcast"
 
@@ -38,8 +40,11 @@ or `SCVS_FUNDER_MAX_REPLACEMENTS` and redeploy; the next round re-prices it once
 ## Turbo refused a deposit (`credit_rejected`)
 
 The transfer mined, the funder offered it to Turbo every round until its block was safe, and Turbo still
-refused it. The ETH has left the funding address. Take the hash to ArDrive. Nothing needs undoing in the
-funder: the transaction stays `rejected` and still counts against the day's top-up cap.
+refused it. The ETH has left the funding address and bought nothing, and the funder has halted so that a
+refusal with a lasting cause, such as an amount under Turbo's minimum, is not repeated up to the daily
+cap every day. The alarm holds while the funder is halted. Take the hash to ArDrive and find the cause;
+fix the configuration if it was ours. Then remove `halted`. The transaction stays `rejected` and still
+counts against the day's top-up cap.
 
 ## No credits to share (`share_unfunded`)
 
