@@ -36,6 +36,7 @@ import type {
 } from "@scvs/core";
 import {
   assembleArtifact,
+  publishedSourceUri,
   toBldarg,
   toBldopt,
   toBuildIsolation,
@@ -136,7 +137,7 @@ export class PublishService {
     const { artifact_url: _artifactUrl, artifact_sha256: _artifactSha256, arweave_tx_id: _arweaveTxId, ...reassemblyInput } = stored;
     const written = await this.writePublication(job, reassemblyInput, stored.matched, { ownsRow: false });
 
-    // A private job's earlier report may carry the source_uri it no longer publishes. Point its row at the report
+    // A job's earlier report may carry a source_uri it no longer publishes. Point its row at the report
     // just written, and forget the earlier report's permanent copy (archived_tx_id), which cannot be withdrawn: kept,
     // the status-link recovery would link it to the new report. The new report owes its own copy, so the archive
     // retry picks it up.
@@ -145,7 +146,9 @@ export class PublishService {
     const repoint =
       written &&
       written.reportUrl !== stored.artifact_url &&
-      (job.sourceRef.visibility === "private" || (await this.storedReportIsPrivate(stored)));
+      (job.sourceRef.visibility === "private" ||
+        (Boolean(job.sourceRef.source_uri) && publishedSourceUri(job.sourceRef) === undefined) ||
+        (await this.storedReportIsPrivate(stored)));
     if (written && repoint) {
       const { arweave_tx_id: _staleCopy, ...kept } = stored;
       await this.jobs.updateJob(jobId, {
@@ -231,7 +234,7 @@ export class PublishService {
         bldarg: toBldarg(builtOptions),
         bldopt: toBldopt(builtOptions),
         sourceSha256: artifact.source.source_sha256,
-        sourceUri: job.sourceRef.visibility === "public" ? job.sourceRef.source_uri : undefined,
+        sourceUri: publishedSourceUri(job.sourceRef),
         ...(matched ? {} : { rebuiltHash: finalResult.rebuilt_wasm_hash }),
         processedAt: now,
         resultsUrls: [{ type: "report", location: "verifier_self_storage", url: reportUrl, sha256: reportSha256 }],

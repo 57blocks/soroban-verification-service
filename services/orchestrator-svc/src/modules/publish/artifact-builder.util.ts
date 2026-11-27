@@ -6,7 +6,7 @@ import type {
   SandboxDiagnostics as SandboxDiagnosticsDto,
 } from "@scvs/core";
 import type { JobRecord } from "@scvs/db";
-import { parseDto, type VerificationResultSummary as VerificationResultSummaryDto } from "@scvs/core";
+import { isHttpsSourceUri, parseDto, type VerificationResultSummary as VerificationResultSummaryDto } from "@scvs/core";
 import { VerificationArtifact as VerificationArtifactDto } from "@scvs/storage-layout";
 
 export type VerifierIdentity = { id: string; displayName: string; policyId: string };
@@ -79,14 +79,22 @@ export function assembleArtifact(
       source_sha256: canonicalSourceSha256 ?? requireSourceSha256(job),
       is_public: job.sourceRef.visibility === "public",
       ...(sourceFileName ? { source_file_name: sourceFileName } : {}),
-      // The persisted ref: the submitter's declared source_uri, never a presigned URL. Private sources keep it private.
-      ...(job.sourceRef.visibility === "public" && job.sourceRef.source_uri ? { source_uri: job.sourceRef.source_uri } : {}),
+      ...(publishedSourceUri(job.sourceRef) ? { source_uri: publishedSourceUri(job.sourceRef) } : {}),
       ...(chainSourceSha256 ? { chain_source_sha256: chainSourceSha256 } : {}),
     },
     result: publishedResult(result),
     image_trust_level: buildEnvironment.trustLevel,
     build_recipe: buildRecipeRecord(job, buildEnvironment),
   } satisfies VerificationArtifactDto);
+}
+
+/**
+ * The submitter's declared source_uri, never a presigned URL, and only one the verifier fetched and hash-checked:
+ * a public `source_uri` job's. An upload's bytes never came from a URL, and a private source keeps its own private.
+ */
+export function publishedSourceUri(sourceRef: JobRecord["sourceRef"]): string | undefined {
+  if (sourceRef.type !== "source_uri" || sourceRef.visibility !== "public" || !sourceRef.source_uri) return undefined;
+  return isHttpsSourceUri(sourceRef.source_uri) ? sourceRef.source_uri : undefined;
 }
 
 function publishedResult(result: VerificationResultSummaryDto): VerificationResultSummaryDto {

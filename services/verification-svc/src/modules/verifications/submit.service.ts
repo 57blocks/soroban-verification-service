@@ -17,6 +17,7 @@ import {
   compareTargetAgainstChain,
   getWasmMetadata,
   runPreflight,
+  unfetchableChainSourceUri,
   validateSubmittedManifest,
   type ChainReaderConfig,
   type ManifestValidation,
@@ -45,8 +46,8 @@ const SEP58_FIELD_HINTS: Record<
   },
   source_uri: {
     description:
-      "Required when the WASM metadata records source_sha256 but no source_uri. Provide a URI or local development path for the exact source archive.",
-    format: "^[a-zA-Z][a-zA-Z0-9+.-]*:\\S+$",
+      "Required when the WASM metadata records source_sha256 but no source_uri. Provide an https:// URL for the exact source archive.",
+    format: "^https://\\S+$",
     example: "https://example.com/my-contract-v1.0.0.tar.gz",
   },
 };
@@ -133,6 +134,13 @@ export class SubmitService {
           SubmittedSourceManifest,
           preflight.suggested_manifest
         );
+        const detail = unfetchableChainSourceUri(inferredManifest.source_uri);
+        if (detail) {
+          return {
+            statusCode: 400,
+            body: errorBody(400, { error: "invalid_manifest", detail, message: detail }),
+          };
+        }
         this.logger.log("manifest inferred from SEP-58 metadata", {
           ...targetFields(target),
           chain_image: inferredManifest.bldimg,
@@ -437,7 +445,6 @@ export class SubmitService {
       ? {
           type: "private_tarball",
           visibility,
-          source_uri: manifest.source_uri,
           source_sha256: manifest.source_sha256,
           tarball_sha256: manifest.source_sha256,
           upload_id: manifest.upload_id,

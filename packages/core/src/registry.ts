@@ -30,6 +30,20 @@ export const SEP58_BLDOPT_ENTRY = /^--[A-Za-z][A-Za-z0-9_-]*(=.+)?$/;
 /** Any scheme, or an absolute path; not restricted to `https`. */
 export const SOURCE_URI_PATTERN = /^(?:[a-zA-Z][a-zA-Z0-9+.-]*:\S+|\/\S+)$/;
 
+/**
+ * The only `source_uri` a submission may name or a result may publish: an absolute `https://` URL every URL parser
+ * reads the same way, so no backslash, control character or scheme-relative spelling.
+ */
+export function isHttpsSourceUri(value: string): boolean {
+  if (!/^https:\/\/[^\s\\/\u0000-\u001f\u007f][^\s\\\u0000-\u001f\u007f]*$/i.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** An explicit registry host, a repository (a tag may precede the digest) and a sha256 digest. */
 export const BLDIMG_PATTERN = /^(?:localhost(?::\d+)?|[^\s@/]*[.:][^\s@/]*)\/[^\s@]+@sha256:[0-9a-f]{64}$/;
 

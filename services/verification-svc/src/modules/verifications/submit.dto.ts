@@ -48,10 +48,10 @@ export class SubmissionManifest {
   @ApiProperty({ type: String, pattern: "^[0-9a-fA-F]{64}$", description: "SHA-256 of the exact source archive bytes." })
   source_sha256!: string;
 
-  @ApiPropertyOptional({ type: String, format: "uri", description: "Where the verifier fetches the archive. Give this or `upload_id`." })
+  @ApiPropertyOptional({ type: String, format: "uri", description: "An `https://` URL where the verifier fetches the archive. Give this or `upload_id`, never both." })
   source_uri?: string;
 
-  @ApiPropertyOptional({ type: String, format: "uuid", description: "The `upload_id` of an upload. Give this or `source_uri`." })
+  @ApiPropertyOptional({ type: String, format: "uuid", description: "The `upload_id` of an upload. Give this or `source_uri`, never both." })
   upload_id?: string;
 
   @ApiPropertyOptional({

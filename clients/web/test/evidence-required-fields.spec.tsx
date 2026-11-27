@@ -114,7 +114,7 @@ describe("stage two validates the required evidence before it submits", () => {
     });
 
     expect(submitVerification).not.toHaveBeenCalled();
-    expect(fieldError(result.current.form, "source_uri")).toMatch(/full URI/);
+    expect(fieldError(result.current.form, "source_uri")).toMatch(/https:\/\/ URL/);
   });
 
   test("a missing source_sha256 issues no request", async () => {
@@ -169,16 +169,21 @@ describe("stage two validates the required evidence before it submits", () => {
 });
 
 describe("the source-URI rule accepts what the submit boundary accepts", () => {
-  test.each([
-    "https://example.com/source.tar.gz",
-    "http://example.com/source.tar.gz",
-    "ipfs://bafy.../source.tar.gz",
-    "/srv/sources/source.tar.gz",
-  ])("%s is accepted", (uri) => {
+  test.each(["https://example.com/source.tar.gz", "HTTPS://example.com/source.tar.gz"])("%s is accepted", (uri) => {
     expect(sourceUriRefusal(uri)).toBeNull();
   });
 
-  test.each(["", "   ", "example.com/source.tar.gz", "9lives:x", "://nowhere"])(
+  test.each([
+    "",
+    "   ",
+    "example.com/source.tar.gz",
+    "9lives:x",
+    "://nowhere",
+    "http://example.com/source.tar.gz",
+    "ipfs://bafy.../source.tar.gz",
+    "/srv/sources/source.tar.gz",
+    "javascript:alert(1)",
+  ])(
     "%j is refused",
     (uri) => {
       expect(sourceUriRefusal(uri)).not.toBeNull();
