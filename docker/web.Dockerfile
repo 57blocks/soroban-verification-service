@@ -35,7 +35,7 @@ RUN stamp=$(sed -n 's/.*<meta name="build" content="\([^"]*\)".*/\1/p' clients/w
       exit 1; \
     fi
 
-FROM nginx:1.30-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
+FROM nginx:1.30-alpine@sha256:caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3
 COPY docker/web-nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/clients/web/dist /usr/share/nginx/html
 COPY --from=build /app/clients/docs/dist /usr/share/nginx/html/docs
