@@ -59,6 +59,11 @@ function targetFields(target: VerificationTarget): LogFields {
   };
 }
 
+/** The build options a job is created with, and the ones another submission must declare to be answered with it. */
+function declaredBuildOptions(manifest: SubmittedSourceManifest): { bldopt: string[]; bldarg: string[] } {
+  return { bldopt: manifest.bldopt || [], bldarg: manifest.bldarg || [] };
+}
+
 function declaredVisibility(manifest: SubmittedSourceManifest): "public" | "private" {
   return (manifest.is_public ?? false) ? "public" : "private";
 }
@@ -452,10 +457,7 @@ export class SubmitService {
       target,
       verificationMode,
       sourceRef,
-      buildOptions: {
-        bldopt: manifest.bldopt || [],
-        bldarg: manifest.bldarg || [],
-      },
+      buildOptions: declaredBuildOptions(manifest),
       manifest,
       dryRun,
       // The service's own hash, never anything the request carried.
@@ -486,6 +488,7 @@ export class SubmitService {
     visibility: "public" | "private";
     sourceSha256: string;
     sourcePossessionProven: true;
+    buildOptions: { bldopt: string[]; bldarg: string[] };
   } {
     const staleMs = this.configService.get("activeJobDedupStaleMs", {
       infer: true,
@@ -497,6 +500,8 @@ export class SubmitService {
       sourceSha256: manifest.source_sha256,
       // A job that has not shown it holds the source must not absorb a submission that can.
       sourcePossessionProven: true,
+      // A job building the same source another way reaches another verdict, so it is not this submission's job.
+      buildOptions: declaredBuildOptions(manifest),
     };
   }
 

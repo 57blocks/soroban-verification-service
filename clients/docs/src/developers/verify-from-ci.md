@@ -134,9 +134,11 @@ other limits; see [Rate limits](../api/index.md#rate-limits).
 
 ## Submitting twice
 
-- **While a job for the same Wasm and the same archive is still queued or running**, with the same
-  `dry_run` and `is_public`, the verifier returns that job, with `202` and its `job_id`, instead of
-  starting another. The response carries no
+- **While a job for the same Wasm and the same archive is still running**, with the same `dry_run`,
+  `is_public`, build options and build arguments, the verifier returns that job, with `202` and its
+  `job_id`, instead of starting another. It does so only once that job has shown it holds the archive:
+  an upload has from the start, and a `source_uri` job has once the verifier has fetched its URL and
+  checked the hash. Until then each submission gets its own job. The response carries no
   `build_log_token`: the log belongs to the submission that created the job. The script above still
   follows the job to its verdict.
 - **After a job has finished**, an identical submission starts a new job, which usually reuses the

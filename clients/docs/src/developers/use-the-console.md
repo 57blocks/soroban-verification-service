@@ -73,8 +73,9 @@ the terms it showed you.
 ## After you submit
 
 The console opens the job's page and follows the job there as it runs. If the same Wasm and archive
-are already being built by a job that has shown it holds the archive, you are taken to that job instead
-of a new one, and its build log stays with whoever submitted it first.
+are already being built, with the same build options and arguments, by a job that has shown it holds
+the archive, you are taken to that job instead of a new one, and its build log stays with whoever
+submitted it first.
 
 Leaving the page does not stop the job. Come back to it from **Recent verification jobs** on the console,
 or through the job link.
