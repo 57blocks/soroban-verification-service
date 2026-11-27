@@ -33,7 +33,7 @@ export const CONFIG_SUMMARIES: Record<string, string> = {
   SCVS_ABUSE_WINDOW_MS:
     "Length, in milliseconds, of the fixed window in which the per-client abuse limits (SCVS_ABUSE_MAX_PER_WINDOW and its submit and stream counterparts) count requests.",
   SCVS_ACTIVE_JOB_DEDUP_STALE_MS:
-    "How long, in milliseconds, an unfinished job makes new submissions for the same target answer \"already queued or running\". Raising it past the slowest realistic build lets a stuck job block its target.",
+    "How long, in milliseconds, an unfinished job that has shown it holds its source answers new submissions of the same target, source and build options with its own job. Raising it past the slowest realistic build lets a stuck job block its target.",
   SCVS_AGGREGATION_SYNC_INTERVAL_MS:
     "How often, in milliseconds, query-svc refreshes its aggregated data from each trusted verifier. `0` disables the timer, and the aggregated bulk-load route then answers 503.",
   SCVS_ARCHIVE_RECOVERY_INTERVAL_MS:

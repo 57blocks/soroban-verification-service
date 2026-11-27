@@ -97,6 +97,7 @@ describe("the prefetch egress proxy", () => {
     ["a docker bridge", ["172.17.0.1"]],
     ["IPv6 loopback", ["::1"]],
     ["an IPv4-mapped private address", ["::ffff:10.0.0.1"]],
+    ["an IPv4-compatible metadata address", ["::a9fe:a9fe"]],
     ["IPv6 unique-local", ["fd00::1"]],
     ["a private address among public ones", [PUBLIC, "10.0.0.2"]],
   ])("refuses an allowlisted name that resolves to %s", async (_name, addresses) => {
@@ -137,9 +138,16 @@ describe("what counts as a public address", () => {
     ["224.0.0.1", false],
     ["255.255.255.255", false],
     ["::", false],
+    ["::1", false],
     ["fe80::1", false],
     ["64:ff9b::a00:1", false],
-    ["::ffff:93.184.216.34", true],
+    ["::ffff:10.0.0.1", false],
+    ["::ffff:93.184.216.34", false],
+    ["::a9fe:a9fe", false],
+    ["::169.254.169.254", false],
+    ["::5db8:d822", false],
+    ["::1:0:0:0", true],
+    ["8.8.8.8", true],
     ["not-an-address", false],
   ])("%s → %s", (address, expected) => {
     expect(isPublicAddress(address)).toBe(expected);

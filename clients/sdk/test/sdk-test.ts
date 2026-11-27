@@ -359,9 +359,15 @@ async function fetchPolicy(): Promise<void> {
     assert.throws(() => checkUrl(permissive, `https://${host}/latest/meta-data/`), FetchPolicyError,
       `${host} should be refused as an IPv4-mapped or expanded private literal`);
   }
-  assert.doesNotThrow(() =>
-    checkUrl(normalizePolicy({ allowedOrigins: [] }), "https://[::ffff:8.8.8.8]/x.json"),
-  );
+  // An IPv4-mapped or IPv4-compatible address is refused whole, a public one included.
+  for (const host of ["[::ffff:8.8.8.8]", "[::8.8.8.8]", "[64:ff9b::a00:1]"]) {
+    assert.throws(() => checkUrl(normalizePolicy({ allowedOrigins: [] }), `https://${host}/x.json`), FetchPolicyError,
+      `${host} should be refused as an IPv4-carrying literal`);
+  }
+  // NAT64's well-known prefix is judged as the IPv4 address it reaches: DNS64 adds one next to a public A record.
+  for (const host of ["8.8.8.8", "[64:ff9b::808:808]"]) {
+    assert.doesNotThrow(() => checkUrl(normalizePolicy({ allowedOrigins: [] }), `https://${host}/x.json`));
+  }
 
   assert.doesNotThrow(() =>
     checkUrl(normalizePolicy({ allowedOrigins: [], blockPrivateRanges: false }), "https://127.0.0.1/x.json"),
