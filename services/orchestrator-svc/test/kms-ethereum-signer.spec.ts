@@ -4,13 +4,8 @@ import { SigningKey } from "@ethersproject/signing-key";
 import { keccak256 } from "@ethersproject/keccak256";
 import { computeAddress, parse, recoverAddress } from "@ethersproject/transactions";
 import type { KmsSendClient } from "@scvs/aws";
-import {
-  KMS_WALLET_PLACEHOLDER,
-  KmsEthereumSigner,
-  kmsIrysToken,
-  parseDerSignature,
-  toEthereumSignature,
-} from "../src/modules/publish/kms-ethereum-signer.js";
+import { createSignedDataItem, deepHash, serializeTags } from "@scvs/aws";
+import { KmsEthereumSigner, parseDerSignature, toEthereumSignature } from "../src/modules/publish/kms-ethereum-signer.js";
 
 const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const PRIVATE_KEY = id("scvs kms-ethereum-signer spec key");
@@ -101,7 +96,7 @@ describe("KmsEthereumSigner", () => {
   it.each([false, true])("signs exactly as a private-key wallet's EIP-191 signMessage (KMS returns high-s: %s)", async (highS) => {
     const kms = fakeKms({ highS });
     const signer = await KmsEthereumSigner.create(kms, KEY_ID);
-    const message = new TextEncoder().encode("an Irys data item's deep hash");
+    const message = new TextEncoder().encode("a data item's deep hash");
 
     const signature = await signer.sign(message);
 
@@ -160,34 +155,24 @@ describe("KmsEthereumSigner.signTransaction", () => {
   });
 });
 
-describe.each(["ethereum", "base-eth"] as const)("kmsIrysToken(%s)", (tokenName) => {
-  async function token() {
+describe("as an ANS-104 data-item signer", () => {
+  it("signs a data item whose signature recovers to the KMS address over its deep hash", async () => {
     const signer = await KmsEthereumSigner.create(fakeKms({ highS: true }), KEY_ID);
-    const Token = kmsIrysToken(signer, tokenName);
-    const instance = new Token({ irys: {} as never, wallet: KMS_WALLET_PLACEHOLDER, providerUrl: "http://127.0.0.1:1" } as never);
-    return { signer, instance };
-  }
-
-  it("reports the KMS address, the same string Irys derives from the owner bytes", async () => {
-    const { signer, instance } = await token();
-    expect(instance.address).toBe(signer.address);
-    expect(await instance.ownerToAddress(instance.getPublicKey())).toBe(signer.address);
-  });
-
-  it("produces signatures Irys's own Ethereum verifier accepts", async () => {
-    const { instance } = await token();
-    const data = new TextEncoder().encode("payload");
-    const signature = await instance.sign(data);
-    expect(await instance.verify(instance.getPublicKey(), data, signature)).toBe(true);
-  });
-
-  it("names the Irys token it pays in", async () => {
-    const { instance } = await token();
-    expect(instance.name).toBe(tokenName);
-  });
-
-  it("never builds a funding transaction", async () => {
-    const { instance } = await token();
-    await expect(instance.createTx(1, "0x0000000000000000000000000000000000000001")).rejects.toThrow(/never funds itself/);
+    const item = await createSignedDataItem(Buffer.from("payload"), [{ name: "App-Name", value: "Stellar-Verifier" }], signer);
+    const signature = item.raw.subarray(2, 67);
+    const owner = item.raw.subarray(67, 132);
+    expect(owner.equals(signer.publicKey)).toBe(true);
+    expect(item.raw.readUInt16LE(0)).toBe(3);
+    const message = deepHash([
+      Buffer.from("dataitem"),
+      Buffer.from("1"),
+      Buffer.from("3"),
+      owner,
+      Buffer.alloc(0),
+      Buffer.alloc(0),
+      serializeTags([{ name: "App-Name", value: "Stellar-Verifier" }]),
+      Buffer.from("payload"),
+    ]);
+    expect(recoverAddress(hashMessage(message), signature).toLowerCase()).toBe(signer.address);
   });
 });

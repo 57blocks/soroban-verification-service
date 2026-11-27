@@ -12,7 +12,7 @@ and development happens there in the open.
 
 | Directory | Holds |
 | --- | --- |
-| `services/` | The services: `verification-svc` (the Submission API), `orchestrator-svc` (runs the builds), `builder` and `composer` (the build jobs), `query-svc` (an aggregator's Query API, deployed apart from a verifier), and `arweave-funder-svc` (keeps the Irys balance that pays for Arweave archiving topped up) |
+| `services/` | The services: `verification-svc` (the Submission API), `orchestrator-svc` (runs the builds), `builder` and `composer` (the build jobs), `query-svc` (an aggregator's Query API, deployed apart from a verifier), and `arweave-funder-svc` (keeps the Turbo credits that pay for Arweave archiving topped up) |
 | `clients/` | The console (`web`), the SDK (`sdk`), this site (`docs`), and the Submission API client the console uses (`api-client`) |
 | `packages/` | Code the services share, such as the result format and the fetch policy |
 | `docs/results-sep/` | The result format: the two [specification](../specifications/verification-results.md) drafts, their JSON Schemas and examples |

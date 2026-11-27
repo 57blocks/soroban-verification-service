@@ -34,7 +34,7 @@ beforeAll(async () => {
   process.env.SCVS_RESULT_ROOT = await mkdtemp(join(tmpdir(), "scvs-shutdown-detached-work-test-"));
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4995/public";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
-  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
+  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://arweave.net";
   client = createPrismaClient(readDbEnv());
 });
 
@@ -139,10 +139,10 @@ describe("closing the module waits for work nothing awaited", () => {
     });
     const upload = gate();
     const internals = moduleRef.get(ArweaveArchiveService) as unknown as {
-      uploadToIrys: (kind: string, input: unknown) => Promise<unknown>;
+      uploadToTurbo: (kind: string, input: unknown) => Promise<unknown>;
     };
-    const realUpload = internals.uploadToIrys.bind(internals);
-    internals.uploadToIrys = async (kind, input) => {
+    const realUpload = internals.uploadToTurbo.bind(internals);
+    internals.uploadToTurbo = async (kind, input) => {
       await upload.opened;
       return realUpload(kind, input);
     };

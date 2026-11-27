@@ -78,12 +78,13 @@ test("a metric record inherits the ambient job_id, with no call site passing one
   assert.equal(records[0].metric, "failure_reason_total");
 });
 
-test("every unit in METRIC_UNITS is count, seconds or eth, and only the funder's balances are eth", () => {
+test("every unit in METRIC_UNITS is count, seconds, eth or credits, and only the funder's balances are eth or credits", () => {
   for (const [name, unit] of Object.entries(METRIC_UNITS)) {
-    assert.ok(unit === "count" || unit === "seconds" || unit === "eth", `${name} has unit ${unit}`);
+    assert.ok(unit === "count" || unit === "seconds" || unit === "eth" || unit === "credits", `${name} has unit ${unit}`);
     if (unit === "eth") assert.match(name, /^arweave_funder_.*_eth$/);
+    if (unit === "credits") assert.match(name, /^arweave_funder_.*credits/);
   }
-  assert.equal(Object.keys(METRIC_UNITS).length, 33);
+  assert.equal(Object.keys(METRIC_UNITS).length, 39);
 });
 
 test("a dimension cannot shadow `value` and silently redirect the filter", () => {

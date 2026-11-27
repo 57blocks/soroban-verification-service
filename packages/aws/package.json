@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "c8 tsx src/conditional-write-test.ts"
+    "test": "c8 sh -c 'for f in src/*-test.ts; do tsx \"$f\" || exit 1; done'"
   },
   "dependencies": {
     "@aws-sdk/client-batch": "^3.1149.0",
@@ -23,6 +23,7 @@
     "@aws-sdk/client-s3": "^3.1149.0",
     "@aws-sdk/client-sqs": "^3.1149.0",
     "@aws-sdk/s3-request-presigner": "^3.1149.0",
+    "@ethersproject/address": "^5.8.0",
     "@ethersproject/bytes": "^5.8.0",
     "@ethersproject/hash": "^5.8.0",
     "@ethersproject/keccak256": "^5.8.0",

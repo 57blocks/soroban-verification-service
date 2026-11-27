@@ -77,7 +77,7 @@ PostgreSQL, through Prisma.
 
 | Component | Needs to reach |
 | --- | --- |
-| `orchestrator-svc` | Stellar RPC for each network it verifies; the URLs submitters give for their source; container registries, to read build images; AWS Batch, SQS and S3; result storage; Irys and an Ethereum RPC, if it archives to Arweave |
+| `orchestrator-svc` | Stellar RPC for each network it verifies; the URLs submitters give for their source; container registries, to read build images; AWS Batch, SQS and S3; result storage; ArDrive Turbo's upload service and an Arweave gateway, if it archives to Arweave |
 | `verification-svc` | Stellar RPC; S3; result storage; the URL of your legal documents, if they are given as one |
 | `builder` | S3, through the links it is given; Docker Hub, for official Stellar CLI images; ECR; public package hosts, such as crates.io and the main Git hosts, to download dependencies |
 | `composer` | The official sources of its components, such as Docker Hub, GitHub releases and the Rust toolchain servers; ECR; S3, through the link it is given |
@@ -119,12 +119,13 @@ Secrets:
   without it.
 - Database credentials, for each database.
 - `SCVS_R2_ACCESS_KEY_ID` and `SCVS_R2_SECRET_ACCESS_KEY`, for R2 or another S3-compatible store.
-- `SCVS_ARWEAVE_WALLET_PRIVATE_KEY`, only if you archive results to Irys devnet with
-  `SCVS_ARWEAVE_SIGNER=private-key`. To archive to Irys mainnet, sign with an AWS KMS key instead
-  (`SCVS_ARWEAVE_SIGNER=kms` and `SCVS_ARWEAVE_KMS_KEY_ID`): the orchestrator does not start with a
-  private key on mainnet. A KMS-signed wallet cannot fund itself: hold the balance in a wallet of
-  your own, grant the KMS address an Irys balance approval from it, and name that wallet in
-  `SCVS_ARWEAVE_PAID_BY`. The orchestrator does not start with the KMS signer and no paying wallet.
+- `SCVS_ARWEAVE_WALLET_PRIVATE_KEY`, only if you archive results to the ar.io sandbox
+  (`SCVS_ARWEAVE_NETWORK=devnet`) with `SCVS_ARWEAVE_SIGNER=private-key`. To archive to Arweave
+  through Turbo's mainnet, sign with an AWS KMS key instead (`SCVS_ARWEAVE_SIGNER=kms` and
+  `SCVS_ARWEAVE_KMS_KEY_ID`): the orchestrator does not start with a private key on mainnet. A
+  KMS-signed wallet cannot buy credits for itself: hold Turbo credits in a wallet of your own, share
+  some with the KMS address, and name that wallet in `SCVS_ARWEAVE_PAID_BY`. The orchestrator does not
+  start with the KMS signer and no paying wallet.
 
 Keep secrets apart from ordinary settings, so that permission to read configuration never grants access
 to a password or a key.

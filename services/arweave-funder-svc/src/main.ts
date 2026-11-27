@@ -3,9 +3,9 @@ import { createServer, type Server } from "node:http";
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import { formatConfigContractLogLine } from "@scvs/config";
-import { createKmsClient, createS3Client, kmsKeyRegion, KmsEthereumSigner } from "@scvs/aws";
+import { createKmsClient, createS3Client, kmsKeyRegion, KmsEthereumSigner, TurboClient } from "@scvs/aws";
 import { ScvsLogger, ScvsMetrics, type LogFields, type MetricName } from "@scvs/core";
-import { IrysClient, JsonRpcChain, S3StateStore } from "./adapters.js";
+import { JsonRpcChain, S3StateStore, TurboFunderClient } from "./adapters.js";
 import { loadFunderConfig, type FunderConfig } from "./config.js";
 import { FunderRound, type Telemetry } from "./funder.js";
 
@@ -28,7 +28,7 @@ type Running = { stop(): Promise<void>; server: Server };
 export async function start(config: FunderConfig = loadFunderConfig()): Promise<Running> {
   const region = kmsKeyRegion(config.kmsKeyId) ?? config.awsRegion;
   const signer = await KmsEthereumSigner.create(createKmsClient(region), config.kmsKeyId);
-  const irys = await IrysClient.build({ signer, token: config.token, network: config.network, rpcUrl: config.rpcUrl });
+  const bundler = new TurboFunderClient(new TurboClient(config.turbo, config.token), signer);
   const store = new S3StateStore(createS3Client({ region: config.awsRegion }), config.stateBucket, config.stateKey);
   const chain = new JsonRpcChain(config.rpcUrl);
   const holder = `${hostname()}/${process.pid}/${randomUUID()}`;
@@ -47,7 +47,7 @@ export async function start(config: FunderConfig = loadFunderConfig()): Promise<
 
   const round = async (): Promise<void> => {
     try {
-      const outcome = await new FunderRound({ ...config.settings, holder }, { chain, irys, store, signer, telemetry, now: Date.now }).run();
+      const outcome = await new FunderRound({ ...config.settings, holder }, { chain, bundler, store, signer, telemetry, now: Date.now }).run();
       metrics.counter("arweave_funder_round_total", 1, { outcome });
       if (outcome !== "conflict") lastSuccess = Date.now();
     } catch (error) {

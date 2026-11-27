@@ -83,55 +83,69 @@ export function getStagingStorageConfig(): StagingStorageConfig {
 }
 
 export type ArweaveConfig = {
-  mode: "disabled" | "dry-run" | "irys";
-  network: "mainnet" | "devnet";
-  /** The Irys token uploads are paid in. An approval is per token, so it must match the paying wallet's. */
+  mode: "disabled" | "dry-run" | "turbo";
+  network: ArweaveNetwork;
+  /** The Turbo token credits are bought in; both are Ethereum-signed, so it decides only how an address is billed. */
   token: ArweaveToken;
-  /** The chain RPC for `token` (Ethereum or Base), not an Irys endpoint. */
-  rpcUrl?: string;
+  turbo: TurboEndpoints;
   signer: "kms" | "private-key";
   /** Read only when `signer` is `kms`. */
   kmsKeyId?: string;
   /** Read only when `signer` is `private-key`. */
   privateKey?: string;
-  /** Lowercased address whose Irys balance pays, through its approval of the signer; unset means the signer pays. */
+  /** Lowercased address whose Turbo credits pay, through the credits it shared with the signer; unset means the signer pays. */
   paidBy?: string;
   gatewayUrl: string;
+  /** Arweave blocks an archived item must be under before it is linked; 0 links on upload (devnet never reaches Arweave). */
+  confirmations: number;
   /** Whether public mainnet source is eligible for Arweave archival; independent of `mode`. */
   sourceArchiveEnabled: boolean;
 };
 
 export const arweaveTokens = ["ethereum", "base-eth"] as const;
 export type ArweaveToken = (typeof arweaveTokens)[number];
+export type ArweaveNetwork = "mainnet" | "devnet";
 
-// Irys devnet settles on these testnets; mainnet has no default, because a public endpoint is not one to rely on.
-const DEVNET_DEFAULT_RPC_URLS: Record<ArweaveToken, string> = {
-  ethereum: "https://ethereum-sepolia-rpc.publicnode.com",
-  "base-eth": "https://sepolia.base.org",
+export type TurboEndpoints = { uploadUrl: string; paymentUrl: string };
+
+// devnet is the ar.io sandbox: testnet tokens only, items purged after a few days, never posted to Arweave.
+export const TURBO_ENDPOINTS: Record<ArweaveNetwork, TurboEndpoints> = {
+  mainnet: { uploadUrl: "https://upload.ardrive.io", paymentUrl: "https://payment.ardrive.io" },
+  devnet: { uploadUrl: "https://upload.services.ar-io.dev", paymentUrl: "https://payment.services.ar-io.dev" },
 };
-const DEFAULT_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
+
+const DEFAULT_ARWEAVE_CONFIRMATIONS = 15;
+
+const DEFAULT_ARWEAVE_GATEWAY_URLS: Record<ArweaveNetwork, string> = {
+  mainnet: "https://arweave.net",
+  devnet: "https://ar-io.dev",
+};
+
+export function arweaveNetwork(value: string | undefined): ArweaveNetwork {
+  return (value || "devnet").toLowerCase() === "mainnet" ? "mainnet" : "devnet";
+}
 
 export function getArweaveConfig(): ArweaveConfig {
   const rawMode = (process.env.SCVS_ARWEAVE_MODE || "disabled").toLowerCase();
   const mode: ArweaveConfig["mode"] =
     rawMode === "dry-run" || rawMode === "dry_run"
       ? "dry-run"
-      : rawMode === "irys"
-        ? "irys"
+      : rawMode === "turbo"
+        ? "turbo"
         : "disabled";
-  const network: ArweaveConfig["network"] =
-    (process.env.SCVS_ARWEAVE_NETWORK || "devnet").toLowerCase() === "mainnet" ? "mainnet" : "devnet";
+  const network = arweaveNetwork(process.env.SCVS_ARWEAVE_NETWORK);
   const token: ArweaveToken = (process.env.SCVS_ARWEAVE_TOKEN || "ethereum").toLowerCase() === "base-eth" ? "base-eth" : "ethereum";
   return {
     mode,
     network,
     token,
-    rpcUrl: process.env.SCVS_ARWEAVE_RPC_URL || (network === "devnet" ? DEVNET_DEFAULT_RPC_URLS[token] : undefined),
+    turbo: TURBO_ENDPOINTS[network],
     signer: (process.env.SCVS_ARWEAVE_SIGNER || "private-key").toLowerCase() === "kms" ? "kms" : "private-key",
     kmsKeyId: process.env.SCVS_ARWEAVE_KMS_KEY_ID || undefined,
     privateKey: process.env.SCVS_ARWEAVE_WALLET_PRIVATE_KEY,
     paidBy: process.env.SCVS_ARWEAVE_PAID_BY?.toLowerCase() || undefined,
-    gatewayUrl: (process.env.SCVS_ARWEAVE_GATEWAY_URL || DEFAULT_ARWEAVE_GATEWAY_URL).replace(/\/+$/, ""),
+    gatewayUrl: (process.env.SCVS_ARWEAVE_GATEWAY_URL || DEFAULT_ARWEAVE_GATEWAY_URLS[network]).replace(/\/+$/, ""),
+    confirmations: mode === "turbo" && network === "mainnet" ? Number(process.env.SCVS_ARWEAVE_CONFIRMATIONS || DEFAULT_ARWEAVE_CONFIRMATIONS) : 0,
     sourceArchiveEnabled: boolEnv("SCVS_SOURCE_ARCHIVE_ENABLED", false),
   };
 }

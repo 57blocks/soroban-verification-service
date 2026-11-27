@@ -62,12 +62,15 @@ export type JobRecord = {
   retryAttempts: number;
   archivePendingSince?: string;
   archivedTxId?: string;
+  /** Present only when the copy resolves on another gateway than the configured one. */
+  archivedGatewayUrl?: string;
   archiveAttempts: number;
   sourcePublishPendingSince?: string;
   sourceFileName?: string;
   sourcePublishAttempts: number;
   sourceArchivePendingSince?: string;
   sourceArchivedTxId?: string;
+  sourceArchivedGatewayUrl?: string;
   sourceArchiveAttempts: number;
   statusLinkPendingSince?: string;
   statusLinkBlockedSince?: string;
@@ -503,6 +506,7 @@ export class JobsRepository {
   ): Promise<boolean> {
     const now = new Date();
     const txIdSql = Prisma.raw(`"${txIdColumn}"`);
+    const gatewaySql = Prisma.raw(txIdColumn === "archived_tx_id" ? '"archived_gateway_url"' : '"source_archived_gateway_url"');
     const pendingSql = Prisma.raw(`"${pendingColumn}"`);
     const reportGuard = reportSha256 === undefined
       ? Prisma.empty
@@ -520,6 +524,7 @@ export class JobsRepository {
       return write(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
+          ${gatewaySql} = NULL,
           ${pendingSql} = NULL,
           "published_updated_at" = ${statusLink.advancePublished ? now : Prisma.raw('"published_updated_at"')},
           "updated_at" = ${now}
@@ -529,6 +534,7 @@ export class JobsRepository {
       return write(this.prisma.$executeRaw`
         UPDATE "jobs" SET
           ${txIdSql} = ${txId},
+          ${gatewaySql} = NULL,
           ${pendingSql} = NULL,
           "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
           "updated_at" = ${now}
@@ -537,6 +543,7 @@ export class JobsRepository {
     return write(this.prisma.$executeRaw`
       UPDATE "jobs" SET
         ${txIdSql} = ${txId},
+        ${gatewaySql} = NULL,
         ${pendingSql} = NULL,
         "status_link_pending_since" = COALESCE("status_link_pending_since", ${now}),
         "status_link_blocked_since" = COALESCE("status_link_blocked_since", ${now}),
@@ -775,7 +782,7 @@ function toUpdateData(updates: UpdateJobInput): Prisma.JobUncheckedUpdateManyInp
     ...("publishAttempts" in updates ? { publishAttempts: updates.publishAttempts } : {}),
     ...("retryAttempts" in updates ? { retryAttempts: updates.retryAttempts } : {}),
     ...("archivePendingSince" in updates ? { archivePendingSince: updates.archivePendingSince } : {}),
-    ...("archivedTxId" in updates ? { archivedTxId: updates.archivedTxId } : {}),
+    ...("archivedTxId" in updates ? { archivedTxId: updates.archivedTxId, archivedGatewayUrl: null } : {}),
     ...("publishedUpdatedAt" in updates ? { publishedUpdatedAt: updates.publishedUpdatedAt } : {}),
     ...("sourcePublishPendingSince" in updates
       ? { sourcePublishPendingSince: updates.sourcePublishPendingSince }
@@ -854,6 +861,7 @@ function rowToJob(row: PrismaJob): JobRecord {
       ? { statusLinkBlockedReason: row.statusLinkBlockedReason as StatusLinkBlockedReason }
       : {}),
     ...(row.archivedTxId ? { archivedTxId: row.archivedTxId } : {}),
+    ...(row.archivedGatewayUrl ? { archivedGatewayUrl: row.archivedGatewayUrl } : {}),
     archiveAttempts: row.archiveAttempts,
     ...(row.publishedUpdatedAt ? { publishedUpdatedAt: row.publishedUpdatedAt.toISOString() } : {}),
     ...(row.sourcePublishPendingSince
@@ -865,6 +873,7 @@ function rowToJob(row: PrismaJob): JobRecord {
       ? { sourceArchivePendingSince: row.sourceArchivePendingSince.toISOString() }
       : {}),
     ...(row.sourceArchivedTxId ? { sourceArchivedTxId: row.sourceArchivedTxId } : {}),
+    ...(row.sourceArchivedGatewayUrl ? { sourceArchivedGatewayUrl: row.sourceArchivedGatewayUrl } : {}),
     sourceArchiveAttempts: row.sourceArchiveAttempts,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

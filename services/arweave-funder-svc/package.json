@@ -13,8 +13,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",
     "@ethersproject/transactions": "^5.8.0",
-    "@irys/upload": "^0.0.15",
-    "@irys/upload-ethereum": "^0.0.16",
     "@scvs/aws": "workspace:*",
     "@scvs/config": "workspace:*",
     "@scvs/core": "workspace:*",

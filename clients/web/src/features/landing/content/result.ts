@@ -72,7 +72,7 @@ export const resultCards: Capability[] = [
   {
     title: "An archived copy",
     description:
-      "Report artifacts are archived to Arweave through Irys. HTTPS stays the primary read path; the archive is what outlives it.",
+      "Report artifacts are archived to Arweave through ArDrive Turbo. HTTPS stays the primary read path; the archive is what outlives it.",
     sample: [
       { text: "arweave", tone: "key" },
       { text: " archive · https stays primary", tone: "value" },

@@ -5,3 +5,5 @@ export * from "./eventbridge.js";
 export * from "./sqs.js";
 export * from "./kms.js";
 export * from "./kms-ethereum.js";
+export * from "./ans104.js";
+export * from "./turbo.js";

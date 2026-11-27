@@ -1627,7 +1627,7 @@ services:
         code: services/orchestrator-svc/src/config/configuration.ts
       SCVS_ARWEAVE_MODE:
         type: enum
-        values: [disabled, dry-run, dry_run, irys]
+        values: [disabled, dry-run, dry_run, turbo]
         required: no
         fail: silent
         source: literal
@@ -1639,10 +1639,8 @@ services:
         note: >-
           Any unrecognised value maps to `disabled` — a typo silently turns result archiving off and
           nothing in the logs says so. Validated at boot by OrchestratorSvcEnvDto for exactly this.
-          `http` retired (archive-and-recovery plan.md §2.1/§7, 2026-08-05): it configured an
-          SCVS_ARWEAVE_ENDPOINT HTTP archiving service nothing in this repository ever implemented.
-          `irys` is the real archiving mode that replaces it — a genuine @irys/upload-ethereum
-          upload, paid for by SCVS_ARWEAVE_WALLET_PRIVATE_KEY's wallet.
+          `turbo` signs each archived report or source as an ANS-104 data item and uploads it to
+          ArDrive Turbo, which bundles it onto Arweave and bills it to Turbo credits.
       SCVS_SOURCE_ARCHIVE_ENABLED:
         type: boolean
         required: no
@@ -1656,7 +1654,7 @@ services:
           Independent of SCVS_ARWEAVE_MODE, which still governs the report archive unconditionally
           (mainnet-source-archive design.md §8, MSA-5). Defaults to false: public mainnet source
           publishes to S3 only, and `sourceArchivePendingSince` is never set. Set to true (with
-          SCVS_ARWEAVE_MODE=irys) to also archive it — no code change needed.
+          SCVS_ARWEAVE_MODE=turbo) to also archive it — no code change needed.
       SCVS_ARWEAVE_NETWORK:
         type: enum
         values: [mainnet, devnet]
@@ -1669,11 +1667,11 @@ services:
         observable: value
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          Defaults to devnet so local dev/CI never touch real funds or produce a real Arweave
-          record merely by exercising SCVS_ARWEAVE_MODE=irys with no special setup. A deployment
-          that should produce durable archives must set this to `mainnet` explicitly — silently
-          inheriting the dev-friendly default there produces non-durable devnet archives with no
-          error (archive-and-recovery plan.md §2.2/§7/§8, 2026-08-05).
+          Picks the Turbo services. `mainnet` is upload.ardrive.io and payment.ardrive.io, and
+          stores on Arweave. `devnet` is the ar.io sandbox (upload.services.ar-io.dev,
+          payment.services.ar-io.dev): testnet tokens only, items served for a few days and then
+          purged, never posted to Arweave. Defaults to devnet so local dev and CI never touch real
+          funds; a deployment that should produce durable archives must set `mainnet` explicitly.
       SCVS_ARWEAVE_TOKEN:
         type: enum
         values: [ethereum, base-eth]
@@ -1686,30 +1684,15 @@ services:
         observable: value
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          The Irys token uploads are paid in. Must match the paying wallet's token (arweave-funder-svc's
-          SCVS_ARWEAVE_TOKEN when the funder pays): Irys balances and approvals are per token, so a
-          mismatch boots healthy and every upload fails with insufficient_balance. Also picks the devnet
-          default RPC (Sepolia for `ethereum`, Base Sepolia for `base-eth`). Validated at boot by
-          OrchestratorSvcEnvDto, because getArweaveConfig maps an unrecognised value to `ethereum`.
-      SCVS_ARWEAVE_RPC_URL:
-        type: url
-        required: no
-        required_when: SCVS_ARWEAVE_NETWORK == mainnet
-        fail: first-use
-        source: literal
-        tier: knob
-        inject: ecs-secrets
-        default: ~
-        code: packages/config/src/index.ts::getArweaveConfig
-        note: >-
-          RPC endpoint of the chain SCVS_ARWEAVE_TOKEN settles on, which the archiving wallet signs
-          through. devnet has a working default per token (Sepolia, or Base Sepolia for `base-eth`)
-          baked into getArweaveConfig, so this is only ever set for a mainnet deployment.
+          The Turbo token the signer is built for. Both values sign with an Ethereum key and bill the
+          same address, so it must match arweave-funder-svc's SCVS_ARWEAVE_TOKEN only for the logs to
+          agree. Validated at boot by OrchestratorSvcEnvDto, because getArweaveConfig maps an
+          unrecognised value to `ethereum`.
       SCVS_ARWEAVE_SIGNER:
         type: enum
         values: [kms, private-key]
         required: no
-        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_NETWORK == mainnet
+        required_when: SCVS_ARWEAVE_MODE == turbo && SCVS_ARWEAVE_NETWORK == mainnet
         fail: boot
         source: literal
         tier: knob
@@ -1718,14 +1701,14 @@ services:
         observable: value
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          What signs Irys uploads. `kms` signs through the AWS KMS key named by SCVS_ARWEAVE_KMS_KEY_ID,
-          so the wallet key never enters process memory; `private-key` signs with
+          What signs archived data items. `kms` signs through the AWS KMS key named by
+          SCVS_ARWEAVE_KMS_KEY_ID, so the wallet key never enters process memory; `private-key` signs with
           SCVS_ARWEAVE_WALLET_PRIVATE_KEY and is for local development and self-hosters only. Boot
-          rejects anything but `kms` when SCVS_ARWEAVE_MODE=irys and SCVS_ARWEAVE_NETWORK=mainnet.
+          rejects anything but `kms` when SCVS_ARWEAVE_MODE=turbo and SCVS_ARWEAVE_NETWORK=mainnet.
       SCVS_ARWEAVE_KMS_KEY_ID:
         type: string
         required: no
-        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER == kms
+        required_when: SCVS_ARWEAVE_MODE == turbo && SCVS_ARWEAVE_SIGNER == kms
         fail: boot
         source: literal
         tier: knob
@@ -1743,7 +1726,7 @@ services:
       SCVS_ARWEAVE_PAID_BY:
         type: string
         required: no
-        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER == kms
+        required_when: SCVS_ARWEAVE_MODE == turbo && SCVS_ARWEAVE_SIGNER == kms
         fail: boot
         source: literal
         tier: knob
@@ -1752,19 +1735,18 @@ services:
         observable: presence
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          Ethereum address whose Irys balance pays for uploads, through an Irys balance approval it
-          granted the signer's address (createApproval with an amount and an expiry). Required with
-          the KMS signer, whose address can never hold an Irys balance of its own: Irys credits a
-          deposit to the on-chain sender, and only the orchestrator may sign with the key. With the
-          private-key signer it is optional, and unset the signer's own Irys balance pays. It keeps
-          the funds in a wallet held outside AWS and caps what the signer can spend at the
-          approval's remaining amount. Uploads
-          stop with insufficient_balance when the approval is used up, expired, or exceeds what the
-          payer still holds; renewing it is a manual step by the paying wallet.
+          Ethereum address whose Turbo credits pay for uploads, through credits it shared with the
+          signer's address (shareCredits with an amount and an expiry); sent as each upload's
+          paidBy. Required with the KMS signer, whose address can never hold credits of its own:
+          Turbo credits a deposit to the on-chain sender, and only the orchestrator may sign with the
+          key. With the private-key signer it is optional, and unset the signer's own credits pay.
+          Nothing is checked before an upload: Turbo answers 402 when the share or the payer's
+          credits fall short, and the upload stops with insufficient_balance until arweave-funder-svc
+          tops up or renews the share.
       SCVS_ARWEAVE_WALLET_PRIVATE_KEY:
         type: string
         required: no
-        required_when: SCVS_ARWEAVE_MODE == irys && SCVS_ARWEAVE_SIGNER != kms
+        required_when: SCVS_ARWEAVE_MODE == turbo && SCVS_ARWEAVE_SIGNER != kms
         fail: first-use
         secret: true
         source: secret
@@ -1775,8 +1757,8 @@ services:
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
           Ethereum wallet private key, read only when SCVS_ARWEAVE_SIGNER=private-key (local development
-          and self-hosters; never on Irys mainnet) — read as a plain process.env value at container
-          start, never fetched from Secrets Manager by this service's own code. Dev uses this secret with Irys devnet; the ECS task execution role
+          and self-hosters; never on mainnet) — read as a plain process.env value at container
+          start, never fetched from Secrets Manager by this service's own code. The ECS task execution role
           needs secretsmanager:GetSecretValue on this secret before the container can start.
       SCVS_ARWEAVE_GATEWAY_URL:
         type: url
@@ -1785,18 +1767,28 @@ services:
         source: literal
         tier: knob
         inject: ecs-secrets
-        default: "https://gateway.irys.xyz"
+        default: "https://arweave.net (mainnet), https://ar-io.dev (devnet)"
         code: packages/config/src/index.ts::getArweaveConfig
         note: >-
-          The gateway an archived report's results_urls entry is built against
-          (`${gatewayUrl}/${tx_id}`). Confirmed (2026-08-06) that Irys's own default gateway
-          serves both devnet and mainnet uploads correctly by tx_id — one default suits both
-          networks. Overridable to point at a different Arweave gateway (e.g. arweave.net)
-          without a code change, but a devnet upload is only ever reachable through Irys's own
-          gateway regardless of this setting: it never reaches the real Arweave network at all
-          (it lives on Irys's own devnet node and is deleted after ~60 days), so arweave.net or
-          the ar:// scheme (which resolves via real Arweave/AR.IO gateways) will never show
-          devnet-archived content no matter what this variable is set to.
+          The gateway an archived item's results_urls entry is built against (`${gatewayUrl}/${id}`),
+          and whose `/graphql` the archive queries to find an item it already uploaded. The default
+          follows SCVS_ARWEAVE_NETWORK. A devnet item is only ever served by the sandbox gateway,
+          and only for a few days: it never reaches Arweave.
+      SCVS_ARWEAVE_CONFIRMATIONS:
+        type: number
+        required: no
+        fail: silent
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: "15 (turbo on mainnet), otherwise 0"
+        code: packages/config/src/index.ts::getArweaveConfig
+        note: >-
+          Arweave blocks an archived item must sit under, as SCVS_ARWEAVE_GATEWAY_URL reports it, before
+          its `arweave` link is written and the job stops being archive-pending. Until then the item's
+          claim row stays `uploaded` and the archive-recovery scans recheck it; an item still not on chain
+          past the deadline height Turbo gave is uploaded again. Read only with SCVS_ARWEAVE_MODE=turbo on
+          mainnet: devnet items never reach Arweave, so there they are linked on upload.
     tunables:
       SCVS_WORKER_CONCURRENCY:
         type: number
@@ -1856,7 +1848,7 @@ services:
           losing findOrCreate caller treats it as abandoned (the claimant crashed mid-upload) and
           releases it inline — no dedicated reaper; see
           mainnet-source-archive/decisions/source-upload-claim-uses-a-unique-constraint-not-an-advisory-lock.md.
-          Long enough that a normal Irys upload is never reaped mid-flight.
+          Long enough that a normal Turbo upload is never reaped mid-flight.
         tier: knob
       SCVS_REPORT_ARCHIVE_CLAIM_TIMEOUT_MS:
         type: number
@@ -1867,7 +1859,7 @@ services:
           findOrCreate caller treats it as abandoned (the claimant crashed mid-upload) and releases
           it inline — no dedicated reaper; see
           archive-and-recovery/decisions/report-archive-dedup-needs-a-claim-row-too.md.
-          Long enough that a normal Irys upload is never reaped mid-flight.
+          Long enough that a normal Turbo upload is never reaped mid-flight.
         tier: knob
       SCVS_PUBLISH_STALE_MS:
         type: number
@@ -2209,8 +2201,9 @@ services:
         observable: value
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
-          Which Irys network the funder tops up and approves on. No default, unlike orchestrator-svc's:
-          it must name the network the orchestrator uploads to.
+          Which Turbo services the funder buys and shares credits on (see orchestrator-svc's
+          SCVS_ARWEAVE_NETWORK). No default, unlike orchestrator-svc's: it must name the network the
+          orchestrator uploads to.
       SCVS_ARWEAVE_TOKEN:
         type: enum
         values: [ethereum, base-eth]
@@ -2223,9 +2216,9 @@ services:
         observable: value
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
-          The Irys token the funder deposits and approves in. Must equal orchestrator-svc's
-          SCVS_ARWEAVE_TOKEN: Irys balances and approvals are per token, so a mismatch leaves the
-          orchestrator's uploads unpaid.
+          The Turbo token the funder buys credits with: `base-eth` deposits ETH on Base, `ethereum` on
+          Ethereum. Picks the deposit address read from Turbo's payment service. Credits are not per
+          token, so the orchestrator spends them whichever token bought them.
       SCVS_FUNDER_KMS_KEY_ID:
         type: string
         required: yes
@@ -2250,7 +2243,7 @@ services:
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
           The orchestrator upload key's address — the address of orchestrator-svc's
-          SCVS_ARWEAVE_KMS_KEY_ID. The funder keeps an Irys balance approval in place for it.
+          SCVS_ARWEAVE_KMS_KEY_ID. The funder keeps a share of its Turbo credits in place for it.
       SCVS_FUNDER_RPC_URL:
         type: url
         required: yes
@@ -2272,7 +2265,10 @@ services:
         inject: ecs-secrets
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
-        note: The EIP-155 chain id every top-up is signed for (8453 Base, 84532 Base Sepolia).
+        note: >-
+          The EIP-155 chain id every top-up is signed for (8453 Base, 84532 Base Sepolia). Boot requires it
+          to match SCVS_ARWEAVE_NETWORK and SCVS_ARWEAVE_TOKEN: a mainnet chain for mainnet credits, a
+          testnet chain for the sandbox's.
       SCVS_FUNDER_DEPOSIT_ADDRESS:
         type: string
         required: yes
@@ -2283,8 +2279,8 @@ services:
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
-          Irys's deposit address for this token and network, pinned. The funder halts rather than send
-          if Irys reports a different one.
+          Turbo's deposit address for this token and network, pinned. The funder halts rather than send
+          if Turbo's payment service reports a different one.
       SCVS_FUNDER_STATE_BUCKET:
         type: string
         required: yes
@@ -2295,7 +2291,7 @@ services:
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
-          S3 bucket holding the funder's state object (nonces, signed transactions, lease, approval
+          S3 bucket holding the funder's state object (nonces, signed transactions, lease, share
           history), written with conditional writes. The task role needs s3:GetObject and s3:PutObject on
           that object.
       SCVS_FUNDER_STATE_KEY:
@@ -2322,7 +2318,19 @@ services:
         note: >-
           Delay between rounds. The lease is three intervals, and `/health` fails once no round has
           completed for three intervals.
-      SCVS_FUNDER_IRYS_LOW_WEI:
+      SCVS_FUNDER_MAX_REPLACEMENTS:
+        type: number
+        required: no
+        fail: n/a
+        source: literal
+        tier: knob
+        inject: ecs-secrets
+        default: 5
+        code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
+        note: >-
+          Times a stuck top-up's nonce is re-priced. Past it the funder keeps watching for a receipt
+          but signs nothing more for that nonce, and reports arweave_funder_tx_stuck.
+      SCVS_FUNDER_CREDITS_LOW_WINC:
         type: number
         required: yes
         fail: boot
@@ -2331,7 +2339,9 @@ services:
         inject: ecs-secrets
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
-        note: A round tops up when the funding key's Irys balance is below this many wei.
+        note: >-
+          A round tops up when the funding key's spendable Turbo credits are below this many winc
+          (10^12 winc is one credit). Credits shared with the upload key and not yet spent do not count.
       SCVS_FUNDER_TOPUP_WEI:
         type: number
         required: yes
@@ -2341,7 +2351,9 @@ services:
         inject: ecs-secrets
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
-        note: Wei sent to the Irys deposit address per top-up.
+        note: >-
+          Wei sent to the Turbo deposit address per top-up. Credits cannot be withdrawn, so size it to
+          a week or two of uploads.
       SCVS_FUNDER_DAILY_TOPUP_CAP_WEI:
         type: number
         required: yes
@@ -2366,7 +2378,7 @@ services:
         note: >-
           Highest EIP-1559 maxFeePerGas a top-up or its replacement may carry. Above it the round skips
           the top-up and reports arweave_funder_fee_cap_reached.
-      SCVS_FUNDER_APPROVAL_WEI:
+      SCVS_FUNDER_SHARE_WINC:
         type: number
         required: yes
         fail: boot
@@ -2376,9 +2388,9 @@ services:
         default: ~
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
-          Amount of each Irys approval granted to SCVS_FUNDER_APPROVED_ADDRESS. An approval replaces the
-          previous one rather than adding to it.
-      SCVS_FUNDER_APPROVAL_TTL_SECONDS:
+          Winc in each credit share granted to SCVS_FUNDER_APPROVED_ADDRESS. A share is added to the ones
+          still live, not a replacement for them.
+      SCVS_FUNDER_SHARE_TTL_SECONDS:
         type: number
         required: no
         fail: n/a
@@ -2387,22 +2399,24 @@ services:
         inject: ecs-secrets
         default: 604800
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
-        note: How long each approval lasts; the funder renews it in its last day, or when under 10% remains.
-      SCVS_FUNDER_APPROVAL_WINDOW_CAP_WEI:
+        note: >-
+          How long each share lasts; the funder grants another once the last live one is in its final
+          day, or when under 10% of a share remains.
+      SCVS_FUNDER_SHARE_WINDOW_CAP_WINC:
         type: number
         required: no
         fail: n/a
         source: literal
         tier: knob
         inject: ecs-secrets
-        default: twice SCVS_FUNDER_APPROVAL_WEI
+        default: twice SCVS_FUNDER_SHARE_WINC
         code: services/arweave-funder-svc/src/config.ts::loadFunderConfig
         note: >-
-          Most wei approved within any one TTL window; must be at least SCVS_FUNDER_APPROVAL_WEI. It bounds
+          Most winc shared within any one TTL window; must be at least SCVS_FUNDER_SHARE_WINC. It bounds
           what a stolen upload key can spend per window.
     note: >-
-      Keeps the funding key's Irys balance topped up from the ETH sent to its address, and a short-lived,
-      capped Irys approval in place for orchestrator-svc's upload key. Plain Node, no NestJS. Inherits no
+      Keeps the funding key's Turbo credits topped up from the ETH sent to its address, and a short-lived,
+      capped share of them in place for orchestrator-svc's upload key. Plain Node, no NestJS. Inherits no
       group: it has no database, no result storage and no public HTTP server, so none of `base`'s
       server timeouts apply. Its only state is one S3 object.
 

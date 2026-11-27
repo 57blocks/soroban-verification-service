@@ -35,7 +35,7 @@ beforeAll(async () => {
   process.env.SCVS_RESULT_ROOT = resultRoot;
   process.env.SCVS_PUBLIC_RESULT_ROOT = "http://localhost:4996/public";
   process.env.SCVS_ARWEAVE_MODE = "dry-run";
-  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://gateway.irys.xyz";
+  process.env.SCVS_ARWEAVE_GATEWAY_URL = "https://arweave.net";
   process.env.SCVS_SOURCE_ARCHIVE_ENABLED = "true";
 
   moduleRef = await Test.createTestingModule({
@@ -243,7 +243,7 @@ describe("PublishService.retryPendingSourcePublish — mainnet archive eligibili
 
     const status = await readWasmStatus(resultStorage(), WASM_HASH);
     const uris = (status?.source_code_verifications[0]?.verified_source_code_uris ?? []).map(toSourceCodeUri);
-    expect(uris.some((uri) => uri.location === "arweave" && uri.url.startsWith("https://gateway.irys.xyz/"))).toBe(
+    expect(uris.some((uri) => uri.location === "arweave" && uri.url.startsWith("https://arweave.net/"))).toBe(
       true,
     );
     expect(status?.source_code_verifications[0]?.source_sha256).toBe(sourceSha256);
