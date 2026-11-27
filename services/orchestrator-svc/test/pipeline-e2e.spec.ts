@@ -1723,6 +1723,55 @@ describe("ADR-008 pipeline, end to end", () => {
   });
 });
 
+describe("republishing a public upload published with a source_uri nobody fetched", () => {
+  it("points it at a rewritten report that names no source_uri", async () => {
+    const sourceSha256 = randomBytes(32).toString("hex");
+    const contract = contractId();
+    chain.deployed.set(contract, REBUILT_HASH);
+
+    const job = await createJob({ contractId: contract, sourceSha256 });
+    await pipeline.run(job);
+    const attached = await reload(job.jobId);
+    await rebuilds.markTerminal(attached.rebuildId!, {
+      outcome: "success",
+      runner: "stellar_contract_verify",
+      rebuiltWasmHash: REBUILT_HASH,
+    });
+    await pipeline.run(attached);
+    const published = await reload(job.jobId);
+
+    const unfetched = "https://attacker.example/source.tar.gz";
+    const oldReport = "http://localhost:4999/reports/" + "0".repeat(64) + ".json";
+    await prisma.job.update({
+      where: { id: job.jobId },
+      data: {
+        sourceRef: {
+          type: "private_tarball",
+          visibility: "public",
+          source_uri: unfetched,
+          source_sha256: sourceSha256,
+          tarball_sha256: sourceSha256,
+          upload_id: randomUUID(),
+        },
+        resultSummary: { ...published.result!, artifact_url: oldReport, artifact_sha256: "0".repeat(64) },
+        archivedTxId: "old-archive-tx",
+        archivePendingSince: null,
+      },
+    });
+
+    await publish.republishStoredResult(job.jobId);
+
+    const after = await reload(job.jobId);
+    expect(after.result?.artifact_url).toBe(`http://localhost:4999/reports/${after.result?.artifact_sha256}.json`);
+    expect(after.result?.artifact_url).not.toBe(oldReport);
+    expect(after.archivedTxId).toBeUndefined();
+    const rewritten = await readFile(join(resultRoot, "reports", `${after.result?.artifact_sha256}.json`), "utf8");
+    expect(rewritten).not.toContain(unfetched);
+    const status = await readFile(join(resultRoot, "wasms", `${REBUILT_HASH}.json`), "utf8").catch(() => "");
+    expect(status).not.toContain(unfetched);
+  });
+});
+
 describe("republishing a public job that adopted a private job's verdict", () => {
   it("points it at its own report, away from the private report it adopted, and owes the new report a copy", async () => {
     const sourceSha256 = randomBytes(32).toString("hex");

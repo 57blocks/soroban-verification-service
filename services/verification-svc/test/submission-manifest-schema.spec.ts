@@ -36,8 +36,13 @@ describe("the documented submission manifest matches what submit accepts", () =>
     expect(required.sort()).toEqual(["schema", "source_sha256"]);
   });
 
-  it("accepts every documented property at once", () => {
-    expect(validateSubmittedManifest(pick(documented), TARGET).ok).toBe(true);
+  it("accepts every documented property with either source", () => {
+    expect(validateSubmittedManifest(pick(documented.filter((key) => key !== "upload_id")), TARGET).ok).toBe(true);
+    expect(validateSubmittedManifest(pick(documented.filter((key) => key !== "source_uri")), TARGET).ok).toBe(true);
+  });
+
+  it("rejects a manifest that names both sources", () => {
+    expect(validateSubmittedManifest(pick(documented), TARGET).ok).toBe(false);
   });
 
   it("accepts the required properties plus either source", () => {

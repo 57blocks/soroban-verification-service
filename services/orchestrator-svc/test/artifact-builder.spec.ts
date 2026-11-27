@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { composedEnvironmentRecipeHash, parseDto, RegistryVerification, type ComposedEnvironmentRecipe, type MechanismReason } from "@scvs/core";
 import type { JobRecord } from "@scvs/db";
-import { assembleArtifact, observeSep55Marker, recipeSourceFor, toBldopt } from "../src/modules/publish/artifact-builder.util.js";
+import { assembleArtifact, observeSep55Marker, publishedSourceUri, recipeSourceFor, toBldopt } from "../src/modules/publish/artifact-builder.util.js";
 import { PublishService } from "../src/modules/publish/publish.service.js";
 
 const bldoptCarrier = (bldopt: string[]): Record<string, unknown> => ({
@@ -373,6 +373,46 @@ describe("ArtifactSource.source_uri is published only for a public submission", 
 
     expect(artifact.source.is_public).toBe(false);
     expect(artifact.source.source_uri).toBeUndefined();
+  });
+
+  it("omits a source_uri stored on a public upload, whose bytes never came from that URL", () => {
+    const publicUploadWithUri: JobRecord = {
+      ...job,
+      sourceRef: {
+        type: "private_tarball",
+        visibility: "public",
+        source_uri: "https://attacker.example/source.tar.gz",
+        upload_id: "11111111-1111-1111-1111-111111111111",
+        tarball_sha256: "3".repeat(64),
+        source_sha256: "3".repeat(64),
+      },
+    };
+
+    expect(publishedSourceUri(publicUploadWithUri.sourceRef)).toBeUndefined();
+    const artifact = assembleArtifact(
+      publicUploadWithUri,
+      { id: "dev-verifier", displayName: "Dev verifier", policyId: "default" },
+      "network_isolated",
+      { kind: "chain_named", trustLevel: "official_trusted", buildImage: "docker.io/stellar/stellar-cli@sha256:aa".padEnd(71, "a") },
+      undefined,
+      "recipe_deviates_from_chain",
+    );
+
+    expect(artifact.source.is_public).toBe(true);
+    expect(artifact.source.source_uri).toBeUndefined();
+  });
+
+  it.each(["javascript:alert(1)", "http://example.com/source.tar.gz", "/var/tmp/source.tar.gz"])(
+    "never publishes %s, even from a public source_uri job",
+    (uri) => {
+      expect(publishedSourceUri({ type: "source_uri", visibility: "public", source_uri: uri, source_sha256: "3".repeat(64) })).toBeUndefined();
+    },
+  );
+
+  it("publishes a public source_uri job's https URL", () => {
+    expect(
+      publishedSourceUri({ type: "source_uri", visibility: "public", source_uri: "https://example.com/source.tar.gz", source_sha256: "3".repeat(64) }),
+    ).toBe("https://example.com/source.tar.gz");
   });
 });
 

@@ -1,4 +1,4 @@
-import { SEP58_BLDOPT_ENTRY, SOURCE_URI_PATTERN, extractManifestPath, refusedEnvAssignment, repeatedBuildOption, resolveContainerManifestPath } from "@scvs/core";
+import { SEP58_BLDOPT_ENTRY, SOURCE_URI_PATTERN, extractManifestPath, isHttpsSourceUri, refusedEnvAssignment, repeatedBuildOption, resolveContainerManifestPath } from "@scvs/core";
 import type { SubmittedSourceManifest, VerificationTarget } from "@scvs/core";
 
 export type ManifestValidation =
@@ -33,6 +33,15 @@ export function compareSourceAgainstChain(
     "source_archive_not_chain_recorded",
     `The source archive you submitted hashes to ${submittedSha256.toLowerCase()}, but this contract ` +
       `records source_sha256=${chainSourceSha256.toLowerCase()} on chain.`,
+  );
+}
+
+/** Why a job cannot be created from the `source_uri` a contract records alone, or undefined when it can. */
+export function unfetchableChainSourceUri(sourceUri: string | undefined): string | undefined {
+  if (sourceUri && isHttpsSourceUri(sourceUri)) return undefined;
+  return (
+    "The contract's metadata records a source_uri that is not an https:// URL, which the verifier does not fetch. " +
+    "Submit a manifest naming an https:// source_uri or an upload_id for the same archive."
   );
 }
 
@@ -105,12 +114,26 @@ export function validateSubmittedManifest(
         "manifest.source_uri must be a valid URI when provided, e.g. https://example.com/source.tar.gz",
       );
     }
+    if (!isHttpsSourceUri(value.source_uri)) {
+      return invalid(
+        "invalid_manifest",
+        "manifest.source_uri must be an https:// URL, e.g. https://example.com/source.tar.gz; the verifier fetches no other kind.",
+      );
+    }
   }
 
   if (value.upload_id !== undefined) {
     if (typeof value.upload_id !== "string" || !/^[0-9a-f-]{36}$/i.test(value.upload_id)) {
       return invalid("invalid_manifest", "manifest.upload_id must be a valid upload handle.");
     }
+  }
+
+  // An upload is built from its own bytes, so a URL beside it would be published without ever being fetched.
+  if (value.source_uri !== undefined && value.upload_id !== undefined) {
+    return invalid(
+      "invalid_manifest",
+      "manifest names both source_uri and upload_id. Send one: the verifier builds from a single source, and publishes a source_uri only after fetching it.",
+    );
   }
 
   if (!value.source_uri && !value.upload_id) {

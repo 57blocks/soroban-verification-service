@@ -13,7 +13,7 @@ export const sourceUriRefusal = (value?: string): string | null => {
   if (!trimmed) {
     return "Enter the public URL of the exact source archive, or switch to Upload archive.";
   }
-  return SOURCE_URI_PATTERN.test(trimmed)
+  return SOURCE_URI_PATTERN.test(trimmed) && /^https:\/\//i.test(trimmed)
     ? null
-    : "Must be a full URI, e.g. https://example.com/my-contract-v1.0.0.tar.gz";
+    : "Must be an https:// URL, e.g. https://example.com/my-contract-v1.0.0.tar.gz";
 };

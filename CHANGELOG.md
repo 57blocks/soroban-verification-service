@@ -29,6 +29,11 @@ change what the verification API accepts; those are also listed under **Changed*
   adopted a private job's verdict, at its rewritten report,
   which is then archived in its own right; the earlier reports stay in result storage, and copies already
   archived to Arweave cannot be withdrawn. (#243, #268)
+- **A published `source_uri` is one the verifier fetched.** A manifest naming both `source_uri` and
+  `upload_id` was built from the upload, and its `source_uri`, never requested, was published on the
+  result. A manifest now names one or the other, a `source_uri` must be an `https://` URL, and a result
+  built from an upload carries no `source_uri`. Republishing (`publish-once`) rewrites such a result
+  without it and points the job at the rewritten report; copies already archived cannot be withdrawn.
 - **A `source_uri` job proves it holds its source before it shares a rebuild.** Each job fetches its
   own URL and checks the declared `source_sha256` before attaching to a rebuild another submission
   started, and a source is published only from the publishing job's own copy. (#237, #255)
@@ -48,6 +53,10 @@ change what the verification API accepts; those are also listed under **Changed*
 - **Breaking: a compressed request body is refused.** Both public APIs answer `415`
   `content_encoding_unsupported` to a request whose `Content-Encoding` is anything but `identity`,
   before the body is read. (#236)
+- **Breaking: a manifest names `source_uri` or `upload_id`, not both, and `source_uri` must be `https://`.**
+  Either is refused with `400` `invalid_manifest`. A non-`https` URL was already refused when the build
+  was dispatched; it is now refused at submit, including a submission with no manifest for a contract
+  whose metadata records one.
 - **Breaking: a public submission's `source_uri` may not carry credentials.** A user name, a password or
   a credential-like query parameter (`X-Amz-Signature`, `X-Goog-Signature`, `sig`, `token`,
   `access_token`, `api_key` and similar) is refused with `400` `invalid_manifest`. (#243)
