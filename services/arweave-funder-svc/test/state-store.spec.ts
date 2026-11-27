@@ -45,7 +45,8 @@ describe("the funder's state object", () => {
 });
 
 describe("credits shared with the upload key", () => {
-  const share = (approvedAddress: string, approved: string, used: string, expirationDate?: string) => ({
+  const share = (approvedAddress: string, approved: string, used: string, expirationDate?: string, approvalDataItemId?: string) => ({
+    approvalDataItemId,
     approvedAddress,
     approvedWincAmount: approved,
     usedWincAmount: used,
@@ -56,18 +57,18 @@ describe("credits shared with the upload key", () => {
   it("sums what is left of every live share to that address, and reports when the last one lapses", () => {
     const result = remainingShare(
       [
-        share("0xAA", "100", "40", "2026-11-27T00:00:00Z"),
-        share("0xaa", "50", "0", "2026-12-01T00:00:00Z"),
+        share("0xAA", "100", "40", "2026-11-27T00:00:00Z", "item-1"),
+        share("0xaa", "50", "0", "2026-12-01T00:00:00Z", "item-2"),
         share("0xbb", "999", "0", "2026-12-01T00:00:00Z"),
         share("0xaa", "70", "0", "2026-11-25T00:00:00Z"),
       ],
       "0xaa",
       NOW,
     );
-    expect(result).toEqual({ amount: 110n, expiresAt: Date.parse("2026-12-01T00:00:00Z") / 1000 });
+    expect(result).toEqual({ amount: 110n, expiresAt: Date.parse("2026-12-01T00:00:00Z") / 1000, ids: ["item-1", "item-2"] });
   });
 
   it("reports nothing shared when every share has lapsed", () => {
-    expect(remainingShare([share("0xaa", "10", "0", "2026-11-01T00:00:00Z")], "0xaa", NOW)).toEqual({ amount: 0n });
+    expect(remainingShare([share("0xaa", "10", "0", "2026-11-01T00:00:00Z")], "0xaa", NOW)).toEqual({ amount: 0n, ids: [] });
   });
 });

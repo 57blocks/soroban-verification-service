@@ -94,14 +94,31 @@ class FakeTurbo implements Bundler {
   async balance() {
     return this.credits;
   }
+  listed: string[] = [];
+  signed = 0;
+  /** Makes the next submit fail; `made` says whether Turbo made the share before the answer was lost. */
+  failNext: { error: Error; made: boolean } | undefined;
   async shared() {
-    return { amount: this.sharedAmount, ...(this.sharedExpiresAt === undefined ? {} : { expiresAt: this.sharedExpiresAt }) };
+    return { amount: this.sharedAmount, ...(this.sharedExpiresAt === undefined ? {} : { expiresAt: this.sharedExpiresAt }), ids: [...this.listed] };
   }
-  async shareCredits(_approved: string, amount: bigint, ttl: number) {
-    this.approvals.push({ amount, ttl });
-    this.sharedAmount += amount;
-    this.sharedExpiresAt = Math.max(this.sharedExpiresAt ?? 0, clock.now + ttl);
-    return `share-${this.approvals.length}`;
+  async signShare(_approved: string, amount: bigint, ttl: number) {
+    this.signed += 1;
+    const id = `share-${this.signed}`;
+    return {
+      id,
+      submit: async () => {
+        const failure = this.failNext;
+        this.failNext = undefined;
+        if (!failure || failure.made) {
+          this.approvals.push({ amount, ttl });
+          this.sharedAmount += amount;
+          this.sharedExpiresAt = Math.max(this.sharedExpiresAt ?? 0, clock.now + ttl);
+          this.listed.push(id);
+        }
+        if (failure) throw failure.error;
+        return `approval-${id}`;
+      },
+    };
   }
   async submitFundTransaction(hash: string) {
     this.submitted.push(hash);
@@ -539,26 +556,55 @@ describe("a receipt a lagging RPC backend has not seen", () => {
 });
 
 describe("sharing with the upload key", () => {
-  it("records a share before asking Turbo, and keeps it counted when the answer is lost", async () => {
+  it("records a share by its data-item id before asking Turbo, and marks it seen once Turbo answers", async () => {
     const { bundler, store, round } = setup();
     bundler.credits = CREDIT;
-    bundler.shareCredits = async () => {
-      throw new Error("share credits: request timed out");
-    };
-    await expect(round()).rejects.toThrow(/timed out/);
-    expect(store.state?.approvals).toEqual([{ at: T0, amount: (CREDIT / 20n).toString() }]);
+    await expect(round()).resolves.toBe("done");
+    expect(store.state?.approvals).toEqual([{ at: T0, amount: (CREDIT / 20n).toString(), id: "share-1", seenAt: T0 }]);
   });
 
   it("takes the record back when Turbo answers that it made no share", async () => {
     const { bundler, store, round } = setup();
     bundler.credits = CREDIT;
-    bundler.shareCredits = async () => {
-      throw new ShareRefused("share credits: Turbo answered HTTP 400");
-    };
+    bundler.failNext = { error: new ShareRefused("share credits: Turbo answered HTTP 400"), made: false };
     await expect(round()).rejects.toThrow(/HTTP 400/);
     expect(store.state?.approvals).toEqual([]);
   });
 
+  it("keeps a share whose answer was lost once Turbo lists it, and shares nothing more for it", async () => {
+    const { bundler, store, round } = setup();
+    bundler.credits = CREDIT;
+    bundler.failNext = { error: new Error("share credits: request timed out"), made: true };
+    await expect(round()).rejects.toThrow(/timed out/);
+    expect(store.state?.approvals).toEqual([{ at: T0, amount: (CREDIT / 20n).toString(), id: "share-1" }]);
+    clock.now += 300;
+    await expect(round()).resolves.toBe("done");
+    expect(store.state?.approvals).toEqual([{ at: T0, amount: (CREDIT / 20n).toString(), id: "share-1", seenAt: clock.now }]);
+    clock.now += 30 * 60;
+    await expect(round()).resolves.toBe("done");
+    expect(store.state?.approvals).toHaveLength(1);
+    expect(bundler.signed).toBe(1);
+  });
+
+  it("waits out the grace for a share whose answer was lost, then stops counting it and shares again", async () => {
+    const { bundler, store, gauges, round } = setup();
+    bundler.credits = CREDIT;
+    for (let i = 0; i < 2; i += 1) {
+      bundler.failNext = { error: new Error("share credits: request timed out"), made: false };
+      await expect(round()).rejects.toThrow(/timed out/);
+      for (let r = 0; r < 2; r += 1) {
+        clock.now += 300;
+        await expect(round()).resolves.toBe("done");
+        expect(bundler.signed).toBe(i + 1);
+      }
+      clock.now += 15 * 60;
+    }
+    await expect(round()).resolves.toBe("done");
+    expect(bundler.signed).toBe(3);
+    expect(bundler.approvals).toHaveLength(1);
+    expect(store.state?.approvals).toEqual([expect.objectContaining({ id: "share-3", seenAt: clock.now })]);
+    expect(gauges.get("arweave_funder_approval_cap_reached")).toBe(0);
+  });
 
   it("waits for a top-up instead of failing the round when the spendable credits cannot cover a share", async () => {
     const { bundler, gauges, round } = setup();

@@ -113,19 +113,25 @@ export class RpcError extends Error {
 
 export type FunderToken = TurboToken;
 
-type GivenShare = Pick<TurboShare, "approvedAddress" | "approvedWincAmount" | "usedWincAmount" | "expirationDate">;
+type GivenShare = Pick<TurboShare, "approvalDataItemId" | "approvedAddress" | "approvedWincAmount" | "usedWincAmount" | "expirationDate">;
 
-export function remainingShare(shares: GivenShare[], approvedAddress: string, nowMs: number): { amount: bigint; expiresAt?: number } {
+export function remainingShare(
+  shares: GivenShare[],
+  approvedAddress: string,
+  nowMs: number,
+): { amount: bigint; expiresAt?: number; ids: string[] } {
   let amount = 0n;
   let expiresAt: number | undefined;
+  const ids: string[] = [];
   for (const share of shares) {
     if (share.approvedAddress.toLowerCase() !== approvedAddress.toLowerCase()) continue;
+    if (share.approvalDataItemId) ids.push(share.approvalDataItemId);
     const expiry = share.expirationDate ? Date.parse(share.expirationDate) : undefined;
     if (expiry !== undefined && expiry <= nowMs) continue;
     amount += BigInt(share.approvedWincAmount) - BigInt(share.usedWincAmount);
     if (expiry !== undefined) expiresAt = Math.max(expiresAt ?? 0, Math.floor(expiry / 1000));
   }
-  return { amount, ...(expiresAt !== undefined ? { expiresAt } : {}) };
+  return { amount, ...(expiresAt !== undefined ? { expiresAt } : {}), ids };
 }
 
 /** The funding key's side of Turbo: it buys credits, shares them, and signs each share as a data item. */
@@ -143,18 +149,24 @@ export class TurboFunderClient implements Bundler {
     return this.turbo.balance(address);
   }
 
-  async shared(approvedAddress: string): Promise<{ amount: bigint; expiresAt?: number }> {
+  async shared(approvedAddress: string): Promise<{ amount: bigint; expiresAt?: number; ids: string[] }> {
     return remainingShare(await this.turbo.sharesGivenBy(this.signer.address), approvedAddress, Date.now());
   }
 
-  async shareCredits(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<string> {
-    try {
-      return await this.turbo.shareCredits(this.signer, approvedAddress, amount, expiresInSeconds);
-    } catch (error) {
-      // A 4xx is Turbo turning the share down; a 5xx or a lost answer may come after the share was made.
-      if (error instanceof TurboHttpError && error.status >= 400 && error.status < 500) throw new ShareRefused(error.message);
-      throw error;
-    }
+  async signShare(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<{ id: string; submit(): Promise<string> }> {
+    const item = await this.turbo.signShare(this.signer, approvedAddress, amount, expiresInSeconds);
+    return {
+      id: item.id,
+      submit: async () => {
+        try {
+          return await this.turbo.submitShare(item);
+        } catch (error) {
+          // A 4xx is Turbo turning the share down; a 5xx or a lost answer may come after the share was made.
+          if (error instanceof TurboHttpError && error.status >= 400 && error.status < 500) throw new ShareRefused(error.message);
+          throw error;
+        }
+      },
+    };
   }
 
   submitFundTransaction(hash: string): Promise<"credited" | "pending" | "rejected"> {

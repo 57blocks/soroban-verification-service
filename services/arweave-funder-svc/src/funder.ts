@@ -14,6 +14,9 @@ export const STATE_SCHEMA = 2;
 const DAY_SECONDS = 86_400;
 const APPROVAL_HISTORY_SECONDS = 30 * DAY_SECONDS;
 const SETTLED_HISTORY_SECONDS = 30 * DAY_SECONDS;
+// Long past a request our side gave up on finishing at Turbo's, and the share then showing in its list; short enough
+// that a share that was never made blocks the next one for minutes, not for the rest of the window.
+const SHARE_UNSEEN_GRACE_SECONDS = 15 * 60;
 const RECEIPT_GRACE_SECONDS = 180;
 // A landed top-up's receipt missing while its nonce stays spent is a lagging backend for seconds, not half an hour.
 const SPENT_NONCE_GRACE_SECONDS = 30 * 60;
@@ -56,8 +59,14 @@ export type FunderState = {
   halted?: { reason: string; at: number; hash?: string };
   txs: FundTx[];
   /** Credit shares granted to the upload key, in winc. */
-  approvals: { at: number; amount: string }[];
+  approvals: ShareRecord[];
 };
+
+/**
+ * A share, recorded before Turbo is asked for it. `id` is its data item's; `seenAt` is set once Turbo has answered
+ * with it or listed it. One still unseen past the grace was never made, and stops counting.
+ */
+export type ShareRecord = { at: number; amount: string; id?: string; seenAt?: number };
 
 export interface Chain {
   chainId(): Promise<number>;
@@ -80,10 +89,16 @@ export type Receipt = { status: 0 | 1; blockNumber: number; feeWei: bigint };
 export interface Bundler {
   depositAddress(): Promise<string>;
   balance(address: string): Promise<bigint>;
-  /** What is left of the unexpired credits this wallet shared with `approvedAddress`, and when the last of them lapses. */
-  shared(approvedAddress: string): Promise<{ amount: bigint; expiresAt?: number }>;
-  /** Shares are added, not replaced: each one stands until it is spent or expires. */
-  shareCredits(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<string>;
+  /**
+   * What is left of the unexpired credits this wallet shared with `approvedAddress`, when the last of them lapses,
+   * and the data-item ids of the shares Turbo lists.
+   */
+  shared(approvedAddress: string): Promise<{ amount: bigint; expiresAt?: number; ids: string[] }>;
+  /**
+   * Signs a share without sending it, so its id can be recorded first. Shares are added, not replaced: each one
+   * stands until it is spent or expires. `submit` answers with the approval Turbo created.
+   */
+  signShare(approvedAddress: string, amount: bigint, expiresInSeconds: number): Promise<{ id: string; submit(): Promise<string> }>;
   /** `credited` once Turbo has added the deposit to the sender's credits; `pending` while it waits for confirmations. */
   submitFundTransaction(hash: string): Promise<"credited" | "pending" | "rejected">;
 }
@@ -602,6 +617,7 @@ export class FunderRound {
     const s = this.settings;
     const now = this.now();
     const current = await bundler.shared(s.approvedAddress);
+    if (await this.reconcileShares(current.ids, now)) return;
     const expiresIn = current.expiresAt === undefined ? Number.POSITIVE_INFINITY : current.expiresAt - now;
     const low = current.amount * 10n < s.shareWinc;
     const due = current.amount === 0n || expiresIn <= s.shareRenewBeforeSeconds || low;
@@ -630,13 +646,14 @@ export class FunderRound {
     }
     telemetry.gauge("arweave_funder_share_unfunded", 0);
     // Recorded before Turbo is asked, as a transaction is before it is sent: a share whose answer is lost still counts
-    // against the window. Only an answer that says no share was made takes the record back.
-    const record = { at: now, amount: s.shareWinc.toString() };
+    // against the window until Turbo's list shows it was never made.
+    const share = await bundler.signShare(s.approvedAddress, s.shareWinc, s.shareTtlSeconds);
+    const record: ShareRecord = { at: now, amount: s.shareWinc.toString(), id: share.id };
     this.state.approvals.push(record);
     await this.save();
-    let id: string;
+    let approval: string;
     try {
-      id = await bundler.shareCredits(s.approvedAddress, s.shareWinc, s.shareTtlSeconds);
+      approval = await share.submit();
     } catch (error) {
       if (error instanceof ShareRefused) {
         this.state.approvals = this.state.approvals.filter((a) => a !== record);
@@ -644,12 +661,42 @@ export class FunderRound {
       }
       throw error;
     }
+    record.seenAt = this.now();
+    await this.save();
     telemetry.event("info", "arweave funder: credits shared with the upload key", {
       approved: s.approvedAddress,
       amount_winc: s.shareWinc.toString(),
       expires_in_seconds: s.shareTtlSeconds,
-      data_item: id,
+      data_item: share.id,
+      approval,
     });
+  }
+
+  /**
+   * Settles shares whose answer was lost: one Turbo lists is kept for good, one still missing past the grace is
+   * dropped. True while one is inside the grace, when sharing again could make a second share for the same need.
+   */
+  private async reconcileShares(listed: string[], now: number): Promise<boolean> {
+    let changed = false;
+    let waiting = false;
+    for (const record of [...this.state.approvals]) {
+      if (record.id === undefined || record.seenAt !== undefined) continue;
+      if (listed.includes(record.id)) {
+        record.seenAt = now;
+        changed = true;
+      } else if (now - record.at >= SHARE_UNSEEN_GRACE_SECONDS) {
+        this.state.approvals = this.state.approvals.filter((a) => a !== record);
+        changed = true;
+        this.deps.telemetry.event("warn", "arweave funder: a share whose answer was lost never appeared at Turbo; no longer counting it", {
+          data_item: record.id,
+          amount_winc: record.amount,
+        });
+      } else {
+        waiting = true;
+      }
+    }
+    if (changed) await this.save();
+    return waiting;
   }
 
   private mark(tx: FundTx, status: TxStatus): void {

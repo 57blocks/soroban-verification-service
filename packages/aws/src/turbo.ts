@@ -1,5 +1,5 @@
 import { getAddress } from "@ethersproject/address";
-import { createSignedDataItem, type DataItemSigner, type DataItemTag } from "./ans104.js";
+import { createSignedDataItem, type DataItemSigner, type DataItemTag, type SignedDataItem } from "./ans104.js";
 
 export type TurboEndpoints = { uploadUrl: string; paymentUrl: string };
 export type TurboToken = "ethereum" | "base-eth";
@@ -7,7 +7,13 @@ export type TurboToken = "ethereum" | "base-eth";
 /** `deadlineHeight`: the Arweave height by which Turbo promises the item is on chain. */
 export type TurboUploadResult = { ok: true; id: string; deadlineHeight?: number } | { ok: false; reason: "insufficient_credits" };
 
-export type TurboShare = { approvedAddress: string; approvedWincAmount: string; usedWincAmount: string; expirationDate?: string };
+export type TurboShare = {
+  approvalDataItemId?: string;
+  approvedAddress: string;
+  approvedWincAmount: string;
+  usedWincAmount: string;
+  expirationDate?: string;
+};
 
 export type TurboFundStatus = "credited" | "pending" | "rejected";
 
@@ -95,12 +101,20 @@ export class TurboClient {
 
   /** A share is a data item the payer signs and uploads; Turbo answers with the approval it created. */
   async shareCredits(signer: DataItemSigner, approvedAddress: string, winc: bigint, expiresInSeconds: number): Promise<string> {
+    return this.submitShare(await this.signShare(signer, approvedAddress, winc, expiresInSeconds));
+  }
+
+  /** The share's data item, whose id is known before Turbo sees it: a caller can record it first. */
+  signShare(signer: DataItemSigner, approvedAddress: string, winc: bigint, expiresInSeconds: number): Promise<SignedDataItem> {
     const tags = [
       { name: SHARE_TAGS.approve, value: asTurboAddress(approvedAddress) },
       { name: SHARE_TAGS.amount, value: winc.toString() },
       { name: SHARE_TAGS.expiresSeconds, value: String(expiresInSeconds) },
     ];
-    const item = await createSignedDataItem(Buffer.from(`${asTurboAddress(approvedAddress)}${winc}${Date.now()}`), tags, signer);
+    return createSignedDataItem(Buffer.from(`${asTurboAddress(approvedAddress)}${winc}${Date.now()}`), tags, signer);
+  }
+
+  async submitShare(item: SignedDataItem): Promise<string> {
     const { text } = await this.request(`${this.endpoints.uploadUrl}/v1/tx/${this.token}`, "share credits", {
       method: "POST",
       headers: { "content-type": "application/octet-stream" },

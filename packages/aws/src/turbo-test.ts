@@ -96,3 +96,11 @@ test("a share is a signed data item carrying the approval tags, answered with th
   const raw = Buffer.from(seen[0]!.body!);
   for (const text of ["x-approve-payment", UPLOADER, "x-amount", "x-expires-seconds"]) assert.ok(raw.includes(Buffer.from(text)), text);
 });
+
+test("a share signed ahead is sent as the very bytes whose id was recorded", async () => {
+  const seen = answer(() => ({ status: 200, body: { id: "x", createdApproval: { approvalDataItemId: "approval-1" } } }));
+  const turbo = new TurboClient(ENDPOINTS, "base-eth");
+  const item = await turbo.signShare(signer, UPLOADER, 5n, 60);
+  assert.equal(await turbo.submitShare(item), "approval-1");
+  assert.deepEqual(Buffer.from(seen[0]!.body!), item.raw);
+});

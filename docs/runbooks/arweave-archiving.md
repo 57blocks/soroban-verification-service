@@ -46,6 +46,14 @@ cap every day. The alarm holds while the funder is halted. Take the hash to ArDr
 fix the configuration if it was ours. Then remove `halted`. The transaction stays `rejected` and still
 counts against the day's top-up cap.
 
+## A share's answer was lost
+
+The funder records each credit share by its data-item id before asking Turbo for it. When the answer is
+lost (a timeout, a 5xx), it shares nothing more until Turbo lists that id, or for 15 minutes; a share
+Turbo never lists by then was not made and stops counting against the window cap. Nothing needs doing
+unless it repeats: then Turbo's upload service is failing, and archives will run dry once the current
+share is spent.
+
 ## No credits to share (`share_unfunded`)
 
 The upload key's share is due, but the funding key's spendable credits cannot cover another one. It
