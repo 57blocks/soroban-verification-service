@@ -1,5 +1,5 @@
 import { caseBlock } from "../../support/gate.js";
-import { fixtures, missingFixture, submissionFor } from "../../support/fixtures.js";
+import { fixtures, missingFixture, recipeScopeOf, submissionFor } from "../../support/fixtures.js";
 import { env } from "../../support/env.js";
 import { expectStatus, http, sleep } from "../../support/http.js";
 import { preflight, submit, waitForTerminal } from "../../support/job.js";
@@ -60,7 +60,17 @@ for (const row of NETWORKS) {
       it(
         "accepts one fresh recipe, reaches verified, and appears on the public query surface",
         async () => {
-          const submitted = await submit(await submissionFor(row.fixtureId));
+          const submission = await submissionFor(row.fixtureId);
+          // The aggregate keeps one entry per verifier per Wasm, so an earlier run's entry for this
+          // Wasm is already there before ours lands. Only the run-scoped recipe tells them apart.
+          const recipeScope = recipeScopeOf(submission.manifest.bldopt);
+          if (recipeScope === undefined) {
+            throw new Error(
+              `${row.fixtureId} must set run_scoped_recipe: E2E-SUB-01 tells this job's query entry ` +
+                `from an earlier run's by the E2E_RECIPE_SCOPE option in bldopt.`
+            );
+          }
+          const submitted = await submit(submission);
           expectStatus(submitted.response, 202);
           expect(submitted.jobId).toBeDefined();
           expect(submitted.response.json.status).toBe("queued");
@@ -84,7 +94,9 @@ for (const row of NETWORKS) {
           const identity = await ownVerifierIdentity();
           const queryUrl = aggregatedByHashUrl(wasmHash!);
           const deadline = Date.now() + 60_000;
-          let ours: AggregatedWasmStatus["source_code_verifications"][number] | undefined;
+          type Entry = AggregatedWasmStatus["source_code_verifications"][number];
+          let ours: Entry | undefined;
+          let lastOwn: Entry | undefined;
           let lastAggregate: AggregatedWasmStatus | undefined;
           while (Date.now() < deadline) {
             const aggregate = await http(queryUrl);
@@ -96,14 +108,23 @@ for (const row of NETWORKS) {
               );
             }
             lastAggregate = aggregate.json as AggregatedWasmStatus;
-            ours = ownEntryOf(lastAggregate.source_code_verifications, identity);
-            if (ours) break;
+            lastOwn = ownEntryOf(lastAggregate.source_code_verifications, identity);
+            if (lastOwn && recipeScopeOf(lastOwn.bldopt) === recipeScope) {
+              ours = lastOwn;
+              break;
+            }
             await sleep(env.pollIntervalMs);
           }
           if (!ours) {
+            const earlier = lastOwn
+              ? `It still shows an earlier entry from this verifier: status ${JSON.stringify(lastOwn.status)}, ` +
+                `processed_at ${lastOwn.processed_at ?? "(absent)"}, ` +
+                `${recipeScopeOf(lastOwn.bldopt) ?? "no recipe scope"}. `
+              : "";
             throw new Error(
               `Verification job ${submitted.jobId} reached verified for Wasm ${wasmHash}, but ` +
-                `query-svc did not expose verifier.url=${identity.url} within 60000 ms. ` +
+                `query-svc did not expose this job's entry (verifier.url=${identity.url}, bldopt ` +
+                `carrying ${recipeScope}) within 60000 ms. ${earlier}` +
                 `Query URL: ${queryUrl}. Last aggregate: ` +
                 `${lastAggregate ? aggregateSummary(lastAggregate) : "(no successful aggregate response)"}.`
             );

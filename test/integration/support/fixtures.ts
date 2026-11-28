@@ -304,6 +304,11 @@ export function runScopedBldopt(
   ];
 }
 
+/** The run-scoped `--env=E2E_RECIPE_SCOPE=…` option a recipe carries, if any. */
+export function recipeScopeOf(bldopt: readonly string[] | undefined): string | undefined {
+  return bldopt?.find((entry) => entry.startsWith(RECIPE_SCOPE_PREFIX));
+}
+
 export function recipeScopeLabel(
   state: { currentTestName?: string; testPath?: string } = expect.getState()
 ): string {
