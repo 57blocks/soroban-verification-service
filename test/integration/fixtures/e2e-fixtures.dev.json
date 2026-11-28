@@ -14,19 +14,19 @@
   "contracts": {
     "F-MAINNET-READ-ONLY": {
       "id": "F-MAINNET-READ-ONLY",
-      "note": "existing_mainnet_reflector_pulse_v6_0_1 — public cli-legacy mainnet target used only by E2E-NET-01/read_only_mainnet. Registry status: candidate for rebuild/submission, but its contract ID, deployed Wasm hash, and toolchain metadata have been independently checked. Do not add source or recipe fields here: doing so would make this read-only probe eligible for submission by accident.",
+      "note": "existing_mainnet_reflector_pulse_v7_1_0 — public cli-legacy mainnet target used only by E2E-NET-01/read_only_mainnet. Registry status: candidate for rebuild/submission, but its contract ID, deployed Wasm hash, and toolchain metadata have been independently checked. Do not add source or recipe fields here: doing so would make this read-only probe eligible for submission by accident.",
       "network": "mainnet",
       "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
-      "wasm_hash": "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c"
+      "wasm_hash": "25fc306065cbb9b05461db78ec259802cb916053ba5b3ab911b0a72dd1a81439"
     },
     "F-LEG-1-MAINNET": {
       "id": "F-LEG-1-MAINNET",
-      "note": "existing_mainnet_reflector_pulse_v6_0_1 — public cli-legacy mainnet contract. The fixed GitHub revision rebuilt to its deployed Wasm in the verifier's v3 composed CLI 27.0.0 / Rust 1.97.1 image with the recorded recipe; registry status: ready.",
+      "note": "existing_mainnet_reflector_pulse_v7_1_0 — public cli-legacy mainnet contract. The fixed GitHub revision is the v7.1.0 release of reflector-pulse-contract, built by the same release workflow and recipe as v6.0.1; registry status: ready, with the composed-image rebuild still to repeat (see registry.yaml).",
       "network": "mainnet",
       "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
-      "wasm_hash": "8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c",
-      "source_uri": "https://api.github.com/repos/reflector-network/reflector-contract/tarball/42f3116b0c5ea335181508c926e5ec48d67af419",
-      "source_sha256": "cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d",
+      "wasm_hash": "25fc306065cbb9b05461db78ec259802cb916053ba5b3ab911b0a72dd1a81439",
+      "source_uri": "https://api.github.com/repos/reflector-network/reflector-contract/tarball/6fece3b6efab3c855e920c450e3a2822f14df405",
+      "source_sha256": "0cf8b099723e5060d298d5c7c45dd92f3727dbf0c09cb39c83286f8295cbd369",
       "run_scoped_recipe": true,
       "bldarg": [
         "contract",

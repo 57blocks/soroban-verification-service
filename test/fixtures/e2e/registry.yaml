@@ -23,12 +23,12 @@ source_inputs:
     validation: deterministic archive built from the tracked source tree and contract-b rebuilt to the deployed Wasm hash
   mainnet_reflector_source:
     repository: https://github.com/reflector-network/reflector-contract
-    revision: 42f3116b0c5ea335181508c926e5ec48d67af419
-    tag: v6.0.1_reflector-pulse-contract_cli27.0.0
+    revision: 6fece3b6efab3c855e920c450e3a2822f14df405
+    tag: v7.1.0_reflector-pulse-contract_cli28.1.0
     package: reflector-pulse-contract
-    downloaded_sha256: cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d
+    downloaded_sha256: 0cf8b099723e5060d298d5c7c45dd92f3727dbf0c09cb39c83286f8295cbd369
     status: ready
-    validation: StellarExpert independently records an exact build match for this revision and package
+    validation: the tag's GitHub release publishes reflector-pulse-contract_v7.1.0.wasm with the deployed Wasm hash, and validate-mainnet-reflector-rebuild.sh rebuilds this revision to it
   public_testnet_stellaroid_earn_source:
     repository: https://github.com/Iron-Mark/Hackathon-Stellaroid_Earn
     revision: 7a67648472102d381665cb1235f003b8d114179d
@@ -177,20 +177,20 @@ contracts:
       - metadata parsed locally with stellar 27.0.0
       - fixed source revision and source archive were publicly reachable
 
-  existing_mainnet_reflector_pulse_v6_0_1:
+  existing_mainnet_reflector_pulse_v7_1_0:
     fixture_roles: [F-LEG-1-mainnet, F-LEG-2-candidate, F-MAINNET-READ-ONLY]
     network: mainnet
     contract_id: CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN
-    wasm_hash: 8ecd1857496df2c15aaab4d18d2d7689542a62814245e9b2c613c609b86bd11c
+    wasm_hash: 25fc306065cbb9b05461db78ec259802cb916053ba5b3ab911b0a72dd1a81439
     class: cli-legacy
-    cliver: 27.0.0#5a7c5fe76530bf4248477ac812fc757146b98cc4
-    rsver: 1.97.1
+    cliver: 28.1.0#c0f4d0da891bbf214c08b8c5035ae6db80e9a3bd
+    rsver: 1.99.0
     source_repo: github:reflector-network/reflector-contract
-    source_revision: 42f3116b0c5ea335181508c926e5ec48d67af419
-    source_tag: v6.0.1_reflector-pulse-contract_cli27.0.0
+    source_revision: 6fece3b6efab3c855e920c450e3a2822f14df405
+    source_tag: v7.1.0_reflector-pulse-contract_cli28.1.0
     source_package: reflector-pulse-contract
-    source_uri: https://api.github.com/repos/reflector-network/reflector-contract/tarball/42f3116b0c5ea335181508c926e5ec48d67af419
-    source_sha256: cb972875cf09d034ce1d932ac992a7262fe9f7c74539c8b32eb195069201a17d
+    source_uri: https://api.github.com/repos/reflector-network/reflector-contract/tarball/6fece3b6efab3c855e920c450e3a2822f14df405
+    source_sha256: 0cf8b099723e5060d298d5c7c45dd92f3727dbf0c09cb39c83286f8295cbd369
     submitted_recipe:
       bldarg: [contract, build]
       bldopt:
@@ -199,13 +199,14 @@ contracts:
         - --optimize
     status: ready
     validation:
-      - StellarExpert resolved the live contract and recorded this exact Wasm hash on 2026-08-03
-      - Wasm downloaded from the public StellarExpert endpoint matched wasm_hash
-      - local metadata parsing matched class, cliver, rsver, and source_repo
-      - StellarExpert records verified source revision 42f3116b, package reflector-pulse-contract, and an exact build match
-      - repository tag lookup resolved the named tag to revision 42f3116b
-      - fixed GitHub source archive downloaded and SHA-256 matched source_sha256 on 2026-08-21
-      - validate-mainnet-reflector-rebuild.sh rebuilt the fixed source in the verifier's v3 composed CLI 27.0.0 / Rust 1.97.1 image with no build-stage network and matched wasm_hash on 2026-08-21
+      - the contract was upgraded from v6.0.1 (Wasm 8ecd1857…, CLI 27.0.0 / Rust 1.97.1) to this release; E2E-NET-01 and E2E-SUB-01/mainnet read the new hash on 2026-11-24
+      - Wasm fetched from mainnet RPC with `stellar contract fetch` on 2026-11-27 matched wasm_hash
+      - local metadata parsing matched cliver, rsver, and source_repo
+      - the GitHub release for the named tag publishes reflector-pulse-contract_v7.1.0.wasm with digest sha256:25fc3060…, and the tag resolves to revision 6fece3b6
+      - the release was built by the same stellar-expert/soroban-build-workflow as v6.0.1, so the recipe is unchanged
+      - fixed GitHub source archive downloaded twice on 2026-11-27 and both SHA-256s matched source_sha256
+      - StellarExpert's contract and Wasm API answered 402 Payment Required on 2026-11-27, so it is no longer evidence here
+      - not yet rebuilt in the verifier's composed CLI 28.1.0 / Rust 1.99.0 image (the local run stopped on a full Docker disk); until validate-mainnet-reflector-rebuild.sh passes, E2E-SUB-01/mainnet's first verified result is the rebuild evidence
 
   purpose_testnet_f_leg_1:
     fixture_roles: [F-LEG-1]
@@ -680,11 +681,11 @@ required_contracts:
     purpose: isolate E2E-DEDUP-06's retrying timeout job from every other target
   F-LEG-1-mainnet:
     status: ready
-    contract: existing_mainnet_reflector_pulse_v6_0_1
+    contract: existing_mainnet_reflector_pulse_v7_1_0
     evidence: test/fixtures/e2e/validate-mainnet-reflector-rebuild.sh
   F-LEG-2:
     status: candidate
-    candidates: [existing_mainnet_reflector_pulse_v6_0_1, existing_testnet_cli_legacy_27_1_94_1]
+    candidates: [existing_mainnet_reflector_pulse_v7_1_0, existing_testnet_cli_legacy_27_1_94_1]
     need: reproducible verifier-composed image and digest for at least one candidate
     not_blocking: E2E-SUB-02/compose_cache_hit — implemented 2026-08-20 on F-LEG-1 + F-MULTIPKG
     still_blocking: E2E-PUB-15's queued row, and the cross-environment claim described above

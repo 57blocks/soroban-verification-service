@@ -77,7 +77,7 @@ caseBlock(
   },
   () => {
     it(
-      "keeps the URI and commitment on the report without writing a static source copy",
+      "keeps the commitment on the report, but neither the URI nor a static source copy",
       async () => {
         const fixture = fixtures.contracts[URI_PRIVATE_VERIFIED];
         await assertFixtureOrigin(fixture);
@@ -93,9 +93,10 @@ caseBlock(
           expect.objectContaining({
             is_public: false,
             source_sha256: fixture.source_sha256,
-            source_uri: fixture.source_uri,
           }),
         );
+        // A private submission's source_uri stays out of published results (#243, #288).
+        expect(artifact.source!.source_uri).toBeUndefined();
         expect(artifact.source!.source_file_name).toBeUndefined();
 
         const stored = await http(staticSourceUrl(sourceFileNameFromUri(fixture)));
